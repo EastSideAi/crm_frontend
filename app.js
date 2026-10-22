@@ -398,6 +398,7 @@
       play: '<circle cx="10" cy="10" r="7.5"/><path d="M8.4 7.2 13 10l-4.6 2.8V7.2z" fill="currentColor" stroke-width="1"/>',
       eye: '<path d="M2.5 10S5.5 5 10 5s7.5 5 7.5 5-3 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/>',
       search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.1 13.1 17.2 17.2"/>',
+      flow: '<circle cx="4" cy="10" r="2"/><circle cx="16" cy="5" r="2"/><circle cx="16" cy="15" r="2"/><path d="M6 10h3.5M9.5 10V5H14M9.5 10v5H14"/>',
       tree: '<rect x="7.3" y="2.6" width="5.4" height="4.2" rx="1.4"/><rect x="2.4" y="13.2" width="5.4" height="4.2" rx="1.4"/><rect x="12.2" y="13.2" width="5.4" height="4.2" rx="1.4"/><path d="M10 6.8v4.2M5.1 11h9.8M5.1 11v2.2M14.9 11v2.2"/>',
       pen: '<path d="M13.6 3.3a1.8 1.8 0 0 1 2.5 2.5L7.6 14.3 4 15.5l1.2-3.6 8.4-8.6z"/><path d="M12.2 4.7l2.5 2.5"/>',
       compass: '<circle cx="10" cy="10" r="7.2"/><path d="M12.8 7.2 8.9 8.9 7.2 12.8l3.9-1.7 1.7-3.9z" fill="currentColor" stroke="none"/>',
@@ -2426,6 +2427,9 @@
        намеренно: оба раздела отвечают на вопрос «как у нас устроено», только один
        про продукты, другой про людей. Видят все, cap dash есть у каждой роли. */
     { id: 'org', label: 'Структура', icon: 'team', cap: 'org' },
+    /* «Процессы» — карта сквозных процессов компании. Право личное, его выдают учетке,
+       а не роли (crm_users.extra_caps): пока карта черновик, ее видит только Вера. */
+    { id: 'processes', label: 'Процессы', icon: 'flow', cap: 'processes' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     /* Две двери в один раздел: свои приходят по `marketing` и видят все вкладки,
        подрядчик по трафику — по `ads`, и у него остается одна «Реклама» (mkTabsFor). */
@@ -3793,6 +3797,7 @@
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'org') renderOrg(view);
+    else if (state.page === 'processes') renderProcesses(view);
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'roadmap') renderRoadmap(view);
     else if (state.page === 'dupes') renderDupes(view);
@@ -34991,6 +34996,182 @@
     if (box && fromTree) {
       var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       box.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    }
+  }
+
+  /* ── ПРОЦЕССЫ — карта сквозных процессов компании ─────────────────────────
+     Черновик, который агент собрал из рабочих заметок команды (Вера 22.10.2026:
+     описать процессы, чтобы увидеть, где ходим кругами, и потом отдать рутинные
+     шаги агентам). Процесс идет от события до результата через нескольких людей,
+     шаг — «что делаем, кто, что получилось», формат по книге Рыбакова.
+     «Мои процессы» — не отдельное описание, а фильтр по человеку в той же базе:
+     выбрал человека — подсвечены его шаги, сверху видно, кто ему передает работу
+     и кому передает он.
+     Данные отдает сервер (`GET /admin/api/processes`, файл в бэкенде), по той же
+     причине, что у «Структуры»: в карте ФИО коллег и внутренние цифры. Право
+     `processes` личное, его выдают учетке, а не роли. */
+  function fetchProcesses() {
+    api('/admin/api/processes')
+      .then(function (d) { state._prc = d; if (state.page === 'processes') renderView(); })
+      .catch(function () { state._prc = 'none'; if (state.page === 'processes') renderView(); });
+  }
+
+  function prcPerson(id) {
+    var d = state._prc, ps = (d && d.people) || [];
+    for (var i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i];
+    return { id: id, name: id, role: '' };
+  }
+  function prcMine(p, who) {
+    if (!who) return 0;
+    return p.steps.filter(function (s) { return s.who.indexOf(who) !== -1; }).length;
+  }
+
+  /* От кого человек получает работу и кому отдает: соседние шаги, где его нет.
+     Считаем по всем процессам сразу — ради этого ответа фильтр и заведен. */
+  function prcLinks(who) {
+    var from = {}, to = {}, d = state._prc;
+    d.processes.forEach(function (p) {
+      p.steps.forEach(function (s, i) {
+        if (s.who.indexOf(who) === -1) return;
+        var pv = p.steps[i - 1], nx = p.steps[i + 1];
+        if (pv && pv.who.indexOf(who) === -1) pv.who.forEach(function (x) { from[x] = 1; });
+        if (nx && nx.who.indexOf(who) === -1) nx.who.forEach(function (x) { to[x] = 1; });
+      });
+    });
+    var names = function (o) {
+      var ks = Object.keys(o).filter(function (k) { return k !== who; });
+      return ks.length ? ks.map(function (k) { return esc(prcPerson(k).name); }).join(', ') : 'нет';
+    };
+    return { from: names(from), to: names(to) };
+  }
+
+  function prcTag(id, who) {
+    var p = prcPerson(id);
+    return '<span class="prc-tag' + (p.system ? ' sys' : '') + (who === id ? ' me' : '') + '">' + esc(p.name) + '</span>';
+  }
+
+  /* Подпроцесс, который уже расписан на карте, — ссылка на него: шаг «передать табель»
+     ведет в «Деньги». Не расписанный — подпись, чтобы было видно, что он есть. */
+  function prcSubLink(sub) {
+    var hit = state._prc.processes.filter(function (p) { return p.title === sub; })[0];
+    return hit ? '<button type="button" class="prc-sub" data-prc="' + esc(hit.id) + '">' + ic('go', 12) +
+      'подпроцесс: ' + esc(sub) + '</button>'
+      : '<span class="prc-sub off">подпроцесс: ' + esc(sub) + '</span>';
+  }
+
+  function prcStep(s, i, prev, who) {
+    var mine = who && s.who.indexOf(who) !== -1;
+    /* передача — шаг, где работа переходит к другим людям. Именно на стыках по
+       заметкам все и рвется, поэтому стык помечен прямо в строке. */
+    var hand = prev && !prev.who.some(function (x) { return s.who.indexOf(x) !== -1; }) &&
+      !(s.who.length && s.who.every(function (x) { return prcPerson(x).system; }));
+    var who_ = s.who.map(function (x) { return prcTag(x, who); }).join('') +
+      (s.who_unknown ? '<span class="prc-tag q">не ясно кто</span>' : '') +
+      (s.agent ? '<span class="prc-tag ag">агент: ' + esc(s.agent) + '</span>' : '');
+    return '<li class="prc-step' + (who ? (mine ? ' mine' : ' dim') : '') + '">' +
+      '<span class="prc-n' + (hand ? ' hand' : '') + '"' + (hand ? ' title="Здесь работа переходит к другим людям"' : '') + '>' + (i + 1) + '</span>' +
+      '<div class="prc-what"><b>' + esc(s.title) + '</b>' +
+        (s.sub ? prcSubLink(s.sub) : '') +
+        (s.pain ? '<span class="prc-pain">' + esc(s.pain) + '</span>' : '') + '</div>' +
+      '<div class="prc-who">' + who_ + '</div>' +
+      '<div class="prc-res">' + esc(s.result) + '</div></li>';
+  }
+
+  /* Выбор процесса меняет карточку ниже плиток: на телефоне она начинается за краем
+     экрана, и без прокрутки нажатие выглядит так, будто поменялся только цвет плитки. */
+  function prcGo(id) {
+    state.prcSel = id;
+    renderView();
+    var card = document.querySelector('.prc-card');
+    if (!card || card.getBoundingClientRect().top >= 0 && card.getBoundingClientRect().top < window.innerHeight * .5) return;
+    var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    card.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  function renderProcesses(view) {
+    if (!state._prc) { view.innerHTML = dashSkeleton(); fetchProcesses(); return; }
+    if (state._prc === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить карту процессов, обновите страницу.</div></div>';
+      return;
+    }
+    var d = state._prc, who = state.prcWho || '';
+    var sel = d.processes.filter(function (p) { return p.id === state.prcSel; })[0] || d.processes[0];
+    state.prcSel = sel.id;
+
+    var tile = function (p) {
+      var n = prcMine(p, who);
+      return '<button type="button" class="prc-tile' + (p.id === sel.id ? ' on' : '') + '" data-prc="' + esc(p.id) + '"' +
+        ' aria-pressed="' + (p.id === sel.id ? 'true' : 'false') + '">' +
+        '<span class="prc-tn">' + esc(p.n) + '</span><b>' + esc(p.title) + '</b><small>' + esc(p.span) + '</small>' +
+        (who ? '<i class="prc-cnt' + (n ? '' : ' zero') + '">' + n + '</i>' : '') + '</button>';
+    };
+    var path = d.processes.filter(function (p) { return p.on_path; });
+    var rest = d.processes.filter(function (p) { return !p.on_path; });
+
+    var people = d.people.filter(function (p) { return !p.system; });
+    var opts = '<option value="">Все люди</option>' + people.map(function (p) {
+      return '<option value="' + esc(p.id) + '"' + (p.id === who ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+    }).join('');
+
+    var panel = '';
+    if (who) {
+      var l = prcLinks(who), inP = d.processes.filter(function (p) { return prcMine(p, who); });
+      panel = '<div class="prc-person">' +
+        '<div><span class="po-lbl">Роль</span><p>' + esc(prcPerson(who).role || '') + '</p></div>' +
+        '<div><span class="po-lbl">Участвует</span>' + (inP.length ? '<ul class="prc-in">' + inP.map(function (p) {
+          var n = prcMine(p, who);
+          return '<li><button type="button" data-prc="' + esc(p.id) + '">' + esc(p.title) + '</button> ' +
+            n + ' ' + plural(n, 'шаг', 'шага', 'шагов') + '</li>';
+        }).join('') + '</ul>' : '<p>нет шагов в расписанных процессах</p>') + '</div>' +
+        '<div><span class="po-lbl">Получает работу от</span><p>' + l.from + '</p></div>' +
+        '<div><span class="po-lbl">Передает дальше</span><p>' + l.to + '</p></div></div>';
+    }
+
+    var agN = sel.steps.filter(function (s) { return s.agent; }).length;
+    var steps = sel.steps.map(function (s, i) { return prcStep(s, i, sel.steps[i - 1], who); }).join('');
+    var list = function (a) { return a.length ? '<ul>' + a.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p>Только заметки агентов.</p>'; };
+
+    view.innerHTML = '<div class="prc-wrap">' +
+      '<div class="prc-top"><div><h2 class="org-h1">Процессы компании</h2>' +
+        '<div class="org-sub">' + esc(d.note || '') + '</div></div>' +
+        '<span class="sev n-wait">черновик · ' + esc(fmtDay(d.version)) + '</span></div>' +
+
+      '<div class="prc-map"><div class="po-lbl">Путь клиента</div>' +
+        '<div class="prc-path">' + path.map(tile).join('') + '</div>' +
+        '<div class="po-lbl prc-lbl2">Остальные процессы</div>' +
+        '<div class="prc-rest">' + rest.map(tile).join('') + '</div></div>' +
+
+      '<div class="prc-filter"><label class="po-lbl" for="prc-who">Шаги человека</label>' +
+        '<span class="al-selwrap prc-selw"><select id="prc-who" class="al-sel sm prc-sel">' + opts + '</select></span></div>' + panel +
+
+      '<div class="card prc-card">' +
+        '<div class="prc-head"><div class="prc-tn">Процесс ' + esc(sel.n) + '</div>' +
+          '<h3>' + esc(sel.title) + ': ' + esc(sel.span) +
+            (sel.status === 'draft' ? '' : ' <span class="sev n-ok">' + esc(sel.status) + '</span>') + '</h3>' +
+          '<dl class="prc-meta"><dt>Цель</dt><dd>' + esc(sel.goal) + '</dd>' +
+            '<dt>Руководитель</dt><dd>' + (sel.owner_disputed ? '<span class="prc-q">?</span> ' : '') + esc(sel.owner) + '</dd>' +
+            '<dt>Начало</dt><dd>' + esc(sel.start) + '</dd><dt>Конец</dt><dd>' + esc(sel.end) + '</dd></dl>' +
+          '<div class="prc-agn">Агенту можно отдать ' + agN + ' из ' + sel.steps.length + ' шагов, целиком или черновиком</div>' +
+          (sel.pain ? '<span class="prc-pain">' + esc(sel.pain) + '</span>' : '') + '</div>' +
+        '<div class="prc-cols"><span>№</span><span>Что делаем</span><span>Кто</span><span>Результат шага</span></div>' +
+        '<ol class="prc-steps">' + steps + '</ol>' +
+        '<div class="prc-foot"><div><span class="po-lbl">Вопросы на проверку</span>' + list(sel.questions || []) + '</div>' +
+          '<div><span class="po-lbl">На что опирается</span>' + list(sel.sources || []) + '</div></div></div>' +
+
+      '<div class="prc-two">' +
+        '<div class="card prc-box"><div class="po-lbl">Где источники спорят</div><ol class="prc-disp">' +
+          (d.disputes || []).map(function (x) { return '<li><b>' + esc(x.title) + '</b><span>' + esc(x.text) + '</span></li>'; }).join('') + '</ol></div>' +
+        '<div class="card prc-box"><div class="po-lbl">Процессы без расписанных шагов</div><ul class="prc-minor">' +
+          (d.minor || []).map(function (x) { return '<li><b>' + esc(x.title) + '</b><span>' + esc(x.who) + '</span></li>'; }).join('') + '</ul></div>' +
+      '</div></div>';
+
+    view.querySelectorAll('[data-prc]').forEach(function (b) {
+      b.addEventListener('click', function () { prcGo(b.getAttribute('data-prc')); });
+    });
+    var s = view.querySelector('select.prc-sel');
+    if (s) {
+      s.addEventListener('change', function () { state.prcWho = s.value; renderView(); });
+      searchSelect(s);
     }
   }
 
