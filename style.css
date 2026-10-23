@@ -13374,7 +13374,13 @@ video.cs-media { background: #000; }
   animation: omLive 2.4s var(--ease) infinite; }
 @keyframes omLive { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 
-.om-marks { display: inline-flex; gap: 4px; }
+.om-marks { display: inline-flex; align-items: center; gap: 5px; }
+/* Счет человека: сделано и в работе. Числа табличные, подписи тихие — строка
+   читается как счет, а не как еще одна метка. */
+.om-tally { padding: 0 5px; border-radius: 999px; background: rgba(255,255,255,.82);
+  border: 1px solid var(--line-2); font-size: 9.5px; color: var(--ink-2); white-space: nowrap; }
+.om-tally b { font-weight: 700; color: var(--ink); }
+.om-tally b.ok { color: var(--green-ink); }
 .om-mk { min-width: 17px; padding: 0 5px; border-radius: 999px; font-size: 10px; font-weight: 700; }
 .om-mk.bad { background: var(--red-soft); color: var(--red-ink); }
 .om-mk.ok { background: var(--green-soft); color: var(--green-ink); }

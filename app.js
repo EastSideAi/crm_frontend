@@ -122,7 +122,7 @@
     // больше нет: 16.09.2026 Павел свел оба места в одно.
     meetView: 'slots', meetMonth: 0, meetMonthData: {},
     news: null, newsUnread: 0,
-    teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
+    teamMode: 'office', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
     pulse: null, pulseDate: '', pulseTimer: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -11110,10 +11110,14 @@
        это как сломанный фильтр. Слева период, справа два управленческих среза,
        между ними черта — выбран всегда ровно один пункт.
        Фокус и застряло переехали сюда из левого меню 06.10.2026. */
+    // Офис стоит первым и открывается по умолчанию (Павел, 24.10.2026): это
+    // ответ на вопрос «кто чем занят сейчас», а периоды — разбор после.
     return '<div class="pay-seg plan-seg tm-seg">' +
+      btns([['office', 'Офис']]) +
+      '<span class="seg-div"></span>' +
       btns([['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']]) +
       '<span class="seg-div"></span>' +
-      btns([['focus', 'Фокус'], ['stuck', 'Застряло'], ['office', 'Офис']]) +
+      btns([['focus', 'Фокус'], ['stuck', 'Застряло']]) +
     '</div>';
   }
   function wireTeamMode(view) {
@@ -11413,6 +11417,16 @@
     return p[0] + (p[1] ? ' ' + p[1][0] + '.' : '');
   }
 
+  /* Обратный словарь «подпись роли → роль»: строится один раз по ROLES, тем же
+     списком, по которому подписи и выдаются. */
+  var OFFICE_BY_LABEL = null;
+  function officeRoleByLabel(label) {
+    if (!OFFICE_BY_LABEL) {
+      OFFICE_BY_LABEL = {};
+      Object.keys(ROLES).forEach(function (k) { OFFICE_BY_LABEL[ROLES[k].label] = k; });
+    }
+    return OFFICE_BY_LABEL[label] || '';
+  }
   function officeRoom(role) {
     for (var i = 0; i < OFFICE_ROOMS.length; i++) {
       if (OFFICE_ROOMS[i].roles.indexOf(role) !== -1) return OFFICE_ROOMS[i].id;
@@ -11631,8 +11645,17 @@
         '<div class="card"><div class="empty">Не удалось собрать офис. Обнови страницу.</div></div>';
       wireTeamMode(view); return;
     }
-    var d = state.pulse, seats = d.seats || [], rws = {};
+    var d = state.pulse, rws = {};
     (d.people || []).forEach(function (p) { rws[p.id] = p; });
+    /* Сервер старее экрана (между промоутами фронта и бэкенда это норма): мест
+       он еще не отдает. Тогда рассаживаем тех, у кого сегодня было движение, —
+       роль берем по ее подписи. Свободные столы появятся после выкатки. */
+    var seats = d.seats, partial = !d.seats;
+    if (partial) {
+      seats = (d.people || []).map(function (p) {
+        return { id: p.id, name: p.name, role: officeRoleByLabel(p.role_label), agent: null };
+      });
+    }
 
     var men = seats.map(function (s) {
       var row = rws[s.id], st = deskState(row);
@@ -11640,6 +11663,7 @@
                say: officeSay(row, st), days: st === 'slow' ? daysAgo(row.now.at) : 0,
                task: st === 'work' || st === 'slow' ? row.now.id : 0,
                over: (row && row.overdue) || 0, done: (row && row.done_n) || 0,
+               open: (row && row.open_n) || 0,
                live: !!(row && row.active_at && daysAgo(row.active_at) === 0),
                bot: s.agent ? (AGENT_SAY[s.agent.state] || 'в работе') : '',
                botAsk: !!(s.agent && s.agent.state === 'ask') };
@@ -11659,8 +11683,13 @@
     var strip = '<div class="om-strip">' +
       '<span><b class="num">' + live + '</b> за работой</span>' +
       '<span' + (stale ? ' class="warn"' : '') + '><b class="num">' + stale + '</b> без движения</span>' +
-      '<span><b class="num">' + seats.length + '</b> мест</span>' +
-      '<i>на связи покажем, когда заработают голосовые каналы</i>' +
+      '<span><b class="num">' + men.reduce(function (n, m) { return n + m.done; }, 0) +
+        '</b> сделано сегодня</span>' +
+      '<span><b class="num">' + seats.length + '</b> ' +
+        (partial ? 'за столами' : 'мест') + '</span>' +
+      '<i>' + (partial
+        ? 'свободные места и агентов покажем, когда выкатится сервер'
+        : 'на связи покажем, когда заработают голосовые каналы') + '</i>' +
       '<a class="qchip mr-go om-go" href="' + API + '/meet">' + ic('mic', 13) +
         '<span>Зайти в офис</span></a>' +
     '</div>';
@@ -11744,8 +11773,13 @@
         var m = p.m, marks = '';
         if (m.over) marks += '<span class="om-mk bad num" role="img" aria-label="просрочено задач: ' +
           m.over + '">' + m.over + '</span>';
-        if (m.done) marks += '<span class="om-mk ok num" role="img" aria-label="сделано сегодня: ' +
-          m.done + '">' + m.done + '</span>';
+        // Главный вопрос руководителя к карте: кто сколько сделал и сколько
+        // держит в работе. Поэтому счет идет словами под именем, а не одними
+        // кружками: кружок без подписи читают по-разному.
+        var tally = [];
+        if (m.done) tally.push('<b class="num ok">' + m.done + '</b> сделано');
+        if (m.open) tally.push('<b class="num">' + m.open + '</b> в работе');
+        if (tally.length) marks += '<span class="om-tally">' + tally.join(' · ') + '</span>';
         var shows = m.st === 'work' || m.st === 'slow';
         return (shows
             ? '<div class="om-pin om-' + m.st + '" style="left:' + pc(p.x) + ';top:' + pcY(p.y) + '">' +
