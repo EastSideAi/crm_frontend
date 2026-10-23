@@ -22563,6 +22563,53 @@
     });
   }
 
+  /* Поиск карточки — ПО СЛОВАМ, а не одной строкой подряд. Подстрочный поиск врал
+     дважды: «Зайцевы» не находило «Зайцев», а «Зайцев Николай» не находило карточку
+     «Николай Зайцев» — слова переставлены, и для строки это разные тексты. Деньги
+     из-за этого уезжали на первую похожую карточку (Роман 23.10.2026, доход
+     Зайцевых сел на пустой дубль). Слово длиннее четырёх букв ищем по корню:
+     окончание в русском меняется чаще, чем человек готов подбирать его в поиске. */
+  function pkWords(v) {
+    return String(v || '').toLowerCase().replace(/ё/g, 'е')
+      .split(/[^0-9a-zа-я@._+]+/).filter(Boolean);
+  }
+  function pkStem(w) { return w.length > 4 ? w.slice(0, w.length - 1) : w; }
+  function pkFilter(all, q) {
+    var words = pkWords(q);
+    if (!words.length) return all;
+    return all.filter(function (l) {
+      var hay = pkWords((leadName(l) || '') + ' ' + (l.name || '') + ' ' +
+                        (l.contact || '') + ' ' + (l.email || ''));
+      return words.every(function (w) {
+        var stem = pkStem(w);
+        return hay.some(function (h) { return h.indexOf(stem) === 0 || h.indexOf(w) >= 0; });
+      });
+    });
+  }
+  /* Чем карточка живее, тем выше. Пустой заход внизу: именно его и выбирают по ошибке,
+     когда две строки выглядят одинаково. */
+  function pkRank(l) {
+    var crm = l.crm || {};
+    var r = 0;
+    if (l.paid) r += 8;
+    if (crm.status === 'client') r += 6;
+    if (crm.owner && crm.owner.id) r += 3;
+    if (l.booking) r += 2;
+    if (l.status !== 'visited') r += 1;
+    if (!l.name && !(l.contact || l.email)) r -= 4;
+    return r;
+  }
+  function pkMarks(l) {
+    var crm = l.crm || {};
+    var out = [];
+    if (l.paid) out.push('<em class="pk-m pk-m--on">платил</em>');
+    if (crm.status === 'client') out.push('<em class="pk-m pk-m--on">клиент</em>');
+    if (crm.owner && crm.owner.name) out.push('<em class="pk-m">ведет ' + esc(crm.owner.name) + '</em>');
+    if (!l.paid && l.booking) out.push('<em class="pk-m">записан на разбор</em>');
+    if (!l.name && !(l.contact || l.email)) out.push('<em class="pk-m pk-m--off">пустая карточка</em>');
+    return out.join('');
+  }
+
   /* Пикер карточки клиента для строки дохода без привязки. Список лидов ищем по имени и
      контакту; выбор пишет meta.case_id, после чего имя дохода станет ссылкой в карточку.
      Прямой и ручной платёж приходит без клиента, и здесь его привязывают руками. */
@@ -22605,18 +22652,15 @@
     };
     var draw = function (q) {
       if (!all) return;
-      q = (q || '').trim().toLowerCase();
-      var list = all;
-      if (q) list = all.filter(function (l) {
-        return ((leadName(l) || '') + ' ' + (l.contact || '') + ' ' + (l.email || ''))
-          .toLowerCase().indexOf(q) >= 0;
-      });
+      var list = pkFilter(all, q);
       if (!list.length) { box.innerHTML = '<div class="empty">Никого не нашли</div>'; return; }
+      list = list.slice().sort(function (a, b) { return pkRank(b) - pkRank(a); });
       box.innerHTML = list.slice(0, 60).map(function (l) {
         var c = (l.contact || l.email || '').trim();
         return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
           '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
-          (c ? '<i>' + esc(c) + '</i>' : '') + '</button>';
+          (c ? '<i>' + esc(c) + '</i>' : '') +
+          '<span class="pk-marks">' + pkMarks(l) + '</span></button>';
       }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
       Array.prototype.forEach.call(box.querySelectorAll('.pk-row'), function (b) {
         b.addEventListener('click', function () { pick(b.getAttribute('data-pick')); });

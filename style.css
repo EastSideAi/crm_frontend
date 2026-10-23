@@ -7445,6 +7445,14 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .pk-row:hover { background: var(--blue-tint); border-color: var(--blue); }
 .pk-row b { font: 600 13.5px 'Manrope', sans-serif; color: var(--ink); }
 .pk-row i { font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); font-style: normal; }
+/* Метки карточки в пикере: платил, клиент, кто ведет, пустая. Две одинаковые с виду
+   строки — главная причина, по которой доход уезжает на дубль, поэтому различие дают
+   не рамкой, а словами. Приглушенная метка «пустая карточка» уводит взгляд вниз. */
+.pk-marks { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pk-m { font: 600 11px 'Manrope', sans-serif; font-style: normal; color: var(--ink-2);
+  background: var(--line-soft, rgba(16,24,40,.05)); border-radius: var(--r-pill); padding: 2px 8px; }
+.pk-m--on { color: var(--green-ink); background: var(--green-soft); }
+.pk-m--off { color: var(--ink-3, var(--ink-2)); opacity: .75; }
 .pk-more { text-align: center; color: var(--ink-2); font-size: 12px; padding: 8px 0 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
