@@ -35045,12 +35045,21 @@
   /* Плоский словарь узлов по всем процессам: путь-крошки, поиск и фильтр по
      человеку ходят по нему, а не перебором файлов. */
   function prcIndex() {
-    var d = state._prc, by = {}, people = {};
+    var d = state._prc, by = {}, people = {}, agents = {};
     d.people.forEach(function (p) { people[p.id] = p; });
+    (d.agents || []).forEach(function (a) { agents[a.id] = a; });
     d.processes.forEach(function (p) {
       Object.keys(p.nodes).forEach(function (nid) { by[nid] = { pid: p.id, node: p.nodes[nid] }; });
     });
-    d._by = by; d._people = people;
+    d._by = by; d._people = people; d._agents = agents;
+  }
+  /* Агент на карте — роль из списка с куратором (Вера 23.10.2026). Пусто значит,
+     что процесс пока ведет человек; незнакомый id показываем как есть, а не прячем. */
+  function prcAgent(id) {
+    if (!id) return 'нет, ведет человек';
+    var a = (state._prc._agents || {})[id];
+    if (!a) return id;
+    return a.name + ' · куратор ' + prcPerson(a.curator).name;
   }
   function prcPerson(id) {
     var p = state._prc._people[id];
@@ -35415,7 +35424,7 @@
 
     var owner = n.owner ? prcPerson(n.owner).name : '';
     var meta = [
-      ['Руководитель', esc(owner)], ['Агент', esc(n.agent || '')],
+      ['Руководитель', esc(owner)], ['Агент', esc(prcAgent(n.agent))],
       ['Начало', esc(n.trigger || '')], ['Конец', esc(n.done || '')],
       ['На входе', esc(n.input || '')], ['На выходе', esc(n.output || '')], ['Срок', esc(n.sla || '')],
     ].filter(function (x) { return x[1]; });
