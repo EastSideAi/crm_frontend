@@ -21397,8 +21397,11 @@
               // в meta.payout: у партнерской выплаты это и есть ответ на вопрос «кому
               // и за кого переводим» (Роман 23.10.2026).
               '<span class="fl-sub">' + [finDate(o.date), o.item || '—', o.offering || '',
-                o.comment || '', finPayoutReq(o.payout)]
-                .filter(Boolean).map(esc).join(' · ') + docChip + '</span>' +
+                o.comment || ''].filter(Boolean).map(esc).join(' · ') +
+                (o.payout ? ' · ' + finReqBtn(o.payout, {
+                  who: o.counterparty || '', amount: o.amount,
+                  purpose: [o.item || '', o.comment || ''].filter(Boolean).join('. '),
+                }) : '') + docChip + '</span>' +
               // Трата с фонда — такой же расход ведомости, и отмечается так же
               // (Роман 19.10.2026: «внутри фондов тоже на расходах можно поставить
               // оплачено»). Правка период-ом не этой ведомости сюда не приезжает.
@@ -21520,6 +21523,7 @@
     // (реквизиты + чек) в ведомости той строки (period_id). Остальные фонды — обычная
     // форма расхода, та же, что при заводе; список трат тут за выбранную ведомость,
     // поэтому правка уходит в неё (finLineForm берёт текущий период).
+    finReqWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-fpay]'), function (r) {
       r.addEventListener('click', function () {
         var id = r.getAttribute('data-fpay');
@@ -22992,11 +22996,15 @@
           ? 'счет № ' + inv.number + (inv.issued_on ? ' от ' + finDate(inv.issued_on) : '')
           : '';
         // Реквизиты в подстрочник: кто проводит платежи, видит «кому и куда» прямо в
-        // расходах, не открывая реестр выплат (Роман 23.10.2026). finPayoutReq дает
-        // получателя и способ перевода — счет с БИК или телефон.
-        var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '',
-                   finPayoutReq(it.payout)]
+        // расходах, не открывая реестр выплат (Роман 23.10.2026). В строке стоит
+        // получатель и способ перевода, а клик по ним открывает снимок целиком.
+        var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
           .filter(Boolean).map(esc).join(' · ');
+        var reqBtn = finReqBtn(it.payout, {
+          who: it.counterparty || '', amount: it.amount,
+          purpose: [it.item || '', it.comment || ''].filter(Boolean).join('. '),
+        });
+        if (reqBtn) sub = sub ? sub + ' · ' + reqBtn : reqBtn;
         // Сам документ лежит у нас, и номер счета — ссылка на него: вопрос «за что
         // ушли деньги» без бумаги не закрывается, а искать ее потом негде.
         if (invLbl) {
@@ -23092,6 +23100,7 @@
         finSupplierForm(null, b.getAttribute('data-spsup'));
       });
     });
+    finReqWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-spvia]'), function (b) {
       b.addEventListener('click', function () {
         var next = b.getAttribute('data-via') === 'card' ? 'rs' : 'card';
@@ -23737,6 +23746,89 @@
     else if (p.wallet) bits.push('ЮMoney ' + p.wallet);
     if (p.bank) bits.push(p.bank);
     return bits.join(' · ');
+  }
+
+  /* Реквизиты целиком — по клику на них в строке (Роман 23.10.2026: «может еще
+     кнопку сделать, чтобы можно было открыть реквизиты полностью»). В строке стоит
+     только то, по чему делают перевод, а в карточке — весь снимок выплаты: ИНН,
+     назначение платежа и сумма. Каждое поле копируется отдельной кнопкой: в банк
+     реквизиты переносят по одному, а выделять мышкой кусок подстрочника неудобно. */
+  function finPayoutLines(p, ctx) {
+    var WAY = { sbp: 'перевод по телефону (СБП)', bank: 'на банковский счет',
+                yoomoney: 'кошелек ЮMoney' };
+    var m = p.method || (p.account ? 'bank' : (p.wallet ? 'yoomoney' : 'sbp'));
+    var L = [];
+    if (p.receiver) L.push(['Получатель', p.receiver]);
+    L.push(['Как платим', WAY[m] || WAY.bank]);
+    if (p.phone) L.push(['Телефон', p.phone]);
+    if (p.account) L.push(['Расчетный счет', p.account]);
+    if (p.bic) L.push(['БИК', p.bic]);
+    if (p.bank) L.push(['Банк', p.bank]);
+    if (p.wallet) L.push(['Кошелек ЮMoney', p.wallet]);
+    // ИНН в строке не показываем — в платеже физлицу он не участвует, — но в
+    // карточке он есть: это доказательство, кому ушли деньги.
+    if (p.inn) L.push(['ИНН', p.inn]);
+    if (ctx && ctx.purpose) L.push(['Назначение', ctx.purpose]);
+    // Сумму копируем голым числом: в поле банка пробелы и знак рубля не вставишь.
+    if (ctx && ctx.amount != null) L.push(['Сумма', finRub(ctx.amount), String(ctx.amount)]);
+    return L;
+  }
+
+  function finPayoutCard(p, ctx) {
+    if (!p) return;
+    var lines = finPayoutLines(p, ctx || {});
+    var body = '<div class="rq-lines">' + lines.map(function (l) {
+      return '<div class="rq-l"><span class="rq-k">' + esc(l[0]) + '</span>' +
+        '<span class="rq-v">' + esc(l[1]) + '</span>' +
+        '<button class="rq-c" data-cp="' + esc(l[2] == null ? l[1] : l[2]) +
+        '" title="Скопировать">' + ic('copy', 13) + '</button></div>';
+    }).join('') + '</div>';
+    var m = finModal({
+      eyebrow: 'Куда переводим', title: (ctx && ctx.who) || 'Реквизиты',
+      sub: 'Так было на момент выплаты. Партнер поменяет реквизиты у себя в ' +
+           'кабинете — здесь останутся те, по которым платили.',
+      body: body, ok: 'Скопировать все',
+    });
+    if (!m) return;
+    // «Отмена» тут не к месту: отменять нечего, карточка только показывает.
+    var cancel = m.ov.querySelector('#fm-cancel');
+    if (cancel) cancel.parentNode.removeChild(cancel);
+    Array.prototype.forEach.call(m.ov.querySelectorAll('[data-cp]'), function (b) {
+      b.addEventListener('click', function () { copyText(b.getAttribute('data-cp'), b); });
+    });
+    el('fm-ok').addEventListener('click', function () {
+      copyText(lines.map(function (l) {
+        return l[0] + ': ' + (l[2] == null ? l[1] : l[2]);
+      }).join('\n'), el('fm-ok'));
+    });
+  }
+
+  /* Кнопка с реквизитами в подстрочник строки. Сам снимок кладем в FIN.reqs под
+     коротким ключом: в data-атрибуте ему не место — это ФИО, счет и ИНН человека,
+     и в разметке они лежали бы у каждой строки списка. */
+  function finReqBtn(p, ctx) {
+    if (!p) return '';
+    var txt = finPayoutReq(p);
+    if (!txt) return '';
+    var key = 'r' + (FIN._reqN = (FIN._reqN || 0) + 1);
+    (FIN.reqs || (FIN.reqs = {}))[key] = { p: p, ctx: ctx || {} };
+    // Значка рядом нет намеренно: реквизиты длинные и переносятся, а значок при
+    // переносе оставался один на отдельной строке. Подчеркивания и подсказки хватает,
+    // рядом тем же рецептом нарисована ссылка на счет.
+    return '<button class="rq-open" data-req="' + key +
+      '" title="Открыть реквизиты полностью">' + esc(txt) + '</button>';
+  }
+
+  function finReqWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
+      b.addEventListener('click', function (e) {
+        // Строка траты в фонде кликается целиком (правка расхода) — реквизиты
+        // открываем, не задевая ее.
+        e.stopPropagation();
+        var r = (FIN.reqs || {})[b.getAttribute('data-req')];
+        if (r) finPayoutCard(r.p, r.ctx);
+      });
+    });
   }
 
   // Одна строка истории/периода выплат: дата, получатель с подстрочником, сумма,

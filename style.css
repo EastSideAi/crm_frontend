@@ -7608,6 +7608,42 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .fsp-row.has-pay .fo-what i { white-space: normal; }
 .fsp-row .fo-st { flex-wrap: wrap; row-gap: 5px; }
 
+/* Реквизиты в подстрочнике — кнопка, а не текст: по клику открывается карточка со
+   всем снимком выплаты (Роман 23.10.2026). Рисуем как ссылку подстрочника, тем же
+   рецептом, что номер счета рядом: вторая акцентная кнопка в строке расхода спорила
+   бы с «документом» и «попросить счет» справа. */
+/* display: inline, а не inline-flex: реквизиты длинные, и в узкой строке они должны
+   переноситься по словам вместе с остальным подстрочником. */
+.rq-open { font: inherit; color: var(--ink-2); background: none; border: 0; padding: 0;
+  cursor: pointer; display: inline; text-decoration: underline;
+  text-decoration-color: rgba(17,21,31,.22); text-underline-offset: 2px;
+  text-align: left; }
+.rq-open:hover { color: var(--blue); text-decoration-color: var(--blue); }
+.rq-open:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px;
+  border-radius: 4px; }
+
+/* Карточка реквизитов: поле в строку, значение моноширинным — счет и БИК читают по
+   цифрам, и пропорциональный шрифт тут мешает сверить их с банком. */
+.rq-lines { display: flex; flex-direction: column; gap: 2px; }
+.rq-l { display: grid; grid-template-columns: 132px 1fr 28px; align-items: center;
+  gap: 10px; padding: 8px 4px 8px 10px; border-radius: 10px; }
+.rq-l:hover { background: var(--fill); }
+.rq-k { font-size: 12.5px; color: var(--ink-2); }
+.rq-v { font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums;
+  word-break: break-word; }
+.rq-c { width: 26px; height: 26px; display: grid; place-items: center; flex: none;
+  border: 0; border-radius: 8px; background: none; color: var(--ink-3);
+  cursor: pointer; opacity: .4; transition: opacity .12s var(--ease); }
+/* Значок виден всегда, пусть и приглушенно: спрятанный до наведения, он не говорит
+   человеку, что поле вообще копируется по одному. */
+.rq-l:hover .rq-c, .rq-c:focus-visible { opacity: 1; }
+.rq-c:hover { background: var(--blue-tint); color: var(--blue); }
+@media (max-width: 560px) {
+  .rq-l { grid-template-columns: 1fr 28px; row-gap: 2px; }
+  .rq-k { grid-column: 1 / -1; }
+  .rq-c { opacity: 1; }
+}
+
 /* Поле файла в форме ведомости: плашка по мере .al-in, внутри спрятан input.
    Браузерная кнопка «Choose File» приходит с английской подписью и чужой
    типографикой — на экране про деньги это читается как сбой верстки. */
