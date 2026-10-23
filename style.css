@@ -389,6 +389,19 @@ a { color: inherit; text-decoration: none; }
    Метрика недоступна или счётчик не задан — плиток снова пять. */
 .statbar.six { grid-template-columns: repeat(6, 1fr); }
 .statbar.six .stat { padding: 16px 14px; }
+/* Одна главная цифра на полосу. Четыре равновесных числа читаются по кругу: глазу
+   не за что зацепиться, и экран каждый раз приходится перечитывать целиком. Ведущая
+   плитка шире и крупнее, соседние тише — иерархия весом, а не рамкой. */
+.statbar.lead { grid-template-columns: 1.5fr 1fr 1fr 1fr; }
+.statbar.lead .stat.lead .sv { font-size: 46px; letter-spacing: -.045em; margin-top: 16px; }
+.statbar.lead .stat:not(.lead) .sv { font-size: 26px; margin-top: 12px; }
+/* Кегли внутри полосы разные, поэтому ряд держат не числа, а лейбл сверху и
+   сноска снизу: иначе подписи плывут каждая на своей высоте. */
+.statbar.lead .stat { display: flex; flex-direction: column; }
+.statbar.lead .stat .sd { margin-top: auto; padding-top: 10px; }
+/* Под главной цифрой стоит не сноска, а вторая сумма (доход до комиссии), поэтому
+   она читается в полный голос, а не серым шепотом. */
+.statbar.lead .stat.lead .sd .smut { font-size: 13px; color: var(--ink-2); }
 .stat { min-width: 0; text-align: left; padding: 16px 22px; position: relative; transition: background .12s; border-radius: 14px; }
 .stat + .stat::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: var(--line); }
 .stat.go { cursor: pointer; }
@@ -5197,7 +5210,11 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
      оставались в половину экрана: заголовок «Со спасибо в закрытый канал» вставал
      в четыре строки, а числа с подписями обрезались по краю карточки. */
   .sp6 { grid-column: 1 / span 12; }
-  .statbar, .statbar.five, .statbar.six { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
+  .statbar, .statbar.five, .statbar.six, .statbar.lead { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
+  /* В две колонки ведущая плитка уже не ведет композицию строкой — выравниваем
+     кегли, иначе рядом с соседкой она просто ломает сетку. */
+  .statbar.lead .stat.lead .sv { font-size: 32px; letter-spacing: -.04em; margin-top: 14px; }
+  .statbar.lead .stat:not(.lead) .sv { font-size: 32px; margin-top: 14px; }
   .stat, .statbar.five .stat, .statbar.six .stat { padding: 14px 16px; }
   .statbar.three { grid-template-columns: repeat(3, 1fr); }
   .stat .sv { font-size: 32px; }
@@ -5330,7 +5347,7 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 /* Телефон. Идет ПОСЛЕ блока 960px: там метрики стоят в две колонки, а в половине
    ширины «18 006 620 ₽» переносится и знак рубля уезжает на отдельную строку. */
 @media (max-width: 480px) {
-  .statbar, .statbar.five, .statbar.six { grid-template-columns: 1fr; }
+  .statbar, .statbar.five, .statbar.six, .statbar.lead { grid-template-columns: 1fr; }
   .stat + .stat::before { display: none; }
   /* Плитки в столбик занимали весь первый экран, и список начинался ниже сгиба.
      Кладем их в две колонки и убираем сноску: шапка укладывается в две невысокие
@@ -7428,6 +7445,17 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .pk-row:hover { background: var(--blue-tint); border-color: var(--blue); }
 .pk-row b { font: 600 13.5px 'Manrope', sans-serif; color: var(--ink); }
 .pk-row i { font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); font-style: normal; }
+/* Метки карточки в пикере: платил, клиент, кто ведет, пустая. Две одинаковые с виду
+   строки — главная причина, по которой доход уезжает на дубль, поэтому различие дают
+   не рамкой, а словами. Приглушенная метка «пустая карточка» уводит взгляд вниз. */
+.pk-marks { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pk-m { font: 600 11px 'Manrope', sans-serif; font-style: normal; color: var(--ink-2);
+  background: var(--line-soft, rgba(16,24,40,.05)); border-radius: var(--r-pill); padding: 2px 8px; }
+.pk-m--on { color: var(--green-ink); background: var(--green-soft); }
+.pk-m--off { color: var(--ink-3, var(--ink-2)); opacity: .75; }
+/* Предупреждение, а не статус: тем же контактом подписана еще одна карточка, и деньги
+   легко уехать не туда (Роман 23.10.2026, доход Зайцевых). */
+.pk-m--warn { color: var(--amber-ink); background: var(--amber-soft); }
 .pk-more { text-align: center; color: var(--ink-2); font-size: 12px; padding: 8px 0 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }

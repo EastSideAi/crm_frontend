@@ -232,6 +232,8 @@
     cabinet_invite_sent: 'отправили приглашение в кабинет',
     cabinet_invite_issued: 'выпустили приглашение в кабинет',
     cabinet_invite_shown: 'взяли ссылку приглашения',
+    lead_taken: 'взяли в работу',
+    lead_owner_set: 'назначен ответственный',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -267,6 +269,16 @@
     if (e.type === 'cabinet_invite_sent') label += p.channel === 'email' ? ' письмом' : '';
     if (e.type === 'cabinet_invite_issued' || e.type === 'cabinet_invite_shown') {
       label += (p.relation === 'parent' ? ': родитель' : ': ученик') + (p.by ? ' · ' + p.by : '');
+    }
+    if (e.type === 'lead_taken' && p.by) label += ': ' + p.by;
+    /* Кто ведет карточку — поле без истории, а по нему считается процент продавцу.
+       Поэтому «откуда тут этот человек» читается только отсюда (Роман 23.10.2026
+       спросил ровно это про карточку Зайцевых, и ответить было нечем). */
+    if (e.type === 'lead_owner_set') {
+      label = p.to ? 'ведет ' + p.to : 'ответственный снят';
+      if (p.from) label += ', вместо ' + p.from;
+      label += p.by === 'раздача' ? ' · раздача' + (p.why ? ': ' + p.why : '')
+        : (p.by ? ' · поставил ' + p.by : '');
     }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
@@ -20500,14 +20512,24 @@
       accById[a.id] = a;
       if (a.id === 'vtb') vtb = a;
     });
+    /* Четыре одинаковых числа заставляли обходить полосу по кругу каждый раз: якоря
+       не было ни одного. Крупной идет первая строка каскада — доход периода, с нее
+       экран и читается сверху вниз; порядок и названия прежние (Роман 20.10.2026). */
     var bar = statBar([
-      { label: 'Доход к зачислению', value: finRub(c.income), sub: 'уже за вычетом комиссии' },
+      { label: 'Доход к зачислению', value: finRub(c.income),
+        /* Рядом с зачислением — сколько заплатили клиенты, до комиссии эквайринга
+           (Роман 20.10.2026). Брутто считает бэкенд (period_gross); там, где его не
+           знают, оно равно зачислению, и вторая сумма превратилась бы в дубль. */
+        sub: (c.income_gross && c.income_gross > c.income)
+          ? 'до комиссии ' + finRub(c.income_gross)
+          : 'уже за вычетом комиссии',
+        lead: true },
       { label: 'Дивиденды', value: finRub(c.dividends), sub: 'после всех отчислений' },
       { label: 'Денег в фондах', value: finRub(m.in_funds), sub: 'по всем фондам сразу' },
       { label: 'Остаток на р/с', value: finRub(vtb ? vtb.live : m.on_vtb),
         sub: vtb && vtb.opening ? 'с учетом ' + finRub(vtb.opening) + ' с прошлого'
                                 : 'сколько реально на ВТБ' },
-    ]);
+    ], 'lead');
 
     /* Правило фонда правится там же, где видно его действие: строка каскада — это и
        есть результат правила, и открывать ради нее отдельный экран незачем. */
@@ -21353,16 +21375,18 @@
           'Добавить выплату</button>' : '') + '</div>' +
       ((f.operations || []).length
         ? '<div class="fin-list">' + f.operations.map(function (o) {
-            // Выплата подрядчику (ручной расход фонда) открывается на правку по клику;
-            // автострока и чужая статья (продукт в этом же фонде) — только показ.
-            var payRow = isContractors && o.source === 'фонд' && !o.auto;
+            // Ручной расход фонда открывается на правку по клику (o.editable с бэка:
+            // не автострока и не списание сервиса). У подрядчиков это выплата с
+            // реквизитами и чеком, у остальных фондов — обычная трата.
+            var editRow = !!o.editable;
+            var payRow = isContractors && editRow;
             var docChip = !payRow ? ''
               : (o.doc ? ' <span class="fst doc">' + ic('check', 11) +
                     esc(o.doc.name || 'документ') + '</span>'
                  : (o.status === 'факт' ? ' <span class="fst wait">нет документа</span>' : ''));
-            return '<div class="fl-row fl-2' + (payRow ? ' click' : '') +
+            return '<div class="fl-row fl-2' + (editRow ? ' click' : '') +
               (o.status === 'факт' ? ' paid' : '') + '"' +
-              (payRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
+              (editRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
               '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
               (o.offering ? ' · ' + esc(o.offering) : '') + docChip + '</span>' +
@@ -21483,14 +21507,19 @@
       else finLineForm(null, { form: 'фонд', section: FIN.fundId });
     });
     finPaidBind(view);
-    // Строки-выплаты фонда подрядчиков открываются на правку прямо здесь — форма выплаты
-    // в ведомости той строки (period_id), а не в текущей выбранной.
+    // Ручной расход фонда открывается на правку прямо здесь. Подрядчики — форма выплаты
+    // (реквизиты + чек) в ведомости той строки (period_id). Остальные фонды — обычная
+    // форма расхода, та же, что при заводе; список трат тут за выбранную ведомость,
+    // поэтому правка уходит в неё (finLineForm берёт текущий период).
     Array.prototype.forEach.call(view.querySelectorAll('[data-fpay]'), function (r) {
       r.addEventListener('click', function () {
         var id = r.getAttribute('data-fpay');
         var ops = (FIN.fund && FIN.fund.operations) || [];
         for (var i = 0; i < ops.length; i++) {
-          if (ops[i].id === id) return finPayoutForm(ops[i], { period_id: ops[i].period_id });
+          if (ops[i].id !== id) continue;
+          var o = ops[i];
+          if (isContractors) return finPayoutForm(o, { period_id: o.period_id });
+          return finLineForm(finFundOpToLine(o), { form: 'фонд' });
         }
       });
     });
@@ -22549,6 +22578,83 @@
     });
   }
 
+  /* Поиск карточки — ПО СЛОВАМ, а не одной строкой подряд. Подстрочный поиск врал
+     дважды: «Зайцевы» не находило «Зайцев», а «Зайцев Николай» не находило карточку
+     «Николай Зайцев» — слова переставлены, и для строки это разные тексты. Деньги
+     из-за этого уезжали на первую похожую карточку (Роман 23.10.2026, доход
+     Зайцевых сел на пустой дубль). Слово длиннее четырёх букв ищем по корню:
+     окончание в русском меняется чаще, чем человек готов подбирать его в поиске. */
+  function pkWords(v) {
+    return String(v || '').toLowerCase().replace(/ё/g, 'е')
+      .split(/[^0-9a-zа-я@._+]+/).filter(Boolean);
+  }
+  function pkStem(w) { return w.length > 4 ? w.slice(0, w.length - 1) : w; }
+  function pkFilter(all, q) {
+    var words = pkWords(q);
+    if (!words.length) return all;
+    return all.filter(function (l) {
+      var hay = pkWords((leadName(l) || '') + ' ' + (l.name || '') + ' ' +
+                        (l.contact || '') + ' ' + (l.email || ''));
+      return words.every(function (w) {
+        var stem = pkStem(w);
+        return hay.some(function (h) { return h.indexOf(stem) === 0 || h.indexOf(w) >= 0; });
+      });
+    });
+  }
+  /* Чем карточка живее, тем выше. Пустой заход внизу: именно его и выбирают по ошибке,
+     когда две строки выглядят одинаково. */
+  function pkRank(l) {
+    var crm = l.crm || {};
+    var r = 0;
+    if (l.paid) r += 8;
+    if (crm.status === 'client') r += 6;
+    if (crm.owner && crm.owner.id) r += 3;
+    if (l.booking) r += 2;
+    if (l.status !== 'visited') r += 1;
+    if (!l.name && !(l.contact || l.email)) r -= 4;
+    return r;
+  }
+  /* Один и тот же телефон, почта или телеграм в двух карточках. Склеенные дубли в
+     списках не показываются вовсе, а несклеенные выглядят как два разных человека — и
+     деньги уходят на тот, который пустой. Пишем ровно факт «контакт как у другой
+     карточки», а не «дубль»: тем же контактом бывает подписана и карточка мамы, и
+     карточка ребенка, и это не ошибка. Считаем по списку, который и так загружен:
+     отдельная ручка означала бы запрос на каждое открытие окна. */
+  function pkKeys(l) {
+    var out = [];
+    [l.contact, l.email, (l.booking || {}).contact].forEach(function (v) {
+      var raw = String(v || '').trim().toLowerCase().replace(/\s+/g, '');
+      if (!raw) return;
+      if (raw.indexOf('@') > 0) { out.push('m:' + raw.replace(/^mailto:/, '')); return; }
+      if (raw.charAt(0) === '@') { out.push('t:' + raw.slice(1)); return; }
+      var dig = raw.replace(/\D/g, '');
+      if (dig.length >= 10) out.push('p:' + dig.slice(-10));
+      else if (raw.length >= 4) out.push('t:' + raw.replace(/^https?:\/\/(t\.me|vk\.com)\//, ''));
+    });
+    return out;
+  }
+  function pkDupes(all) {
+    var seen = {}, dup = {};
+    (all || []).forEach(function (l) {
+      pkKeys(l).forEach(function (k) {
+        if (seen[k] && seen[k] !== l.id) { dup[l.id] = 1; dup[seen[k]] = 1; }
+        else seen[k] = l.id;
+      });
+    });
+    return dup;
+  }
+  function pkMarks(l, dup) {
+    var crm = l.crm || {};
+    var out = [];
+    if (l.paid) out.push('<em class="pk-m pk-m--on">платил</em>');
+    if (crm.status === 'client') out.push('<em class="pk-m pk-m--on">клиент</em>');
+    if (crm.owner && crm.owner.name) out.push('<em class="pk-m">ведет ' + esc(crm.owner.name) + '</em>');
+    if (!l.paid && l.booking) out.push('<em class="pk-m">записан на разбор</em>');
+    if (dup && dup[l.id]) out.push('<em class="pk-m pk-m--warn">контакт как у другой карточки</em>');
+    if (!l.name && !(l.contact || l.email)) out.push('<em class="pk-m pk-m--off">пустая карточка</em>');
+    return out.join('');
+  }
+
   /* Пикер карточки клиента для строки дохода без привязки. Список лидов ищем по имени и
      контакту; выбор пишет meta.case_id, после чего имя дохода станет ссылкой в карточку.
      Прямой и ручной платёж приходит без клиента, и здесь его привязывают руками. */
@@ -22583,7 +22689,7 @@
     el('pk-cancel').addEventListener('click', close);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
-    var box = el('pk-list'), all = null;
+    var box = el('pk-list'), all = null, dup = {};
     var pick = function (cid) {
       finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
         'Привязал к клиенту');
@@ -22591,18 +22697,15 @@
     };
     var draw = function (q) {
       if (!all) return;
-      q = (q || '').trim().toLowerCase();
-      var list = all;
-      if (q) list = all.filter(function (l) {
-        return ((leadName(l) || '') + ' ' + (l.contact || '') + ' ' + (l.email || ''))
-          .toLowerCase().indexOf(q) >= 0;
-      });
+      var list = pkFilter(all, q);
       if (!list.length) { box.innerHTML = '<div class="empty">Никого не нашли</div>'; return; }
+      list = list.slice().sort(function (a, b) { return pkRank(b) - pkRank(a); });
       box.innerHTML = list.slice(0, 60).map(function (l) {
         var c = (l.contact || l.email || '').trim();
         return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
           '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
-          (c ? '<i>' + esc(c) + '</i>' : '') + '</button>';
+          (c ? '<i>' + esc(c) + '</i>' : '') +
+          '<span class="pk-marks">' + pkMarks(l, dup) + '</span></button>';
       }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
       Array.prototype.forEach.call(box.querySelectorAll('.pk-row'), function (b) {
         b.addEventListener('click', function () { pick(b.getAttribute('data-pick')); });
@@ -22610,6 +22713,7 @@
     };
     var have = function (leads) {
       all = leads || [];
+      dup = pkDupes(all);
       draw(presetName || '');
       var q = el('pk-q');
       if (q) { q.value = presetName || ''; q.focus(); q.select(); }
@@ -22645,6 +22749,16 @@
   function finDirectToLine(it, blockId) {
     return { id: it.id, date: it.date, status: it.status, counterparty: it.counterparty,
       item: it.item, comment: it.comment, amount: it.amount, section: blockId,
+      included: true, payout_to: '', sale_amount: '', percent: '', product: '',
+      payment_id: '' };
+  }
+
+  // Строка расхода фонда (экран «Расходы фонда») → строка для формы расхода. Фонд, с
+  // которого платили, — это текущий открытый на экране фонд (FIN.fundId): список трат тут
+  // за него одного.
+  function finFundOpToLine(o) {
+    return { id: o.id, date: o.date, status: o.status, counterparty: o.counterparty,
+      item: o.item, comment: o.comment, amount: o.amount, section: FIN.fundId,
       included: true, payout_to: '', sale_amount: '', percent: '', product: '',
       payment_id: '' };
   }
@@ -23921,7 +24035,14 @@
      Начисление = ставка × оплаты клиента; ставку (5% от оплат по умолчанию или фикс
      за клиента) задают прямо тут. Считает вознаграждение сервер — своей копии правила
      во фронте нет. Экран сквозной: партнёр ведёт клиента не один период, своей полосы
-     периодов тут нет (как у «Программ»). */
+     периодов тут нет (как у «Программ»).
+
+     Партнёрской программы тут НЕТ и быть не должно (правка Романа 22.10.2026: «нахрена
+     она нужна в финансах, если у нас в другом месте всё реализовано»). Реферальную
+     ссылку партнёр берёт в своём кабинете и в боте, который его зарегистрировал, —
+     вторая кнопка с той же ссылкой в ведомости только размывала границу: здесь деньги,
+     а не работа с партнёрами. По той же причине экран не показывает заведённых
+     партнёров без клиентов: в ведомости они ничего не значат. */
   function finLoadPartners() {
     finBusy('partners', function (done) {
       api('/admin/api/partners/payouts').then(function (r) {
@@ -23953,13 +24074,10 @@
     if (FIN.partners === 'none') return finErrView(view);
     var P = FIN.partners;
     var allPartners = P.partners || [];
-    // С начислениями — полной карточкой (кому и за кого платим). Без клиентов — заведён,
-    // но ещё никого не привёл: показываем компактно, чтобы можно было скопировать ссылку
-    // и отдать партнёру (раньше таких прятали как шум, но теперь партнёров заводим здесь же).
+    // Показываем только тех, у кого есть приведённые клиенты: это разговор про деньги.
+    // Заведённый партнёр без клиентов — факт партнёрской программы, а не ведомости.
     var partners = allPartners.filter(function (p) { return (p.clients || []).length > 0; });
-    var idle = allPartners.filter(function (p) { return (p.clients || []).length === 0; });
     var def = finPartnerDefRate(P);
-    var partnerLink = function (code) { return MK_GO + encodeURIComponent(code || ''); };
 
     var totalDue = 0, clientsDue = 0;
     partners.forEach(function (p) {
@@ -24052,34 +24170,17 @@
               (p.clients.length) + ' ' +
               plural(p.clients.length, 'клиент', 'клиента', 'клиентов') + '</div></div>' +
           '<span class="list-count fin-count">к выплате <b>' + finRub(p.due || 0) + '</b></span>' +
-          '<button class="qchip fpt-right" data-copylink="' + esc(partnerLink(p.ref_code)) +
-            '">' + ic('card', 12) + 'Ссылка</button>' +
         '</div>' +
         p.clients.map(clientRow).join('') +
         foot +
       '</div>';
     }).join('');
 
-    // Партнёры без клиентов — компактной карточкой: имя, код и кнопка скопировать ссылку,
-    // чтобы было видно, кому ещё не капало, и под рукой была его реф-ссылка.
-    var idleCards = idle.map(function (p) {
-      return '<div class="card listcard fs-seller"><div class="list-tools">' +
-        '<div><div class="t fe-t">' + esc(p.name || 'Партнёр') + '</div>' +
-          '<div class="s fe-s">код ' + esc(p.ref_code || '—') + ' · пока не привёл клиентов</div></div>' +
-        '<button class="qchip fpt-right" data-copylink="' + esc(partnerLink(p.ref_code)) +
-          '">' + ic('card', 12) + 'Скопировать ссылку</button>' +
-      '</div></div>';
-    }).join('');
-    var idleBlock = idleCards
-      ? '<div class="sec-head" style="margin:22px 4px 10px"><span class="ic">' + ic('team', 14) +
-        '</span><div><div class="t">Заведены, ждут клиентов</div>' +
-        '<div class="s">скопируйте ссылку и отдайте партнёру — как приведёт клиента, он поднимется наверх</div>' +
-        '</div></div>' + idleCards
-      : '';
-
-    var body = (cards || idleCards)
-      ? cards + idleBlock
-      : '<div class="card listcard"><div class="empty">Партнёров пока нет.</div></div>';
+    var body = cards
+      ? cards
+      : '<div class="card listcard"><div class="empty">' +
+        'Начислений пока нет: никто из партнёров не привёл оплатившего клиента.' +
+        '</div></div>';
 
     // Заголовок раздела и пояснение уже стоят в шапке страницы (renderHead) — второй
     // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
@@ -24089,9 +24190,6 @@
 
     var rb = el('fpt-rate');
     if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-copylink]'), function (b) {
-      b.addEventListener('click', function () { copyText(b.getAttribute('data-copylink'), b); });
-    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
       b.addEventListener('click', function () {
         var p = partners.filter(function (x) { return String(x.id) === b.getAttribute('data-req'); })[0];
@@ -37862,7 +37960,9 @@
       var foot = s.delta
         ? '<span class="kd ' + (s.deltaCls || '') + '">' + s.delta + '</span>'
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
-      return '<button class="stat' + (s.go || s.ebl ? ' go' : '') + '"' +
+      /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
+         получает модификатор .lead, плитка — тот же класс (см. style.css). */
+      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') + '"' +
         (s.go ? ' data-go="' + s.go + '"' : '') +
         /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
            вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
