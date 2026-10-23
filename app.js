@@ -21388,8 +21388,12 @@
               (o.status === 'факт' ? ' paid' : '') + '"' +
               (editRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
-              '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
-              (o.offering ? ' · ' + esc(o.offering) : '') + docChip + '</span>' +
+              // «За какого клиента» живет в комментарии строки, реквизиты — снимком
+              // в meta.payout: у партнерской выплаты это и есть ответ на вопрос «кому
+              // и за кого переводим» (Роман 23.10.2026).
+              '<span class="fl-sub">' + [finDate(o.date), o.item || '—', o.offering || '',
+                o.comment || '', finPayoutReq(o.payout)]
+                .filter(Boolean).map(esc).join(' · ') + docChip + '</span>' +
               // Трата с фонда — такой же расход ведомости, и отмечается так же
               // (Роман 19.10.2026: «внутри фондов тоже на расходах можно поставить
               // оплачено»). Правка период-ом не этой ведомости сюда не приезжает.
@@ -22982,7 +22986,11 @@
         var invLbl = inv && inv.number
           ? 'счет № ' + inv.number + (inv.issued_on ? ' от ' + finDate(inv.issued_on) : '')
           : '';
-        var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
+        // Реквизиты в подстрочник: кто проводит платежи, видит «кому и куда» прямо в
+        // расходах, не открывая реестр выплат (Роман 23.10.2026). Полного номера счета
+        // тут нет намеренно — finPayoutReq дает получателя, ИНН и хвост счета.
+        var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '',
+                   finPayoutReq(it.payout)]
           .filter(Boolean).map(esc).join(' · ');
         // Сам документ лежит у нас, и номер счета — ссылка на него: вопрос «за что
         // ушли деньги» без бумаги не закрывается, а искать ее потом негде.
@@ -23037,7 +23045,11 @@
             esc(it.counterparty || '') + '" title="' + esc(it.ask_why || '') + '">' +
             'в поставщики' + '</button>';
         }
-        return '<div class="trow fin-grid fe-grid fsp-row">' +
+        // Строка с реквизитами разворачивает подстрочник на две строки: иначе «кому и
+        // куда» обрезается многоточием ровно там, где начинается счет, и ради него
+        // приходится открывать карточку.
+        return '<div class="trow fin-grid fe-grid fsp-row' +
+          (it.payout ? ' has-pay' : '') + '">' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
           '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
             (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
