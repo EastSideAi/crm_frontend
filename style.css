@@ -13326,10 +13326,10 @@ video.cs-media { background: #000; }
 }
 
 /* ── Офис: карта команды («Задачи» → «Команда» → «Офис») ─────────────────────
-   Карта отвечает на вопрос пульса без чтения: кто за работой, у кого она стоит,
-   у кого ее нет. Плоско, как вся CRM: пол комнаты — заливка, стол — линия,
-   человек — голова с плечами. Цвет головы несет идентификатор (палитра аватаров
-   из диалогов, design.md §3.6); у пустого стола цвета нет, он фон. */
+   Сцена — canvas с пиксельным планом этажа (рисуется в app.js, блок «Пиксельный
+   офис»), поверх него слой подписей: имена, задачи и метки должны читаться
+   настоящим шрифтом, пиксельный кириллицу не вытягивает. Слой позиционируется
+   в процентах, поэтому едет вместе с масштабом сцены на любой ширине. */
 .om-card { padding: 0; }
 .om-strip { display: flex; gap: 20px; align-items: baseline; flex-wrap: wrap;
   padding: 14px 18px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 12.5px; }
@@ -13337,118 +13337,72 @@ video.cs-media { background: #000; }
 .om-strip .warn b { color: var(--amber-ink); }
 .om-strip i { margin-left: auto; font-style: normal; color: var(--ink-2); font-size: 11.5px; }
 .om-go { margin-left: 14px; }
-/* Легенда значков: тихая строка под цифрами. Без нее на карте восемь кодов и
-   ни одной подписи, а на телефоне всплывающей подсказки нет вовсе. */
-.om-leg { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 16px;
-  padding: 9px 18px; border-bottom: 1px solid var(--line);
-  font-size: 11px; color: var(--ink-2); }
-.om-leg > span { margin-right: 2px; }
-.om-lg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
-.om-lg-bot { display: inline-flex; color: var(--ink-3); }
 
-/* Комнаты — полосы сверху вниз, как этаж в плане. Колонками комната на одного
-   человека занимала половину экрана и тянулась по высоте за соседней. */
-.om-plan { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px 20px; }
-.om-room { background: var(--fill); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 14px; }
-.om-rt { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px;
-  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
-.om-rt i { margin-left: auto; font-style: normal; font-size: 11.5px; font-weight: 600;
-  color: var(--ink-2); letter-spacing: 0; text-transform: none; }
-.om-desks { display: grid; grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); gap: 6px; }
+.om-stage { position: relative; line-height: 0; background: #E7EBF6; }
+.om-cv { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.om-lyr { position: absolute; inset: 0; line-height: 1.3; }
 
-/* Общая сетка строк на весь ряд (subgrid), а не своя у каждого стола: реплики
-   разной длины, и без общей сетки фигурки плавают по высоте — читается как
-   разный пол, хотя все сидят на одном. Реплика прижата к низу своей строки,
-   поэтому растет вверх, а головы остаются на одной линии. */
-.om-desk { position: relative; padding: 8px 6px 10px; border-radius: 12px;
-  display: grid; grid-template-rows: 1fr auto auto auto auto; justify-items: center;
-  text-align: center; transition: background .14s var(--ease); }
-@supports (grid-template-rows: subgrid) {
-  .om-desks { grid-auto-rows: auto; }
-  .om-desk { grid-row: span 5; grid-template-rows: subgrid; }
-}
-.om-desk.go { cursor: pointer; }
-.om-desk.go:hover { background: var(--card); }
-.om-desk.go:focus-visible { background: var(--card); outline: none; box-shadow: inset 0 0 0 2px var(--blue); }
+/* Вывеска зоны стоит над стеклянной перегородкой, поэтому у нее своя плашка:
+   на светлом полу текст без подложки теряется. */
+.om-rt { position: absolute; transform: translate(0, -100%); pointer-events: none; }
+.om-rt b { display: inline-block; padding: 2px 9px; border-radius: 7px;
+  background: var(--card); border: 1px solid var(--line-2);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
+.om-rt span { margin-left: 7px; color: var(--ink-3); font-weight: 600; letter-spacing: 0; text-transform: none; }
 
-/* Реплика над головой — что человек делает. Белая плашка с хвостиком: это
-   речь стола, а не подпись под картинкой. */
-.om-say { position: relative; align-self: end; width: 100%; margin-bottom: 9px; padding: 6px 9px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-  font-size: 12.5px; line-height: 1.35; color: var(--ink); text-align: left; }
-/* Длинное название режется по двум строкам: третья строка в пузыре над головой
-   уже не читается, а ряд столов от нее разъезжается. */
-.om-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  overflow: hidden; }
-.om-txt.one { -webkit-line-clamp: 1; }
-/* Хвостик пузыря — повернутый квадрат под его серединой. Границы заданы все
-   четыре: у незаданных сторон цвет берется от текста, и вместо светлого угла
-   над репликой рисовалась темная галочка. */
-.om-say::after { content: ''; position: absolute; left: 50%; margin-left: -4px; bottom: -4px;
-  width: 7px; height: 7px; background: inherit;
-  border: 1px solid transparent; border-right-color: var(--line); border-bottom-color: var(--line);
-  transform: rotate(45deg); }
-/* «Стоит N дней» — второй строкой под названием: у застрявшей задачи важнее
-   срок простоя, чем полная формулировка, поэтому названию оставлена строка. */
-.om-say .om-stale { display: block; margin-top: 2px; font-style: normal; font-weight: 600;
-  font-size: 11px; color: var(--amber-ink); }
-/* Остановившаяся работа — главный несрочный сигнал экрана, поэтому она не тише
-   остальных, а помечена амбером полоской слева (рецепт из «ритма»). */
-.om-slow .om-say { background: var(--amber-soft); border-color: transparent;
-  padding-left: 8px; border-left: 2px solid var(--amber-ink); }
-.om-idle .om-say { background: transparent; border-style: dashed; border-color: var(--line-2); color: var(--ink-2); }
-.om-more { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line-2);
-  font-size: 11.5px; color: var(--ink-2); }
-/* Пустой стол молчит: реплики нет, но ее место в сетке ряда остается. */
-.om-say.mute { background: none; border: 0; min-height: 0; }
-.om-say.mute::after { display: none; }
-/* У пустующего стола пузырь пунктирный и без заливки: пунктирный хвостик на
-   таком фоне читается как сор, поэтому его нет. */
-.om-idle .om-say::after { display: none; }
+/* Реплика — одна строка над монитором: это сцена, а не список, полный текст
+   приходит подсказкой и в карточке задачи. */
+.om-pin { position: absolute; transform: translate(-50%, -100%); text-align: center; pointer-events: none; }
+.om-say { display: block; max-width: 134px; margin: 0 auto; padding: 3px 8px; border-radius: 8px;
+  background: var(--card); border: 1px solid var(--line-2); color: var(--ink);
+  font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.om-slow .om-say { background: var(--amber-soft); border-color: transparent; color: var(--amber-ink); }
+.om-days { display: block; font-style: normal; font-weight: 700; font-size: 10px; color: var(--amber-ink); }
 
-.om-fig { position: relative; display: flex; flex-direction: column; align-items: center; }
-.om-hd { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
-  color: #fff; font-size: 10.5px; font-weight: 700; letter-spacing: -.01em; background: var(--line-2); }
-.om-bd { width: 34px; height: 15px; margin-top: 2px; border-radius: 16px 16px 5px 5px; background: var(--line-2); }
-.om-off .om-fig { opacity: .8; }
-.om-off .om-hd { color: var(--ink-3); }
-.om-live { position: absolute; top: -1px; right: -1px; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--green); box-shadow: 0 0 0 2px var(--fill); animation: ofLive 2.4s var(--ease) infinite; }
-@keyframes ofLive { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.om-nm { position: absolute; transform: translate(-50%, 0); text-align: center; }
+.om-nm b { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 7px;
+  background: var(--card); border: 1px solid var(--line-2); color: var(--ink);
+  font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.om-nm b.go { cursor: pointer; }
+.om-nm b.go:hover { border-color: rgba(47,107,255,.45); }
+.om-nm b.go:focus-visible { outline: none; border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(47,107,255,.14); }
+.om-nm.off b { background: rgba(255,255,255,.62); border-color: transparent;
+  color: var(--ink-3); font-weight: 500; }
+.om-nm i { display: block; margin-top: 3px; font-style: normal; }
+.om-live { width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+  animation: omLive 2.4s var(--ease) infinite; }
+@keyframes omLive { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 
-.om-tbl { width: 66px; height: 5px; margin-top: 5px; border-radius: 3px; background: var(--line-2); }
-.om-off .om-tbl { height: 0; background: transparent; border-top: 1.5px dashed var(--line-2); }
-.om-nm { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: var(--ink); }
-.om-off .om-nm { color: var(--ink-2); font-weight: 500; }
-
-.om-foot { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px; max-width: 100%; }
 .om-marks { display: inline-flex; gap: 4px; }
-.om-mk { min-width: 18px; padding: 1px 5px; border-radius: 999px; font-size: 10.5px; font-weight: 700; }
+.om-mk { min-width: 17px; padding: 0 5px; border-radius: 999px; font-size: 10px; font-weight: 700; }
 .om-mk.bad { background: var(--red-soft); color: var(--red-ink); }
 .om-mk.ok { background: var(--green-soft); color: var(--green-ink); }
 
-/* Агент сидит при своем человеке: он не сотрудник и формой это показывает —
-   скругленный прямоугольник вместо головы с плечами. */
-.om-bot { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-  font-size: 10.5px; color: var(--ink-2); max-width: 100%; }
-.om-bot i { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.om-bot svg { flex: none; color: var(--ink-3); }
-.om-bot.ask { background: var(--amber-soft); border-color: transparent; color: var(--amber-ink); }
-.om-bot.ask svg { color: var(--amber-ink); }
+/* Чип агента — под его роботом: робот показывает, что агент тут, чип говорит,
+   что именно он делает. */
+.om-bot { position: absolute; transform: translate(-50%, 0); padding: 1px 6px; border-radius: 7px;
+  background: var(--blue-tint); color: var(--blue-d); border: 1px solid rgba(47,107,255,.25);
+  font-size: 10px; white-space: nowrap; }
+.om-bot.ask { background: var(--amber-soft); color: var(--amber-ink); border-color: rgba(224,146,47,.3); }
 
-@media (max-width: 980px) {
-  .om-desks { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+.om-leg { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 16px;
+  padding: 10px 18px; border-top: 1px solid var(--line); font-size: 11px; color: var(--ink-2); }
+.om-leg > span { margin-right: 2px; }
+.om-lg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.om-lg-bot { display: inline-flex; color: var(--blue); }
+
+@media (max-width: 760px) {
+  .om-say { max-width: 104px; font-size: 10px; }
+  .om-nm b { font-size: 10px; padding: 1px 5px; }
+  .om-rt b { letter-spacing: .1em; }
 }
 @media (max-width: 560px) {
-  .om-plan { padding: 12px 12px 16px; gap: 10px; }
-  .om-desks { gap: 6px; }
-  .om-desks { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
-  .om-desk { padding: 8px 4px 10px; }
   .om-strip { gap: 14px; padding: 12px 14px; }
   .om-strip i { margin-left: 0; width: 100%; }
-  .om-leg { gap: 4px 12px; padding: 8px 14px; }
   .om-go { margin-left: 0; }
+  .om-leg { gap: 4px 12px; padding: 8px 14px; }
+  .om-bot { font-size: 9px; padding: 0 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .om-live { animation: none; }

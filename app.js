@@ -11436,59 +11436,190 @@
     if (row.open_n) return 'idle';
     return 'off';
   }
-  /* Текст реплики лежит во вложенном span: обрезка по двум строкам
-     (-webkit-line-clamp) работает только на своем display, а сам пузырь —
-     ячейка сетки стола, его display занят. */
+  /* Подпись над столом. Короткая: на сцене это реплика, а не строка списка,
+     полный текст приходит по наведению и в карточке задачи. */
   function officeSay(row, st) {
-    if (st === 'work') return '<span class="om-txt">' + esc(row.now.title || '') + '</span>';
-    if (st === 'slow') {
-      var d = daysAgo(row.now.at);
-      return '<span class="om-txt one">' + esc(row.now.title || '') + '</span>' +
-        '<i class="om-stale">стоит ' + d + ' ' + plural(d, 'день', 'дня', 'дней') + '</i>';
-    }
-    // Без рода: столы занимают и мужчины, и женщины, а «взял» и «начала» в
-    // одном ряду читаются как ошибка системы.
-    if (st === 'idle') return '<span class="om-txt">' + row.open_n + ' ' +
-      plural(row.open_n, 'задача', 'задачи', 'задач') + ', в работе ни одной</span>';
+    if (st === 'work' || st === 'slow') return row.now.title || '';
+    if (st === 'idle') return row.open_n + ' ' +
+      plural(row.open_n, 'задача', 'задачи', 'задач') + ', в работе ни одной';
     return '';
   }
   var AGENT_SAY = { queued: 'взял задачу', ask: 'ждет ответа', review: 'сдал на приемку' };
 
-  function officeDesk(seat, row) {
-    var st = deskState(row);
-    var say = officeSay(row, st);
-    var tid = st === 'work' || st === 'slow' ? row.now.id : 0;
-    var fresh = row && row.active_at && daysAgo(row.active_at) === 0;
-    var marks = '';
-    if (row && row.overdue) marks += '<span class="om-mk bad num" role="img" aria-label="просрочено задач: ' +
-      row.overdue + '">' + row.overdue + '</span>';
-    if (row && row.done_n) marks += '<span class="om-mk ok num" role="img" aria-label="сделано сегодня: ' +
-      row.done_n + '">' + row.done_n + '</span>';
-    if (marks) marks = '<span class="om-marks">' + marks + '</span>';
-    var ag = seat.agent
-      ? '<span class="om-bot' + (seat.agent.state === 'ask' ? ' ask' : '') + '" title="' +
-          esc(seat.agent.title || '') + '" aria-label="агент: ' +
-          (AGENT_SAY[seat.agent.state] || 'в работе') + ', ' + esc(seat.agent.title || '') + '">' + ic('bot', 13) +
-          '<i>' + (AGENT_SAY[seat.agent.state] || 'в работе') + '</i></span>'
-      : '';
-    // Цвет головы — идентификатор человека (та же палитра, что у аватара в
-    // диалогах). У пустого стола цвета нет: он фон, а не действующее лицо.
-    var tint = st === 'off' ? '' : ' style="background:' + officeTint(seat.id) + '"';
-    var head = '<span class="om-hd"' + tint + '>' + esc(initials(seat.name)) + '</span>';
-    return '<div class="om-desk om-' + st + (tid ? ' go' : '') + '"' + (tid ? ' data-oft="' + tid + '"' : '') +
-        ' tabindex="' + (tid ? '0' : '-1') + '"' + (tid ? ' role="button"' : '') + '>' +
-      // Реплика рисуется всегда, даже пустая: без нее стол теряет строку общей
-      // сетки ряда и его фигурка уезжает выше соседних.
-      '<span class="om-say' + (say ? '' : ' mute') + '">' + say + '</span>' +
-      '<span class="om-fig">' + head + '<span class="om-bd"' + tint + '></span>' +
-        (fresh ? '<i class="om-live" role="img" aria-label="двигал задачи сегодня"></i>' : '') + '</span>' +
-      '<span class="om-tbl"></span>' +
-      '<span class="om-nm">' + esc(officeName(seat.name)) + '</span>' +
-      // Метки и агент — одна строка сетки: разными строками у половины столов
-      // их было бы две, и ряд разъезжался бы по высоте.
-      '<span class="om-foot">' + marks + ag + '</span>' +
-    '</div>';
+  /* ── Пиксельный офис ────────────────────────────────────────────────────────
+     Павел 24.10.2026: плоская схема не подошла, нужен офис сверху с живыми
+     человечками, в нашей стилистике и «про будущее». Сцена рисуется на canvas
+     целиком кодом — ни одной внешней картинки: спрайты собираются из
+     прямоугольников, поэтому карта весит как текст и масштабируется без
+     размытия (image-rendering: pixelated). Пиксель мелкий (S = 2), чтобы у
+     фигур была деталь, а не крупный квадрат.
+     Палитра — ночная сапфировая из design.md платформы (§2): база #03081C,
+     карточка #0A1538, акцент #2B8FFF. Правило двух цветов соблюдается: этаж
+     нейтраль + сапфир, теплое на сцене значит только внимание и просрочку.
+     Подписи лежат HTML-слоем поверх: пиксельный шрифт кириллицу читает плохо,
+     а имена людей и названия задач должны читаться. */
+  var PXO = { S: 2, SEAT_W: 66, SEAT_H: 52, PAD: 16, GAPX: 20, GAPY: 30,
+              SIDE: 30, HALL: 30, WALL: 8, TOPWALL: 20, TICK: 620 };
+  /* Светлая тема (Павел, 24.10.2026): этаж светлый, как сама CRM, акцент
+     сапфировый. Бумага и стекло, а не ночь: пол #E7EBF6, зоны белые, кант
+     перегородки сапфировый, светятся только экраны. */
+  var PXC = {
+    night: '#EEF1FA', panel: '#D3DBEF', card: '#FFFFFF',
+    floor: '#E7EBF6', floor2: '#DFE5F3',
+    glassEdge: 'rgba(43,143,255,.38)', glassTop: 'rgba(255,255,255,.9)',
+    sapp: '#2B8FFF', sapp3: '#9FCBFF',
+    deskTop: '#FFFFFF', deskTop2: '#F4F6FD', deskEdge: '#D2DAEE',
+    deskLine: 'rgba(21,32,59,.07)',
+    mon: '#1B2B4F', monEdge: '#2E3F68', scr: '#2B8FFF', scrHi: '#9FCBFF', scrOff: '#C3CDE4',
+    chair: '#C4D0E9', chair2: '#AFBEE0',
+    skin: ['#f2cda6', '#e7bc90', '#d6a278', '#c08a62'],
+    hair: ['#2a2130', '#4a3426', '#8a5a2a', '#1f2430', '#6b4a7a'],
+    plant: '#2EA06E', plant2: '#1C7E52', pot: '#C9A27A',
+    shade: 'rgba(21,32,59,.13)', glow: 'rgba(43,143,255,.16)'
+  };
+
+  /* Рубашки — холодная гамма: оттенок различает людей, но не спорит с акцентом.
+     Теплое на этом экране означает только внимание, поэтому его тут нет. */
+  var PX_WEAR = ['#2B8FFF', '#5CB4FF', '#3F7FD6', '#2F57B5', '#5B6FD8', '#3BA9C9',
+                 '#2E8F9E', '#6A7BE0', '#4C86E8', '#7A8FF0', '#2F6BA8', '#5F9AD6'];
+  function pxr(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(x, y, w, h); }
+  function pxHash(v) {
+    var s = String(v == null ? '' : v), h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973;
+    return h;
   }
+  function pxTone(hex, k) {
+    var n = parseInt(hex.slice(1), 16), r0 = n >> 16, g0 = (n >> 8) & 255, b0 = n & 255;
+    function f(v) { return Math.max(0, Math.min(255, Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k))); }
+    return 'rgb(' + f(r0) + ',' + f(g0) + ',' + f(b0) + ')';
+  }
+  function pxWear(id) { return PX_WEAR[pxHash(id) % PX_WEAR.length]; }
+  /* Человек 18x30: три тона на рубашке, два на коже, прядь волос, воротник,
+     кисти рук. frame поднимает фигуру на пиксель — этого хватает, чтобы
+     сидящий «дышал», и не хватает, чтобы это мешало читать экран. */
+  function pxPerson(c, x, y, id, frame) {
+    var up = frame ? 1 : 0, yy = y - up;
+    var sh = pxWear(id), hair = PXC.hair[pxHash(id + 'h') % PXC.hair.length];
+    var skin = PXC.skin[pxHash(id + 's') % PXC.skin.length];
+    var dark = pxTone(sh, -.32), light = pxTone(sh, .22);
+    pxr(c, x + 3, y + 29, 12, 3, PXC.shade);
+    pxr(c, x + 4, yy + 2, 10, 9, skin);
+    pxr(c, x + 3, yy + 3, 1, 7, skin); pxr(c, x + 14, yy + 3, 1, 7, skin);
+    pxr(c, x + 4, yy + 9, 10, 2, pxTone(skin, -.18));
+    pxr(c, x + 3, yy, 12, 4, hair);
+    pxr(c, x + 2, yy + 1, 1, 6, hair); pxr(c, x + 15, yy + 1, 1, 6, hair);
+    pxr(c, x + 4, yy + 4, 3, 1, pxTone(hair, .25));
+    pxr(c, x + 6, yy + 6, 2, 2, '#10131c'); pxr(c, x + 10, yy + 6, 2, 2, '#10131c');
+    pxr(c, x + 8, yy + 9, 2, 1, pxTone(skin, -.3));
+    pxr(c, x + 3, yy + 12, 12, 13, sh);
+    pxr(c, x + 3, yy + 12, 12, 2, light);
+    pxr(c, x + 3, yy + 21, 12, 4, dark);
+    pxr(c, x + 7, yy + 12, 4, 4, pxTone(sh, .34));
+    pxr(c, x + 1, yy + 14, 2, 8, dark); pxr(c, x + 15, yy + 14, 2, 8, dark);
+    pxr(c, x + 1, yy + 21, 2, 3, skin); pxr(c, x + 15, yy + 21, 2, 3, skin);
+  }
+  function pxStanding(c, x, y, id, frame) {
+    pxPerson(c, x, y, id, frame);
+    var up = frame ? 1 : 0, legs = pxTone(pxWear(id), -.62);
+    pxr(c, x + 4, y + 25 - up, 4, 5, legs); pxr(c, x + 10, y + 25 - up, 4, 5, legs);
+    pxr(c, x + 4, y + 29 - up, 4, 1, '#3A4668'); pxr(c, x + 10, y + 29 - up, 4, 1, '#3A4668');
+  }
+  /* Рабочее место 66x52. Геометрия задана один раз и держит всю сцену: кресло
+     и человек наверху, стол под ними с передней кромкой (отсюда глубина),
+     монитор у левого края экраном к нам, клавиатура и кружка перед человеком.
+     Кто не начал ни одной задачи — стоит слева от стола, и это видно раньше
+     любой подписи. */
+  function pxSeat(c, x, y, m, frame) {
+    var busy = m.st === 'work' || m.st === 'slow';
+    pxr(c, x + 24, y + 4, 22, 20, PXC.chair);
+    pxr(c, x + 24, y + 4, 22, 2, PXC.chair2);
+    pxr(c, x + 22, y + 9, 2, 13, PXC.chair2); pxr(c, x + 46, y + 9, 2, 13, PXC.chair2);
+    if (busy) pxPerson(c, x + 26, y, m.id, frame);
+    pxr(c, x + 2, y + 36, 60, 6, PXC.shade);
+    pxr(c, x, y + 26, 64, 10, PXC.deskTop);
+    pxr(c, x, y + 26, 64, 2, PXC.deskTop2);
+    pxr(c, x, y + 36, 64, 5, PXC.deskEdge);
+    pxr(c, x, y + 27, 64, 1, PXC.deskLine);
+    pxr(c, x, y + 41, 64, 1, 'rgba(1,4,14,.6)');
+    pxr(c, x + 3, y + 14, 18, 14, PXC.monEdge);
+    pxr(c, x + 4, y + 15, 16, 12, PXC.mon);
+    pxr(c, x + 5, y + 16, 14, 10, busy ? PXC.scr : PXC.scrOff);
+    if (busy) {
+      pxr(c, x + 5, y + 16, 14, 3, PXC.scrHi);
+      pxr(c, x + 6, y + 21, 8, 1, 'rgba(255,255,255,.55)');
+      pxr(c, x + 6, y + 23, 11, 1, 'rgba(255,255,255,.33)');
+      pxr(c, x + 1, y + 12, 22, 18, PXC.glow);
+      pxr(c, x + 2, y + 30, 20, 6, 'rgba(43,143,255,.10)');
+    }
+    pxr(c, x + 10, y + 28, 4, 2, PXC.monEdge);
+    pxr(c, x + 28, y + 30, 18, 4, '#D7DEF0');      // клавиатура
+    pxr(c, x + 28, y + 30, 18, 1, '#EFF3FC');
+    pxr(c, x + 50, y + 29, 7, 6, busy ? PXC.sapp : '#C3CDE4');   // кружка
+    pxr(c, x + 57, y + 30, 1, 3, busy ? PXC.sapp : '#C3CDE4');
+    if (m.st === 'idle') pxStanding(c, x + 2, y + 8, m.id, frame);
+  }
+  function pxBot(c, x, y, frame) {
+    var up = frame ? 1 : 0;
+    pxr(c, x + 2, y + 20, 14, 3, PXC.shade);
+    pxr(c, x + 2, y + 4 - up, 14, 13, '#E3E9F8');
+    pxr(c, x + 2, y + 4 - up, 14, 2, '#FFFFFF');
+    pxr(c, x + 3, y + 5 - up, 12, 11, '#DCE4F6');
+    pxr(c, x + 4, y + 7 - up, 10, 5, PXC.sapp);
+    pxr(c, x + 5, y + 8 - up, 3, 3, PXC.scrHi);
+    pxr(c, x + 8, y - up, 2, 4, '#C3CDE4'); pxr(c, x + 7, y - 2 - up, 4, 2, PXC.sapp);
+    pxr(c, x + 3, y + 17, 4, 3, '#AFBEE0'); pxr(c, x + 11, y + 17, 4, 3, '#AFBEE0');
+  }
+  function pxPlant(c, x, y) {
+    pxr(c, x + 4, y + 26, 16, 3, PXC.shade);
+    pxr(c, x + 6, y + 18, 12, 9, PXC.pot);
+    pxr(c, x + 6, y + 18, 12, 2, '#DDBA95');
+    pxr(c, x + 2, y + 6, 20, 12, PXC.plant);
+    pxr(c, x + 6, y, 12, 8, PXC.plant2);
+    pxr(c, x + 10, y + 2, 3, 6, pxTone(PXC.plant, .3));
+  }
+  function pxCooler(c, x, y) {
+    pxr(c, x + 2, y + 30, 16, 3, PXC.shade);
+    pxr(c, x + 2, y + 12, 16, 20, '#E9EEFA');
+    pxr(c, x + 2, y + 12, 16, 2, '#FFFFFF');
+    pxr(c, x + 4, y, 12, 12, '#8FD0FF');
+    pxr(c, x + 5, y + 1, 10, 6, '#CFE8FF');
+    pxr(c, x + 6, y + 18, 8, 3, '#C3CDE4');
+  }
+  function pxCouch(c, x, y) {
+    pxr(c, x + 2, y + 22, 48, 4, PXC.shade);
+    pxr(c, x, y + 4, 52, 20, '#C9D4EC');
+    pxr(c, x, y, 52, 6, '#DCE4F6');
+    pxr(c, x + 3, y + 9, 21, 12, '#DCE4F6'); pxr(c, x + 28, y + 9, 21, 12, '#DCE4F6');
+    pxr(c, x, y, 52, 1, 'rgba(255,255,255,.8)');
+  }
+  function pxBoard(c, x, y) {
+    pxr(c, x, y, 52, 18, '#FFFFFF');
+    pxr(c, x, y, 52, 1, PXC.glassEdge);
+    pxr(c, x, y + 17, 52, 1, 'rgba(21,32,59,.10)');
+    pxr(c, x + 5, y + 5, 18, 2, PXC.sapp);
+    pxr(c, x + 5, y + 10, 30, 2, 'rgba(21,32,59,.18)');
+    pxr(c, x + 29, y + 5, 14, 2, 'rgba(21,32,59,.12)');
+  }
+
+  /* Раскладка этажа. Зона встает в ту колонку, где сейчас выше свободное место:
+     так этаж не растет лесенкой, когда в отделах разное число людей. */
+  function pxLayout(zones, cols, perRow) {
+    var P = PXO, zw = P.PAD * 2 + perRow * P.SEAT_W + (perRow - 1) * P.GAPX + P.SIDE;
+    var colY = [], out = [], i;
+    for (i = 0; i < cols; i++) colY.push(P.TOPWALL + 26);
+    zones.forEach(function (z) {
+      var rows = Math.ceil(z.men.length / perRow);
+      var h = 22 + rows * P.SEAT_H + (rows - 1) * P.GAPY + 14;
+      var col = colY.indexOf(Math.min.apply(null, colY));
+      out.push({ z: z, x: P.WALL + col * (zw + P.HALL), y: colY[col], w: zw, h: h });
+      colY[col] += h + P.HALL + 26;
+    });
+    return { rooms: out, w: P.WALL * 2 + cols * zw + (cols - 1) * P.HALL,
+             h: Math.max.apply(null, colY) - 26 + P.WALL };
+  }
+  var PX_TINT = ['rgba(43,143,255,.10)', 'rgba(46,160,110,.09)',
+                 'rgba(122,143,240,.10)', 'rgba(245,200,76,.07)',
+                 'rgba(92,180,255,.09)', 'rgba(47,87,181,.12)'];
 
   function renderOffice(view) {
     if (state.pulse === null) {
@@ -11500,93 +11631,176 @@
         '<div class="card"><div class="empty">Не удалось собрать офис. Обнови страницу.</div></div>';
       wireTeamMode(view); return;
     }
-    var d = state.pulse;
-    var seats = d.seats || [];
-    var rows = {};
-    (d.people || []).forEach(function (p) { rows[p.id] = p; });
+    var d = state.pulse, seats = d.seats || [], rws = {};
+    (d.people || []).forEach(function (p) { rws[p.id] = p; });
 
-    var rooms = {};
-    OFFICE_ROOMS.forEach(function (r) { rooms[r.id] = []; });
-    seats.forEach(function (s) { rooms[officeRoom(s.role)].push(s); });
-    // Внутри комнаты вперед идут те, у кого работа идет: взгляд должен падать
-    // на живое, а пустые столы — это фон, их место с краю.
+    var men = seats.map(function (s) {
+      var row = rws[s.id], st = deskState(row);
+      return { id: s.id, name: officeName(s.name), full: s.name, room: officeRoom(s.role), st: st,
+               say: officeSay(row, st), days: st === 'slow' ? daysAgo(row.now.at) : 0,
+               task: st === 'work' || st === 'slow' ? row.now.id : 0,
+               over: (row && row.overdue) || 0, done: (row && row.done_n) || 0,
+               live: !!(row && row.active_at && daysAgo(row.active_at) === 0),
+               bot: s.agent ? (AGENT_SAY[s.agent.state] || 'в работе') : '',
+               botAsk: !!(s.agent && s.agent.state === 'ask') };
+    });
     var ORD = { work: 0, slow: 1, idle: 2, off: 3 };
-    Object.keys(rooms).forEach(function (k) {
-      rooms[k].sort(function (a, b) {
-        var da = ORD[deskState(rows[a.id])], db = ORD[deskState(rows[b.id])];
-        return da !== db ? da - db : (a.name || '').localeCompare(b.name || '');
-      });
-    });
+    var zones = OFFICE_ROOMS.map(function (r) {
+      return { name: r.label, men: men.filter(function (m) { return m.room === r.id; })
+        .sort(function (a, b) { return ORD[a.st] - ORD[b.st] || a.name.localeCompare(b.name); }) };
+    }).filter(function (z) { return z.men.length; });
 
-    var live = 0, stale = 0;
-    seats.forEach(function (s) {
-      var st = deskState(rows[s.id]);
-      if (st === 'work') live++;
-      if (st === 'slow') stale++;
-    });
-
-    var plan = OFFICE_ROOMS.filter(function (r) { return rooms[r.id].length; }).map(function (r) {
-      var men = rooms[r.id];
-      var busy = men.filter(function (s) { return deskState(rows[s.id]) === 'work'; }).length;
-      /* Пустые столы стоят последними, и длинный их хвост превращает комнату в
-         серое поле: дальше четвертого они сворачиваются в строку. Сколько в
-         команде людей, по-прежнему видно в счетчике комнаты. */
-      var shown = men, hidden = 0;
-      var free = men.filter(function (s) { return deskState(rows[s.id]) === 'off'; }).length;
-      // На телефоне столы идут по два в ряд, и четыре пустых — это два ряда
-      // серых силуэтов перед строкой-счетчиком: там сворачиваем их целиком.
-      var cap = window.innerWidth <= 560 ? 0 : OFFICE_FREE_MAX;
-      if (free > cap) {
-        hidden = free - cap;
-        shown = men.slice(0, men.length - hidden);
-      }
-      return '<section class="om-room' + (men.length > 5 ? ' wide' : '') + '">' +
-        '<div class="om-rt"><span>' + r.label + '</span>' +
-          '<i class="num">за работой ' + busy + ' из ' + men.length + '</i></div>' +
-        '<div class="om-desks">' + shown.map(function (s) { return officeDesk(s, rows[s.id]); }).join('') + '</div>' +
-        (hidden ? '<div class="om-more">еще ' + hidden + ' ' +
-          plural(hidden, 'свободное место', 'свободных места', 'свободных мест') + '</div>' : '') +
-      '</section>';
-    }).join('');
+    var wide = window.innerWidth;
+    var cols = wide < 980 ? 1 : 2, perRow = wide < 620 ? 2 : 3;
+    var L = pxLayout(zones, cols, perRow);
+    var live = men.filter(function (m) { return m.st === 'work'; }).length;
+    var stale = men.filter(function (m) { return m.st === 'slow'; }).length;
 
     var strip = '<div class="om-strip">' +
       '<span><b class="num">' + live + '</b> за работой</span>' +
       '<span' + (stale ? ' class="warn"' : '') + '><b class="num">' + stale + '</b> без движения</span>' +
       '<span><b class="num">' + seats.length + '</b> мест</span>' +
       '<i>на связи покажем, когда заработают голосовые каналы</i>' +
-      // Карта отвечает «кто где сидит», а голосовой офис — «зайти к ним».
-      // Пропуск добирается тем же способом, что и для комнат встреч.
       '<a class="qchip mr-go om-go" href="' + API + '/meet">' + ic('mic', 13) +
         '<span>Зайти в офис</span></a>' +
-    '</div>' +
-    // Восемь значков без подписи читать неоткуда: на телефоне всплывающей
-    // подсказки нет вовсе. Легенда тихая, одной строкой.
-    '<div class="om-leg">' +
-      '<span class="om-mk bad num">1</span> просрочено' +
-      '<span class="om-mk ok num">1</span> сделано сегодня' +
-      '<span class="om-lg-dot"></span> двигал задачи сегодня' +
-      '<span class="om-lg-bot">' + ic('bot', 12) + '</span> задача у агента' +
     '</div>';
 
     view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '</div>' +
       '<div class="card om-card">' + strip +
-        (plan ? '<div class="om-plan">' + plan + '</div>'
-              : '<div class="empty">В команде пока некого рассадить.</div>') +
+        (zones.length
+          ? '<div class="om-stage" style="aspect-ratio:' + L.w + '/' + L.h + '">' +
+              '<canvas class="om-cv" width="' + (L.w * PXO.S) + '" height="' + (L.h * PXO.S) + '"></canvas>' +
+              '<div class="om-lyr"></div></div>' +
+            '<div class="om-leg">' +
+              '<span class="om-mk bad num">1</span> просрочено' +
+              '<span class="om-mk ok num">1</span> сделано сегодня' +
+              '<span class="om-lg-dot"></span> двигал задачи сегодня' +
+              '<span class="om-lg-bot">' + ic('bot', 12) + '</span> задача у агента' +
+            '</div>'
+          : '<div class="empty">В команде пока некого рассадить.</div>') +
       '</div>';
     wireTeamMode(view); wireDeptChips(view);
-    // Экран про «прямо сейчас», поэтому он живет сам: renderTeamWeek гасит
-    // общий таймер при каждом проходе, здесь поднимаем его заново.
-    if (d.is_today) state.pulseTimer = setInterval(function () { loadPulse(true); }, 60000);
     Array.prototype.forEach.call(view.querySelectorAll('.mr-go'), function (a) {
       a.addEventListener('click', function (e) { enterMeetRoom(e, a); });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-oft]'), function (b) {
-      function go() { openTask(+b.getAttribute('data-oft')); }
-      b.addEventListener('click', go);
-      b.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    if (!zones.length) return;
+
+    var cv = view.querySelector('.om-cv'), lyr = view.querySelector('.om-lyr');
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(PXO.S, 0, 0, PXO.S, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    var pins = [];
+
+    function scene(tick) {
+      var i, P = PXO;
+      pxr(ctx, 0, 0, L.w, L.h, PXC.floor);
+      for (i = 0; i < L.h; i += 16) pxr(ctx, 0, i, L.w, 1, PXC.floor2);
+      for (i = 0; i < L.w; i += 16) pxr(ctx, i, 0, 1, L.h, 'rgba(21,32,59,.045)');
+      pxr(ctx, 0, 0, L.w, P.TOPWALL, PXC.panel);
+      pxr(ctx, 0, 0, L.w, 2, '#B9C4DE');
+      pxr(ctx, 0, P.TOPWALL - 1, L.w, 1, 'rgba(21,32,59,.12)');
+      pxr(ctx, 0, 0, P.WALL, L.h, PXC.panel); pxr(ctx, L.w - P.WALL, 0, P.WALL, L.h, PXC.panel);
+      pxr(ctx, 0, L.h - P.WALL, L.w, P.WALL, PXC.panel);
+      pins = [];
+      L.rooms.forEach(function (R, ri) {
+        pxr(ctx, R.x, R.y, R.w, R.h, PXC.card);
+        pxr(ctx, R.x, R.y, R.w, R.h, PX_TINT[ri % PX_TINT.length]);
+        // Лампы: пятно света на полу через каждые 110, слоями — резких кругов
+        // в пиксельной сетке не бывает, и ступенька тут честнее сглаживания.
+        for (var lx = R.x + 40; lx < R.x + R.w - 20; lx += 110) {
+          pxr(ctx, lx - 28, R.y + 6, 56, R.h - 12, 'rgba(43,143,255,.022)');
+          pxr(ctx, lx - 18, R.y + 4, 36, R.h - 8, 'rgba(43,143,255,.022)');
+          pxr(ctx, lx - 8, R.y + 2, 16, R.h - 4, 'rgba(43,143,255,.028)');
+        }
+        for (var fy = 0; fy < R.h; fy += 16) pxr(ctx, R.x, R.y + fy, R.w, 1, 'rgba(21,32,59,.025)');
+        // Перегородка — стекло: сапфировый кант со свечением наружу.
+        pxr(ctx, R.x - 4, R.y - 4, R.w + 8, 4, 'rgba(43,143,255,.10)');
+        pxr(ctx, R.x - 4, R.y + R.h, R.w + 8, 4, 'rgba(43,143,255,.08)');
+        pxr(ctx, R.x - 2, R.y - 2, R.w + 4, 2, PXC.glassEdge);
+        pxr(ctx, R.x - 2, R.y + R.h, R.w + 4, 2, 'rgba(21,32,59,.18)');
+        pxr(ctx, R.x - 2, R.y - 2, 2, R.h + 4, PXC.glassEdge);
+        pxr(ctx, R.x + R.w, R.y - 2, 2, R.h + 4, PXC.glassEdge);
+        pxBoard(ctx, R.x + R.w - 62, R.y + 8);
+        R.z.men.forEach(function (m, i2) {
+          var sx = R.x + P.PAD + (i2 % perRow) * (P.SEAT_W + P.GAPX);
+          var sy = R.y + 18 + Math.floor(i2 / perRow) * (P.SEAT_H + P.GAPY);
+          pxSeat(ctx, sx, sy, m, m.st === 'off' ? 0 : (tick + i2) % 2);
+          if (m.bot) pxBot(ctx, sx + 58, sy + 14, (tick + i2 + 1) % 2);
+          pins.push({ m: m, x: sx + 35, y: sy - 2, bottom: sy + 44, botY: sy + 58 });
+        });
+        pxPlant(ctx, R.x + R.w - 28, R.y + 26);
+        if (ri % 2) pxCooler(ctx, R.x + R.w - 26, R.y + R.h - 44);
+        else pxCouch(ctx, R.x + R.w - 60, R.y + R.h - 34);
       });
-    });
+    }
+    function pc(v) { return (v / L.w * 100).toFixed(3) + '%'; }
+    function pcY(v) { return (v / L.h * 100).toFixed(3) + '%'; }
+    function tags() {
+      lyr.innerHTML = L.rooms.map(function (R) {
+        var busy = R.z.men.filter(function (m) { return m.st === 'work'; }).length;
+        return '<div class="om-rt" style="left:' + pc(R.x + 2) + ';top:' + pcY(R.y - 6) + '"><b>' +
+          esc(R.z.name) + '<span>' + busy + ' из ' + R.z.men.length + '</span></b></div>';
+      }).join('') + pins.map(function (p) {
+        var m = p.m, marks = '';
+        if (m.over) marks += '<span class="om-mk bad num" role="img" aria-label="просрочено задач: ' +
+          m.over + '">' + m.over + '</span>';
+        if (m.done) marks += '<span class="om-mk ok num" role="img" aria-label="сделано сегодня: ' +
+          m.done + '">' + m.done + '</span>';
+        var shows = m.st === 'work' || m.st === 'slow';
+        return (shows
+            ? '<div class="om-pin om-' + m.st + '" style="left:' + pc(p.x) + ';top:' + pcY(p.y) + '">' +
+              '<span class="om-say">' + esc(m.say) +
+              (m.days ? '<i class="om-days">стоит ' + m.days + ' ' +
+                plural(m.days, 'день', 'дня', 'дней') + '</i>' : '') + '</span></div>'
+            : '') +
+          '<div class="om-nm' + (m.st === 'off' ? ' off' : '') + '" style="left:' + pc(p.x) +
+            ';top:' + pcY(p.bottom) + '">' +
+            '<b' + (m.task ? ' class="go" tabindex="0" role="button" data-oft="' + m.task + '"' : '') +
+              ' title="' + esc(m.full + (m.say ? ' — ' + m.say : '')) + '">' + esc(m.name) +
+              (m.live ? '<i class="om-live" role="img" aria-label="двигал задачи сегодня"></i>' : '') +
+            '</b>' + (marks ? '<i class="om-marks">' + marks + '</i>' : '') + '</div>' +
+          (m.bot ? '<div class="om-bot' + (m.botAsk ? ' ask' : '') + '" style="left:' + pc(p.x) +
+            ';top:' + pcY(p.botY) + '">' + m.bot + '</div>' : '');
+      }).join('');
+      Array.prototype.forEach.call(lyr.querySelectorAll('[data-oft]'), function (b) {
+        function go() { openTask(+b.getAttribute('data-oft')); }
+        b.addEventListener('click', go);
+        b.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+        });
+      });
+    }
+    var tick = 0;
+    scene(0); tags();
+    // Кадр раз в 620 мс, подписи при этом не трогаем: они не меняются, а их
+    // перерисовка снимала бы фокус с клавиатуры.
+    officeStop();
+    if (!pxReduceMotion()) {
+      state.officeAnim = setInterval(function () {
+        if (!document.body.contains(cv)) { officeStop(); return; }
+        tick++; scene(tick);
+      }, PXO.TICK);
+    }
+    if (d.is_today) state.pulseTimer = setInterval(function () { loadPulse(true); }, 60000);
+    // Этаж складывается по ширине окна: на телефоне одна колонка и два стола
+    // в ряд. Пересобираем только когда ширина реально поменяла раскладку.
+    if (!state.officeResize) {
+      state.officeResize = function () {
+        var w = window.innerWidth;
+        if ((((w < 980) ? 1 : 2) !== cols || ((w < 620) ? 2 : 3) !== perRow) &&
+            state.teamMode === 'office' && state.page === 'tasks' && state.taskSeg === 'team') renderView();
+      };
+      window.addEventListener('resize', function () {
+        clearTimeout(state.officeResizeT);
+        state.officeResizeT = setTimeout(function () { state.officeResize(); }, 180);
+      });
+    }
+  }
+  function officeStop() {
+    if (state.officeAnim) { clearInterval(state.officeAnim); state.officeAnim = null; }
+  }
+  function pxReduceMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
   /* ── Пульс команды ──────────────────────────────────────────────────────────
