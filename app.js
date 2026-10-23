@@ -20026,7 +20026,12 @@
                 // ради одного выбора.
                 ? '<select id="sh-' + f[0] + '" class="al-in">' +
                     (f[3] || []).map(function (o) {
-                      return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>';
+                      // Пятым элементом поля можно передать выбранное значение: форма
+                      // правки обязана открываться на том, что стоит сейчас, иначе
+                      // сохранение молча меняет выбор на первый вариант списка.
+                      return '<option value="' + esc(o[0]) + '"' +
+                        (f[4] != null && String(o[0]) === String(f[4]) ? ' selected' : '') +
+                        '>' + esc(o[1]) + '</option>';
                     }).join('') + '</select>'
                 : f[1] === 'file'
                 // Файл читаем в браузере и отправляем строкой в JSON — тем же способом,
@@ -23722,8 +23727,14 @@
     if (!p) return '';
     var bits = [];
     if (p.receiver) bits.push(p.receiver);
-    if (p.account) bits.push('счёт ' + p.account + (p.bic ? ', БИК ' + p.bic : ''));
+    // Способы — те же три, что партнер выбирает в своем кабинете. Если он выбрал один,
+    // а заполнено несколько, показываем ВЫБРАННЫЙ: платим туда, куда человек ждет.
+    var m = p.method || (p.account ? 'bank' : (p.wallet ? 'yoomoney' : 'sbp'));
+    if (m === 'yoomoney' && p.wallet) bits.push('ЮMoney ' + p.wallet);
+    else if (m === 'sbp' && p.phone) bits.push('по телефону ' + p.phone);
+    else if (p.account) bits.push('счёт ' + p.account + (p.bic ? ', БИК ' + p.bic : ''));
     else if (p.phone) bits.push('по телефону ' + p.phone);
+    else if (p.wallet) bits.push('ЮMoney ' + p.wallet);
     if (p.bank) bits.push(p.bank);
     return bits.join(' · ');
   }
@@ -24153,12 +24164,36 @@
     };
 
     var cards = partners.map(function (p) {
-      // В полосе карточки — тот же способ перевода, что и в строке ведомости: счёт
-      // целиком или телефон. Хвост счёта не говорит ничего тому, кто платит.
-      var reqBits = [];
-      if (p.requisites && p.requisites.receiver) reqBits.push(p.requisites.receiver);
-      if (p.requisites && p.requisites.account) reqBits.push('счёт ' + p.requisites.account);
-      else if (p.requisites && p.requisites.phone) reqBits.push('по телефону ' + p.requisites.phone);
+      // В полосе карточки — тот же способ перевода, что и в строке ведомости, одним
+      // хелпером: два места про одни деньги обязаны говорить одинаково.
+      var reqLineTxt = finPayoutReq(p.requisites);
+      // Откуда реквизиты: партнер внес сам в кабинете или вписали мы. Свежая правка
+      // перед выплатой — то, на что стоит посмотреть глазами: кабинет открывается по
+      // постоянной ссылке, и подмена реквизитов это способ увести выплату.
+      var reqWho = p.pay_updated_at
+        ? (p.pay_by_partner ? 'внес партнер' : 'внесли мы' +
+            (p.pay_updated_by ? ', ' + p.pay_updated_by : '')) + ' ' + finDate(p.pay_updated_at)
+        : '';
+      // Перед переводом важен один вопрос: не переписали ли реквизиты только что. Кабинет
+      // партнера открывается по постоянной ссылке, и подмена счета это способ увести
+      // выплату, поэтому свежая смена и смена с другой фамилией получателя видны строкой,
+      // а не лежат в журнале, куда никто не заглянет (аудит 23.10.2026).
+      var warns = [];
+      var last = (p.pay_changes || [])[0];
+      var fresh = p.pay_updated_at &&
+        (Date.now() - new Date(p.pay_updated_at).getTime()) < 48 * 3600 * 1000;
+      if (fresh && (p.due || 0) > 0) {
+        warns.push('Реквизиты сменили ' + finDate(p.pay_updated_at) +
+          (last && last.dest_old ? ' (было …' + last.dest_old + ', стало …' + last.dest_new + ')' : '') +
+          '. Если партнер об этом не просил, не платите, пока не спросите его.');
+      }
+      if (p.pay_name_odd && (p.due || 0) > 0) {
+        warns.push('Получатель назван не фамилией партнера. Бывает законно, но проверьте.');
+      }
+      var warnBox = warns.length
+        ? '<div class="fin-note fpt-warn">' + ic('alert', 15) +
+            '<span>' + warns.map(esc).join(' ') + '</span></div>'
+        : '';
       // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
       // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
       var foot;
@@ -24168,8 +24203,9 @@
           '<button class="qchip add fpt-right" data-req="' + p.id + '">' +
             ic('plus', 12) + 'Куда платить</button></div>';
       } else {
-        var reqLine = reqBits.length
-          ? '<span class="fin-count fpt-req">' + esc(reqBits.join(' · ')) + '</span>'
+        var reqLine = reqLineTxt
+          ? '<span class="fin-count fpt-req">' + esc(reqLineTxt) +
+              (reqWho ? ' <i class="fpt-who">' + esc('· ' + reqWho) + '</i>' : '') + '</span>'
           : '<span class="fin-count fpt-req">реквизиты не заданы</span>';
         var payBtn = (p.due || 0) > 0
           ? '<button class="qchip add fpt-right" data-pay="' + p.id + '" data-due="' + p.due +
@@ -24189,6 +24225,7 @@
           '<span class="list-count fin-count">к выплате <b>' + finRub(p.due || 0) + '</b></span>' +
         '</div>' +
         p.clients.map(clientRow).join('') +
+        warnBox +
         foot +
       '</div>';
     }).join('');
@@ -24234,30 +24271,43 @@
     pageAnim(view);
   }
 
+  // Способы получения — те же три, что партнер выбирает у себя в кабинете; четвертого
+  // в CRM быть не должно, иначе человек ждет денег одним путем, а мы шлем другим.
+  var PAY_WAYS = [['sbp', 'Телефон (СБП)'], ['bank', 'Банковские реквизиты'],
+                  ['yoomoney', 'ЮMoney']];
+
   function finPartnerReqForm(p) {
     var r = p.requisites || {};
-    // Телефон стоит первым: партнёры у нас в основном физлица, и переводят им по
-    // телефону, а не на расчётный счёт (Роман 23.10.2026). Контактный телефон из
-    // кабинета ПОДСКАЗЫВАЕМ в подписи, но не подставляем молча: по нему с человеком
+    // Реквизиты заполняет сам партнер в кабинете (Роман 23.10.2026), эта форма —
+    // запасной путь для тех, кто туда не дошел. Контактный телефон из кабинета
+    // ПОДСКАЗЫВАЕМ в подписи, но не подставляем молча: по нему с человеком
     // связываются, а деньги он мог попросить на другой.
-    var hint = p.contact_phone
-      ? 'Телефон для перевода или счёт — хватит одного. В кабинете партнёр оставлял ' +
-        p.contact_phone + ', спросите, тот ли это номер.'
-      : 'Телефон для перевода или счёт — хватит одного. Кто и когда менял, сохраняется: ' +
-        'подмена реквизитов это способ увода выплат.';
+    var hint = p.pay_by_partner
+      ? 'Эти реквизиты партнер внес сам в кабинете. Правьте, только если он попросил: ' +
+        'ваша правка перебьет его.'
+      : (p.contact_phone
+        ? 'Партнер заполняет их у себя в кабинете. Если не дошел — впишите здесь. ' +
+          'В кабинете он оставлял телефон ' + p.contact_phone + ', спросите, тот ли это номер.'
+        : 'Партнер заполняет их у себя в кабинете. Если не дошел — впишите здесь. ' +
+          'Кто и когда менял, сохраняется: подмена реквизитов это способ увода выплат.');
     openSheet('Реквизиты партнёра', hint,
-      [['receiver', 'line', 'Получатель (ФИО или ИП)', r.receiver || ''],
+      [['method', 'pick', 'Способ получения', PAY_WAYS, r.method || 'sbp'],
+       ['receiver', 'line', 'Получатель (ФИО или ИП)', r.receiver || ''],
        ['phone', 'line', 'Телефон для перевода', r.phone || ''],
+       ['wallet', 'line', 'Кошелек ЮMoney', r.wallet || ''],
        ['account', 'line', 'Расчётный счёт', r.account || ''],
        ['bic', 'line', 'БИК', r.bic || ''],
        ['bank', 'line', 'Банк', r.bank || ''],
        ['inn', 'line', 'ИНН (если платим ИП)', r.inn || '']],
       function (v, close) {
-        if (!String(v.account || '').trim() && !String(v.phone || '').trim())
-          return 'Впишите телефон для перевода или расчётный счёт — иначе платить некуда';
+        var need = { sbp: ['phone', 'телефон для перевода'],
+                     bank: ['account', 'расчётный счёт'],
+                     yoomoney: ['wallet', 'номер кошелька ЮMoney'] }[v.method || 'sbp'];
+        if (!String(v[need[0]] || '').trim())
+          return 'Для выбранного способа нужен ' + need[1];
         czSend('/admin/api/partners/' + p.id + '/requisites', 'PUT', {
           receiver: v.receiver, account: v.account, bic: v.bic, bank: v.bank,
-          inn: v.inn, phone: v.phone,
+          inn: v.inn, phone: v.phone, wallet: v.wallet, method: v.method,
         }).then(function () {
           close(); FIN.partners = null; renderAll(); showToast('Реквизиты сохранены');
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });

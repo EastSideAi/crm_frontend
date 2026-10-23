@@ -7598,6 +7598,12 @@ a.fin-rcp.off:hover { text-decoration: underline; }
    расходов подстрочник это описание, и вторая строка там лишняя высота. Высота
    строки при этом обязана расти: у .trow она жесткие 58px, и перенесенный счет
    налезал на имя следующего получателя. */
+/* Предупреждение перед выплатой партнеру: текст на две строки, поэтому значок встает
+   по верхнему краю, а не по центру высоты всей плашки. */
+.fin-note.fpt-warn { align-items: flex-start; line-height: 1.45; }
+/* Кто внес реквизиты партнера и когда — тихой подписью рядом со способом перевода:
+   свежая чужая правка перед выплатой это то, на что стоит посмотреть глазами. */
+.fpt-who { font-style: normal; color: var(--ink-3); }
 .fsp-row.has-pay { height: auto; min-height: 58px; padding-top: 11px; padding-bottom: 11px; }
 .fsp-row.has-pay .fo-what i { white-space: normal; }
 .fsp-row .fo-st { flex-wrap: wrap; row-gap: 5px; }
