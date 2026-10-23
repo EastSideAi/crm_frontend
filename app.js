@@ -35276,7 +35276,7 @@
               '<small>' + esc(root.goal || '') + '</small>' +
               '<span class="prc-stat">' + (z.nodes > 1 ? '<span>' + (z.nodes - 1) + ' ' + plural(z.nodes - 1, 'подпроцесс', 'подпроцесса', 'подпроцессов') + '</span>' : '') +
                 '<span>' + z.steps + ' ' + plural(z.steps, 'шаг', 'шага', 'шагов') + '</span>' +
-                (z.pains ? '<span class="pain">' + z.pains + ' ' + plural(z.pains, 'боль', 'боли', 'болей') + '</span>' : '') + '</span>' +
+                (z.pains ? '<span class="pain">' + z.pains + ' ' + plural(z.pains, 'проблема', 'проблемы', 'проблем') + '</span>' : '') + '</span>' +
               (who ? '<i class="prc-cnt' + (mine ? '' : ' zero') + '">' + mine + '</i>' : '') +
               (root.status === 'draft' ? '<span class="sev n-wait prc-draft">черновик</span>' : '') +
             '</button>';
@@ -35358,7 +35358,7 @@
           (sub ? '<span class="prc-subn">' + ic('flow', 12) + subN + ' ' + plural(subN, 'шаг', 'шага', 'шагов') + ' внутри</span>' : '') +
           ((s.variants || []).length ? '<span class="prc-subn">' + ic('flow', 12) + s.variants.length + ' ' + plural(s.variants.length, 'вариант', 'варианта', 'вариантов') + '</span>' : '') +
           (s.goto && prcLight(s.goto) ? '<span class="prc-gon">' + ic('go', 12) + 'дальше в «' + esc(prcRootTitle(s.goto)) + '»</span>' : '') +
-          (s.pain ? '<span class="prc-painmk">есть боль</span>' : '') + '</span>' +
+          (s.pain ? '<span class="prc-painmk">есть проблема</span>' : '') + '</span>' +
         '<span class="prc-who">' + s.who.map(function (x) { return prcTag(x, who); }).join('') + '</span>' +
         '<span class="prc-ex">' + prcExec(s) + '</span>' +
         '<span class="prc-chev">' + ic('go', 14) + '</span>' +
@@ -35440,7 +35440,7 @@
         esc(prcRootTitle(x.nid)) + ': ' + esc(x.title) + '</button></li>';
     }).join('') + '</ul></div>' : '';
     var foot = incHtml + (full ? (
-      list('Где болит', full.pains, function (x) { return '<li>' + esc(x.text) + (x.src ? '<small>' + esc(prcSrc(x.src)) + '</small>' : '') + '</li>'; }) +
+      list('Проблемы', full.pains, function (x) { return '<li>' + esc(x.text) + (x.src ? '<small>' + esc(prcSrc(x.src)) + '</small>' : '') + '</li>'; }) +
       list('Заметки', full.note ? [full.note] : [], function (x) { return '<li>' + esc(x) + '</li>'; }) +
       list('Вопросы на проверку', full.questions, function (x) { return '<li>' + esc(x.text) + (x.who ? '<small>спросить: ' + esc(prcPerson(x.who).name) + '</small>' : '') + '</li>'; }) +
       list('Цифры', full.metrics, function (x) { return '<li>' + esc(x) + '</li>'; }) +
