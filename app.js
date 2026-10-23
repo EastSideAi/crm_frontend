@@ -22987,8 +22987,8 @@
           ? 'счет № ' + inv.number + (inv.issued_on ? ' от ' + finDate(inv.issued_on) : '')
           : '';
         // Реквизиты в подстрочник: кто проводит платежи, видит «кому и куда» прямо в
-        // расходах, не открывая реестр выплат (Роман 23.10.2026). Полного номера счета
-        // тут нет намеренно — finPayoutReq дает получателя, ИНН и хвост счета.
+        // расходах, не открывая реестр выплат (Роман 23.10.2026). finPayoutReq дает
+        // получателя и способ перевода — счет с БИК или телефон.
         var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '',
                    finPayoutReq(it.payout)]
           .filter(Boolean).map(esc).join(' · ');
@@ -23713,14 +23713,18 @@
     });
   }
 
-  // Короткая сводка реквизитов для строки: получатель по счёту и хвост счёта. Полный
-  // счёт в списке не светим — он виден в самой выплате.
+  // Реквизиты в строке отвечают ровно на один вопрос: куда переводить (Роман
+  // 23.10.2026: «ИНН нафиг не нужен, нужен либо номер счёта либо номер телефона»).
+  // Поэтому счёт печатаем целиком вместе с БИК — по ним и делают платёжку, а хвост
+  // заставлял открывать карточку; нет счёта — показываем телефон для перевода.
+  // ИНН в снимке остаётся, но на экране его нет: в платеже физлицу он не участвует.
   function finPayoutReq(p) {
     if (!p) return '';
     var bits = [];
     if (p.receiver) bits.push(p.receiver);
-    if (p.inn) bits.push('ИНН ' + p.inn);
-    else if (p.account) bits.push('счёт …' + String(p.account).slice(-4));
+    if (p.account) bits.push('счёт ' + p.account + (p.bic ? ', БИК ' + p.bic : ''));
+    else if (p.phone) bits.push('по телефону ' + p.phone);
+    if (p.bank) bits.push(p.bank);
     return bits.join(' · ');
   }
 
@@ -24149,17 +24153,18 @@
     };
 
     var cards = partners.map(function (p) {
-      var reqTail = p.requisites && p.requisites.account
-        ? '…' + String(p.requisites.account).slice(-4) : '';
+      // В полосе карточки — тот же способ перевода, что и в строке ведомости: счёт
+      // целиком или телефон. Хвост счёта не говорит ничего тому, кто платит.
       var reqBits = [];
       if (p.requisites && p.requisites.receiver) reqBits.push(p.requisites.receiver);
-      if (reqTail) reqBits.push('счёт ' + reqTail);
+      if (p.requisites && p.requisites.account) reqBits.push('счёт ' + p.requisites.account);
+      else if (p.requisites && p.requisites.phone) reqBits.push('по телефону ' + p.requisites.phone);
       // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
       // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
       var foot;
       if ((p.due || 0) > 0 && !p.has_requisites) {
         foot = '<div class="fin-note fpt-foot">' + ic('alert', 15) +
-          '<span>К выплате ' + finRub(p.due) + ', но реквизиты не заданы — некуда платить.</span>' +
+          '<span>К выплате ' + finRub(p.due) + ', но реквизитов нет: нужен телефон для перевода или счёт.</span>' +
           '<button class="qchip add fpt-right" data-req="' + p.id + '">' +
             ic('plus', 12) + 'Куда платить</button></div>';
       } else {
@@ -24231,18 +24236,28 @@
 
   function finPartnerReqForm(p) {
     var r = p.requisites || {};
-    openSheet('Реквизиты партнёра',
-      'Куда перечисляем вознаграждение. Кто и когда менял — сохраняется: подмена счёта это способ увода выплат.',
+    // Телефон стоит первым: партнёры у нас в основном физлица, и переводят им по
+    // телефону, а не на расчётный счёт (Роман 23.10.2026). Контактный телефон из
+    // кабинета ПОДСКАЗЫВАЕМ в подписи, но не подставляем молча: по нему с человеком
+    // связываются, а деньги он мог попросить на другой.
+    var hint = p.contact_phone
+      ? 'Телефон для перевода или счёт — хватит одного. В кабинете партнёр оставлял ' +
+        p.contact_phone + ', спросите, тот ли это номер.'
+      : 'Телефон для перевода или счёт — хватит одного. Кто и когда менял, сохраняется: ' +
+        'подмена реквизитов это способ увода выплат.';
+    openSheet('Реквизиты партнёра', hint,
       [['receiver', 'line', 'Получатель (ФИО или ИП)', r.receiver || ''],
+       ['phone', 'line', 'Телефон для перевода', r.phone || ''],
        ['account', 'line', 'Расчётный счёт', r.account || ''],
        ['bic', 'line', 'БИК', r.bic || ''],
        ['bank', 'line', 'Банк', r.bank || ''],
-       ['inn', 'line', 'ИНН', r.inn || '']],
+       ['inn', 'line', 'ИНН (если платим ИП)', r.inn || '']],
       function (v, close) {
-        if (!String(v.account || '').trim())
-          return 'Впишите расчётный счёт — без него платить некуда';
+        if (!String(v.account || '').trim() && !String(v.phone || '').trim())
+          return 'Впишите телефон для перевода или расчётный счёт — иначе платить некуда';
         czSend('/admin/api/partners/' + p.id + '/requisites', 'PUT', {
-          receiver: v.receiver, account: v.account, bic: v.bic, bank: v.bank, inn: v.inn,
+          receiver: v.receiver, account: v.account, bic: v.bic, bank: v.bank,
+          inn: v.inn, phone: v.phone,
         }).then(function () {
           close(); FIN.partners = null; renderAll(); showToast('Реквизиты сохранены');
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });

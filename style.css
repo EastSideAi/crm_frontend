@@ -7595,7 +7595,10 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .trow.fsp-row { grid-template-columns: 92px 1.5fr 150px 260px; }
 /* Выплата человеку несет в подстрочнике реквизиты — их обрезать нельзя: по ним и
    делают платежку (Роман 23.10.2026). Перенос только у таких строк: у остальных
-   расходов подстрочник это описание, и вторая строка там лишняя высота. */
+   расходов подстрочник это описание, и вторая строка там лишняя высота. Высота
+   строки при этом обязана расти: у .trow она жесткие 58px, и перенесенный счет
+   налезал на имя следующего получателя. */
+.fsp-row.has-pay { height: auto; min-height: 58px; padding-top: 11px; padding-bottom: 11px; }
 .fsp-row.has-pay .fo-what i { white-space: normal; }
 .fsp-row .fo-st { flex-wrap: wrap; row-gap: 5px; }
 
