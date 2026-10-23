@@ -35015,6 +35015,7 @@
      `.../v2/<id>` по требованию), в них ФИО коллег и внутренние цифры. Право
      `processes` личное, его выдают учетке, а не роли. */
   var PRC_GROUPS = [
+    { id: 'channels', label: 'Откуда приходят люди' },
     { id: 'core', label: 'Путь клиента', chain: true },
     { id: 'support', label: 'Обеспечивающие' },
     { id: 'manage', label: 'Управление' },
@@ -35061,9 +35062,13 @@
     var pid = prcPid(nid), f = state._prcFull && state._prcFull[pid];
     return f && f.nodes ? f.nodes[nid] : null;
   }
+  /* Название по Рыбакову: «Короткое имя: от начала до результата». Короткое — для
+     плиток, крошек и ссылок, границы процесса — второй строкой. */
+  function prcShort(t) { t = String(t || ''); var i = t.search(/: от /); return i > 0 ? t.slice(0, i) : t; }
+  function prcSpan(t) { t = String(t || ''); var i = t.search(/: от /); return i > 0 ? t.slice(i + 2) : ''; }
   function prcRootTitle(nid) {
     var pid = prcPid(nid), p = state._prc.processes.filter(function (x) { return x.id === pid; })[0];
-    return p ? p.nodes[p.root].title : '';
+    return p ? prcShort(p.nodes[p.root].title) : '';
   }
   /* Передача в другой процесс: шаг уводит работу в узел чужого процесса. Подпись
      называет процесс, а не только узел, — иначе «Проверить документы» не скажет,
@@ -35072,7 +35077,7 @@
     var t = prcLight(g);
     if (!t) return '';
     return '<button type="button" class="prc-goto" data-open="' + esc(g) + '">' + ic('go', 12) +
-      esc(prcRootTitle(g)) + (prcPid(g) && t.level > 1 ? ': ' + esc(t.title) : '') + '</button>';
+      esc(prcRootTitle(g)) + (prcPid(g) && t.level > 1 ? ': ' + esc(prcShort(t.title)) : '') + '</button>';
   }
   /* Откуда в этот узел приходит работа из других процессов. */
   function prcIncoming(nid) {
@@ -35205,7 +35210,7 @@
     return '<div class="prc-person">' +
       '<div><span class="po-lbl">Роль</span><p>' + esc(prcPerson(who).role || '') + '</p></div>' +
       '<div><span class="po-lbl">Участвует</span>' + (inP.length ? '<ul class="prc-in">' + inP.map(function (x) {
-        return '<li><button type="button" data-open="' + esc(x.p.root) + '">' + esc(x.p.nodes[x.p.root].title) + '</button> ' +
+        return '<li><button type="button" data-open="' + esc(x.p.root) + '">' + esc(prcShort(x.p.nodes[x.p.root].title)) + '</button> ' +
           x.n + ' ' + plural(x.n, 'шаг', 'шага', 'шагов') + '</li>';
       }).join('') + '</ul>' : '<p>шагов на карте нет</p>') + '</div>' +
       '<div><span class="po-lbl">Получает работу от</span><p>' + l.from + '</p></div>' +
@@ -35265,7 +35270,8 @@
             var root = p.nodes[p.root], z = prcSize(p.root), mine = who ? prcMineIn(p.root, who) : 0;
             return '<button type="button" class="prc-tile' + (who && !mine ? ' dim' : '') + '" data-open="' + esc(p.root) + '">' +
               '<span class="prc-tn">' + esc(p.n) + '</span>' +
-              '<b>' + esc(root.title) + '</b>' +
+              '<b>' + esc(prcShort(root.title)) + '</b>' +
+              (prcSpan(root.title) ? '<span class="prc-span">' + esc(prcSpan(root.title)) + '</span>' : '') +
               '<small>' + esc(root.goal || '') + '</small>' +
               '<span class="prc-stat">' + (z.nodes > 1 ? '<span>' + (z.nodes - 1) + ' ' + plural(z.nodes - 1, 'подпроцесс', 'подпроцесса', 'подпроцессов') + '</span>' : '') +
                 '<span>' + z.steps + ' ' + plural(z.steps, 'шаг', 'шага', 'шагов') + '</span>' +
@@ -35307,11 +35313,11 @@
       (full.pain ? '<div class="prc-pain">' + esc(full.pain) + '</div>' : '') +
       (full.src ? '<div class="prc-src">Источник: ' + esc(prcSrc(full.src)) + '</div>' : '') +
       ((s.variants || []).length ? '<div class="prc-dr"><span class="po-lbl">Варианты</span><div class="prc-vars">' +
-        s.variants.map(function (v) { var t = prcLight(v); return t ? '<button type="button" class="prc-goto" data-open="' + esc(v) + '">' + ic('go', 12) + esc(t.title) + '</button>' : ''; }).join('') +
+        s.variants.map(function (v) { var t = prcLight(v); return t ? '<button type="button" class="prc-goto" data-open="' + esc(v) + '">' + ic('go', 12) + esc(prcShort(t.title)) + '</button>' : ''; }).join('') +
         '</div></div>' : '') +
       ((s.sub || s.goto) ? '<div class="prc-acts">' +
         (s.sub ? '<button type="button" class="bp prc-dive" data-open="' + esc(s.sub) + '">' + ic('go', 14) + 'Внутрь: ' +
-          esc((prcLight(s.sub) || {}).title || 'подпроцесс') + '</button>' : '') +
+          esc(prcShort((prcLight(s.sub) || {}).title) || 'подпроцесс') + '</button>' : '') +
         (s.goto && prcLight(s.goto) ? '<span class="prc-golbl">Работа уходит в</span>' + prcGoto(s.goto) : '') + '</div>' : '') +
     '</div>';
   }
@@ -35402,8 +35408,8 @@
     var crumb = '<nav class="prc-crumbs" aria-label="Путь"><button type="button" data-open="">Процессы</button>' +
       crumbs.map(function (c, i) {
         return '<span class="sep">' + ic('go', 11) + '</span>' + (i === crumbs.length - 1
-          ? '<span class="cur" aria-current="page">' + esc(c.title) + '</span>'
-          : '<button type="button" data-open="' + esc(c.id) + '">' + esc(c.title) + '</button>');
+          ? '<span class="cur" aria-current="page">' + esc(prcShort(c.title)) + '</span>'
+          : '<button type="button" data-open="' + esc(c.id) + '">' + esc(prcShort(c.title)) + '</button>');
       }).join('') + '</nav>';
 
     var owner = n.owner ? prcPerson(n.owner).name : '';
@@ -35443,7 +35449,8 @@
     view.innerHTML = '<div class="prc-wrap">' + crumb + prcToolbar(who) + prcPersonPanel(who) +
       '<div class="card prc-card">' +
         '<div class="prc-head"><div class="prc-tn">' + lvl + '</div>' +
-          '<h3>' + esc(n.title) + (n.status === 'draft' ? ' <span class="sev n-wait">черновик, так пока не работает</span>' : '') + '</h3>' +
+          '<h3>' + esc(prcShort(n.title)) + (n.status === 'draft' ? ' <span class="sev n-wait">черновик, так пока не работает</span>' : '') + '</h3>' +
+          (prcSpan(n.title) ? '<p class="prc-span">' + esc(prcSpan(n.title)) + '</p>' : '') +
           (n.goal ? '<p class="prc-goal">' + esc(n.goal) + '</p>' : '') +
           '<dl class="prc-meta">' + meta.map(function (x) { return '<dt>' + x[0] + '</dt><dd>' + x[1] + '</dd>'; }).join('') + '</dl>' +
           '<div class="prc-flowsum">' +

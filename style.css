@@ -12597,6 +12597,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .prc-tile:hover { background: #FBFBFC; border-color: var(--line-2); }
 .prc-tile:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .prc-tile b { font-size: 15px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; padding-right: 26px; }
+.prc-tile .prc-span { font-size: 12.5px; font-weight: 600; color: var(--ink-2); line-height: 1.35; padding-right: 26px; }
 .prc-tile small { font-size: 12.5px; color: var(--ink-2); line-height: 1.45;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .prc-tile.dim b, .prc-tile.dim small { color: var(--ink-3); }
@@ -12641,6 +12642,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .prc-head { padding: 22px 24px 18px; }
 .prc-head h3 { margin-top: 4px; font-size: 23px; font-weight: 700; letter-spacing: -.03em; line-height: 1.25; text-wrap: balance; }
 .prc-head h3 .sev { vertical-align: 3px; margin-left: 4px; }
+.prc-head .prc-span { margin-top: 4px; font-size: 15px; font-weight: 600; color: var(--ink-2); letter-spacing: -.01em; text-wrap: balance; }
 .prc-goal { margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--ink-2); max-width: 760px; }
 .prc-meta { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 7px 16px; margin-top: 16px; font-size: 13.5px; max-width: 900px; }
 .prc-meta dt { color: var(--ink-3); }
