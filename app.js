@@ -181,10 +181,15 @@
     rejected:       { label: 'отказ',           order: 6, dot: '#A2A7B2' },
   };
   var ACTIVE_STATUSES = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent'];
+  /* «Контакты» — один раздел на всех людей (Павел 23.10.2026: раньше были «Лиды» и
+     «Люди», и по названиям было непонятно, чем они отличаются). Вкладки идут по шагу,
+     на котором человек сейчас: написал и ничего не оставил → в работе → оплатил.
+     «Новые» — бывший раздел «Лиды», правило то же (isProspect). */
   var SEGS = {
-    queue:    { label: 'В работе',      hint: 'заявки в работе — от горячих к спокойным' },
-    all:      { label: 'Пользователи',  hint: 'все, кто был на платформе — это ещё не клиенты' },
+    new:      { label: 'Новые',         hint: 'написали или зашли, но ничего не оставили — пока с ними говорит бот' },
+    queue:    { label: 'В работе',      hint: 'оставили заявку или их взяли в работу — от горячих к спокойным' },
     clients:  { label: 'Клиенты',       hint: 'оплатившие и те, кого отметили клиентом вручную' },
+    all:      { label: 'Все',           hint: 'все карточки, кроме архива' },
     rejected: { label: 'Отказы',        hint: 'не сложилось — но контакт остался' },
     archive:  { label: 'Архив',         hint: 'скрытые лиды и тестовые записи — можно вернуть' },
   };
@@ -967,9 +972,9 @@
       if (seg === 'queue') return inQueue(l);
       if (seg === 'clients') return isClient(l);
       if (seg === 'rejected') return l.crm.status === 'rejected';
-      // Холодные живут в разделе «Лиды» (см. isProspect) — двух списков с одними
-      // и теми же людьми быть не должно, иначе непонятно, где с ними работают.
-      return !isProspect(l);
+      if (seg === 'new') return isProspect(l);
+      // Кому «Новые» не показаны, тому и во «Всех» холодных нет.
+      return segAvail('new') || !isProspect(l);
     });
   }
   var PERIODS = { today: 1, week: 7, month: 30 };
@@ -1042,16 +1047,16 @@
     return arr;
   }
   function counts() {
-    /* «Пользователи» считаются по тому же правилу, что и список: холодные лиды
-       в цифру на вкладке не входят, иначе счетчик спорил бы со строками. Считаем
-       их отдельно (c.cold) — это бейдж раздела «Лиды» в меню. */
+    /* Счетчики вкладок «Контактов» — по тем же правилам, что и списки, иначе цифра
+       спорила бы со строками. c.cold — вкладка «Новые», c.all — «Все» вместе с ними. */
     var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
               anketa: 0, booked: 0, blank: 0, cold: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
       if (isBlankVisit(l)) c.blank++;
+      // «Все» прячет пустые заходы (isBlankVisit), значит и не считает их.
+      else if (segAvail('new') || !isProspect(l)) c.all++;
       if (isProspect(l)) { c.cold++; return; }
-      c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
       if (isClient(l)) c.clients++;
@@ -2391,9 +2396,10 @@
     { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all', hidden: true },
     { id: 'stuck', label: 'Застряло', icon: 'alert', cap: 'tasks_all', hidden: true },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox|inbox_own' },
-    // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
-    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
-    { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
+    /* «Лиды» с 23.10.2026 — вкладка «Новые» внутри «Контактов». Строка осталась
+       скрытой ради старых ссылок и закладок: renderView ведет их на вкладку. */
+    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hidden: true },
+    { id: 'leads', label: 'Контакты', icon: 'leads', cap: 'clients' },
     // «Карта» — клиенты по этапам пути. Рядом с «Людьми» намеренно: те же
     // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
     { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
@@ -2950,8 +2956,8 @@
       var dupN = (state._dup && state._dup !== 'none' && state._dup.groups) ? state._dup.groups.length : 0;
       var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
         (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
-      tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
-        var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
+      tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).filter(segAvail).map(function (s) {
+        var n = s === 'new' ? c.cold : s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
         return '<a class="tab' + (!onDup && state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
       }).join('') + dupTab + '</nav>';
@@ -3201,13 +3207,8 @@
           : 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
         '</span></div></div>';
     }
-    if (state.page === 'prospects') {
-      var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
-      html = '<div><h2>Лиды</h2>' +
-        '<div class="verdict" style="margin-top:8px"><span>' + esc(PR_SEGS[prSeg].hint) + '</span></div></div>';
-    }
     if (state.page === 'leads') {
-      html = '<div><h2>Люди</h2>' +
+      html = '<div><h2>Контакты</h2>' +
         '<div class="verdict" style="margin-top:8px"><span>' + esc(SEGS[state.seg].hint) + '</span></div></div>';
     }
     if (state.page === 'path' && !can('clients')) {
@@ -3777,6 +3778,9 @@
     if (state.page === 'focus' || state.page === 'stuck') {
       state.teamMode = state.page; state.page = 'tasks'; state.taskSeg = 'team';
     }
+    // «Лиды» стали вкладкой «Новые» в «Контактах» (23.10.2026).
+    if (state.page === 'prospects') { state.page = 'leads'; state.seg = 'new'; }
+    if (state.page === 'leads' && !segAvail(state.seg)) state.seg = 'queue';
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
     if (!can(pageCap(state.page)) || pageHidden(state.page)) state.page = firstAllowedPage();
     // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
@@ -3813,7 +3817,6 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'org') renderOrg(view);
     else if (state.page === 'processes') renderProcesses(view);
-    else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'roadmap') renderRoadmap(view);
     else if (state.page === 'dupes') renderDupes(view);
     else if (state.page === 'students') renderStudents(view);
@@ -4120,9 +4123,9 @@
       tip: 'Данные детей нельзя выносить в личные переписки и таблицы. Это не бюрократия, за это штрафуют компанию.',
     },
     clients: {
-      lead: 'Раздел «Люди» — все, кто к нам обратился. Карточка человека это его история: откуда пришел, ' +
+      lead: 'Раздел «Контакты» — все, кто к нам обратился. Карточка человека это его история: откуда пришел, ' +
         'что спрашивал, что решили, что дальше.',
-      art: function () { return gdWin(2, 'Люди', []); },
+      art: function () { return gdWin(2, 'Контакты', []); },
       dos: [
         'Взяли человека в работу — нажмите «Беру». Тогда видно, что он не ничей.',
         'После каждого разговора — короткая запись в карточке: о чем договорились и когда следующий шаг.',
@@ -27741,7 +27744,10 @@
        аккаунтом школы гость подписан одним именем, тезок в базе по несколько, и она
        честно не угадывает. Привязать было негде, и такие записи копились — 30 штук к
        12.10.2026, среди них настоящие диагностики (Вера 12.10.2026). */
-    var canTie = !c.session_id && m.key.charAt(0) === 'f' && can('clients');
+    /* Привязать можно и запись из зума, и нашу комнату: ученика при создании
+       встречи почти не выбирают, и тогда разговор с семьей не попадает в
+       карточку (23.10.2026 — так лежали все девять консультаций). */
+    var canTie = !c.session_id && 'fr'.indexOf(m.key.charAt(0)) >= 0 && can('clients');
     var acts = [];
     if (c.text_chars && !text) {
       acts.push('<button type="button" class="qchip" data-mxtext="' + esc(m.key) + '">' +
@@ -38271,7 +38277,7 @@
       '<div class="sec-head"><div class="t">Куда нажимать</div></div>' +
       '<div class="s" style="margin:-6px 0 6px">три экрана на каждый день</div>' +
       navRow('inbox', 'dialogs', 'Диалоги', 'переписки с клиентами') +
-      navRow('leads', 'leads', 'Люди', 'все мои клиенты и карточки') +
+      navRow('leads', 'leads', 'Контакты', 'все мои клиенты и карточки') +
       navRow('tasks', 'task', 'Задачи', 'что поставлено и на мне') + '</div>';
 
     return '<div class="dash">' +
@@ -38624,7 +38630,7 @@
      канал, повод прихода и когда человек последний раз о себе напоминал. */
   var PR_SEGS = {
     all:   { label: 'Все',   hint: 'все, кто с нами связался, но еще ничего не оставил' },
-    fresh: { label: 'Новые', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
+    fresh: { label: 'За неделю', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
     quiet: { label: 'Молчат', hint: 'больше двух недель тишины — нужен повод написать снова' },
   };
   var PR_QUIET_DAYS = 14;
@@ -38702,13 +38708,13 @@
     apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/take', 'POST', null, function () {
       var l = findLead(id);
       /* Двигаем локально ровно то же, что записал сервер: строка уезжает из
-         «Лидов» сразу, без перезагрузки всего списка. */
+         «Новых» сразу, без перезагрузки всего списка. */
       if (l) {
         l.status = 'manual';
         if (l.crm.status === 'new') l.crm.status = 'contacted';
       }
       renderAll();
-      showToast('В работе — карточка в «Людях»', '', id);
+      showToast('Взяли в работу — карточка во вкладке «В работе»', '', id);
     }, function () {
       if (btn) { btn.disabled = false; btn.textContent = 'Беру в работу'; }
       showToast('Не получилось — проверь сеть');
@@ -38768,7 +38774,7 @@
           '<input id="search" class="search" type="search" placeholder="Имя, контакт или повод прихода" autocomplete="off">' +
           '<button class="s-clear" id="s-clear" title="Очистить">' + ic('x', 12) + '</button></div>' +
         '<span class="list-count num">' + '<b>' + c.all + '</b> ' +
-          plural(c.all, 'лид', 'лида', 'лидов') + '</span>' +
+          plural(c.all, 'человек', 'человека', 'человек') + '</span>' +
       '</div>' +
       // Один-единственный чип «Все» выбора не дает — тогда полосы срезов нет вовсе.
       (chips.replace(/\s/g, '') ? '<div class="list-quick">' + chips + '</div>' : '');
@@ -38807,7 +38813,13 @@
     });
   }
 
+  /* Вкладка доступна роли? «Новые» тьютору не показываем: холодные лиды — работа
+     продаж, тьютор ведет своих учеников (Павел 11.09.2026). */
+  function segAvail(s) {
+    return !!SEGS[s] && !(s === 'new' && state.role === 'tutor');
+  }
   function renderLeads(view) {
+    if (state.seg === 'new' && state.loaded) return renderProspects(view);
     view.innerHTML = '<div class="card listcard">' + leadsToolbar() + '<div class="list-body" id="list-body"></div></div>';
     attachToolbarHandlers();
     renderListBody();
@@ -38833,31 +38845,12 @@
     }).join('') + '</div>';
   }
 
-  /* Куда делись холодные. Раньше пустые заходы сворачивались прямо здесь; с
-     появлением раздела «Лиды» (решение Веры 20.08.2026) они уехали туда целиком,
-     и в «Людях» о них остается одна строка со ссылкой — иначе менеджер решит,
-     что трафика нет вовсе. */
-  function blankNote() {
-    var n = counts().cold;
-    if (!n || state.seg !== 'all') return '';
-    return '<div class="list-foot">' +
-      '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
-      '<span class="lf-t"><b class="num">' + n + '</b> ' + plural(n, 'человек написал', 'человека написали', 'человек написали') +
-        ' или зашли, но ничего пока не оставили. Они в разделе «Лиды», с ними говорит бот.</span>' +
-      '<button class="lf-btn" id="lf-blank">Открыть</button>' +
-    '</div>';
-  }
-  function attachBlankNote(host) {
-    var b = host.querySelector('#lf-blank');
-    if (b) b.addEventListener('click', function () { setPage('prospects'); });
-  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
-      host.innerHTML = blankNote() + emptyState();
+      host.innerHTML = emptyState();
       var lc = el('le-clear');
       if (lc) lc.addEventListener('click', function () { state.q = ''; state.quick = ''; renderView(); });
-      attachBlankNote(host);
       return;
     }
     var rows = arr.map(function (l) {
@@ -38892,7 +38885,7 @@
       '</div>';
     }).join('');
 
-    host.innerHTML = blankNote() +
+    host.innerHTML =
       '<div class="trow lr-grid thead">' +
         thCell('crm', 'Статус', '') +
         thCell('name', 'Лид', '') +
@@ -38901,7 +38894,6 @@
         thCell('created', 'Пришел', ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
-    attachBlankNote(host);
 
     Array.prototype.forEach.call(host.querySelectorAll('.th.sortable'), function (th) {
       th.addEventListener('click', function () {
@@ -40733,7 +40725,7 @@
     if (!d.found && can('contractors')) {
       return (d.can_create
         ? '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
-          'title="Карточки в «Людях» нет — завести ее из этого диалога">' + ic('plus', 14) +
+          'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
           '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>'
         : '') +
         '<button class="tg-cact czmark" data-czmark="' + esc(uid) + '" ' +
@@ -40748,7 +40740,7 @@
     }
     if (d.can_create) {
       return '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
-        'title="Карточки в «Людях» нет — завести ее из этого диалога">' + ic('plus', 14) +
+        'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
         '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>';
     }
     return '';
@@ -49869,7 +49861,7 @@
     leads: {
       get: function () { return SEGS[state.seg] ? state.seg : ''; },
       set: function (s) {
-        if (!SEGS[s] || s === state.seg) return false;
+        if (!segAvail(s) || s === state.seg) return false;
         state.seg = s; state.sort = null;
         // архив тянет ОТДЕЛЬНЫЙ набор (скрытые) — тот же порядок, что у вкладки
         if (s === 'archive') loadLeads(false);
@@ -50035,7 +50027,7 @@
       // Ссылка на клиента в руках того, кому карточки не открыты: без этой строки
       // он видит свой обычный экран и думает, что ссылка битая.
       if (hashLeadId()) {
-        denyLink('lead', 'Люди', 'Карточка клиента вам не открыта', 'раздела «Люди» нет в вашем доступе');
+        denyLink('lead', 'Контакты', 'Карточка клиента вам не открыта', 'раздела «Контакты» нет в вашем доступе');
       }
       renderView();
     }
