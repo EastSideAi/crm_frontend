@@ -38383,8 +38383,13 @@
      ни у ответственного; таких карточек на бою нашлось пять). Признак клиента тот же,
      что у вкладки «Клиенты», — иначе вкладка показывала бы человека, которого нет в
      списке людей. */
+  /* Кто проходил наш тест или занимался в тренажере (DET, HSK, CSCA), тоже не прохожий,
+     даже без анкеты: левые люди тесты не проходят (Вера, 23.10.2026). Кирилл Захаров прошел
+     тест по личной ссылке 22.10.2026, анкету не заполнял, и в «Людях» его не было вовсе.
+     Признак `learner` считает сервер (admin_leads). */
   function isProspect(l) {
-    return l.status === 'visited' && !isClient(l) && l.crm.status !== 'rejected';
+    return l.status === 'visited' && !isClient(l) && l.crm.status !== 'rejected' &&
+      !l.learner && !l.det;
   }
   function prAge(l) {
     var t = l.last_activity || l.created_at;
@@ -38406,7 +38411,8 @@
     if (seg === 'quiet') arr = arr.filter(function (l) { return prAge(l) >= PR_QUIET_DAYS; });
     if (state.q) {
       arr = arr.filter(function (l) {
-        var hay = ((l.name || '') + ' ' + (l.contact || '') + ' ' + (l.crm.note || '')).toLowerCase();
+        var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' + (l.contact || '') + ' ' +
+          (l.crm.note || '')).toLowerCase();
         return hay.indexOf(state.q) !== -1;
       });
     }
