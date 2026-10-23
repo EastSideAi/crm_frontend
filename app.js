@@ -2310,7 +2310,10 @@
     /* Подрядчик по рекламе (Вера 22.10.2026): одна дверь — вкладка «Реклама».
        Весь раздел «Маркетинг» ему не отдаем: там сквозная воронка, оплаты клиентов
        и план запуска, а внешнему человеку нужны его показы, клики и расход. */
-    ads_contractor: { label: 'Подрядчик по рекламе',  short: 'сводка рекламы',       caps: ['dash', 'ads'] },
+    // Без `dash` намеренно: он открывает дашборд компании, «Что нового» и
+    // «Воркшопы» — внутреннюю кухню команды. Внешнему подрядчику остается
+    // «Маркетинг», а в нем одна вкладка «Реклама» (mkTabsFor).
+    ads_contractor: { label: 'Подрядчик по рекламе',  short: 'сводка рекламы',       caps: ['ads'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
     curator:       { label: 'Тьютор (старая роль)',  short: 'устар., без ограничений', caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
@@ -34999,47 +35002,138 @@
     }
   }
 
-  /* ── ПРОЦЕССЫ — карта сквозных процессов компании ─────────────────────────
-     Черновик, который агент собрал из рабочих заметок команды (Вера 22.10.2026:
-     описать процессы, чтобы увидеть, где ходим кругами, и потом отдать рутинные
-     шаги агентам). Процесс идет от события до результата через нескольких людей,
-     шаг — «что делаем, кто, что получилось», формат по книге Рыбакова.
-     «Мои процессы» — не отдельное описание, а фильтр по человеку в той же базе:
-     выбрал человека — подсвечены его шаги, сверху видно, кто ему передает работу
-     и кому передает он.
-     Данные отдает сервер (`GET /admin/api/processes`, файл в бэкенде), по той же
-     причине, что у «Структуры»: в карте ФИО коллег и внутренние цифры. Право
+  /* ── ПРОЦЕССЫ — карта процессов компании, «матрешка» ──────────────────────
+     Вера 22.10.2026: процессы раскладываются на подпроцессы, те на свои, и так до
+     инструкции, по которой работает агент; ветвлений нет — развилка это два разных
+     процесса (метод Рыбакова). Поэтому экран один на любом уровне: шапка процесса
+     и прямая цепочка шагов, шаг с подпроцессом проваливается внутрь, сверху путь
+     назад. Шаг раскрывается инструкцией: вход, как делать, где, выход, проверка,
+     что делать при сбое — ровно то, что читает агент, второго текста нет.
+     «Мои процессы» — фильтр по человеку в той же базе, «дорожки» — те же шаги
+     сеткой «человек × шаг», в ней видно, где работа переходит из рук в руки.
+     Данные отдает сервер (скелет `GET /admin/api/processes/v2`, процесс целиком —
+     `.../v2/<id>` по требованию), в них ФИО коллег и внутренние цифры. Право
      `processes` личное, его выдают учетке, а не роли. */
+  var PRC_GROUPS = [
+    { id: 'core', label: 'Путь клиента', chain: true },
+    { id: 'support', label: 'Обеспечивающие' },
+    { id: 'manage', label: 'Управление' },
+  ];
+  var PRC_EXEC = {
+    system: { t: 'машина', c: 'sys' },
+    agent: { t: 'агент', c: 'ag' },
+    agent_supervised: { t: 'агент + человек', c: 'ag' },
+    human: { t: 'человек', c: 'hu' },
+  };
+
   function fetchProcesses() {
-    api('/admin/api/processes')
-      .then(function (d) { state._prc = d; if (state.page === 'processes') renderView(); })
+    api('/admin/api/processes/v2')
+      .then(function (d) { state._prc = d; prcIndex(); if (state.page === 'processes') renderView(); })
       .catch(function () { state._prc = 'none'; if (state.page === 'processes') renderView(); });
   }
-
-  function prcPerson(id) {
-    var d = state._prc, ps = (d && d.people) || [];
-    for (var i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i];
-    return { id: id, name: id, role: '' };
+  /* Полный процесс с инструкциями: тянется, когда в него провалились. */
+  function fetchProcessFull(pid) {
+    state._prcFull = state._prcFull || {};
+    if (state._prcFull[pid]) return;
+    state._prcFull[pid] = 'wait';
+    api('/admin/api/processes/v2/' + encodeURIComponent(pid))
+      .then(function (d) { state._prcFull[pid] = d; if (state.page === 'processes') renderView(); })
+      .catch(function () { state._prcFull[pid] = 'none'; if (state.page === 'processes') renderView(); });
   }
-  function prcMine(p, who) {
-    if (!who) return 0;
-    return p.steps.filter(function (s) { return s.who.indexOf(who) !== -1; }).length;
-  }
-
-  /* От кого человек получает работу и кому отдает: соседние шаги, где его нет.
-     Считаем по всем процессам сразу — ради этого ответа фильтр и заведен. */
-  function prcLinks(who) {
-    var from = {}, to = {}, d = state._prc;
+  /* Плоский словарь узлов по всем процессам: путь-крошки, поиск и фильтр по
+     человеку ходят по нему, а не перебором файлов. */
+  function prcIndex() {
+    var d = state._prc, by = {}, people = {};
+    d.people.forEach(function (p) { people[p.id] = p; });
     d.processes.forEach(function (p) {
-      p.steps.forEach(function (s, i) {
-        if (s.who.indexOf(who) === -1) return;
-        var pv = p.steps[i - 1], nx = p.steps[i + 1];
-        if (pv && pv.who.indexOf(who) === -1) pv.who.forEach(function (x) { from[x] = 1; });
-        if (nx && nx.who.indexOf(who) === -1) nx.who.forEach(function (x) { to[x] = 1; });
+      Object.keys(p.nodes).forEach(function (nid) { by[nid] = { pid: p.id, node: p.nodes[nid] }; });
+    });
+    d._by = by; d._people = people;
+  }
+  function prcPerson(id) {
+    var p = state._prc._people[id];
+    return p || { id: id, name: id, role: '' };
+  }
+  function prcLight(nid) { var x = state._prc._by[nid]; return x ? x.node : null; }
+  function prcPid(nid) { var x = state._prc._by[nid]; return x ? x.pid : null; }
+  /* Полный узел, если процесс уже приехал; иначе скелет (в нем нет инструкций). */
+  function prcFullNode(nid) {
+    var pid = prcPid(nid), f = state._prcFull && state._prcFull[pid];
+    return f && f.nodes ? f.nodes[nid] : null;
+  }
+  function prcRootTitle(nid) {
+    var pid = prcPid(nid), p = state._prc.processes.filter(function (x) { return x.id === pid; })[0];
+    return p ? p.nodes[p.root].title : '';
+  }
+  /* Передача в другой процесс: шаг уводит работу в узел чужого процесса. Подпись
+     называет процесс, а не только узел, — иначе «Проверить документы» не скажет,
+     что работа ушла из продаж в сопровождение. */
+  function prcGoto(g) {
+    var t = prcLight(g);
+    if (!t) return '';
+    return '<button type="button" class="prc-goto" data-open="' + esc(g) + '">' + ic('go', 12) +
+      esc(prcRootTitle(g)) + (prcPid(g) && t.level > 1 ? ': ' + esc(t.title) : '') + '</button>';
+  }
+  /* Откуда в этот узел приходит работа из других процессов. */
+  function prcIncoming(nid) {
+    var by = state._prc._by, out = [];
+    Object.keys(by).forEach(function (k) {
+      by[k].node.steps.forEach(function (s, i) { if (s.goto === nid) out.push({ nid: k, i: i, title: s.title }); });
+    });
+    return out;
+  }
+  function prcCrumbs(nid) {
+    var out = [], cur = prcLight(nid), guard = 0;
+    while (cur && guard++ < 12) {
+      out.unshift(cur);
+      var up = cur.parent || cur.variant_of;
+      cur = up ? prcLight(up.node) : null;
+    }
+    return out;
+  }
+  /* Сколько узлов и шагов под узлом, включая все вложенные уровни. */
+  function prcSize(nid) {
+    var n = prcLight(nid), nodes = 0, steps = 0, ag = 0, pains = 0, seen = {};
+    (function walk(x) {
+      if (!x || seen[x.id]) return;
+      seen[x.id] = 1; nodes++; pains += x.n_pains || 0;
+      x.steps.forEach(function (s) {
+        steps++;
+        if (s.can_agent === 'yes' || s.can_agent === 'supervised' || s.exec === 'agent' || s.exec === 'agent_supervised') ag++;
+        if (s.sub) walk(prcLight(s.sub));
+        (s.variants || []).forEach(function (v) { walk(prcLight(v)); });
+      });
+    })(n);
+    return { nodes: nodes, steps: steps, ag: ag, pains: pains };
+  }
+  function prcMineIn(nid, who) {
+    var n = 0, seen = {};
+    (function walk(x) {
+      if (!x || seen[x.id]) return;
+      seen[x.id] = 1;
+      x.steps.forEach(function (s) {
+        if ((s.who || []).indexOf(who) !== -1) n++;
+        if (s.sub) walk(prcLight(s.sub));
+        (s.variants || []).forEach(function (v) { walk(prcLight(v)); });
+      });
+    })(prcLight(nid));
+    return n;
+  }
+  /* От кого человек получает работу и кому отдает: соседние шаги, где его нет,
+     по всем уровням сразу — ради этого ответа фильтр и заведен. */
+  function prcLinks(who) {
+    var from = {}, to = {}, by = state._prc._by;
+    Object.keys(by).forEach(function (nid) {
+      var fl = prcFlow(by[nid].node.steps);
+      fl.forEach(function (f) {
+        if (!f.hand) return;
+        if (f.to.indexOf(who) !== -1) f.from.forEach(function (x) { from[x] = (from[x] || 0) + 1; });
+        if (f.from.indexOf(who) !== -1) f.to.forEach(function (x) { to[x] = (to[x] || 0) + 1; });
       });
     });
     var names = function (o) {
-      var ks = Object.keys(o).filter(function (k) { return k !== who; });
+      var ks = Object.keys(o).filter(function (k) { return k !== who && !prcPerson(k).system; })
+        .sort(function (a, b) { return o[b] - o[a]; });
       return ks.length ? ks.map(function (k) { return esc(prcPerson(k).name); }).join(', ') : 'нет';
     };
     return { from: names(from), to: names(to) };
@@ -35049,43 +35143,24 @@
     var p = prcPerson(id);
     return '<span class="prc-tag' + (p.system ? ' sys' : '') + (who === id ? ' me' : '') + '">' + esc(p.name) + '</span>';
   }
-
-  /* Подпроцесс, который уже расписан на карте, — ссылка на него: шаг «передать табель»
-     ведет в «Деньги». Не расписанный — подпись, чтобы было видно, что он есть. */
-  function prcSubLink(sub) {
-    var hit = state._prc.processes.filter(function (p) { return p.title === sub; })[0];
-    return hit ? '<button type="button" class="prc-sub" data-prc="' + esc(hit.id) + '">' + ic('go', 12) +
-      'подпроцесс: ' + esc(sub) + '</button>'
-      : '<span class="prc-sub off">подпроцесс: ' + esc(sub) + '</span>';
+  function prcExec(s) {
+    var e = PRC_EXEC[s.exec] || PRC_EXEC.human;
+    var fut = s.exec === 'human' && (s.can_agent === 'yes' || s.can_agent === 'supervised')
+      ? '<span class="prc-x fut">' + (s.can_agent === 'supervised' ? 'можно агенту с человеком' : 'можно агенту') + '</span>' : '';
+    return '<span class="prc-x ' + e.c + '">' + e.t + '</span>' + fut;
   }
 
-  function prcStep(s, i, prev, who) {
-    var mine = who && s.who.indexOf(who) !== -1;
-    /* передача — шаг, где работа переходит к другим людям. Именно на стыках по
-       заметкам все и рвется, поэтому стык помечен прямо в строке. */
-    var hand = prev && !prev.who.some(function (x) { return s.who.indexOf(x) !== -1; }) &&
-      !(s.who.length && s.who.every(function (x) { return prcPerson(x).system; }));
-    var who_ = s.who.map(function (x) { return prcTag(x, who); }).join('') +
-      (s.who_unknown ? '<span class="prc-tag q">не ясно кто</span>' : '') +
-      (s.agent ? '<span class="prc-tag ag">агент: ' + esc(s.agent) + '</span>' : '');
-    return '<li class="prc-step' + (who ? (mine ? ' mine' : ' dim') : '') + '">' +
-      '<span class="prc-n' + (hand ? ' hand' : '') + '"' + (hand ? ' title="Здесь работа переходит к другим людям"' : '') + '>' + (i + 1) + '</span>' +
-      '<div class="prc-what"><b>' + esc(s.title) + '</b>' +
-        (s.sub ? prcSubLink(s.sub) : '') +
-        (s.pain ? '<span class="prc-pain">' + esc(s.pain) + '</span>' : '') + '</div>' +
-      '<div class="prc-who">' + who_ + '</div>' +
-      '<div class="prc-res">' + esc(s.result) + '</div></li>';
-  }
-
-  /* Выбор процесса меняет карточку ниже плиток: на телефоне она начинается за краем
-     экрана, и без прокрутки нажатие выглядит так, будто поменялся только цвет плитки. */
-  function prcGo(id) {
-    state.prcSel = id;
+  function prcOpen(nid, step) {
+    state.prcNode = nid || null;
+    state.prcStep = step == null ? null : step;
+    state.prcQ = '';
     renderView();
-    var card = document.querySelector('.prc-card');
-    if (!card || card.getBoundingClientRect().top >= 0 && card.getBoundingClientRect().top < window.innerHeight * .5) return;
     var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    card.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    if (step != null) {
+      var row = document.querySelector('.prc-step[data-i="' + step + '"]');
+      if (row) { row.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'center' }); return; }
+    }
+    window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' });
   }
 
   function renderProcesses(view) {
@@ -35094,85 +35169,309 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить карту процессов, обновите страницу.</div></div>';
       return;
     }
-    var d = state._prc, who = state.prcWho || '';
-    var sel = d.processes.filter(function (p) { return p.id === state.prcSel; })[0] || d.processes[0];
-    state.prcSel = sel.id;
+    if (state.prcNode && !prcLight(state.prcNode)) state.prcNode = null;
+    if (state.prcNode) renderProcessNode(view, state.prcNode); else renderProcessHome(view);
+  }
 
-    var tile = function (p) {
-      var n = prcMine(p, who);
-      return '<button type="button" class="prc-tile' + (p.id === sel.id ? ' on' : '') + '" data-prc="' + esc(p.id) + '"' +
-        ' aria-pressed="' + (p.id === sel.id ? 'true' : 'false') + '">' +
-        '<span class="prc-tn">' + esc(p.n) + '</span><b>' + esc(p.title) + '</b><small>' + esc(p.span) + '</small>' +
-        (who ? '<i class="prc-cnt' + (n ? '' : ' zero') + '">' + n + '</i>' : '') + '</button>';
-    };
-    var path = d.processes.filter(function (p) { return p.on_path; });
-    var rest = d.processes.filter(function (p) { return !p.on_path; });
+  /* Поиск по названиям процессов и шагов на всех уровнях. */
+  function prcSearch(q) {
+    var by = state._prc._by, out = [];
+    Object.keys(by).forEach(function (nid) {
+      var n = by[nid].node;
+      if (n.title.toLowerCase().indexOf(q) !== -1) out.push({ nid: nid, title: n.title, kind: 'node' });
+      n.steps.forEach(function (s, i) {
+        if (s.title.toLowerCase().indexOf(q) !== -1) out.push({ nid: nid, i: i, title: s.title, kind: 'step', in_: n.title, root: (n.level || 1) > 1 ? prcRootTitle(nid) : '' });
+      });
+    });
+    return out.slice(0, 60);
+  }
 
-    var people = d.people.filter(function (p) { return !p.system; });
+  function prcToolbar(who) {
+    var people = state._prc.people.filter(function (p) { return !p.system; });
     var opts = '<option value="">Все люди</option>' + people.map(function (p) {
       return '<option value="' + esc(p.id) + '"' + (p.id === who ? ' selected' : '') + '>' + esc(p.name) + '</option>';
     }).join('');
-
-    var panel = '';
-    if (who) {
-      var l = prcLinks(who), inP = d.processes.filter(function (p) { return prcMine(p, who); });
-      panel = '<div class="prc-person">' +
-        '<div><span class="po-lbl">Роль</span><p>' + esc(prcPerson(who).role || '') + '</p></div>' +
-        '<div><span class="po-lbl">Участвует</span>' + (inP.length ? '<ul class="prc-in">' + inP.map(function (p) {
-          var n = prcMine(p, who);
-          return '<li><button type="button" data-prc="' + esc(p.id) + '">' + esc(p.title) + '</button> ' +
-            n + ' ' + plural(n, 'шаг', 'шага', 'шагов') + '</li>';
-        }).join('') + '</ul>' : '<p>нет шагов в расписанных процессах</p>') + '</div>' +
-        '<div><span class="po-lbl">Получает работу от</span><p>' + l.from + '</p></div>' +
-        '<div><span class="po-lbl">Передает дальше</span><p>' + l.to + '</p></div></div>';
-    }
-
-    var agN = sel.steps.filter(function (s) { return s.agent; }).length;
-    var steps = sel.steps.map(function (s, i) { return prcStep(s, i, sel.steps[i - 1], who); }).join('');
-    var list = function (a) { return a.length ? '<ul>' + a.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p>Только заметки агентов.</p>'; };
-
-    view.innerHTML = '<div class="prc-wrap">' +
-      '<div class="prc-top"><div><h2 class="org-h1">Процессы компании</h2>' +
-        '<div class="org-sub">' + esc(d.note || '') + '</div></div>' +
-        '<span class="sev n-wait">черновик · ' + esc(fmtDay(d.version)) + '</span></div>' +
-
-      '<div class="prc-map"><div class="po-lbl">Путь клиента</div>' +
-        '<div class="prc-path">' + path.map(tile).join('') + '</div>' +
-        '<div class="po-lbl prc-lbl2">Остальные процессы</div>' +
-        '<div class="prc-rest">' + rest.map(tile).join('') + '</div></div>' +
-
-      '<div class="prc-filter"><label class="po-lbl" for="prc-who">Шаги человека</label>' +
-        '<span class="al-selwrap prc-selw"><select id="prc-who" class="al-sel sm prc-sel">' + opts + '</select></span></div>' + panel +
-
-      '<div class="card prc-card">' +
-        '<div class="prc-head"><div class="prc-tn">Процесс ' + esc(sel.n) + '</div>' +
-          '<h3>' + esc(sel.title) + ': ' + esc(sel.span) +
-            (sel.status === 'draft' ? '' : ' <span class="sev n-ok">' + esc(sel.status) + '</span>') + '</h3>' +
-          '<dl class="prc-meta"><dt>Цель</dt><dd>' + esc(sel.goal) + '</dd>' +
-            '<dt>Руководитель</dt><dd>' + (sel.owner_disputed ? '<span class="prc-q">?</span> ' : '') + esc(sel.owner) + '</dd>' +
-            '<dt>Начало</dt><dd>' + esc(sel.start) + '</dd><dt>Конец</dt><dd>' + esc(sel.end) + '</dd></dl>' +
-          '<div class="prc-agn">Агенту можно отдать ' + agN + ' из ' + sel.steps.length + ' шагов, целиком или черновиком</div>' +
-          (sel.pain ? '<span class="prc-pain">' + esc(sel.pain) + '</span>' : '') + '</div>' +
-        '<div class="prc-cols"><span>№</span><span>Что делаем</span><span>Кто</span><span>Результат шага</span></div>' +
-        '<ol class="prc-steps">' + steps + '</ol>' +
-        '<div class="prc-foot"><div><span class="po-lbl">Вопросы на проверку</span>' + list(sel.questions || []) + '</div>' +
-          '<div><span class="po-lbl">На что опирается</span>' + list(sel.sources || []) + '</div></div></div>' +
-
-      '<div class="prc-two">' +
-        '<div class="card prc-box"><div class="po-lbl">Где источники спорят</div><ol class="prc-disp">' +
-          (d.disputes || []).map(function (x) { return '<li><b>' + esc(x.title) + '</b><span>' + esc(x.text) + '</span></li>'; }).join('') + '</ol></div>' +
-        '<div class="card prc-box"><div class="po-lbl">Процессы без расписанных шагов</div><ul class="prc-minor">' +
-          (d.minor || []).map(function (x) { return '<li><b>' + esc(x.title) + '</b><span>' + esc(x.who) + '</span></li>'; }).join('') + '</ul></div>' +
-      '</div></div>';
-
-    view.querySelectorAll('[data-prc]').forEach(function (b) {
-      b.addEventListener('click', function () { prcGo(b.getAttribute('data-prc')); });
+    return '<div class="prc-bar">' +
+      '<div class="searchwrap prc-search' + (state.prcQ ? ' has-val' : '') + '">' + ic('search', 15) +
+        '<input id="prc-q" class="search" type="search" placeholder="Найти процесс или шаг" autocomplete="off" value="' + esc(state.prcQ || '') + '">' +
+        '<button class="s-clear" id="prc-qclear" title="Очистить">' + ic('x', 12) + '</button></div>' +
+      '<span class="al-selwrap prc-selw"><select id="prc-who" class="al-sel sm prc-sel">' + opts + '</select></span></div>';
+  }
+  function prcPersonPanel(who) {
+    if (!who) return '';
+    var l = prcLinks(who);
+    var inP = state._prc.processes.map(function (p) { return { p: p, n: prcMineIn(p.root, who) }; })
+      .filter(function (x) { return x.n; });
+    return '<div class="prc-person">' +
+      '<div><span class="po-lbl">Роль</span><p>' + esc(prcPerson(who).role || '') + '</p></div>' +
+      '<div><span class="po-lbl">Участвует</span>' + (inP.length ? '<ul class="prc-in">' + inP.map(function (x) {
+        return '<li><button type="button" data-open="' + esc(x.p.root) + '">' + esc(x.p.nodes[x.p.root].title) + '</button> ' +
+          x.n + ' ' + plural(x.n, 'шаг', 'шага', 'шагов') + '</li>';
+      }).join('') + '</ul>' : '<p>шагов на карте нет</p>') + '</div>' +
+      '<div><span class="po-lbl">Получает работу от</span><p>' + l.from + '</p></div>' +
+      '<div><span class="po-lbl">Передает дальше</span><p>' + l.to + '</p></div></div>';
+  }
+  function prcWire(view) {
+    view.querySelectorAll('[data-open]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var st = b.getAttribute('data-step');
+        prcOpen(b.getAttribute('data-open') || null, st == null || st === '' ? null : +st);
+      });
     });
+    var lw = view.querySelector('.prc-lanes-w');
+    if (lw) {
+      var edge = function () { lw.classList.toggle('more', lw.scrollLeft + lw.clientWidth < lw.scrollWidth - 4); };
+      lw.addEventListener('scroll', edge, { passive: true }); edge();
+    }
     var s = view.querySelector('select.prc-sel');
     if (s) {
       s.addEventListener('change', function () { state.prcWho = s.value; renderView(); });
       searchSelect(s);
     }
+    var qi = el('prc-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        state.prcQ = qi.value;
+        var host = view.querySelector('.prc-found');
+        var q = state.prcQ.trim().toLowerCase();
+        qi.parentNode.classList.toggle('has-val', !!state.prcQ);
+        if (host || q.length >= 2) { renderView(); var n = el('prc-q'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }
+      });
+      var clr = el('prc-qclear');
+      if (clr) clr.addEventListener('click', function () { state.prcQ = ''; renderView(); });
+    }
+  }
+
+  function renderProcessHome(view) {
+    var d = state._prc, who = state.prcWho || '', q = (state.prcQ || '').trim().toLowerCase();
+    var all = Object.keys(d._by), stepsAll = 0;
+    all.forEach(function (k) { stepsAll += d._by[k].node.steps.length; });
+
+    var body;
+    if (q.length >= 2) {
+      var hits = prcSearch(q);
+      body = '<div class="card prc-found">' + (hits.length ? '<ul>' + hits.map(function (h) {
+        return '<li><button type="button" data-open="' + esc(h.nid) + '"' + (h.kind === 'step' ? ' data-step="' + h.i + '"' : '') + '>' +
+          '<b>' + esc(h.title) + '</b><small>' + (h.kind === 'step' ? 'шаг в «' + esc(h.in_) + '»' + (h.root ? ' · ' + esc(h.root) : '')
+          : (prcLight(h.nid).level || 1) > 1 || prcLight(h.nid).variant_of ? 'подпроцесс в «' + esc(prcRootTitle(h.nid)) + '»' : 'процесс') + '</small></button></li>';
+      }).join('') + '</ul>' : '<div class="empty">Ничего не нашлось. Попробуйте другое слово: «счет», «табель», «виза».</div>') + '</div>';
+    } else {
+      body = PRC_GROUPS.map(function (g) {
+        var ps = d.processes.filter(function (p) { return p.group === g.id; });
+        if (!ps.length) return '';
+        return '<section class="prc-grp"><div class="po-lbl">' + esc(g.label) + '</div>' +
+          '<div class="prc-tiles' + (g.chain ? ' chain' : '') + '">' + ps.map(function (p) {
+            var root = p.nodes[p.root], z = prcSize(p.root), mine = who ? prcMineIn(p.root, who) : 0;
+            return '<button type="button" class="prc-tile' + (who && !mine ? ' dim' : '') + '" data-open="' + esc(p.root) + '">' +
+              '<span class="prc-tn">' + esc(p.n) + '</span>' +
+              '<b>' + esc(root.title) + '</b>' +
+              '<small>' + esc(root.goal || '') + '</small>' +
+              '<span class="prc-stat">' + (z.nodes > 1 ? '<span>' + (z.nodes - 1) + ' ' + plural(z.nodes - 1, 'подпроцесс', 'подпроцесса', 'подпроцессов') + '</span>' : '') +
+                '<span>' + z.steps + ' ' + plural(z.steps, 'шаг', 'шага', 'шагов') + '</span>' +
+                (z.pains ? '<span class="pain">' + z.pains + ' ' + plural(z.pains, 'боль', 'боли', 'болей') + '</span>' : '') + '</span>' +
+              (who ? '<i class="prc-cnt' + (mine ? '' : ' zero') + '">' + mine + '</i>' : '') +
+              (root.status === 'draft' ? '<span class="sev n-wait prc-draft">черновик</span>' : '') +
+            '</button>';
+          }).join('') + '</div></section>';
+      }).join('');
+    }
+
+    var orph = (d.orphans || []).length && q.length < 2 ? '<section class="prc-grp"><div class="po-lbl">Не привязано к процессам</div>' +
+      '<div class="card prc-orph"><p>' + esc(d.orphans_note || '') + '</p><ul>' + d.orphans.map(function (x) {
+        return '<li><b>' + esc(x.title) + '</b><span>' + esc(x.who) + ' · ' + esc(x.what) + '</span></li>';
+      }).join('') + '</ul></div></section>' : '';
+    view.innerHTML = '<div class="prc-wrap">' +
+      '<div class="prc-top"><div><h2 class="org-h1">Процессы компании</h2>' +
+        '<div class="org-sub">' + d.processes.length + ' ' + plural(d.processes.length, 'процесс', 'процесса', 'процессов') + ', ' +
+          (all.length - d.processes.length) + ' ' + plural(all.length - d.processes.length, 'подпроцесс', 'подпроцесса', 'подпроцессов') + ', ' +
+          stepsAll + ' ' + plural(stepsAll, 'шаг', 'шага', 'шагов') + '. Нажмите на процесс, чтобы провалиться внутрь, на шаг, чтобы открыть инструкцию.</div></div>' +
+        '<span class="sev n-wait">как есть · черновик</span></div>' +
+      prcToolbar(who) + prcPersonPanel(who) + body + orph + '</div>';
+    prcWire(view);
+  }
+
+  function prcSrc(x) { return String(x || '').replace(/\/data\/workspace\/(Verundina\/protsessy\/)?/g, ''); }
+  function prcDetail(s, full) {
+    if (!full) return '<div class="prc-det"><div class="sk-list"><div class="shim"></div><div class="shim"></div></div></div>';
+    var row = function (k, v) { return v ? '<div class="prc-dr"><span class="po-lbl">' + k + '</span><div>' + v + '</div></div>' : ''; };
+    var how = (full.how || []).length ? '<ol class="prc-how">' + full.how.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>' : '';
+    return '<div class="prc-det">' +
+      row('Вход', esc(full.input || '')) +
+      row('Как делать', how) +
+      row('Где', esc(full.where || '')) +
+      row('Выход', esc(full.output || '')) +
+      row('Проверка', esc(full.check || '')) +
+      row('Если не так', /^\s*(—|-|нет\.?)?\s*$/i.test(full.fail || '') ? '' : esc(full.fail)) +
+      row('Срок', esc(full.sla || '')) +
+      (full.pain ? '<div class="prc-pain">' + esc(full.pain) + '</div>' : '') +
+      (full.src ? '<div class="prc-src">Источник: ' + esc(prcSrc(full.src)) + '</div>' : '') +
+      ((s.variants || []).length ? '<div class="prc-dr"><span class="po-lbl">Варианты</span><div class="prc-vars">' +
+        s.variants.map(function (v) { var t = prcLight(v); return t ? '<button type="button" class="prc-goto" data-open="' + esc(v) + '">' + ic('go', 12) + esc(t.title) + '</button>' : ''; }).join('') +
+        '</div></div>' : '') +
+      ((s.sub || s.goto) ? '<div class="prc-acts">' +
+        (s.sub ? '<button type="button" class="bp prc-dive" data-open="' + esc(s.sub) + '">' + ic('go', 14) + 'Внутрь: ' +
+          esc((prcLight(s.sub) || {}).title || 'подпроцесс') + '</button>' : '') +
+        (s.goto && prcLight(s.goto) ? '<span class="prc-golbl">Работа уходит в</span>' + prcGoto(s.goto) : '') + '</div>' : '') +
+    '</div>';
+  }
+
+  /* Движение работы по шагам: где она переходит к другим людям и где возвращается
+     к тому, кто уже ее отдавал (тот самый «ходим кругами»). Считаем по людям шагов,
+     машину не считаем: бот не держит работу у себя. Если в шаге остался кто-то из
+     предыдущего, это не передача, а та же работа с подключением нового человека. */
+  function prcFlow(steps) {
+    /* Сравниваем с последним шагом, где были люди, а не с соседним: цепочка
+       «менеджер → бот отправил → семья» — это передача от менеджера семье. */
+    var seen = {}, out = [], last = [];
+    var hum = function (w) { return w.filter(function (x) { return !prcPerson(x).system; }); };
+    steps.forEach(function (s, i) {
+      var cur = hum(s.who);
+      var hand = cur.length && last.length && !last.some(function (x) { return cur.indexOf(x) !== -1; });
+      var back = hand ? cur.filter(function (x) { return seen[x] !== undefined; }) : [];
+      out.push({ hand: !!hand, back: back, from: last, to: cur });
+      if (cur.length) { cur.forEach(function (x) { seen[x] = i; }); last = cur; }
+    });
+    return out;
+  }
+  function prcPlain(ids) { return ids.map(function (x) { return prcPerson(x).name; }).join(', '); }
+  function prcNames(ids) { return ids.map(function (x) { return esc(prcPerson(x).name); }).join(', '); }
+
+  function prcStepRow(s, i, prev, who, full, open, fl) {
+    var mine = who && s.who.indexOf(who) !== -1;
+    var hand = fl && fl.hand;
+    var sub = s.sub ? prcLight(s.sub) : null, subN = sub ? sub.steps.length : 0;
+    var handLine = hand ? '<li class="prc-hand' + (fl.back.length ? ' back' : '') + '" role="separator" aria-label="' + esc((fl.back.length ? 'возврат' : 'передача') + ': от ' + prcPlain(fl.from) + ' к ' + prcPlain(fl.to)) + '"><span>' +
+      (fl.back.length ? 'возврат' : 'из рук в руки') + '</span>' +
+      prcNames(fl.from) + ' ' + ic('go', 11) + ' ' + prcNames(fl.to) + '</li>' : '';
+    return handLine + '<li class="prc-step' + (open ? ' open' : '') + (who ? (mine ? ' mine' : ' dim') : '') + '" data-i="' + i + '">' +
+      '<button type="button" class="prc-row" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+        '<span class="prc-n">' + (i + 1) + '</span>' +
+        '<span class="prc-what"><b>' + esc(s.title) + '</b>' +
+          (sub ? '<span class="prc-subn">' + ic('flow', 12) + subN + ' ' + plural(subN, 'шаг', 'шага', 'шагов') + ' внутри</span>' : '') +
+          ((s.variants || []).length ? '<span class="prc-subn">' + ic('flow', 12) + s.variants.length + ' ' + plural(s.variants.length, 'вариант', 'варианта', 'вариантов') + '</span>' : '') +
+          (s.goto && prcLight(s.goto) ? '<span class="prc-gon">' + ic('go', 12) + 'дальше в «' + esc(prcRootTitle(s.goto)) + '»</span>' : '') +
+          (s.pain ? '<span class="prc-painmk">есть боль</span>' : '') + '</span>' +
+        '<span class="prc-who">' + s.who.map(function (x) { return prcTag(x, who); }).join('') + '</span>' +
+        '<span class="prc-ex">' + prcExec(s) + '</span>' +
+        '<span class="prc-chev">' + ic('go', 14) + '</span>' +
+      '</button>' +
+      (open ? prcDetail(s, full) : '') + '</li>';
+  }
+
+  /* Дорожки: строка на человека, колонка на шаг. Видно то, чего не видно списком,
+     — сколько раз работа меняет руки и у кого копится. */
+  function prcLanes(n, who) {
+    var ppl = [];
+    n.steps.forEach(function (s) { s.who.forEach(function (x) { if (ppl.indexOf(x) === -1) ppl.push(x); }); });
+    var cols = n.steps.length, flow = prcFlow(n.steps);
+    var head = '<div class="prc-lh"></div>' + n.steps.map(function (s, i) {
+      var f = flow[i];
+      return '<div class="prc-lc' + (f.hand ? ' hand' : '') + (f.back.length ? ' back' : '') + '">' + (i + 1) +
+        (f.back.length ? ' <em>возврат</em>' : f.hand ? ' <em>передача</em>' : '') + '</div>';
+    }).join('');
+    var rows = ppl.map(function (pid) {
+      var p = prcPerson(pid);
+      return '<div class="prc-lp' + (who === pid ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</div>' +
+        n.steps.map(function (s, i) {
+          if (s.who.indexOf(pid) === -1) return '<div class="prc-lx"></div>';
+          /* один шаг на нескольких людей: карточка у первого, у остальных отметка
+             участия — иначе три одинаковые плашки читаются как три работы */
+          var lead = s.who.filter(function (x) { return !prcPerson(x).system; })[0] || s.who[0];
+          if (lead !== pid) return '<div class="prc-lx"><button type="button" class="prc-lm" data-lane="' + i + '" title="' + esc(s.title) + '">' +
+            'участвует в шаге ' + (i + 1) + '</button></div>';
+          var e = PRC_EXEC[s.exec] || PRC_EXEC.human;
+          return '<div class="prc-lx"><button type="button" class="prc-lb ' + e.c + '" data-lane="' + i + '" title="' + esc(s.title) + '">' +
+            '<i>' + (i + 1) + '</i><span>' + esc(s.title) + '</span></button></div>';
+        }).join('');
+    }).join('');
+    return '<div class="prc-lanes-w"><div class="prc-lanes" style="--cols:' + cols + '">' + head + rows + '</div></div>' +
+      '<div class="prc-legend"><span class="prc-more">шаги идут дальше, листайте вбок</span><span class="prc-x hu">человек</span><span class="prc-x ag">агент</span><span class="prc-x sys">машина</span>' +
+        '<span class="prc-lg-h">«передача» над шагом: работа переходит к другим людям, «возврат»: к тому, кто ее уже отдавал</span></div>';
+  }
+
+  function renderProcessNode(view, nid) {
+    var light = prcLight(nid), pid = prcPid(nid), who = state.prcWho || '';
+    fetchProcessFull(pid);
+    var f = state._prcFull[pid];
+    var full = f && f.nodes ? f.nodes[nid] : null;
+    var n = full || light;
+    var crumbs = prcCrumbs(nid);
+    var lens = state.prcLens === 'lanes' ? 'lanes' : 'list';
+
+    var crumb = '<nav class="prc-crumbs" aria-label="Путь"><button type="button" data-open="">Процессы</button>' +
+      crumbs.map(function (c, i) {
+        return '<span class="sep">' + ic('go', 11) + '</span>' + (i === crumbs.length - 1
+          ? '<span class="cur" aria-current="page">' + esc(c.title) + '</span>'
+          : '<button type="button" data-open="' + esc(c.id) + '">' + esc(c.title) + '</button>');
+      }).join('') + '</nav>';
+
+    var owner = n.owner ? prcPerson(n.owner).name : '';
+    var meta = [
+      ['Руководитель', esc(owner)], ['Агент', esc(n.agent || '')],
+      ['Начало', esc(n.trigger || '')], ['Конец', esc(n.done || '')],
+      ['На входе', esc(n.input || '')], ['На выходе', esc(n.output || '')], ['Срок', esc(n.sla || '')],
+    ].filter(function (x) { return x[1]; });
+    var z = prcSize(nid);
+    var lvl = light.variant_of && !light.parent ? 'Вариант шага · один из способов'
+      : (n.level || 1) === 1 ? 'Процесс' : 'Подпроцесс · уровень ' + n.level;
+
+    var flow = prcFlow(n.steps);
+    var nHand = flow.filter(function (x) { return x.hand; }).length;
+    var nBack = flow.filter(function (x) { return x.back.length; }).length;
+    var steps = n.steps.map(function (s, i) {
+      var fs = full ? full.steps[i] : null;
+      return prcStepRow(s, i, n.steps[i - 1], who, fs, state.prcStep === i, flow[i]);
+    }).join('');
+
+    var list = function (title, items, fn) {
+      return items && items.length ? '<div class="prc-fb"><span class="po-lbl">' + title + '</span><ul>' + items.map(fn).join('') + '</ul></div>' : '';
+    };
+    var inc = prcIncoming(nid);
+    var incHtml = inc.length ? '<div class="prc-fb prc-inc"><span class="po-lbl">Сюда приходит работа из</span><ul>' + inc.map(function (x) {
+      return '<li><button type="button" class="prc-goto" data-open="' + esc(x.nid) + '" data-step="' + x.i + '">' + ic('go', 12) +
+        esc(prcRootTitle(x.nid)) + ': ' + esc(x.title) + '</button></li>';
+    }).join('') + '</ul></div>' : '';
+    var foot = incHtml + (full ? (
+      list('Где болит', full.pains, function (x) { return '<li>' + esc(x.text) + (x.src ? '<small>' + esc(prcSrc(x.src)) + '</small>' : '') + '</li>'; }) +
+      list('Заметки', full.note ? [full.note] : [], function (x) { return '<li>' + esc(x) + '</li>'; }) +
+      list('Вопросы на проверку', full.questions, function (x) { return '<li>' + esc(x.text) + (x.who ? '<small>спросить: ' + esc(prcPerson(x.who).name) + '</small>' : '') + '</li>'; }) +
+      list('Цифры', full.metrics, function (x) { return '<li>' + esc(x) + '</li>'; }) +
+      list('На что опирается', full.sources, function (x) { return '<li><small>' + esc(prcSrc(x)) + '</small></li>'; })
+    ) : '');
+
+    view.innerHTML = '<div class="prc-wrap">' + crumb + prcToolbar(who) + prcPersonPanel(who) +
+      '<div class="card prc-card">' +
+        '<div class="prc-head"><div class="prc-tn">' + lvl + '</div>' +
+          '<h3>' + esc(n.title) + (n.status === 'draft' ? ' <span class="sev n-wait">черновик, так пока не работает</span>' : '') + '</h3>' +
+          (n.goal ? '<p class="prc-goal">' + esc(n.goal) + '</p>' : '') +
+          '<dl class="prc-meta">' + meta.map(function (x) { return '<dt>' + x[0] + '</dt><dd>' + x[1] + '</dd>'; }).join('') + '</dl>' +
+          '<div class="prc-flowsum">' +
+            '<span><b>' + nHand + '</b> ' + plural(nHand, 'передача', 'передачи', 'передач') + ' из рук в руки</span>' +
+            '<span' + (nBack ? ' class="back"' : '') + '><b>' + nBack + '</b> ' + plural(nBack, 'возврат', 'возврата', 'возвратов') + ' к тому, кто уже отдал работу</span>' +
+            '<span><b>' + z.steps + '</b> ' + plural(z.steps, 'шаг', 'шага', 'шагов') + ' с вложенными, агенту можно отдать ' + z.ag + '</span></div></div>' +
+        '<div class="prc-lens"><div class="pay-seg" role="tablist">' +
+          '<button type="button" class="' + (lens === 'list' ? 'on' : '') + '" data-lens="list" role="tab" aria-selected="' + (lens === 'list') + '">Шаги</button>' +
+          '<button type="button" class="' + (lens === 'lanes' ? 'on' : '') + '" data-lens="lanes" role="tab" aria-selected="' + (lens === 'lanes') + '">Дорожки</button>' +
+        '</div>' + (f === 'none' ? '<span class="prc-err">инструкции не загрузились, обновите страницу</span>' : '') + '</div>' +
+        (lens === 'lanes' ? prcLanes(n, who) : '<ol class="prc-steps">' + steps + '</ol>') +
+        (foot ? '<div class="prc-foot">' + foot + '</div>' : '') +
+      '</div></div>';
+
+    prcWire(view);
+    view.querySelectorAll('.prc-step .prc-row').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var i = +b.parentNode.getAttribute('data-i');
+        state.prcStep = state.prcStep === i ? null : i;
+        renderView();
+      });
+    });
+    view.querySelectorAll('[data-lens]').forEach(function (b) {
+      b.addEventListener('click', function () { state.prcLens = b.getAttribute('data-lens'); renderView(); });
+    });
+    view.querySelectorAll('[data-lane]').forEach(function (b) {
+      b.addEventListener('click', function () { state.prcLens = 'list'; prcOpen(nid, +b.getAttribute('data-lane')); });
+    });
   }
 
   /* ── ПРОДУКТОВЫЙ ПОРТАЛ — база знаний команды по продуктам ────────────────
