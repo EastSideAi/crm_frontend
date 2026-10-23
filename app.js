@@ -11113,7 +11113,7 @@
     return '<div class="pay-seg plan-seg tm-seg">' +
       btns([['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']]) +
       '<span class="seg-div"></span>' +
-      btns([['focus', 'Фокус'], ['stuck', 'Застряло']]) +
+      btns([['focus', 'Фокус'], ['stuck', 'Застряло'], ['office', 'Офис']]) +
     '</div>';
   }
   function wireTeamMode(view) {
@@ -11359,7 +11359,234 @@
     if (state.teamMode === 'reports') { renderTeamReports(view); return; }
     if (state.teamMode === 'focus') { renderFocus(view); return; }
     if (state.teamMode === 'stuck') { renderStuck(view); return; }
+    if (state.teamMode === 'office') { renderOffice(view); return; }
     renderPulse(view);
+  }
+
+
+  /* ── Офис ───────────────────────────────────────────────────────────────────
+     Павел 23.10.2026: «круто было бы интерактивно, в виде человечков, кто сидит
+     на своем месте, и агенты тоже». Карта отвечает на тот же вопрос, что и
+     пульс, но без чтения: открыл и увидел.
+
+     Важная оговорка, из-за которой карта считает не присутствие, а работу.
+     Сигнала «человек сейчас за компьютером» в системе нет: за сутки команда
+     делает три движения в задачнике, а статус «в работе» висит неделями.
+     Карта присутствия была бы пустой каждый раз и умерла бы за три дня.
+     Поэтому за столом сидит тот, у кого есть работа, и видно ее состояние:
+     идет, стоит или не начата. Живое присутствие по голосовым каналам Мита
+     встанет сюда же, когда он их запустит (meet_participants).
+
+     Данные — тот же /admin/api/team/pulse?mode=day: people (у кого есть работа),
+     seats (все, включая пустые столы) и agent на каждом. Своего запроса у карты
+     нет намеренно: два источника про одно и то же разъезжаются. */
+  var OFFICE_ROOMS = [
+    { id: 'sales',  label: 'Продажи',       roles: ['sales_manager', 'sales_lead', 'tutor_sales', 'manager'] },
+    { id: 'mk',     label: 'Маркетинг',     roles: ['marketer', 'marketing_lead', 'producer'] },
+    { id: 'edu',    label: 'Сопровождение', roles: ['tutor', 'senior_tutor', 'curator', 'diagnostician'] },
+    { id: 'teach',  label: 'Преподаватели', roles: ['teacher'] },
+    { id: 'manage', label: 'Управление',    roles: ['super_admin', 'owner', 'head', 'product_lead',
+                                                    'admin', 'assistant', 'accountant', 'grant_admin'] },
+    // Внешние люди сидят отдельно: подрядчик, посаженный в комнату руководства,
+    // выглядит как сотрудник, и заметить подмену на карте нечем.
+    { id: 'out',    label: 'Подрядчики',    roles: ['partner', 'contractor', 'ads_contractor',
+                                                    'contractor_payer', 'expense_clerk'] },
+  ];
+  // Сколько дней без движения по взятой задаче считаем «стоит». Три: день взял,
+  // день не дошли руки, на третий это уже не работа, а намерение.
+  var OFFICE_SLOW_DAYS = 3;
+  var OFFICE_FREE_MAX = 4;
+  /* Фигуры красим палитрой аватаров, но без красного и амбера: на этом экране
+     красное значит просрочку, амбер — остановившуюся работу, и красный человек
+     в одном ряду с красной меткой читается как сигнал. */
+  var OFFICE_TINT = AVA_PALETTE.filter(function (c) {
+    return ['#e02434', '#e5385f', '#c98207'].indexOf(c) === -1;
+  });
+  function officeTint(seed) {
+    return OFFICE_TINT[hashId(seed == null ? '' : seed) % OFFICE_TINT.length];
+  }
+  /* Имя с буквой фамилии всегда, а не только при совпадении: в команде два
+     Марка и два Павла, и подпись, которая меняется от состава на экране, хуже
+     длинной. */
+  function officeName(name) {
+    var p = String(name || '').trim().split(/\s+/);
+    return p[0] + (p[1] ? ' ' + p[1][0] + '.' : '');
+  }
+
+  function officeRoom(role) {
+    for (var i = 0; i < OFFICE_ROOMS.length; i++) {
+      if (OFFICE_ROOMS[i].roles.indexOf(role) !== -1) return OFFICE_ROOMS[i].id;
+    }
+    return 'manage';
+  }
+  function daysAgo(iso) {
+    if (!iso) return null;
+    var t = new Date(iso).getTime();
+    if (!t) return null;
+    return Math.floor((Date.now() - t) / 86400000);
+  }
+  /* Состояние стола. Порядок проверок и есть смысл экрана: работа идет, работа
+     стоит, работы набрано но ни одна не взята, работы нет. */
+  function deskState(row) {
+    if (!row) return 'off';
+    if (row.now) {
+      var d = daysAgo(row.now.at);
+      return d !== null && d >= OFFICE_SLOW_DAYS ? 'slow' : 'work';
+    }
+    if (row.open_n) return 'idle';
+    return 'off';
+  }
+  /* Текст реплики лежит во вложенном span: обрезка по двум строкам
+     (-webkit-line-clamp) работает только на своем display, а сам пузырь —
+     ячейка сетки стола, его display занят. */
+  function officeSay(row, st) {
+    if (st === 'work') return '<span class="om-txt">' + esc(row.now.title || '') + '</span>';
+    if (st === 'slow') {
+      var d = daysAgo(row.now.at);
+      return '<span class="om-txt one">' + esc(row.now.title || '') + '</span>' +
+        '<i class="om-stale">стоит ' + d + ' ' + plural(d, 'день', 'дня', 'дней') + '</i>';
+    }
+    // Без рода: столы занимают и мужчины, и женщины, а «взял» и «начала» в
+    // одном ряду читаются как ошибка системы.
+    if (st === 'idle') return '<span class="om-txt">' + row.open_n + ' ' +
+      plural(row.open_n, 'задача', 'задачи', 'задач') + ', в работе ни одной</span>';
+    return '';
+  }
+  var AGENT_SAY = { queued: 'взял задачу', ask: 'ждет ответа', review: 'сдал на приемку' };
+
+  function officeDesk(seat, row) {
+    var st = deskState(row);
+    var say = officeSay(row, st);
+    var tid = st === 'work' || st === 'slow' ? row.now.id : 0;
+    var fresh = row && row.active_at && daysAgo(row.active_at) === 0;
+    var marks = '';
+    if (row && row.overdue) marks += '<span class="om-mk bad num" role="img" aria-label="просрочено задач: ' +
+      row.overdue + '">' + row.overdue + '</span>';
+    if (row && row.done_n) marks += '<span class="om-mk ok num" role="img" aria-label="сделано сегодня: ' +
+      row.done_n + '">' + row.done_n + '</span>';
+    if (marks) marks = '<span class="om-marks">' + marks + '</span>';
+    var ag = seat.agent
+      ? '<span class="om-bot' + (seat.agent.state === 'ask' ? ' ask' : '') + '" title="' +
+          esc(seat.agent.title || '') + '" aria-label="агент: ' +
+          (AGENT_SAY[seat.agent.state] || 'в работе') + ', ' + esc(seat.agent.title || '') + '">' + ic('bot', 13) +
+          '<i>' + (AGENT_SAY[seat.agent.state] || 'в работе') + '</i></span>'
+      : '';
+    // Цвет головы — идентификатор человека (та же палитра, что у аватара в
+    // диалогах). У пустого стола цвета нет: он фон, а не действующее лицо.
+    var tint = st === 'off' ? '' : ' style="background:' + officeTint(seat.id) + '"';
+    var head = '<span class="om-hd"' + tint + '>' + esc(initials(seat.name)) + '</span>';
+    return '<div class="om-desk om-' + st + (tid ? ' go' : '') + '"' + (tid ? ' data-oft="' + tid + '"' : '') +
+        ' tabindex="' + (tid ? '0' : '-1') + '"' + (tid ? ' role="button"' : '') + '>' +
+      // Реплика рисуется всегда, даже пустая: без нее стол теряет строку общей
+      // сетки ряда и его фигурка уезжает выше соседних.
+      '<span class="om-say' + (say ? '' : ' mute') + '">' + say + '</span>' +
+      '<span class="om-fig">' + head + '<span class="om-bd"' + tint + '></span>' +
+        (fresh ? '<i class="om-live" role="img" aria-label="двигал задачи сегодня"></i>' : '') + '</span>' +
+      '<span class="om-tbl"></span>' +
+      '<span class="om-nm">' + esc(officeName(seat.name)) + '</span>' +
+      // Метки и агент — одна строка сетки: разными строками у половины столов
+      // их было бы две, и ряд разъезжался бы по высоте.
+      '<span class="om-foot">' + marks + ag + '</span>' +
+    '</div>';
+  }
+
+  function renderOffice(view) {
+    if (state.pulse === null) {
+      view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div>' + dashSkeleton();
+      wireTeamMode(view); loadPulse(); return;
+    }
+    if (state.pulse === 'none') {
+      view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div>' +
+        '<div class="card"><div class="empty">Не удалось собрать офис. Обнови страницу.</div></div>';
+      wireTeamMode(view); return;
+    }
+    var d = state.pulse;
+    var seats = d.seats || [];
+    var rows = {};
+    (d.people || []).forEach(function (p) { rows[p.id] = p; });
+
+    var rooms = {};
+    OFFICE_ROOMS.forEach(function (r) { rooms[r.id] = []; });
+    seats.forEach(function (s) { rooms[officeRoom(s.role)].push(s); });
+    // Внутри комнаты вперед идут те, у кого работа идет: взгляд должен падать
+    // на живое, а пустые столы — это фон, их место с краю.
+    var ORD = { work: 0, slow: 1, idle: 2, off: 3 };
+    Object.keys(rooms).forEach(function (k) {
+      rooms[k].sort(function (a, b) {
+        var da = ORD[deskState(rows[a.id])], db = ORD[deskState(rows[b.id])];
+        return da !== db ? da - db : (a.name || '').localeCompare(b.name || '');
+      });
+    });
+
+    var live = 0, stale = 0;
+    seats.forEach(function (s) {
+      var st = deskState(rows[s.id]);
+      if (st === 'work') live++;
+      if (st === 'slow') stale++;
+    });
+
+    var plan = OFFICE_ROOMS.filter(function (r) { return rooms[r.id].length; }).map(function (r) {
+      var men = rooms[r.id];
+      var busy = men.filter(function (s) { return deskState(rows[s.id]) === 'work'; }).length;
+      /* Пустые столы стоят последними, и длинный их хвост превращает комнату в
+         серое поле: дальше четвертого они сворачиваются в строку. Сколько в
+         команде людей, по-прежнему видно в счетчике комнаты. */
+      var shown = men, hidden = 0;
+      var free = men.filter(function (s) { return deskState(rows[s.id]) === 'off'; }).length;
+      // На телефоне столы идут по два в ряд, и четыре пустых — это два ряда
+      // серых силуэтов перед строкой-счетчиком: там сворачиваем их целиком.
+      var cap = window.innerWidth <= 560 ? 0 : OFFICE_FREE_MAX;
+      if (free > cap) {
+        hidden = free - cap;
+        shown = men.slice(0, men.length - hidden);
+      }
+      return '<section class="om-room' + (men.length > 5 ? ' wide' : '') + '">' +
+        '<div class="om-rt"><span>' + r.label + '</span>' +
+          '<i class="num">за работой ' + busy + ' из ' + men.length + '</i></div>' +
+        '<div class="om-desks">' + shown.map(function (s) { return officeDesk(s, rows[s.id]); }).join('') + '</div>' +
+        (hidden ? '<div class="om-more">еще ' + hidden + ' ' +
+          plural(hidden, 'свободное место', 'свободных места', 'свободных мест') + '</div>' : '') +
+      '</section>';
+    }).join('');
+
+    var strip = '<div class="om-strip">' +
+      '<span><b class="num">' + live + '</b> за работой</span>' +
+      '<span' + (stale ? ' class="warn"' : '') + '><b class="num">' + stale + '</b> без движения</span>' +
+      '<span><b class="num">' + seats.length + '</b> мест</span>' +
+      '<i>на связи покажем, когда заработают голосовые каналы</i>' +
+      // Карта отвечает «кто где сидит», а голосовой офис — «зайти к ним».
+      // Пропуск добирается тем же способом, что и для комнат встреч.
+      '<a class="qchip mr-go om-go" href="' + API + '/meet">' + ic('mic', 13) +
+        '<span>Зайти в офис</span></a>' +
+    '</div>' +
+    // Восемь значков без подписи читать неоткуда: на телефоне всплывающей
+    // подсказки нет вовсе. Легенда тихая, одной строкой.
+    '<div class="om-leg">' +
+      '<span class="om-mk bad num">1</span> просрочено' +
+      '<span class="om-mk ok num">1</span> сделано сегодня' +
+      '<span class="om-lg-dot"></span> двигал задачи сегодня' +
+      '<span class="om-lg-bot">' + ic('bot', 12) + '</span> задача у агента' +
+    '</div>';
+
+    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '</div>' +
+      '<div class="card om-card">' + strip +
+        (plan ? '<div class="om-plan">' + plan + '</div>'
+              : '<div class="empty">В команде пока некого рассадить.</div>') +
+      '</div>';
+    wireTeamMode(view); wireDeptChips(view);
+    // Экран про «прямо сейчас», поэтому он живет сам: renderTeamWeek гасит
+    // общий таймер при каждом проходе, здесь поднимаем его заново.
+    if (d.is_today) state.pulseTimer = setInterval(function () { loadPulse(true); }, 60000);
+    Array.prototype.forEach.call(view.querySelectorAll('.mr-go'), function (a) {
+      a.addEventListener('click', function (e) { enterMeetRoom(e, a); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-oft]'), function (b) {
+      function go() { openTask(+b.getAttribute('data-oft')); }
+      b.addEventListener('click', go);
+      b.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+      });
+    });
   }
 
   /* ── Пульс команды ──────────────────────────────────────────────────────────
@@ -11380,7 +11607,11 @@
   }
   function loadPulse(silent) {
     var mode = state.teamMode === 'week' ? 'week' : 'day';
-    var q = '/admin/api/team/pulse?mode=' + mode + '&date=' + pulseDate() + deptQ();
+    /* Карта офиса — всегда про сейчас. Стрелки дня она не показывает, но дату
+       делит с пульсом: посмотрел вчерашний день, перешел на карту — и она
+       рисовала «сделано» и «был в работе» по вчера, молча и без подписи. */
+    var day = state.teamMode === 'office' ? '' : pulseDate();
+    var q = '/admin/api/team/pulse?mode=' + mode + '&date=' + day + deptQ();
     if (!silent) state.tasksLoading = true;
     api(q).then(function (r) {
       state.tasksLoading = false;
@@ -11637,6 +11868,9 @@
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
         state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null; state.teamStats = null; state.teamPerson = null; state.gantt = null;
+        // Карта офиса тоже собрана под направление: без сброса чип включается,
+        // а рассадка остается от прошлого фильтра.
+        state.pulse = null;
         state.boardGoal = '';
         saveUi(); renderHead(); renderView();
       });
