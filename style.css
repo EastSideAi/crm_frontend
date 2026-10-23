@@ -7453,6 +7453,9 @@ a.fin-rcp.off:hover { text-decoration: underline; }
   background: var(--line-soft, rgba(16,24,40,.05)); border-radius: var(--r-pill); padding: 2px 8px; }
 .pk-m--on { color: var(--green-ink); background: var(--green-soft); }
 .pk-m--off { color: var(--ink-3, var(--ink-2)); opacity: .75; }
+/* Предупреждение, а не статус: тем же контактом подписана еще одна карточка, и деньги
+   легко уехать не туда (Роман 23.10.2026, доход Зайцевых). */
+.pk-m--warn { color: var(--amber-ink); background: var(--amber-soft); }
 .pk-more { text-align: center; color: var(--ink-2); font-size: 12px; padding: 8px 0 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }

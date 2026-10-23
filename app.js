@@ -232,6 +232,8 @@
     cabinet_invite_sent: 'отправили приглашение в кабинет',
     cabinet_invite_issued: 'выпустили приглашение в кабинет',
     cabinet_invite_shown: 'взяли ссылку приглашения',
+    lead_taken: 'взяли в работу',
+    lead_owner_set: 'назначен ответственный',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -267,6 +269,16 @@
     if (e.type === 'cabinet_invite_sent') label += p.channel === 'email' ? ' письмом' : '';
     if (e.type === 'cabinet_invite_issued' || e.type === 'cabinet_invite_shown') {
       label += (p.relation === 'parent' ? ': родитель' : ': ученик') + (p.by ? ' · ' + p.by : '');
+    }
+    if (e.type === 'lead_taken' && p.by) label += ': ' + p.by;
+    /* Кто ведет карточку — поле без истории, а по нему считается процент продавцу.
+       Поэтому «откуда тут этот человек» читается только отсюда (Роман 23.10.2026
+       спросил ровно это про карточку Зайцевых, и ответить было нечем). */
+    if (e.type === 'lead_owner_set') {
+      label = p.to ? 'ведет ' + p.to : 'ответственный снят';
+      if (p.from) label += ', вместо ' + p.from;
+      label += p.by === 'раздача' ? ' · раздача' + (p.why ? ': ' + p.why : '')
+        : (p.by ? ' · поставил ' + p.by : '');
     }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
@@ -22602,13 +22614,43 @@
     if (!l.name && !(l.contact || l.email)) r -= 4;
     return r;
   }
-  function pkMarks(l) {
+  /* Один и тот же телефон, почта или телеграм в двух карточках. Склеенные дубли в
+     списках не показываются вовсе, а несклеенные выглядят как два разных человека — и
+     деньги уходят на тот, который пустой. Пишем ровно факт «контакт как у другой
+     карточки», а не «дубль»: тем же контактом бывает подписана и карточка мамы, и
+     карточка ребенка, и это не ошибка. Считаем по списку, который и так загружен:
+     отдельная ручка означала бы запрос на каждое открытие окна. */
+  function pkKeys(l) {
+    var out = [];
+    [l.contact, l.email, (l.booking || {}).contact].forEach(function (v) {
+      var raw = String(v || '').trim().toLowerCase().replace(/\s+/g, '');
+      if (!raw) return;
+      if (raw.indexOf('@') > 0) { out.push('m:' + raw.replace(/^mailto:/, '')); return; }
+      if (raw.charAt(0) === '@') { out.push('t:' + raw.slice(1)); return; }
+      var dig = raw.replace(/\D/g, '');
+      if (dig.length >= 10) out.push('p:' + dig.slice(-10));
+      else if (raw.length >= 4) out.push('t:' + raw.replace(/^https?:\/\/(t\.me|vk\.com)\//, ''));
+    });
+    return out;
+  }
+  function pkDupes(all) {
+    var seen = {}, dup = {};
+    (all || []).forEach(function (l) {
+      pkKeys(l).forEach(function (k) {
+        if (seen[k] && seen[k] !== l.id) { dup[l.id] = 1; dup[seen[k]] = 1; }
+        else seen[k] = l.id;
+      });
+    });
+    return dup;
+  }
+  function pkMarks(l, dup) {
     var crm = l.crm || {};
     var out = [];
     if (l.paid) out.push('<em class="pk-m pk-m--on">платил</em>');
     if (crm.status === 'client') out.push('<em class="pk-m pk-m--on">клиент</em>');
     if (crm.owner && crm.owner.name) out.push('<em class="pk-m">ведет ' + esc(crm.owner.name) + '</em>');
     if (!l.paid && l.booking) out.push('<em class="pk-m">записан на разбор</em>');
+    if (dup && dup[l.id]) out.push('<em class="pk-m pk-m--warn">контакт как у другой карточки</em>');
     if (!l.name && !(l.contact || l.email)) out.push('<em class="pk-m pk-m--off">пустая карточка</em>');
     return out.join('');
   }
@@ -22647,7 +22689,7 @@
     el('pk-cancel').addEventListener('click', close);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
-    var box = el('pk-list'), all = null;
+    var box = el('pk-list'), all = null, dup = {};
     var pick = function (cid) {
       finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
         'Привязал к клиенту');
@@ -22663,7 +22705,7 @@
         return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
           '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
           (c ? '<i>' + esc(c) + '</i>' : '') +
-          '<span class="pk-marks">' + pkMarks(l) + '</span></button>';
+          '<span class="pk-marks">' + pkMarks(l, dup) + '</span></button>';
       }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
       Array.prototype.forEach.call(box.querySelectorAll('.pk-row'), function (b) {
         b.addEventListener('click', function () { pick(b.getAttribute('data-pick')); });
@@ -22671,6 +22713,7 @@
     };
     var have = function (leads) {
       all = leads || [];
+      dup = pkDupes(all);
       draw(presetName || '');
       var q = el('pk-q');
       if (q) { q.value = presetName || ''; q.focus(); q.select(); }
