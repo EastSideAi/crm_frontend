@@ -973,7 +973,8 @@
       if (seg === 'clients') return isClient(l);
       if (seg === 'rejected') return l.crm.status === 'rejected';
       if (seg === 'new') return isProspect(l);
-      return true;
+      // Кому «Новые» не показаны, тому и во «Всех» холодных нет.
+      return segAvail('new') || !isProspect(l);
     });
   }
   var PERIODS = { today: 1, week: 7, month: 30 };
@@ -1054,7 +1055,7 @@
     state.leads.forEach(function (l) {
       if (isBlankVisit(l)) c.blank++;
       // «Все» прячет пустые заходы (isBlankVisit), значит и не считает их.
-      else c.all++;
+      else if (segAvail('new') || !isProspect(l)) c.all++;
       if (isProspect(l)) { c.cold++; return; }
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
@@ -38460,7 +38461,7 @@
      канал, повод прихода и когда человек последний раз о себе напоминал. */
   var PR_SEGS = {
     all:   { label: 'Все',   hint: 'все, кто с нами связался, но еще ничего не оставил' },
-    fresh: { label: 'Новые', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
+    fresh: { label: 'За неделю', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
     quiet: { label: 'Молчат', hint: 'больше двух недель тишины — нужен повод написать снова' },
   };
   var PR_QUIET_DAYS = 14;
@@ -38604,7 +38605,7 @@
           '<input id="search" class="search" type="search" placeholder="Имя, контакт или повод прихода" autocomplete="off">' +
           '<button class="s-clear" id="s-clear" title="Очистить">' + ic('x', 12) + '</button></div>' +
         '<span class="list-count num">' + '<b>' + c.all + '</b> ' +
-          plural(c.all, 'лид', 'лида', 'лидов') + '</span>' +
+          plural(c.all, 'человек', 'человека', 'человек') + '</span>' +
       '</div>' +
       // Один-единственный чип «Все» выбора не дает — тогда полосы срезов нет вовсе.
       (chips.replace(/\s/g, '') ? '<div class="list-quick">' + chips + '</div>' : '');
