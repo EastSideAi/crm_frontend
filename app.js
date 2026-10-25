@@ -38600,6 +38600,7 @@
         { tint: 'navy', label: 'Ждут связи', value: c.hot, go: 'queue', sub: c.hot ? 'новые заявки' : 'разобрано' },
         { tint: 'green', label: 'Клиенты', value: c.clients, go: 'clients', delta: convClient ? convClient + '% из заявок' : '', deltaCls: 'good' },
       ]) +
+      shiftCard() +
       '<div class="grid">' +
         '<div class="sp7 vstack">' + queueCard + '</div>' +
         '<div class="sp5 vstack">' + funCard + navCard + '</div>' +
@@ -38753,6 +38754,7 @@
     if (!can('path')) {
       if (state.role === 'sales_manager' || state.role === 'manager') {
         /* ── рабочее окно менеджера продаж ── */
+        shLoad();   // текущая смена: открыта ли, счётчик за месяц
         view.innerHTML = salesHomeHtml(c, convClient, saleRows, convSale, weakest, saleSteps);
       } else if (state.role === 'tutor' || state.role === 'tutor_sales') {
         /* ── рабочее окно тьютора: что сделать сегодня по ученикам ── */
@@ -38858,6 +38860,7 @@
       n.addEventListener('click', go);
       n.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     });
+    wireShift(view);
     animBars(view);
   }
 
@@ -39802,8 +39805,9 @@
      ответственного за карточку: ответственный меняется, и начисление за прошлый
      месяц задним числом переехало бы на другого человека.
 
-     Дежурства и диагностики вводятся руками: дежурств в CRM пока нет и журнала диагностик
-     тоже. Появятся — те же две цифры приедут из данных, а экран не изменится. */
+     Дежурства теперь считаются сами из смен (поле «авто»), а это поле — ручной override:
+     пусто = берём авто, число (в т.ч. 0) = перебить вручную. Диагностики пока вводятся руками:
+     журнала диагностик ещё нет, появится — цифра приедет из данных, а экран не изменится. */
   var MOT = { data: null, month: '', err: '', open: 0, rates: false };
   var MOT_ROLE = { full: 'вел чат и провел диагностику', closer: 'провел диагностику',
                    setter: 'довел до диагностики' };
@@ -39860,7 +39864,7 @@
         '<div class="mot-manual" data-motform="' + p.person_id + '">' +
           '<div class="mm-h">Дежурства и диагностики за месяц</div>' +
           '<div class="mm-grid">' +
-            '<label>Дежурств<input data-mf="shifts" inputmode="decimal" value="' + (m.shifts || 0) + '"></label>' +
+            '<label>Дежурств (авто ' + (m.shifts_auto || 0) + ')<input data-mf="shifts" data-mf-null="1" inputmode="decimal" placeholder="авто" value="' + (m.shifts_override == null ? '' : m.shifts_override) + '"></label>' +
             '<label>Коэффициент<input data-mf="shift_coef" inputmode="decimal" value="' + (m.shift_coef === undefined ? 1 : m.shift_coef) + '"></label>' +
             '<label>Диагностик до итоговой проверки<input data-mf="diags_base" inputmode="numeric" value="' + (m.diags_base || 0) + '"></label>' +
             '<label>После итоговой проверки<input data-mf="diags_senior" inputmode="numeric" value="' + (m.diags_senior || 0) + '"></label>' +
@@ -39984,8 +39988,10 @@
         e.stopPropagation();
         var box = b.closest('[data-motform]'), body = { period: motMonth(), person_id: parseInt(b.getAttribute('data-motsave'), 10) };
         Array.prototype.forEach.call(box.querySelectorAll('[data-mf]'), function (i) {
-          var v = parseFloat(String(i.value).replace(',', '.')) || 0;
-          body[i.getAttribute('data-mf')] = v;
+          var raw = String(i.value).trim();
+          // Пустое поле-override (дежурства) = null: берём авто-счёт, не перебиваем.
+          if (i.getAttribute('data-mf-null') && raw === '') { body[i.getAttribute('data-mf')] = null; return; }
+          body[i.getAttribute('data-mf')] = parseFloat(raw.replace(',', '.')) || 0;
         });
         b.disabled = true;
         apiSend('/admin/api/motivation/manual', 'PUT', body, function () {
@@ -48623,6 +48629,83 @@
     });
   }
   function isSalesManager() { return state.role === 'sales_manager' || state.role === 'manager'; }
+
+  /* ── Смена: открыл/закрыл по времени, уход на консультацию не штрафует ──
+     Закрытая смена сама едет в мотивацию (shift_rub). Данные из /shift/current. */
+  var SH = { cur: null, busy: false, timer: null };
+  function shLoad(force) {
+    if (SH.cur && !SH.cur.failed && !force) return;
+    if (SH.busy) return;
+    SH.busy = true;
+    api('/admin/api/shift/current').then(function (r) {
+      SH.cur = r; SH.busy = false;
+      if (state.page === 'dash') renderView();
+    }).catch(function () {
+      SH.cur = { failed: true }; SH.busy = false;
+      if (state.page === 'dash') renderView();
+    });
+  }
+  function shAct(path, body) {
+    var opts = { method: 'POST' };
+    if (body) { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
+    return api('/admin/api/shift/' + path, opts)
+      .then(function () { shLoad(true); })
+      .catch(function () { shLoad(true); });
+  }
+  function shDur(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    if (h) return h + ' ч ' + m + ' мин';
+    if (m) return m + ' мин';
+    return (s % 60) + ' сек';
+  }
+  function shStartTimer(baseMs) {
+    if (SH.timer) { clearInterval(SH.timer); SH.timer = null; }
+    function upd() {
+      var e = el('sh-elapsed');
+      if (!e) { if (SH.timer) { clearInterval(SH.timer); SH.timer = null; } return; }
+      e.textContent = shDur(Date.now() - baseMs);
+    }
+    upd();
+    SH.timer = setInterval(upd, 1000);
+  }
+  function shiftCard() {
+    var d = SH.cur;
+    if (!d || d.failed) {
+      return '<div class="card sh-card"><div class="sh-main"><span class="sh-dot off"></span>' +
+        '<div><div class="sh-t">Смена</div><div class="sh-s">' +
+        (d && d.failed ? 'не удалось загрузить' : 'загружаю…') + '</div></div></div></div>';
+    }
+    var cnt = 'за месяц ' + d.shifts + ' ' + plural(d.shifts, 'смена', 'смены', 'смен') +
+      ' · ' + String(d.hours || 0).replace('.', ',') + ' ч';
+    if (!d.open) {
+      return '<div class="card sh-card">' +
+        '<div class="sh-main"><span class="sh-dot off"></span><div>' +
+        '<div class="sh-t">Смена закрыта</div><div class="sh-s">' + cnt + '</div></div></div>' +
+        '<button class="bp sh-go" id="sh-open">Открыть смену</button></div>';
+    }
+    var o = d.open;
+    var consultBtn = o.on_consult
+      ? '<button class="bp ghost sh-cbtn" id="sh-consult" data-on="0">Вернулся</button>'
+      : '<button class="bp ghost sh-cbtn" id="sh-consult" data-on="1">Ушёл на консультацию</button>';
+    var badge = o.on_consult ? ' <span class="sh-badge">на консультации</span>' : '';
+    return '<div class="card sh-card on">' +
+      '<div class="sh-main"><span class="sh-dot on"></span><div>' +
+      '<div class="sh-t">Смена идёт · <span id="sh-elapsed" class="num">' + shDur(o.elapsed_sec * 1000) + '</span>' + badge + '</div>' +
+      '<div class="sh-s">' + cnt + '</div></div></div>' +
+      '<div class="sh-btns">' + consultBtn + '<button class="bp ghost sh-go" id="sh-close">Закрыть смену</button></div></div>';
+  }
+  function wireShift(view) {
+    var sho = el('sh-open');
+    if (sho) sho.addEventListener('click', function () { sho.disabled = true; shAct('open'); });
+    var shc = el('sh-close');
+    if (shc) shc.addEventListener('click', function () { shc.disabled = true; shAct('close'); });
+    var shx = el('sh-consult');
+    if (shx) shx.addEventListener('click', function () {
+      shx.disabled = true; shAct('consult', { on: shx.getAttribute('data-on') === '1' });
+    });
+    if (SH.cur && SH.cur.open) shStartTimer(Date.parse(SH.cur.open.started_at));
+    else if (SH.timer) { clearInterval(SH.timer); SH.timer = null; }
+  }
 
   var PB_SEGS = [
     { id: 'my', label: 'Мои ученики' },
