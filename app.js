@@ -2455,6 +2455,10 @@
     /* Две двери в один раздел: свои приходят по `marketing` и видят все вкладки,
        подрядчик по трафику — по `ads`, и у него остается одна «Реклама» (mkTabsFor). */
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing|ads' },
+    /* «Бот эфира» — проверить, что бот сделает с сообщением из чата эфира, не трогая
+       сам эфир (Вера 26.10.2026): ни ленты, ни карточки лида, ни сообщения модератору.
+       Открыт всем с задачами: вопросы готовят модераторы, спикеры и продажи. */
+    { id: 'efirbot', label: 'Бот эфира', icon: 'dialogs', cap: 'tasks' },
     /* Цифры лежат подряд (просьба Веры 08.10.2026): «Маркетинг, Соцстатистика,
        Аналитика бота рядом друг с другом». До этого соцсети стояли через два
        пункта, а аналитика бота вообще в хвосте меню, за финансовыми разделами, и
@@ -3827,6 +3831,7 @@
     else if (state.page === 'planfact') renderPlanFact(view);
     else if (state.page === 'manage') renderManage(view);
     else if (state.page === 'stories') renderStories(view);
+    else if (state.page === 'efirbot') renderEfirBot(view);
     else if (state.page === 'gifts') renderGifts(view);
     else if (state.page === 'broadcasts') renderBroadcasts(view);
     else if (state.page === 'social') renderSocial(view);
@@ -9648,6 +9653,55 @@
       });
     });
     setTimeout(function () { var f = ov.querySelector('#ws-title'); if (f) f.focus(); }, 30);
+  }
+
+  /* ── Бот эфира: проверка ответов ─────────────────────────────
+     Ручка /admin/api/webinar/efir-try делает тот же разбор, что чат эфира, но ничего
+     никуда не отправляет. История живет только в этой вкладке: это черновик проверки,
+     а не журнал. */
+  var EFB_SAY = {
+    silent: ['Промолчит', 'n-off', 'Это не вопрос: в чат ничего не уйдет, модератору тоже.'],
+    auto: ['Ответит сам', 'n-ok', 'Уйдет в чат сразу, без модератора.'],
+    moderator: ['Модератору', 'n-wait', 'Вопрос с черновиком придет модератору в бот уведомлений. В чат уйдет то, что он одобрит или напишет сам.']
+  };
+  function renderEfirBot(view) {
+    var tries = state.efbTries || (state.efbTries = []);
+    var list = tries.map(function (t) {
+      if (t.pending) return '<div class="efb-it"><p class="efb-q">' + esc(t.q) + '</p><p class="efb-why">Бот думает, до 20 секунд…</p></div>';
+      if (t.err) return '<div class="efb-it"><p class="efb-q">' + esc(t.q) + '</p><p class="efb-why">' + esc(t.err) + '</p></div>';
+      var say = EFB_SAY[t.r.action] || EFB_SAY.moderator;
+      var text = t.r.text ? '<p class="efb-a">' + esc(t.r.text) + '</p>'
+        : (t.r.action === 'moderator' ? '<p class="efb-a none">Черновика нет, модератор пишет сам или пропускает.</p>' : '');
+      return '<div class="efb-it"><div class="efb-top"><p class="efb-q">' + esc(t.q) + '</p>' +
+        '<span class="sev ' + say[1] + '">' + say[0] + '</span></div>' + text +
+        '<p class="efb-why">' + esc(say[2]) + (t.r.reason ? ' Почему не сам: ' + esc(t.r.reason) + '.' : '') + '</p></div>';
+    }).join('');
+    view.innerHTML = '<div class="card efb">' +
+      '<p class="efb-lead">Напиши сообщение так, как его написал бы зритель в чате эфира. Увидишь, что сделает бот. В эфир, в CRM и модератору ничего не уходит.</p>' +
+      '<textarea class="note-ta" id="efb-in" maxlength="1000" placeholder="Например: сколько стоит языковой год?"></textarea>' +
+      '<div class="efb-row"><button class="mk-btn primary" id="efb-go">Проверить</button></div>' +
+      '</div>' + (list ? '<div class="card efb-list">' + list + '</div>' : '');
+    var inp = view.querySelector('#efb-in'), go = view.querySelector('#efb-go');
+    function send() {
+      var q = (inp.value || '').trim();
+      if (!q) { inp.focus(); return; }
+      var t = { q: q, pending: true };
+      tries.unshift(t);
+      if (tries.length > 30) tries.length = 30;
+      renderEfirBot(view);
+      api('/admin/api/webinar/efir-try', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: q }) })
+        .then(function (r) { t.r = r; })
+        .catch(function (e) {
+          t.err = e.status === 429 ? 'Слишком часто. Подожди минуту и попробуй еще раз.'
+            : 'Не получилось спросить бота. Проверь интернет и попробуй еще раз.';
+        })
+        .then(function () { t.pending = false; if (state.page === 'efirbot') renderEfirBot(view); });
+    }
+    go.addEventListener('click', send);
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+    });
   }
 
   function renderNews(view) {
