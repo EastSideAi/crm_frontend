@@ -26587,15 +26587,77 @@
                 fail: ['bc-fail', 'не дошло'] };
 
   function bcQ() {
-    if (!state._bcQ) state._bcQ = { run: null, q: '', status: '', mark: '', offset: 0, find: '' };
+    /* per — период списка рассылок. По умолчанию 30 дней: прогонов больше сотни, и
+       без периода список отвечает на вопрос «что было вообще», а не «как прошёл этот
+       запуск» (владелец, 26.10.2026: «чтобы не все рассылки видели, а за период»).
+       Сколько рассылок всего, экран говорит отдельной строкой — иначе кажется, что
+       старые куда-то пропали. */
+    if (!state._bcQ) state._bcQ = { run: null, q: '', status: '', mark: '', offset: 0,
+                                    find: '', per: 'month', ot: '', do: '' };
     return state._bcQ;
   }
 
+  var BC_PERS = [['', 'Всё время'], ['week', '7 дней'], ['month', '30 дней']];
+
+  /* Границы периода для запроса. Считаем по дням, а не по часам: человек выбирает
+     «7 дней» и ждёт рассылку сегодняшнего утра в списке. */
+  function bcRange() {
+    var q = bcQ();
+    if (q.per === 'custom') return { ot: q.ot, do: q.do };
+    if (!q.per) return { ot: '', do: '' };
+    var dney = q.per === 'week' ? 6 : 29;
+    var hi = new Date();
+    return { ot: zoomYmd(new Date(hi.getTime() - dney * 86400000)), do: zoomYmd(hi) };
+  }
+
+  function bcPerLabel() {
+    var q = bcQ();
+    if (q.per !== 'custom') return 'Период…';
+    return (q.ot || '…') + ' — ' + (q.do || '…');
+  }
+
+  function bcSetPer(per, ot, dok) {
+    var q = bcQ();
+    q.per = per; q.ot = ot || ''; q.do = dok || '';
+    state._bcList = null;
+    renderView();
+  }
+
   function fetchBcList() {
-    api('/admin/api/broadcasts/list').then(function (r) {
-      state._bcList = r; if (state.page === 'broadcasts') renderView();
+    var r = bcRange();
+    api('/admin/api/broadcasts/list?ot=' + encodeURIComponent(r.ot) +
+        '&do=' + encodeURIComponent(r.do)).then(function (r2) {
+      state._bcList = r2; if (state.page === 'broadcasts') renderView();
     }).catch(function (e) {
       if (e.message !== '403') { state._bcList = 'none'; if (state.page === 'broadcasts') renderView(); }
+    });
+  }
+
+  /* Свой период для списка рассылок. Тот же попап, что на дашборде, но со своим
+     состоянием: периоды двух экранов не должны тянуть друг друга. */
+  function openBcRange(anchor) {
+    closeSmenu();
+    var q = bcQ();
+    smenu = document.createElement('div');
+    smenu.id = 'smenu'; smenu.className = 'profmenu dp-pop';
+    smenu.innerHTML =
+      '<div class="dp-ttl">Свой период</div>' +
+      '<div class="dp-row"><label>С</label><input type="date" id="bcp-from" value="' + esc(q.ot) + '"></div>' +
+      '<div class="dp-row"><label>По</label><input type="date" id="bcp-to" value="' + esc(q.do) + '"></div>' +
+      '<div class="dp-acts"><button class="bp sm" id="bcp-apply" style="flex:1;justify-content:center">Применить</button>' +
+      '<button class="dp-reset" id="bcp-reset">Сбросить</button></div>';
+    document.body.appendChild(smenu);
+    var box = anchor.getBoundingClientRect();
+    smenu.style.minWidth = '244px';
+    smenu.style.top = (box.bottom + 8) + 'px';
+    smenu.style.left = Math.min(box.left, window.innerWidth - 264) + 'px';
+    el('bcp-apply').addEventListener('click', function () {
+      var f = el('bcp-from').value, t = el('bcp-to').value;
+      if (!f && !t) { closeSmenu(); return; }
+      closeSmenu(); bcSetPer('custom', f, t);
+    });
+    el('bcp-reset').addEventListener('click', function () {
+      closeSmenu(); bcSetPer('month');
     });
   }
 
@@ -26809,6 +26871,15 @@
     return '<a class="bc-chat" href="#lead/' + encodeURIComponent(id) + '">карточка</a>';
   }
 
+  /* Сколько рассылок на экране и сколько их всего. Без второй цифры отфильтрованный
+     список выглядит как полный, и старые рассылки считаются пропавшими. */
+  function bcCount(runs) {
+    var d = state._bcList || {}, vsego = d.total_runs || 0, n = runs.length;
+    if (!vsego) return 'пока пусто';
+    if (!bcQ().per || n >= vsego) return n === 1 ? '1 рассылка' : n + ' рассылок, все';
+    return n + ' из ' + vsego + ' за период';
+  }
+
   function bcChat(userId) {
     if (!userId) return '';
     return '<a class="bc-chat" href="#dialog/' + encodeURIComponent(userId) + '">переписка</a>';
@@ -26858,7 +26929,11 @@
       '</div>';
     }).join('') : (notReady
       ? '<div class="empty">Журнал ещё не завёлся: бот с этой доработкой пока не выехал. Появится сразу после выкатки.</div>'
-      : '<div class="empty">Рассылок ещё не было.</div>');
+      /* «Рассылок не было» и «не было за этот период» — разные ответы. Второй без
+         оговорки читается как первый, и человек решает, что мы молчали весь запуск. */
+      : (q.per
+        ? '<div class="empty">За этот период рассылок не было. Выше можно взять шире.</div>'
+        : '<div class="empty">Рассылок ещё не было.</div>'));
 
     var find = state._bcFind;
     var findRows = '';
@@ -26918,14 +26993,28 @@
         (findRows ? '<div class="bc-found">' + findRows + '</div>' : '') +
       '</div>' +
       '<div class="card sp12" style="overflow:hidden">' +
-        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('send', 14) + '</span>' +
-        '<div><div class="t">Рассылки</div><div class="s">нажми на строку — внутри разбор: кто ответил, кто дошёл до анкеты, и срезы по группам</div></div></div>' +
+        '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('send', 14) + '</span>' +
+        '<div><div class="t">Рассылки</div><div class="s">' + esc(bcCount(runs)) +
+        ' · нажми на строку — внутри разбор: кто ответил, кто дошёл до анкеты, и срезы по группам</div></div></div>' +
+        '<div class="bc-per"><div class="dperiod" id="bc-period">' +
+          BC_PERS.map(function (o) {
+            return '<button data-per="' + o[0] + '" class="' + (q.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
+          }).join('') +
+          '<button data-per="custom" class="dp-custom' + (q.per === 'custom' ? ' on' : '') + '">' +
+            ic('cal', 12) + esc(bcPerLabel()) + '</button>' +
+        '</div></div>' +
         '<div style="border-top:1px solid var(--line)">' + rows + '</div></div>' +
       sumCohorts +
     '</div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-run]'), function (row) {
       row.addEventListener('click', function () { bcOpen(parseInt(row.getAttribute('data-run'), 10)); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('#bc-period button'), function (b) {
+      b.addEventListener('click', function () {
+        if (b.getAttribute('data-per') === 'custom') { openBcRange(b); return; }
+        bcSetPer(b.getAttribute('data-per'));
+      });
     });
     var go = el('bc-find-go'), inp = el('bc-find');
     function doFind() {

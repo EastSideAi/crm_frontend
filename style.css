@@ -10176,6 +10176,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .bc-run { grid-template-columns: minmax(0, 1fr) auto 24px; cursor: pointer; }
 /* Колонки одинаковой ширины: числа стоят друг под другом от строки к строке.
    Флексом они разъезжались, и взгляд не мог сравнить две рассылки по вертикали. */
+/* Период списка рассылок: отдельная строка под шапкой карточки, а не в сек-хеде —
+   на телефоне чипы и заголовок в одной строке уезжают за край экрана. */
+.bc-per { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 24px 16px; }
+.bc-per .dperiod { flex-wrap: wrap; }
+@media (max-width: 560px) { .bc-per { padding: 0 16px 14px; } }
 .bc-nums { display: grid; grid-template-columns: repeat(5, 84px); align-items: center; }
 /* У почтовой рассылки чисел на одно больше: открытия и переходы есть только у
    нее, а «закрыли бота» для письма не бывает. Строки одного канала все равно
