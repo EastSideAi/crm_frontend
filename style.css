@@ -13584,3 +13584,16 @@ video.cs-media { background: #000; }
 @media (prefers-reduced-motion: reduce) {
   .om-live { animation: none; }
 }
+
+/* ════ Бот эфира: проверка ответов (renderEfirBot) ════ */
+.efb { padding: 20px; }
+.efb-lead { margin: 0 0 12px; color: var(--ink-2); font-size: 13.5px; line-height: 1.5; max-width: 620px; }
+.efb-row { display: flex; justify-content: flex-end; margin-top: 10px; }
+.efb-list { margin-top: 16px; padding: 4px 20px; }
+.efb-it { padding: 16px 0; border-top: 1px solid var(--line); }
+.efb-it:first-child { border-top: 0; }
+.efb-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.efb-q { margin: 0; font-weight: 600; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.efb-a { margin: 8px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.efb-a.none { color: var(--ink-3); font-style: italic; }
+.efb-why { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--ink-3); }
