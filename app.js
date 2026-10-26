@@ -28317,6 +28317,13 @@
       acts.push('<a class="qchip" href="' + esc(c.url) + '" target="_blank" rel="noopener">' +
         ic('ext', 13) + 'Запись встречи</a>');
     }
+    /* Звук отдельным файлом: час видео это гигабайт, а переслушать разговор в
+       дороге или отдать тому, кто не был, проще десятью мегабайтами mp3
+       (Павел 26.10.2026). Появляется сам, когда машина встреч отделит звук. */
+    if (c.audio_url) {
+      acts.push('<a class="qchip" href="' + esc(c.audio_url) + '" target="_blank" rel="noopener">' +
+        ic('mic', 13) + 'Звук (mp3)</a>');
+    }
     if (c.session_id) {
       acts.push('<button type="button" class="qchip" data-mxlead="' + esc(c.session_id) + '">' +
         ic('leads', 13) + 'Карточка ученика</button>');
