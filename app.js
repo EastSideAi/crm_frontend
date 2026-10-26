@@ -36290,6 +36290,12 @@
   }
   function prcPlain(ids) { return ids.map(function (x) { return prcPerson(x).name; }).join(', '); }
   function prcNames(ids) { return ids.map(function (x) { return esc(prcPerson(x).name); }).join(', '); }
+  /* В углу прямоугольника схемы — главный исполнитель и «+N», полный список в подсказке:
+     три-четыре имени в углу ломали прямоугольник на несколько строк. */
+  function prcCorner(ids) {
+    if (!ids.length) return '';
+    return '<b title="' + prcNames(ids) + '">' + esc(prcPerson(ids[0]).name) + (ids.length > 1 ? ' +' + (ids.length - 1) : '') + '</b>';
+  }
 
   /* Шаг — точка на вертикальной линии: номер, название, под ним одной тихой строкой
      кто делает. Все остальное (подпроцесс, передача дальше, проблема) — короткими
@@ -36396,13 +36402,14 @@
     /* Схема процесса как на рисунках Рыбакова (рис. 1 и 12 книги): слева событие,
        с которого все начинается, дальше пронумерованные шаги стрелками рядами, справа
        результат. Это картинка процесса целиком, ее читают первой; подробности — в
-       списке шагов ниже, клик по прямоугольнику открывает шаг там. */
+       списке шагов ниже, клик по прямоугольнику открывает шаг там. Кто делает шаг —
+       в углу прямоугольника (Вера 26.10.2026), чтобы схема читалась без списка. */
     var scheme = '<ol class="prc-scheme" aria-label="Схема процесса">' +
       (n.trigger ? '<li class="prc-sc-end start" title="' + esc(n.trigger) + '"><span class="po-lbl">Начало</span><p>' + esc(n.trigger) + '</p></li>' : '') +
       n.steps.map(function (s, i) {
         var sub = s.sub ? prcLight(s.sub) : null;
         return '<li><button type="button" class="prc-sc-box' + (sub ? ' sub' : '') + (state.prcStep === i ? ' on' : '') + '" data-sc="' + i + '" title="' + esc(s.title) + '">' +
-          '<i>' + (i + 1) + '</i><span>' + esc(s.title) + '</span>' +
+          '<span class="prc-sc-top"><i>' + (i + 1) + '</i>' + prcCorner(s.who || []) + '</span><span>' + esc(s.title) + '</span>' +
           ((sub || s.pain) ? '<small>' + (sub ? sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри' : '') +
             (s.pain ? '<em>проблема</em>' : '') + '</small>' : '') + '</button></li>';
       }).join('') +
