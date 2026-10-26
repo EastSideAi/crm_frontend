@@ -29762,6 +29762,20 @@
   function mkUrl(code) {
     return MK_GO + code;
   }
+  /* Каналы, где бот админ. Тянем один раз на сессию: список меняется раз в полгода,
+     а мастер ссылки перерисовывается на каждый клик. */
+  function fetchMkChans() {
+    if (state._mkChansWait) return;
+    state._mkChansWait = true;
+    api('/admin/api/marketing/channels').then(function (r) {
+      state._mkChansWait = false; state._mkChans = (r && r.channels) || [];
+      if (state._mk) mkModal(state._mk);
+    }).catch(function () {
+      state._mkChansWait = false; state._mkChans = 'none';
+      if (state._mk) mkModal(state._mk);
+    });
+  }
+
   function mkKind(kind) {
     return MK_KIND_INFO[kind] || MK_KIND_INFO.page;
   }
@@ -29921,7 +29935,7 @@
         var ans = answerRows.filter(function (a) { return a.funnel_code === sf.code; }).map(function (a) {
           return '<div class="mk-ans-r"><span>' + esc(a.key) + ' · ' + esc(a.value) + '</span><span class="num">' + a.count + '</span></div>';
         }).join('');
-        var st = (d && d.stats) || { clicks: {}, users: {}, handoffs: {} };
+        var st = (d && d.stats) || { clicks: {}, users: {}, handoffs: {}, joins: {} };
         function sn(map, code) { return (map && map[code]) || 0; }
         var flinks = ((d && d.links) || []).filter(function (l) {
           var src = l.utm && l.utm.source;
@@ -29933,7 +29947,12 @@
             '<div class="mk-i"><div class="mk-n">' + esc(l.title || l.code) + '</div>' +
             '<div class="mk-l"><span class="mk-kind">' + kind.short + '</span> <span class="mk-code num">' + esc(l.code) + '</span> · ' +
             esc(mkSourceName(l.utm && l.utm.source)) + (l.note ? '<span class="mk-note">' + esc(l.note) + '</span>' : '') + '</div></div>' +
-            '<div class="mk-st num" title="кликов по ссылке">' + sn(st.clicks, l.code) + '</div>' +
+            '<div class="mk-st num" title="кликов по ссылке">' + sn(st.clicks, l.code) +
+              /* Вступление в закрытый канал — то, ради чего ссылку в канал и давали.
+                 Показываем только там, где оно есть: у ссылки на страницу этой цифры
+                 не бывает, и ноль рядом с кликами читался бы как провал. */
+              (sn(st.joins, l.code) ? '<i class="mk-join num" title="вступили в канал">+' +
+                sn(st.joins, l.code) + ' в канал</i>' : '') + '</div>' +
             mkChips(l.code, [kind.short]) + '<button class="mk-btn danger" data-dellink="' + esc(l.code) + '">' + ic('x', 12) + '</button></div>';
         }).join('');
         /* шаги показываем, если они есть в БД — даже пока файл агента не подцепился
@@ -29996,9 +30015,32 @@
           return '<button class="mk-chip2' + (sel === it.id ? ' on' : '') + '" data-' + attr + '="' + esc(it.id) + '">' + esc(it.label) + '</button>';
         }).join('') + '</div>';
       }
-      var targetBlock = w.kind === 'page'
-        ? '<div class="mk-qblock"><div class="mk-q">Куда ведёт страница?</div><input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="истсайд.рф/shanghai_summer.html"></div>'
-        : '';
+      /* У страницы две цели: обычный адрес и закрытый канал. Для канала адрес руками
+         не вписываем — бот заводит ИМЕННУЮ пригласительную ссылку с именем = код
+         размещения. Иначе все рассылки зовут одной ссылкой, и вступления видны
+         только суммой (владелец, 26.10.2026: «а почему нельзя отследить?»). */
+      var chans = state._mkChans;
+      if (w.kind === 'page' && chans === undefined) fetchMkChans();
+      var targetBlock = '';
+      if (w.kind === 'page') {
+        var chanList = (chans && chans !== 'none') ? chans : [];
+        targetBlock = '<div class="mk-qblock"><div class="mk-q">Куда именно?</div>' +
+          chips2([{ id: 'url', label: 'На страницу' }, { id: 'chat', label: 'В закрытый канал' }],
+                 w.mode || 'url', 'wt') +
+          (w.mode === 'chat'
+            ? (chanList.length
+              ? '<div class="mk-chan" style="margin-top:10px">' + chanList.map(function (c) {
+                  return '<button class="mk-chip2' + (String(w.chat) === String(c.chat_id) ? ' on' : '') +
+                    '" data-wch="' + esc(String(c.chat_id)) + '">' + esc(c.title) +
+                    ' <span class="mk-q-s num">' + c.members + '</span></button>';
+                }).join('') + '</div>' +
+                '<div class="mk-q-s" style="margin-top:8px">Бот сделает отдельную ссылку в этот канал и назовёт её кодом размещения — вступления будут видны по источнику.</div>'
+              : (chans === 'none'
+                ? '<div class="mk-q-s" style="margin-top:10px">Список каналов не загрузился — обнови страницу.</div>'
+                : '<div class="mk-q-s" style="margin-top:10px">Загружаю каналы…</div>'))
+            : '<input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="истсайд.рф/shanghai_summer.html" style="margin-top:10px">') +
+        '</div>';
+      }
       inner = '<div class="mk-modal-t">Новая ссылка · <span class="mk-code num">' + esc(w.funnel) + '</span></div>' +
         '<div class="mk-qblock"><div class="mk-q">Куда ведёт?</div>' + chips2(MK_KINDS, w.kind, 'wk') + '</div>' + targetBlock +
         '<div class="mk-qblock"><div class="mk-q">Где будет размещена?</div>' + chips2(MK_CHANNELS, w.chan, 'wc') + '</div>' +
@@ -30118,6 +30160,21 @@
       var nn = el('mk-ln'); if (nn) w.note = nn.value;
       var c = el('mk-lc'); if (c && c.value !== w.code) { w.code = c.value; w.touched = true; }
     }
+    Array.prototype.forEach.call(host.querySelectorAll('[data-wt]'), function (b) {
+      b.addEventListener('click', function () {
+        keep();
+        state._mkL.mode = b.getAttribute('data-wt');
+        if (state._mkL.mode === 'chat') state._mkL.target = '';
+        mkModal(d);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-wch]'), function (b) {
+      b.addEventListener('click', function () {
+        keep();
+        state._mkL.chat = b.getAttribute('data-wch');
+        mkModal(d);
+      });
+    });
     ['wk', 'wc', 'wm'].forEach(function (attr) {
       Array.prototype.forEach.call(host.querySelectorAll('[data-' + attr + ']'), function (b) {
         b.addEventListener('click', function () {
@@ -30139,7 +30196,9 @@
       var w = state._mkL;
       var code = (w.code || '').trim().toLowerCase();
       if (!MK_CODE_RE.test(code)) { showToast('Код — латиницей, без пробелов (leto_tg_inst)'); return; }
-      if (w.kind === 'page' && !(w.target || '').trim()) { showToast('Укажи адрес страницы'); return; }
+      var vKanal = w.kind === 'page' && w.mode === 'chat';
+      if (vKanal && !w.chat) { showToast('Выбери канал'); return; }
+      if (w.kind === 'page' && !vKanal && !(w.target || '').trim()) { showToast('Укажи адрес страницы'); return; }
       var chan = MK_CHANNELS.filter(function (c) { return c.id === w.chan; })[0] || MK_CHANNELS[0];
       var med = MK_MEDIUMS.filter(function (m) { return m.id === w.med; })[0] || MK_MEDIUMS[0];
       var kind = mkKind(w.kind);
@@ -30147,7 +30206,8 @@
         code: code,
         title: kind.short + ' · ' + chan.label + (med.id !== 'post' ? ' · ' + med.label : ''),
         funnel_code: w.funnel, kind: w.kind,
-        target_url: w.kind === 'page' ? w.target.trim() : null,
+        target_url: (w.kind === 'page' && !vKanal) ? w.target.trim() : null,
+        invite_chat_id: vKanal ? parseInt(w.chat, 10) : null,
         utm: { source: chan.src, medium: med.utm },
         note: (w.note || '').trim() || null,
       }).then(function () {
@@ -34140,15 +34200,77 @@
                 fail: ['bc-fail', 'не дошло'] };
 
   function bcQ() {
-    if (!state._bcQ) state._bcQ = { run: null, q: '', status: '', mark: '', offset: 0, find: '' };
+    /* per — период списка рассылок. По умолчанию 30 дней: прогонов больше сотни, и
+       без периода список отвечает на вопрос «что было вообще», а не «как прошёл этот
+       запуск» (владелец, 26.10.2026: «чтобы не все рассылки видели, а за период»).
+       Сколько рассылок всего, экран говорит отдельной строкой — иначе кажется, что
+       старые куда-то пропали. */
+    if (!state._bcQ) state._bcQ = { run: null, q: '', status: '', mark: '', offset: 0,
+                                    find: '', per: 'month', ot: '', do: '' };
     return state._bcQ;
   }
 
+  var BC_PERS = [['', 'Всё время'], ['week', '7 дней'], ['month', '30 дней']];
+
+  /* Границы периода для запроса. Считаем по дням, а не по часам: человек выбирает
+     «7 дней» и ждёт рассылку сегодняшнего утра в списке. */
+  function bcRange() {
+    var q = bcQ();
+    if (q.per === 'custom') return { ot: q.ot, do: q.do };
+    if (!q.per) return { ot: '', do: '' };
+    var dney = q.per === 'week' ? 6 : 29;
+    var hi = new Date();
+    return { ot: zoomYmd(new Date(hi.getTime() - dney * 86400000)), do: zoomYmd(hi) };
+  }
+
+  function bcPerLabel() {
+    var q = bcQ();
+    if (q.per !== 'custom') return 'Период…';
+    return (q.ot || '…') + ' — ' + (q.do || '…');
+  }
+
+  function bcSetPer(per, ot, dok) {
+    var q = bcQ();
+    q.per = per; q.ot = ot || ''; q.do = dok || '';
+    state._bcList = null;
+    renderView();
+  }
+
   function fetchBcList() {
-    api('/admin/api/broadcasts/list').then(function (r) {
-      state._bcList = r; if (state.page === 'broadcasts') renderView();
+    var r = bcRange();
+    api('/admin/api/broadcasts/list?ot=' + encodeURIComponent(r.ot) +
+        '&do=' + encodeURIComponent(r.do)).then(function (r2) {
+      state._bcList = r2; if (state.page === 'broadcasts') renderView();
     }).catch(function (e) {
       if (e.message !== '403') { state._bcList = 'none'; if (state.page === 'broadcasts') renderView(); }
+    });
+  }
+
+  /* Свой период для списка рассылок. Тот же попап, что на дашборде, но со своим
+     состоянием: периоды двух экранов не должны тянуть друг друга. */
+  function openBcRange(anchor) {
+    closeSmenu();
+    var q = bcQ();
+    smenu = document.createElement('div');
+    smenu.id = 'smenu'; smenu.className = 'profmenu dp-pop';
+    smenu.innerHTML =
+      '<div class="dp-ttl">Свой период</div>' +
+      '<div class="dp-row"><label>С</label><input type="date" id="bcp-from" value="' + esc(q.ot) + '"></div>' +
+      '<div class="dp-row"><label>По</label><input type="date" id="bcp-to" value="' + esc(q.do) + '"></div>' +
+      '<div class="dp-acts"><button class="bp sm" id="bcp-apply" style="flex:1;justify-content:center">Применить</button>' +
+      '<button class="dp-reset" id="bcp-reset">Сбросить</button></div>';
+    document.body.appendChild(smenu);
+    var box = anchor.getBoundingClientRect();
+    smenu.style.minWidth = '244px';
+    smenu.style.top = (box.bottom + 8) + 'px';
+    smenu.style.left = Math.min(box.left, window.innerWidth - 264) + 'px';
+    el('bcp-apply').addEventListener('click', function () {
+      var f = el('bcp-from').value, t = el('bcp-to').value;
+      if (!f && !t) { closeSmenu(); return; }
+      closeSmenu(); bcSetPer('custom', f, t);
+    });
+    el('bcp-reset').addEventListener('click', function () {
+      closeSmenu(); bcSetPer('month');
     });
   }
 
@@ -34362,6 +34484,15 @@
     return '<a class="bc-chat" href="#lead/' + encodeURIComponent(id) + '">карточка</a>';
   }
 
+  /* Сколько рассылок на экране и сколько их всего. Без второй цифры отфильтрованный
+     список выглядит как полный, и старые рассылки считаются пропавшими. */
+  function bcCount(runs) {
+    var d = state._bcList || {}, vsego = d.total_runs || 0, n = runs.length;
+    if (!vsego) return 'пока пусто';
+    if (!bcQ().per || n >= vsego) return n === 1 ? '1 рассылка' : n + ' рассылок, все';
+    return n + ' из ' + vsego + ' за период';
+  }
+
   function bcChat(userId) {
     if (!userId) return '';
     return '<a class="bc-chat" href="#dialog/' + encodeURIComponent(userId) + '">переписка</a>';
@@ -34411,7 +34542,11 @@
       '</div>';
     }).join('') : (notReady
       ? '<div class="empty">Журнал ещё не завёлся: бот с этой доработкой пока не выехал. Появится сразу после выкатки.</div>'
-      : '<div class="empty">Рассылок ещё не было.</div>');
+      /* «Рассылок не было» и «не было за этот период» — разные ответы. Второй без
+         оговорки читается как первый, и человек решает, что мы молчали весь запуск. */
+      : (q.per
+        ? '<div class="empty">За этот период рассылок не было. Выше можно взять шире.</div>'
+        : '<div class="empty">Рассылок ещё не было.</div>'));
 
     var find = state._bcFind;
     var findRows = '';
@@ -34471,14 +34606,28 @@
         (findRows ? '<div class="bc-found">' + findRows + '</div>' : '') +
       '</div>' +
       '<div class="card sp12" style="overflow:hidden">' +
-        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('send', 14) + '</span>' +
-        '<div><div class="t">Рассылки</div><div class="s">нажми на строку — внутри разбор: кто ответил, кто дошёл до анкеты, и срезы по группам</div></div></div>' +
+        '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('send', 14) + '</span>' +
+        '<div><div class="t">Рассылки</div><div class="s">' + esc(bcCount(runs)) +
+        ' · нажми на строку — внутри разбор: кто ответил, кто дошёл до анкеты, и срезы по группам</div></div></div>' +
+        '<div class="bc-per"><div class="dperiod" id="bc-period">' +
+          BC_PERS.map(function (o) {
+            return '<button data-per="' + o[0] + '" class="' + (q.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
+          }).join('') +
+          '<button data-per="custom" class="dp-custom' + (q.per === 'custom' ? ' on' : '') + '">' +
+            ic('cal', 12) + esc(bcPerLabel()) + '</button>' +
+        '</div></div>' +
         '<div style="border-top:1px solid var(--line)">' + rows + '</div></div>' +
       sumCohorts +
     '</div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-run]'), function (row) {
       row.addEventListener('click', function () { bcOpen(parseInt(row.getAttribute('data-run'), 10)); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('#bc-period button'), function (b) {
+      b.addEventListener('click', function () {
+        if (b.getAttribute('data-per') === 'custom') { openBcRange(b); return; }
+        bcSetPer(b.getAttribute('data-per'));
+      });
     });
     var go = el('bc-find-go'), inp = el('bc-find');
     function doFind() {
