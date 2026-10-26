@@ -10258,6 +10258,36 @@
     c.insertBefore(officeBox, v);
     return officeBox;
   }
+  /* Размер врезки. Чужой экран в низком окне нечитаем, а на весь экран нужен не
+     всегда: между ними должно быть среднее (Павел 26.10.2026). Три размера, и
+     выбранный помним — каждый раз тыкать одно и то же человек не должен. */
+  var OFFICE_SIZE_LS = 'es_office_size';
+  var OFFICE_SIZES = ['', 'big', 'full'];
+
+  function officeSize() {
+    var v = lsGet(OFFICE_SIZE_LS) || '';
+    return OFFICE_SIZES.indexOf(v) >= 0 ? v : '';
+  }
+  function officeSetSize(v) {
+    var d = officeDock();
+    if (!d) return;
+    // На телефоне размер один: окно там и так почти во весь экран, а кнопки в
+    // углу легли бы поверх ленты каналов. Выбор с компьютера при этом помним.
+    var p = window.innerWidth <= 760 ? '' : v;
+    d.classList.toggle('big', p === 'big');
+    d.classList.toggle('full', p === 'full');
+    document.body.classList.toggle('office-full', p === 'full');
+    try { localStorage.setItem(OFFICE_SIZE_LS, v); } catch (e) {}
+    var up = d.querySelector('.mx-office-up'), fs = d.querySelector('.mx-office-fs');
+    // Иконку переписываем здесь, а не в обработчике: из полного экрана выходят и
+    // кнопкой, и клавишей, и стрелки не должны после этого показывать не то.
+    if (up) {
+      up.innerHTML = ic(v === '' ? 'expand' : 'shrink', 14);
+      up.title = v === '' ? 'Развернуть окно' : 'Вернуть обычный размер';
+    }
+    if (fs) fs.title = v === 'full' ? 'Выйти из полного экрана' : 'Во весь экран';
+  }
+
   function officeShow() {
     var d = officeDock();
     if (!d) return;
@@ -10279,12 +10309,59 @@
         : '');
       d.innerHTML = '';
       d.appendChild(f);
+      d.appendChild(officeTools());
+      officeSetSize(officeSize());
     }).catch(function () {
       d.removeAttribute('data-on');
       d.innerHTML = '<div class="mx-office-wait">Не вышло открыть офис. Обнови страницу.</div>';
     });
   }
-  function officeHide() { if (officeBox) officeBox.hidden = true; }
+  function officeHide() {
+    if (!officeBox) return;
+    officeBox.hidden = true;
+    // Полный экран — состояние ЭТОГО раздела: уходя в задачи, человек не должен
+    // оставить за собой страницу без прокрутки.
+    document.body.classList.remove('office-full');
+  }
+
+  /* Кнопки размера лежат поверх рамки, а не внутри нее: внутри рамка чужая,
+     туда мы дотянуться не можем. */
+  function officeTools() {
+    var box = document.createElement('div');
+    box.className = 'mx-office-tools';
+    var up = document.createElement('button');
+    up.type = 'button';
+    up.className = 'mx-office-up';
+    up.setAttribute('aria-label', 'Размер окна офиса');
+    up.innerHTML = ic(officeSize() === '' ? 'expand' : 'shrink', 14);
+    up.addEventListener('click', function () {
+      officeSetSize(officeSize() === '' ? 'big' : '');
+    });
+    var fs = document.createElement('button');
+    fs.type = 'button';
+    fs.className = 'mx-office-fs';
+    fs.setAttribute('aria-label', 'Во весь экран');
+    // Квадрат во весь кадр: «во весь экран» это про рамку, а не про стрелки,
+    // которыми рядом меняют высоту.
+    fs.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" '
+      + 'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" '
+      + 'stroke-linejoin="round"><rect x="3" y="4" width="14" height="12" rx="2.5"/>'
+      + '<path d="M7.5 8.5h5v3h-5z"/></svg>';
+    fs.addEventListener('click', function () {
+      officeSetSize(officeSize() === 'full' ? 'big' : 'full');
+    });
+    box.appendChild(up);
+    box.appendChild(fs);
+    return box;
+  }
+
+  // Esc возвращает из полного экрана: это привычный выход, и искать кнопку в
+  // углу в такой момент человек не станет.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && officeSize() === 'full' && officeBox && !officeBox.hidden) {
+      officeSetSize('big');
+    }
+  });
 
   function enterMeetRoom(e, a) {
     var url = a.getAttribute('href');

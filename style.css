@@ -12250,8 +12250,26 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    уже под ней кнопки «начать встречу» и списки (Павел 26.10.2026: «чтобы сразу
    открывался такой интерфейс»). Высота дана экраном, а не содержимым: внутри
    своя колонка каналов со своей прокруткой. */
-.mx-office { height: min(520px, 58vh); margin-bottom: 18px; border-radius: var(--r-xl);
-  border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+.mx-office { position: relative; height: min(520px, 58vh); margin-bottom: 18px;
+  border-radius: var(--r-xl); border: 1px solid var(--line); background: var(--card);
+  overflow: hidden; transition: height .18s var(--ease); }
+/* Средний размер: чужой экран в низком окне нечитаем, а на весь экран нужно не
+   всегда (Павел 26.10.2026). */
+.mx-office.big { height: calc(100vh - 210px); min-height: 420px; }
+.mx-office.full { position: fixed; inset: 0; z-index: 60; height: auto;
+  margin: 0; border-radius: 0; border: 0; }
+/* Под окном во весь экран страница не прокручивается: иначе за ним уезжает
+   раздел, и выход возвращает человека не туда, где он был. */
+body.office-full { overflow: hidden; }
+/* Кнопки размера лежат поверх рамки: внутрь нее, на чужую страницу, не дотянуться. */
+.mx-office-tools { position: absolute; right: 12px; top: 10px; z-index: 2;
+  display: flex; gap: 6px; }
+.mx-office-tools button { width: 28px; height: 28px; display: grid; place-items: center;
+  border: 0; border-radius: 9px; cursor: pointer; color: var(--ink-2);
+  background: rgba(255,255,255,.82); backdrop-filter: blur(8px);
+  box-shadow: 0 1px 2px rgba(15,19,32,.1); transition: .15s; }
+.mx-office-tools button:hover { color: var(--ink); background: #fff; }
+.mx-office-tools svg { width: 14px; height: 14px; }
 .mx-office[hidden] { display: none; }
 .mx-office-f { width: 100%; height: 100%; border: 0; display: block; }
 .mx-office-wait { height: 100%; display: grid; place-items: center;
@@ -12260,6 +12278,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    на половине высоты от нее остается полоска. */
 @media (max-width: 760px) {
   .mx-office { height: 74vh; margin-bottom: 14px; }
+  /* Лента каналов там идет поверху — кнопки в углу закрывали бы ее названия. */
+  .mx-office-tools { display: none; }
 }
 
 .mx-top-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
