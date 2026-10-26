@@ -35631,12 +35631,21 @@
   /* Плоский словарь узлов по всем процессам: путь-крошки, поиск и фильтр по
      человеку ходят по нему, а не перебором файлов. */
   function prcIndex() {
-    var d = state._prc, by = {}, people = {};
+    var d = state._prc, by = {}, people = {}, agents = {};
     d.people.forEach(function (p) { people[p.id] = p; });
+    (d.agents || []).forEach(function (a) { agents[a.id] = a; });
     d.processes.forEach(function (p) {
       Object.keys(p.nodes).forEach(function (nid) { by[nid] = { pid: p.id, node: p.nodes[nid] }; });
     });
-    d._by = by; d._people = people;
+    d._by = by; d._people = people; d._agents = agents;
+  }
+  /* Агент на карте — роль из списка с куратором (Вера 23.10.2026). Пусто значит,
+     что процесс пока ведет человек; незнакомый id показываем как есть, а не прячем. */
+  function prcAgent(id) {
+    if (!id) return 'нет, ведет человек';
+    var a = (state._prc._agents || {})[id];
+    if (!a) return id;
+    return a.name + ' · куратор ' + prcPerson(a.curator).name;
   }
   function prcPerson(id) {
     var p = state._prc._people[id];
@@ -35862,7 +35871,7 @@
               '<small>' + esc(root.goal || '') + '</small>' +
               '<span class="prc-stat">' + (z.nodes > 1 ? '<span>' + (z.nodes - 1) + ' ' + plural(z.nodes - 1, 'подпроцесс', 'подпроцесса', 'подпроцессов') + '</span>' : '') +
                 '<span>' + z.steps + ' ' + plural(z.steps, 'шаг', 'шага', 'шагов') + '</span>' +
-                (z.pains ? '<span class="pain">' + z.pains + ' ' + plural(z.pains, 'боль', 'боли', 'болей') + '</span>' : '') + '</span>' +
+                (z.pains ? '<span class="pain">' + z.pains + ' ' + plural(z.pains, 'проблема', 'проблемы', 'проблем') + '</span>' : '') + '</span>' +
               (who ? '<i class="prc-cnt' + (mine ? '' : ' zero') + '">' + mine + '</i>' : '') +
               (root.status === 'draft' ? '<span class="sev n-wait prc-draft">черновик</span>' : '') +
             '</button>';
@@ -35944,7 +35953,7 @@
           (sub ? '<span class="prc-subn">' + ic('flow', 12) + subN + ' ' + plural(subN, 'шаг', 'шага', 'шагов') + ' внутри</span>' : '') +
           ((s.variants || []).length ? '<span class="prc-subn">' + ic('flow', 12) + s.variants.length + ' ' + plural(s.variants.length, 'вариант', 'варианта', 'вариантов') + '</span>' : '') +
           (s.goto && prcLight(s.goto) ? '<span class="prc-gon">' + ic('go', 12) + 'дальше в «' + esc(prcRootTitle(s.goto)) + '»</span>' : '') +
-          (s.pain ? '<span class="prc-painmk">есть боль</span>' : '') + '</span>' +
+          (s.pain ? '<span class="prc-painmk">есть проблема</span>' : '') + '</span>' +
         '<span class="prc-who">' + s.who.map(function (x) { return prcTag(x, who); }).join('') + '</span>' +
         '<span class="prc-ex">' + prcExec(s) + '</span>' +
         '<span class="prc-chev">' + ic('go', 14) + '</span>' +
@@ -36001,7 +36010,7 @@
 
     var owner = n.owner ? prcPerson(n.owner).name : '';
     var meta = [
-      ['Руководитель', esc(owner)], ['Агент', esc(n.agent || '')],
+      ['Руководитель', esc(owner)], ['Агент', esc(prcAgent(n.agent))],
       ['Начало', esc(n.trigger || '')], ['Конец', esc(n.done || '')],
       ['На входе', esc(n.input || '')], ['На выходе', esc(n.output || '')], ['Срок', esc(n.sla || '')],
     ].filter(function (x) { return x[1]; });
@@ -36026,7 +36035,7 @@
         esc(prcRootTitle(x.nid)) + ': ' + esc(x.title) + '</button></li>';
     }).join('') + '</ul></div>' : '';
     var foot = incHtml + (full ? (
-      list('Где болит', full.pains, function (x) { return '<li>' + esc(x.text) + (x.src ? '<small>' + esc(prcSrc(x.src)) + '</small>' : '') + '</li>'; }) +
+      list('Проблемы', full.pains, function (x) { return '<li>' + esc(x.text) + (x.src ? '<small>' + esc(prcSrc(x.src)) + '</small>' : '') + '</li>'; }) +
       list('Заметки', full.note ? [full.note] : [], function (x) { return '<li>' + esc(x) + '</li>'; }) +
       list('Вопросы на проверку', full.questions, function (x) { return '<li>' + esc(x.text) + (x.who ? '<small>спросить: ' + esc(prcPerson(x.who).name) + '</small>' : '') + '</li>'; }) +
       list('Цифры', full.metrics, function (x) { return '<li>' + esc(x) + '</li>'; }) +
@@ -38962,8 +38971,13 @@
      ни у ответственного; таких карточек на бою нашлось пять). Признак клиента тот же,
      что у вкладки «Клиенты», — иначе вкладка показывала бы человека, которого нет в
      списке людей. */
+  /* Кто проходил наш тест или занимался в тренажере (DET, HSK, CSCA), тоже не прохожий,
+     даже без анкеты: левые люди тесты не проходят (Вера, 23.10.2026). Кирилл Захаров прошел
+     тест по личной ссылке 22.10.2026, анкету не заполнял, и в «Людях» его не было вовсе.
+     Признак `learner` считает сервер (admin_leads). */
   function isProspect(l) {
-    return l.status === 'visited' && !isClient(l) && l.crm.status !== 'rejected';
+    return l.status === 'visited' && !isClient(l) && l.crm.status !== 'rejected' &&
+      !l.learner && !l.det;
   }
   function prAge(l) {
     var t = l.last_activity || l.created_at;
@@ -38985,7 +38999,8 @@
     if (seg === 'quiet') arr = arr.filter(function (l) { return prAge(l) >= PR_QUIET_DAYS; });
     if (state.q) {
       arr = arr.filter(function (l) {
-        var hay = ((l.name || '') + ' ' + (l.contact || '') + ' ' + (l.crm.note || '')).toLowerCase();
+        var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' + (l.contact || '') + ' ' +
+          (l.crm.note || '')).toLowerCase();
         return hay.indexOf(state.q) !== -1;
       });
     }
