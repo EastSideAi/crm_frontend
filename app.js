@@ -3133,6 +3133,18 @@
           saveUi(); renderTopbar(); renderView();
         });
       });
+    } else if (state.page === 'processes') {
+      /* Быстрый переход: главная раздела и четыре процесса трубы — главная цепочка
+         компании, в ней самые большие процессы (Вера 26.10.2026). */
+      var prc = state._prc && state._prc !== 'none' ? state._prc : null;
+      var curP = prc && state.prcNode ? prcPid(state.prcNode) : null;
+      tb.innerHTML = '<nav class="tabs"><a class="tab' + (state.prcNode ? '' : ' on') + '" data-prc-tab="">Все процессы</a>' +
+        (prc ? prc.processes.filter(function (p) { return p.group === 'core'; }).map(function (p) {
+          return '<a class="tab' + (curP === p.id ? ' on' : '') + '" data-prc-tab="' + esc(p.root) + '" title="' + esc(prcShort(p.nodes[p.root].title)) + '">' + esc(PRC_TAB[p.id] || prcShort(p.nodes[p.root].title)) + '</a>';
+        }).join('') : '') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () { prcOpen(t.getAttribute('data-prc-tab') || null); });
+      });
     } else {
       var meta = navMeta(state.page);
       tb.innerHTML = meta ? '<div class="freshchip"><span class="fok">' + ic(meta.icon, 11) + '</span>' + esc(meta.label) + '</div>' : '';
@@ -35944,6 +35956,8 @@
     { id: 'support', label: 'Обеспечивающие' },
     { id: 'manage', label: 'Управление' },
   ];
+  /* Короткие имена процессов трубы для вкладок вверху: полные не влезают в один ряд. */
+  var PRC_TAB = { nulevoy: 'Нулевой этап', vvod: 'Ввод', soprovozhdenie: 'Сопровождение', teplyj: 'Теплый прием' };
   var PRC_EXEC = {
     system: { t: 'машина', c: 'sys' },
     agent: { t: 'агент', c: 'ag' },
@@ -36117,6 +36131,7 @@
     }
     if (state.prcNode && !prcLight(state.prcNode)) state.prcNode = null;
     if (state.prcNode) renderProcessNode(view, state.prcNode); else renderProcessHome(view);
+    renderTopbar();
   }
 
   /* Поиск по названиям процессов и шагов на всех уровнях. */
