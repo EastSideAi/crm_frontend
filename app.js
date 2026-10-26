@@ -2514,6 +2514,11 @@
        подтвержден) и информатором проблем: где расход не закрыт документом и где
        на счете не хватает на плановое. Разрез, а не еще одна форма ввода. */
     { id: 'finspend', label: 'Расходы', icon: 'wallet', cap: 'finmodel', space: 'fin' },
+    /* Реестр к выводу: все выплаты периода одним списком для того, кто подписывает
+       платежи. Бухгалтер набирает платёжки в банке руками — экран даёт точку сверки
+       (получатель, сумма, счёт) и итог против остатка РС, чтобы поймать опечатку в
+       сумме и не увести счёт в минус (повод — переплата 23.10.2026, системный заслон). */
+    { id: 'finreestr', label: 'Реестр к выводу', icon: 'check', cap: 'finmodel', space: 'fin' },
     /* Дашборд выплат подрядчикам: админ вносит выплату (получатель, реквизиты, чек/акт),
        и та же запись падает расходом фонда подрядчиков в ведомость — ручного переноса
        из дашборда в ведомость больше нет. Отдельного объекта «выплата» нет: выплата и
@@ -2643,8 +2648,8 @@
      больше мешает, чем помогает. */
   var FIN_GROUPS = [
     { label: 'Ведомость периода',
-      ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect', 'finedit',
-            'finpartners', 'finref'] },
+      ids: ['finsheet', 'finincome', 'finspend', 'finreestr', 'finopex', 'findirect',
+            'finedit', 'finpartners', 'finref'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
     { label: 'Отчеты', ids: ['finpnl', 'finfund', 'finmetrics', 'finops'] },
     { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb'] },
@@ -3105,7 +3110,8 @@
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finspend' || state.page === 'finmetrics' ||
-               state.page === 'finpayouts' || state.page === 'finopex') {
+               state.page === 'finpayouts' || state.page === 'finreestr' ||
+               state.page === 'finopex') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       // Ведомостей стало много (архив 2026), поэтому не лента вкладок, а выбор
       // год -> месяц -> ведомость, как на старом сайте.
@@ -3575,6 +3581,7 @@
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы по фондам и выплаты', findirect: 'Прямые расходы',
                      finspend: 'Расходы', finpayouts: 'Выплаты подрядчикам',
+                     finreestr: 'Реестр к выводу',
                      finopex: 'Операционные расходы', fintax: 'Плановый налог',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finprograms: 'Программы', finpartners: 'Партнёрские выплаты',
@@ -3592,6 +3599,10 @@
       } else if (state.page === 'finmetrics') {
         ph = 'Здоровье центра, откуда берется прибыль и куда уходят деньги со счета. ' +
           'Остаток на счете и прибыль — разные вещи, и разницу тут видно.';
+      } else if (state.page === 'finreestr') {
+        ph = 'Все выплаты периода одним списком — для сверки платёжек перед оплатой. ' +
+          'Сверьте сумму в банке со строкой до рубля, а итог к выводу — с остатком ' +
+          'счёта, чтобы не уйти в минус.';
       }
       // Фонд считается за все время и без периода: вопрос «сколько всего отложено»
       // не про открытую ведомость, а про накопление.
@@ -3867,6 +3878,7 @@
     else if (state.page === 'finopex') renderFinOpex(view);
     else if (state.page === 'fintax') renderFinTax(view);
     else if (state.page === 'finspend') renderFinSpend(view);
+    else if (state.page === 'finreestr') renderFinReestr(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (state.page === 'finbanks') renderFinBanks(view);
@@ -20768,7 +20780,7 @@
               fundHist: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
               calendar: null, programs: null, spend: null, payouts: null, payBusy: false,
-              payHist: null, payScope: 'period',
+              payHist: null, payScope: 'period', reestr: null,
               opex: null, opexBusy: false, tax: null, taxYear: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
@@ -21049,6 +21061,7 @@
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
+    FIN.reestr = null;
     FIN.salesSheet = null; FIN.planstatus = null; FIN.planlines = null;
     FIN.receipts = null; FIN.partners = null; FIN.sup = null;
     // Справочник получателей для пикера формы: новая строка расхода заводит в нем
@@ -23741,6 +23754,120 @@
           'POST', { via: next },
           next === 'card' ? 'Отмечено: с карты Виталия.' : 'Отмечено: с расчетного счета.');
       });
+    });
+    pageAnim(view);
+  }
+
+  /* Реестр к выводу: один список всех выплат периода для того, кто подписывает платежи
+     (Виталий). Бухгалтер набирает платёжки в банке руками, и опечатка в сумме или уход
+     счёта в минус ловились только глазами (переплата самозанятой 23.10.2026). Экран —
+     точка сверки: сумма в строке против платёжки, итог к выводу против остатка счёта.
+     Бэкенд (/admin/api/fin/register) группирует строки и считает остаток; только чтение. */
+  function finLoadReestr() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadReestr(); });
+    finBusy('reestr', function (done) {
+      api('/admin/api/fin/register' + finQ('')).then(function (r) {
+        if (finStale(r)) return;
+        FIN.reestr = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'reestr'); }).then(done);
+    });
+  }
+  function rgstStatusChip(st) {
+    return st === 'факт'
+      ? '<span class="fst ok">выплачено</span>'
+      : '<span class="fst plan">к выводу</span>';
+  }
+  function renderFinReestr(view) {
+    if (!FIN.reestr) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadReestr(); return;
+    }
+    if (FIN.reestr === 'none') return finErrView(view);
+    var R = FIN.reestr, groups = R.groups || [], per = finPeriod();
+
+    var bar = statBar([
+      { label: 'Остаток на счёте', value: finRub(R.rs), sub: 'ВТБ, расчётный', lead: true },
+      { label: 'К выводу', value: finRub(R.to_pay), sub: 'намечено, ещё не ушло' },
+      { label: 'Уже выплачено', value: finRub(R.paid), sub: 'фактом в этом периоде' },
+      { label: 'Останется', value: finRub(R.after),
+        sub: R.over ? 'не хватает остатка' : 'после всех выплат' },
+    ]);
+
+    // Заслон — главный ответ экрана: хватает ли остатка на весь список к выводу.
+    // Красным, когда нет (счёт уйдёт в минус), спокойным зелёным, когда да.
+    var guard = R.over
+      ? '<div class="card rgst-guard over"><span class="ic">' + ic('alert', 18) + '</span>' +
+          '<div><div class="t">К выводу больше, чем на счёте</div>' +
+          '<div class="s">Если выплатить весь список, расчётный счёт уйдёт в минус на ' +
+            finRub(Math.abs(R.after)) + '. Проверьте суммы в реестре или пополните счёт ' +
+            'до оплаты.</div></div></div>'
+      : (R.to_pay
+        ? '<div class="card rgst-guard calm"><span class="ic">' + ic('check', 18) + '</span>' +
+            '<div><div class="t">Остатка хватает на все выплаты</div>' +
+            '<div class="s">После всего списка на счёте останется ' + finRub(R.after) +
+              '. Перед подписью сверьте каждую сумму с платёжкой в банке до рубля.' +
+            '</div></div></div>'
+        : '');
+
+    var cards = groups.map(function (g) {
+      var rows = g.items.map(function (it) {
+        var sub = [it.item && it.item !== it.receiver ? it.item : '', it.comment || '']
+          .filter(Boolean).map(esc).join(' · ');
+        return '<div class="trow rgst-row">' +
+          '<span class="fo-what rgst-who"><b>' + esc(it.receiver || '—') + '</b>' +
+            (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+          '<span class="rgst-dest">' + (it.dest ? esc(it.dest) : '—') + '</span>' +
+          '<span class="fo-st rgst-st">' + rgstStatusChip(it.status) + '</span>' +
+          '<span class="num fo-sum rgst-sum">' + finRub(it.amount) + '</span>' +
+        '</div>';
+      }).join('');
+      var tot = [g.to_pay ? 'к выводу ' + finRub(g.to_pay) : '',
+                 g.paid ? 'выплачено ' + finRub(g.paid) : ''].filter(Boolean).join(' · ');
+      return '<div class="card listcard rgst-block">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
+          '<div><div class="t">' + esc(g.label) + '</div>' +
+          '<div class="s">' + (tot || '—') + '</div></div>' +
+          '<span class="list-count fin-count"><b>' + g.items.length + '</b> ' +
+            plural(g.items.length, 'строка', 'строки', 'строк') + '</span>' +
+        '</div>' + rows + '</div>';
+    }).join('');
+
+    if (!groups.length) {
+      cards = '<div class="card"><div class="empty">В этой ведомости выплат пока нет. ' +
+        'Реестр собирается из расходов периода — выплат команде, самозанятым и ' +
+        'поставщикам.</div></div>';
+    }
+
+    var copyBtn = groups.length
+      ? '<button class="qchip" id="rgst-copy">' + ic('copy', 12) + 'Скопировать для сверки</button>'
+      : '';
+    var head = '<div class="card listcard rgst-head"><div class="list-tools">' +
+      '<div><div class="t fe-t">Реестр к выводу' + (per ? ' · ' + esc(per.name) : '') + '</div>' +
+      '<div class="s fe-s">список всех выплат периода — сверьте с платёжками в банке ' +
+        'перед подписью</div></div>' + copyBtn + '</div></div>';
+
+    view.innerHTML = bar + guard + head + cards;
+
+    var cp = el('rgst-copy');
+    if (cp) cp.addEventListener('click', function () {
+      var lines = [];
+      groups.forEach(function (g) {
+        g.items.forEach(function (it) {
+          lines.push((it.receiver || '—') + ' — ' + finRub(it.amount) +
+            (it.dest ? ' — ' + it.dest : '') +
+            (it.status === 'факт' ? ' (выплачено)' : ''));
+        });
+      });
+      lines.push('');
+      lines.push('Итого к выводу: ' + finRub(R.to_pay));
+      lines.push('Остаток на счёте: ' + finRub(R.rs));
+      var text = lines.join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          showToast('Реестр скопирован', 'вставьте для сверки с банком');
+        }, function () {});
+      }
     });
     pageAnim(view);
   }
