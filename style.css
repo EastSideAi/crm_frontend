@@ -7615,14 +7615,40 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 /* ── Реестр к выводу ──────────────────────────────────────────────────────────
    Список выплат периода для сверки перед подписью. Та же строка ведомости и те же
    рецепты (fo-what / fo-sum / fst), чтобы экран читался как часть финансов, а не
-   чужой. Своя сетка: получатель — счёт — статус — сумма; даты в строке нет (реестр
-   отвечает на «кому и сколько», а не «когда»), поэтому левый край отдан получателю. */
-.trow.rgst-row { grid-template-columns: minmax(0,1.9fr) 170px 104px 150px; }
+   чужой. Своя сетка: галочка — получатель — счёт — статус — сумма; даты в строке нет
+   (реестр отвечает на «кому и сколько», а не «когда»). Вся строка кликабельна —
+   тап отмечает её сверенной. */
+.trow.rgst-row { grid-template-columns: 26px minmax(0,1.8fr) 170px 104px 150px;
+  cursor: pointer; }
 .rgst-dest { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rgst-st { display: flex; justify-content: flex-start; align-items: center; }
 .rgst-sum { text-align: right; }
 .rgst-head .list-tools { justify-content: space-between; }
+/* Галочка сверки: пустой кружок, пока строка не отмечена, зелёная заливка — когда
+   отмечена. Сам значок всегда в разметке, видимость даёт цвет и фон. */
+.rgst-chk { display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 999px; border: 1.5px solid var(--line-2);
+  color: transparent; transition: .12s; }
+.trow.rgst-row:hover .rgst-chk { border-color: var(--ink-3); }
+.trow.rgst-row:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.trow.rgst-row.done .rgst-chk { background: var(--green); border-color: var(--green);
+  color: #fff; }
+/* Сверенная строка гаснет, но сумма остаётся читаемой — её-то и сверяли. */
+.trow.rgst-row.done .rgst-who b, .trow.rgst-row.done .rgst-dest { color: var(--ink-3); }
+.trow.rgst-row.done .rgst-sum { color: var(--ink-2); }
+.trow.rgst-row.done .rgst-st { opacity: .5; }
+/* Счётчик сверки в шапке: амбер, пока не всё, зелёный — когда всё сверено. */
+.rgst-prog { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+  color: var(--amber-ink); font-weight: 600; margin-left: auto; }
+.rgst-prog svg { color: var(--amber); }
+.rgst-prog b { font-variant-numeric: tabular-nums; }
+.rgst-prog.all { color: var(--green-ink); }
+.rgst-prog.all svg { color: var(--green); }
+.rgst-reset { border: 0; background: none; padding: 0; cursor: pointer; font: inherit;
+  color: var(--ink-2); text-decoration: underline;
+  text-decoration-color: rgba(17,21,31,.22); text-underline-offset: 2px; }
+.rgst-reset:hover { color: var(--blue); text-decoration-color: var(--blue); }
 /* Заслон — единственный акцентный блок экрана, ответ на «хватает ли остатка на весь
    список»: спокойный зелёный, когда да, красный, когда нет (счёт уйдёт в минус).
    Рецепт тот же, что у информатора расходов и полосы готовности выплат. */
@@ -7638,16 +7664,21 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .rgst-guard.over .t { color: var(--red-ink); }
 .rgst-guard.over .s { color: var(--red-ink); }
 @media (max-width: 760px) {
-  /* Селекторы scoped под .rgst-row: имя/сумма/счёт/статус несут и общие классы
-     ведомости (fo-what/fo-sum/fo-st), а у тех свои мобильные правила раскладки —
-     без повышенной специфичности они перебивают наши, и счёт налезает на имя. */
-  .trow.rgst-row { grid-template-columns: 1fr auto !important; gap: 2px 12px;
-    height: auto; padding: 12px 16px; align-items: start; }
-  .trow.rgst-row .rgst-who { grid-column: 1; grid-row: 1; }
-  .trow.rgst-row .rgst-sum { grid-column: 2; grid-row: 1; text-align: right;
-    font-size: 15px; align-self: start; }
-  .trow.rgst-row .rgst-dest { grid-column: 1; grid-row: 2; white-space: normal; }
-  .trow.rgst-row .rgst-st { grid-column: 2; grid-row: 2; justify-content: flex-end; }
+  /* На телефоне строка — карточка под сверку: слева галочка, в центре получатель и
+     счёт, справа крупная сумма и статус. Сумма — самое важное при сверке с банком,
+     поэтому ей больший кегль. Селекторы scoped под .rgst-row и с большей
+     специфичностью: имя/сумма/счёт/статус несут общие классы ведомости
+     (fo-what/fo-sum/fo-st) со своими мобильными правилами, иначе те перебивают. */
+  .trow.rgst-row { grid-template-columns: 24px minmax(0,1fr) auto !important;
+    gap: 2px 12px; height: auto; padding: 13px 16px; align-items: start; }
+  .trow.rgst-row .rgst-chk { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+  .trow.rgst-row .rgst-who { grid-column: 2; grid-row: 1; }
+  .trow.rgst-row .rgst-sum { grid-column: 3; grid-row: 1; text-align: right;
+    font-size: 16px; align-self: start; white-space: nowrap; }
+  .trow.rgst-row .rgst-dest { grid-column: 2; grid-row: 2; white-space: normal; }
+  .trow.rgst-row .rgst-st { grid-column: 3; grid-row: 2; justify-content: flex-end; }
+  .rgst-head .list-tools { gap: 8px; }
+  .rgst-prog { margin-left: 0; }
 }
 
 /* Реквизиты в подстрочнике — кнопка, а не текст: по клику открывается карточка со

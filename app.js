@@ -23810,11 +23810,24 @@
             '</div></div></div>'
         : '');
 
+    // Отметка «сверено» по строке — главная помощь при сверке с банком: подписант
+    // идёт платёжка за платёжкой и гасит строки, чтобы не потерять место и увидеть,
+    // что всё проверено. Галочки живут в сессии (sessionStorage на период), на сервер
+    // не уходят: это рабочая пометка одного человека на время сверки, а не статус.
+    var chk = rgstLoadChecked(per && per.id);
+    var allItems = [];
+    groups.forEach(function (g) { g.items.forEach(function (it) { allItems.push(it); }); });
+    var total = allItems.length;
+    var doneN = allItems.filter(function (it) { return chk[it.id]; }).length;
+
     var cards = groups.map(function (g) {
       var rows = g.items.map(function (it) {
         var sub = [it.item && it.item !== it.receiver ? it.item : '', it.comment || '']
           .filter(Boolean).map(esc).join(' · ');
-        return '<div class="trow rgst-row">' +
+        return '<div class="trow rgst-row' + (chk[it.id] ? ' done' : '') +
+            '" data-rk="' + esc(it.id) + '" role="button" tabindex="0" ' +
+            'aria-pressed="' + (chk[it.id] ? 'true' : 'false') + '">' +
+          '<span class="rgst-chk" aria-hidden="true">' + ic('check', 13) + '</span>' +
           '<span class="fo-what rgst-who"><b>' + esc(it.receiver || '—') + '</b>' +
             (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
           '<span class="rgst-dest">' + (it.dest ? esc(it.dest) : '—') + '</span>' +
@@ -23824,8 +23837,9 @@
       }).join('');
       var tot = [g.to_pay ? 'к выводу ' + finRub(g.to_pay) : '',
                  g.paid ? 'выплачено ' + finRub(g.paid) : ''].filter(Boolean).join(' · ');
+      var gico = g.id === 'funds_move' ? 'wallet' : 'rows';
       return '<div class="card listcard rgst-block">' +
-        '<div class="list-tools sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic(gico, 14) + '</span>' +
           '<div><div class="t">' + esc(g.label) + '</div>' +
           '<div class="s">' + (tot || '—') + '</div></div>' +
           '<span class="list-count fin-count"><b>' + g.items.length + '</b> ' +
@@ -23835,31 +23849,71 @@
 
     if (!groups.length) {
       cards = '<div class="card"><div class="empty">В этой ведомости выплат пока нет. ' +
-        'Реестр собирается из расходов периода — выплат команде, самозанятым и ' +
-        'поставщикам.</div></div>';
+        'Реестр собирается из расходов периода — выплат команде, самозанятым, ' +
+        'поставщикам и выводов на фонды.</div></div>';
     }
 
     var copyBtn = groups.length
       ? '<button class="qchip" id="rgst-copy">' + ic('copy', 12) + 'Скопировать для сверки</button>'
       : '';
+    // Счётчик сверки: сколько строк отмечено из всех. Пока не всё — амбер, всё — зелёный.
+    var prog = total
+      ? '<span class="rgst-prog' + (doneN >= total ? ' all' : '') + '" id="rgst-prog">' +
+          ic(doneN >= total ? 'check' : 'rows', 12) + '<b>' + doneN + '</b> из ' + total +
+          ' сверено' + (doneN ? ' · <button class="rgst-reset" id="rgst-reset">сбросить</button>' : '') +
+        '</span>'
+      : '';
     var head = '<div class="card listcard rgst-head"><div class="list-tools">' +
       '<div><div class="t fe-t">Реестр к выводу' + (per ? ' · ' + esc(per.name) : '') + '</div>' +
-      '<div class="s fe-s">список всех выплат периода — сверьте с платёжками в банке ' +
-        'перед подписью</div></div>' + copyBtn + '</div></div>';
+      '<div class="s fe-s">отмечайте строки по мере сверки с платёжками в банке</div></div>' +
+      prog + copyBtn + '</div></div>';
 
     view.innerHTML = bar + guard + head + cards;
+
+    // Тап по строке — отметить/снять «сверено». Пересчитываем счётчик на месте, без
+    // перерисовки всего экрана: при длинном списке это заметный рывок.
+    function toggleRow(rowEl) {
+      var id = rowEl.getAttribute('data-rk');
+      chk[id] = !chk[id];
+      rgstSaveChecked(per && per.id, chk);
+      rowEl.classList.toggle('done', !!chk[id]);
+      rowEl.setAttribute('aria-pressed', chk[id] ? 'true' : 'false');
+      var n = allItems.filter(function (it) { return chk[it.id]; }).length;
+      var pr = el('rgst-prog');
+      if (pr) {
+        pr.classList.toggle('all', n >= total);
+        pr.innerHTML = ic(n >= total ? 'check' : 'rows', 12) + '<b>' + n + '</b> из ' + total +
+          ' сверено' + (n ? ' · <button class="rgst-reset" id="rgst-reset">сбросить</button>' : '');
+        wireReset();
+      }
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rk]'), function (r) {
+      r.addEventListener('click', function () { toggleRow(r); });
+      r.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRow(r); }
+      });
+    });
+    function wireReset() {
+      var rs = el('rgst-reset');
+      if (rs) rs.addEventListener('click', function (e) {
+        e.stopPropagation();
+        chk = {}; rgstSaveChecked(per && per.id, chk); renderAll();
+      });
+    }
+    wireReset();
 
     var cp = el('rgst-copy');
     if (cp) cp.addEventListener('click', function () {
       var lines = [];
       groups.forEach(function (g) {
+        lines.push('— ' + g.label + ' —');
         g.items.forEach(function (it) {
           lines.push((it.receiver || '—') + ' — ' + finRub(it.amount) +
             (it.dest ? ' — ' + it.dest : '') +
             (it.status === 'факт' ? ' (выплачено)' : ''));
         });
+        lines.push('');
       });
-      lines.push('');
       lines.push('Итого к выводу: ' + finRub(R.to_pay));
       lines.push('Остаток на счёте: ' + finRub(R.rs));
       var text = lines.join('\n');
@@ -23870,6 +23924,20 @@
       }
     });
     pageAnim(view);
+  }
+  /* Галочки сверки живут в сессии браузера (на период), а не на сервере: это рабочая
+     пометка одного человека на время сверки. Любой сбой доступа к хранилищу глушим —
+     экран должен работать и в приватном окне, где sessionStorage кидает исключение. */
+  function rgstLoadChecked(pid) {
+    if (!pid) return {};
+    try {
+      var raw = sessionStorage.getItem('rgst_chk_' + pid);
+      return raw ? (JSON.parse(raw) || {}) : {};
+    } catch (e) { return {}; }
+  }
+  function rgstSaveChecked(pid, map) {
+    if (!pid) return;
+    try { sessionStorage.setItem('rgst_chk_' + pid, JSON.stringify(map)); } catch (e) {}
   }
   /* Приложить документ к расходу — расход становится «подтвержден». Файл пока не
      грузим, цепляем название и ссылку: полноценная загрузка артефактов придет с
