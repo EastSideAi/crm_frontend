@@ -7638,12 +7638,16 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .rgst-guard.over .t { color: var(--red-ink); }
 .rgst-guard.over .s { color: var(--red-ink); }
 @media (max-width: 760px) {
-  .trow.rgst-row { grid-template-columns: 1fr auto !important; gap: 3px 12px;
+  /* Селекторы scoped под .rgst-row: имя/сумма/счёт/статус несут и общие классы
+     ведомости (fo-what/fo-sum/fo-st), а у тех свои мобильные правила раскладки —
+     без повышенной специфичности они перебивают наши, и счёт налезает на имя. */
+  .trow.rgst-row { grid-template-columns: 1fr auto !important; gap: 2px 12px;
     height: auto; padding: 12px 16px; align-items: start; }
-  .rgst-who { grid-column: 1; grid-row: 1; }
-  .rgst-sum { grid-column: 2; grid-row: 1; text-align: right; font-size: 15px; }
-  .rgst-dest { grid-column: 1; grid-row: 2; white-space: normal; }
-  .rgst-st { grid-column: 2; grid-row: 2; justify-content: flex-end; }
+  .trow.rgst-row .rgst-who { grid-column: 1; grid-row: 1; }
+  .trow.rgst-row .rgst-sum { grid-column: 2; grid-row: 1; text-align: right;
+    font-size: 15px; align-self: start; }
+  .trow.rgst-row .rgst-dest { grid-column: 1; grid-row: 2; white-space: normal; }
+  .trow.rgst-row .rgst-st { grid-column: 2; grid-row: 2; justify-content: flex-end; }
 }
 
 /* Реквизиты в подстрочнике — кнопка, а не текст: по клику открывается карточка со
