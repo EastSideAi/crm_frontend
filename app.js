@@ -2523,6 +2523,11 @@
        подтвержден) и информатором проблем: где расход не закрыт документом и где
        на счете не хватает на плановое. Разрез, а не еще одна форма ввода. */
     { id: 'finspend', label: 'Расходы', icon: 'wallet', cap: 'finmodel', space: 'fin' },
+    /* Реестр к выводу: все выплаты периода одним списком для того, кто подписывает
+       платежи. Бухгалтер набирает платёжки в банке руками — экран даёт точку сверки
+       (получатель, сумма, счёт) и итог против остатка РС, чтобы поймать опечатку в
+       сумме и не увести счёт в минус (повод — переплата 23.10.2026, системный заслон). */
+    { id: 'finreestr', label: 'Реестр к выводу', icon: 'check', cap: 'finmodel', space: 'fin' },
     /* Дашборд выплат подрядчикам: админ вносит выплату (получатель, реквизиты, чек/акт),
        и та же запись падает расходом фонда подрядчиков в ведомость — ручного переноса
        из дашборда в ведомость больше нет. Отдельного объекта «выплата» нет: выплата и
@@ -2652,8 +2657,8 @@
      больше мешает, чем помогает. */
   var FIN_GROUPS = [
     { label: 'Ведомость периода',
-      ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect', 'finedit',
-            'finpartners', 'finref'] },
+      ids: ['finsheet', 'finincome', 'finspend', 'finreestr', 'finopex', 'findirect',
+            'finedit', 'finpartners', 'finref'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
     { label: 'Отчеты', ids: ['finpnl', 'finfund', 'finmetrics', 'finops'] },
     { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb'] },
@@ -3114,7 +3119,8 @@
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finspend' || state.page === 'finmetrics' ||
-               state.page === 'finpayouts' || state.page === 'finopex') {
+               state.page === 'finpayouts' || state.page === 'finreestr' ||
+               state.page === 'finopex') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       // Ведомостей стало много (архив 2026), поэтому не лента вкладок, а выбор
       // год -> месяц -> ведомость, как на старом сайте.
@@ -3584,10 +3590,11 @@
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы по фондам и выплаты', findirect: 'Прямые расходы',
                      finspend: 'Расходы', finpayouts: 'Выплаты подрядчикам',
+                     finreestr: 'Реестр к выводу',
                      finopex: 'Операционные расходы', fintax: 'Плановый налог',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finprograms: 'Программы', finpartners: 'Партнёрские выплаты',
-                     finmetrics: 'Итоги периода',
+                     finmetrics: 'Итоги периода', finsales: 'Начисления продаж',
                      finplans: 'План отделов', finplandept: 'План отдела',
                      finbanks: 'Банки и лимиты', finkb: 'База знаний',
                      finsup: 'Поставщики' };
@@ -3601,6 +3608,10 @@
       } else if (state.page === 'finmetrics') {
         ph = 'Здоровье центра, откуда берется прибыль и куда уходят деньги со счета. ' +
           'Остаток на счете и прибыль — разные вещи, и разницу тут видно.';
+      } else if (state.page === 'finreestr') {
+        ph = 'Все выплаты периода одним списком — для сверки платёжек перед оплатой. ' +
+          'Сверьте сумму в банке со строкой до рубля, а итог к выводу — с остатком ' +
+          'счёта, чтобы не уйти в минус.';
       }
       // Фонд считается за все время и без периода: вопрос «сколько всего отложено»
       // не про открытую ведомость, а про накопление.
@@ -3703,6 +3714,10 @@
         ph = 'Что пришло на расчетный счет за ведомость <b>' + esc(per.name) + '</b>. ' +
           'Дубль платежа из кассы снимите галочкой «в доход» — строка останется видна, ' +
           'а в расчет не пойдет.';
+      } else if (state.page === 'finsales') {
+        ph = 'Расчетный лист продаж за ведомость <b>' + esc(per.name) + '</b>. Процент ' +
+          'считается сам с каждой оплаты клиента, по продавцу из карточки. «Без ' +
+          'разнесения» — оплаты, по которым начислять некому.';
       } else if (state.page === 'finedit') {
         ph = 'Ведомость <b>' + esc(per.name) + '</b> по вкладкам: листы отделов (продажи, ' +
           'маркетинг, продукт, краткосрочка, безопасность), выплаты подрядчикам и проверка ' +
@@ -3873,6 +3888,7 @@
     else if (state.page === 'finopex') renderFinOpex(view);
     else if (state.page === 'fintax') renderFinTax(view);
     else if (state.page === 'finspend') renderFinSpend(view);
+    else if (state.page === 'finreestr') renderFinReestr(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (state.page === 'finbanks') renderFinBanks(view);
@@ -20801,7 +20817,12 @@
                 // ради одного выбора.
                 ? '<select id="sh-' + f[0] + '" class="al-in">' +
                     (f[3] || []).map(function (o) {
-                      return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>';
+                      // Пятым элементом поля можно передать выбранное значение: форма
+                      // правки обязана открываться на том, что стоит сейчас, иначе
+                      // сохранение молча меняет выбор на первый вариант списка.
+                      return '<option value="' + esc(o[0]) + '"' +
+                        (f[4] != null && String(o[0]) === String(f[4]) ? ' selected' : '') +
+                        '>' + esc(o[1]) + '</option>';
                     }).join('') + '</select>'
                 : f[1] === 'file'
                 // Файл читаем в браузере и отправляем строкой в JSON — тем же способом,
@@ -20905,7 +20926,7 @@
               fundHist: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
               calendar: null, programs: null, spend: null, payouts: null, payBusy: false,
-              payHist: null, payScope: 'period',
+              payHist: null, payScope: 'period', reestr: null,
               opex: null, opexBusy: false, tax: null, taxYear: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
@@ -21186,6 +21207,7 @@
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
+    FIN.reestr = null;
     FIN.salesSheet = null; FIN.planstatus = null; FIN.planlines = null;
     FIN.receipts = null; FIN.partners = null; FIN.sup = null;
     // Справочник получателей для пикера формы: новая строка расхода заводит в нем
@@ -22163,8 +22185,15 @@
               (o.status === 'факт' ? ' paid' : '') + '"' +
               (editRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
-              '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
-              (o.offering ? ' · ' + esc(o.offering) : '') + docChip + '</span>' +
+              // «За какого клиента» живет в комментарии строки, реквизиты — снимком
+              // в meta.payout: у партнерской выплаты это и есть ответ на вопрос «кому
+              // и за кого переводим» (Роман 23.10.2026).
+              '<span class="fl-sub">' + [finDate(o.date), o.item || '—', o.offering || '',
+                o.comment || ''].filter(Boolean).map(esc).join(' · ') +
+                (o.payout ? ' · ' + finReqBtn(o.payout, {
+                  who: o.counterparty || '', amount: o.amount,
+                  purpose: [o.item || '', o.comment || ''].filter(Boolean).join('. '),
+                }) : '') + docChip + '</span>' +
               // Трата с фонда — такой же расход ведомости, и отмечается так же
               // (Роман 19.10.2026: «внутри фондов тоже на расходах можно поставить
               // оплачено»). Правка период-ом не этой ведомости сюда не приезжает.
@@ -22286,6 +22315,7 @@
     // (реквизиты + чек) в ведомости той строки (period_id). Остальные фонды — обычная
     // форма расхода, та же, что при заводе; список трат тут за выбранную ведомость,
     // поэтому правка уходит в неё (finLineForm берёт текущий период).
+    finReqWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-fpay]'), function (r) {
       r.addEventListener('click', function () {
         var id = r.getAttribute('data-fpay');
@@ -23757,8 +23787,16 @@
         var invLbl = inv && inv.number
           ? 'счет № ' + inv.number + (inv.issued_on ? ' от ' + finDate(inv.issued_on) : '')
           : '';
+        // Реквизиты в подстрочник: кто проводит платежи, видит «кому и куда» прямо в
+        // расходах, не открывая реестр выплат (Роман 23.10.2026). В строке стоит
+        // получатель и способ перевода, а клик по ним открывает снимок целиком.
         var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
           .filter(Boolean).map(esc).join(' · ');
+        var reqBtn = finReqBtn(it.payout, {
+          who: it.counterparty || '', amount: it.amount,
+          purpose: [it.item || '', it.comment || ''].filter(Boolean).join('. '),
+        });
+        if (reqBtn) sub = sub ? sub + ' · ' + reqBtn : reqBtn;
         // Сам документ лежит у нас, и номер счета — ссылка на него: вопрос «за что
         // ушли деньги» без бумаги не закрывается, а искать ее потом негде.
         if (invLbl) {
@@ -23812,7 +23850,11 @@
             esc(it.counterparty || '') + '" title="' + esc(it.ask_why || '') + '">' +
             'в поставщики' + '</button>';
         }
-        return '<div class="trow fin-grid fe-grid fsp-row">' +
+        // Строка с реквизитами разворачивает подстрочник на две строки: иначе «кому и
+        // куда» обрезается многоточием ровно там, где начинается счет, и ради него
+        // приходится открывать карточку.
+        return '<div class="trow fin-grid fe-grid fsp-row' +
+          (it.payout ? ' has-pay' : '') + '">' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
           '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
             (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
@@ -23850,6 +23892,7 @@
         finSupplierForm(null, b.getAttribute('data-spsup'));
       });
     });
+    finReqWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-spvia]'), function (b) {
       b.addEventListener('click', function () {
         var next = b.getAttribute('data-via') === 'card' ? 'rs' : 'card';
@@ -23859,6 +23902,222 @@
       });
     });
     pageAnim(view);
+  }
+
+  /* Реестр к выводу: один список всех выплат периода для того, кто подписывает платежи
+     (Виталий). Бухгалтер набирает платёжки в банке руками, и опечатка в сумме или уход
+     счёта в минус ловились только глазами (переплата самозанятой 23.10.2026). Экран —
+     точка сверки: сумма в строке против платёжки, итог к выводу против остатка счёта.
+     Бэкенд (/admin/api/fin/register) группирует строки и считает остаток; только чтение. */
+  function finLoadReestr() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadReestr(); });
+    finBusy('reestr', function (done) {
+      api('/admin/api/fin/register' + finQ('')).then(function (r) {
+        if (finStale(r)) return;
+        FIN.reestr = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'reestr'); }).then(done);
+    });
+  }
+  function rgstStatusChip(st) {
+    return st === 'факт'
+      ? '<span class="fst ok">выплачено</span>'
+      : '<span class="fst plan">к выводу</span>';
+  }
+  function renderFinReestr(view) {
+    if (!FIN.reestr) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadReestr(); return;
+    }
+    if (FIN.reestr === 'none') return finErrView(view);
+    var R = FIN.reestr, rsg = R.rs_groups || [], funds = R.funds || [], per = finPeriod();
+
+    var bar = statBar([
+      { label: 'Остаток на счёте', value: finRub(R.rs), sub: 'ВТБ, расчётный', lead: true },
+      { label: 'К выводу', value: finRub(R.to_pay), sub: 'намечено, ещё не ушло' },
+      { label: 'Уже выплачено', value: finRub(R.paid), sub: 'фактом в этом периоде' },
+      { label: 'Останется', value: finRub(R.after),
+        sub: R.over ? 'не хватает остатка' : 'после всех выплат' },
+    ]);
+
+    // Заслон — главный ответ экрана: хватает ли остатка на весь список к выводу.
+    // Красным, когда нет (счёт уйдёт в минус), спокойным зелёным, когда да.
+    var guard = R.over
+      ? '<div class="card rgst-guard over"><span class="ic">' + ic('alert', 18) + '</span>' +
+          '<div><div class="t">К выводу больше, чем на счёте</div>' +
+          '<div class="s">Если выплатить весь список, расчётный счёт уйдёт в минус на ' +
+            finRub(Math.abs(R.after)) + '. Проверьте суммы в реестре или пополните счёт ' +
+            'до оплаты.</div></div></div>'
+      : (R.to_pay
+        ? '<div class="card rgst-guard calm"><span class="ic">' + ic('check', 18) + '</span>' +
+            '<div><div class="t">Остатка хватает на все выплаты</div>' +
+            '<div class="s">После всего списка на счёте останется ' + finRub(R.after) +
+              '. Перед подписью сверьте каждую сумму с платёжкой в банке до рубля.' +
+            '</div></div></div>'
+        : '');
+
+    // Отметка «сверено» по строке — главная помощь при сверке с банком: подписант
+    // идёт платёжка за платёжкой и гасит строки, чтобы не потерять место и увидеть,
+    // что всё проверено. Галочки живут в сессии (sessionStorage на период), на сервер
+    // не уходят: это рабочая пометка одного человека на время сверки, а не статус.
+    var chk = rgstLoadChecked(per && per.id);
+    var allItems = [];
+    rsg.forEach(function (g) { g.items.forEach(function (it) { allItems.push(it); }); });
+    funds.forEach(function (f) { f.items.forEach(function (it) { allItems.push(it); }); });
+    var total = allItems.length;
+    var doneN = allItems.filter(function (it) { return chk[it.id]; }).length;
+
+    // Одна строка реестра — и в выплатах с РС, и в расходах фонда рисуется одинаково:
+    // галочка сверки, получатель с подстрочником, счёт, статус, сумма.
+    function rgstRow(it) {
+      var sub = [it.item && it.item !== it.receiver ? it.item : '', it.comment || '']
+        .filter(Boolean).map(esc).join(' · ');
+      return '<div class="trow rgst-row' + (chk[it.id] ? ' done' : '') +
+          '" data-rk="' + esc(it.id) + '" role="button" tabindex="0" ' +
+          'aria-pressed="' + (chk[it.id] ? 'true' : 'false') + '">' +
+        '<span class="rgst-chk" aria-hidden="true">' + ic('check', 13) + '</span>' +
+        '<span class="fo-what rgst-who"><b>' + esc(it.receiver || '—') + '</b>' +
+          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+        '<span class="rgst-dest">' + (it.dest ? esc(it.dest) : '—') + '</span>' +
+        '<span class="fo-st rgst-st">' + rgstStatusChip(it.status) + '</span>' +
+        '<span class="num fo-sum rgst-sum">' + finRub(it.amount) + '</span>' +
+      '</div>';
+    }
+
+    // Секция 1 — с расчётного счёта: прямые выплаты + отчисления в фонды. По ней заслон.
+    var rsCards = rsg.map(function (g) {
+      var tot = [g.to_pay ? 'к выводу ' + finRub(g.to_pay) : '',
+                 g.paid ? 'выплачено ' + finRub(g.paid) : ''].filter(Boolean).join(' · ');
+      var gico = g.id === 'funds_alloc' ? 'wallet' : 'rows';
+      return '<div class="card listcard rgst-block">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic(gico, 14) + '</span>' +
+          '<div><div class="t">' + esc(g.label) + '</div>' +
+          '<div class="s">' + (tot || '—') + '</div></div>' +
+          '<span class="list-count fin-count"><b>' + g.items.length + '</b> ' +
+            plural(g.items.length, 'строка', 'строки', 'строк') + '</span>' +
+        '</div>' + g.items.map(rgstRow).join('') + '</div>';
+    }).join('');
+
+    // Секция 2 — фонды: по каждому фонду отложили/расходы + строки расходов из фонда.
+    var fundCards = funds.map(function (f) {
+      var meta = 'отложили ' + finRub(f.added) + ' · расходы ' + finRub(f.spent);
+      var body = f.items.length
+        ? f.items.map(rgstRow).join('')
+        : '<div class="rgst-fund-empty">Расходов из фонда в этом периоде нет.</div>';
+      return '<div class="card listcard rgst-block rgst-fund">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+          '<div><div class="t">' + esc(f.name) + '</div>' +
+          '<div class="s">' + meta + '</div></div>' +
+          (f.items.length ? '<span class="list-count fin-count"><b>' + f.items.length +
+            '</b> ' + plural(f.items.length, 'строка', 'строки', 'строк') + '</span>' : '') +
+        '</div>' + body + '</div>';
+    }).join('');
+
+    var cards = '';
+    if (!rsg.length && !funds.length) {
+      cards = '<div class="card"><div class="empty">В этой ведомости выплат пока нет. ' +
+        'Реестр собирается из расходов периода — выплат команде, отчислений в фонды ' +
+        'и расходов из фондов.</div></div>';
+    } else {
+      cards = (rsCards ? '<div class="rgst-sec">С расчётного счёта</div>' + rsCards : '') +
+        (fundCards ? '<div class="rgst-sec">Фонды · отложили и расходы</div>' + fundCards : '');
+    }
+
+    var copyBtn = (rsg.length || funds.length)
+      ? '<button class="qchip" id="rgst-copy">' + ic('copy', 12) + 'Скопировать для сверки</button>'
+      : '';
+    // Счётчик сверки: сколько строк отмечено из всех. Пока не всё — амбер, всё — зелёный.
+    var prog = total
+      ? '<span class="rgst-prog' + (doneN >= total ? ' all' : '') + '" id="rgst-prog">' +
+          ic(doneN >= total ? 'check' : 'rows', 12) + '<b>' + doneN + '</b> из ' + total +
+          ' сверено' + (doneN ? ' · <button class="rgst-reset" id="rgst-reset">сбросить</button>' : '') +
+        '</span>'
+      : '';
+    var head = '<div class="card listcard rgst-head"><div class="list-tools">' +
+      '<div><div class="t fe-t">Реестр к выводу' + (per ? ' · ' + esc(per.name) : '') + '</div>' +
+      '<div class="s fe-s">отмечайте строки по мере сверки с платёжками в банке</div></div>' +
+      prog + copyBtn + '</div></div>';
+
+    view.innerHTML = bar + guard + head + cards;
+
+    // Тап по строке — отметить/снять «сверено». Пересчитываем счётчик на месте, без
+    // перерисовки всего экрана: при длинном списке это заметный рывок.
+    function toggleRow(rowEl) {
+      var id = rowEl.getAttribute('data-rk');
+      chk[id] = !chk[id];
+      rgstSaveChecked(per && per.id, chk);
+      rowEl.classList.toggle('done', !!chk[id]);
+      rowEl.setAttribute('aria-pressed', chk[id] ? 'true' : 'false');
+      var n = allItems.filter(function (it) { return chk[it.id]; }).length;
+      var pr = el('rgst-prog');
+      if (pr) {
+        pr.classList.toggle('all', n >= total);
+        pr.innerHTML = ic(n >= total ? 'check' : 'rows', 12) + '<b>' + n + '</b> из ' + total +
+          ' сверено' + (n ? ' · <button class="rgst-reset" id="rgst-reset">сбросить</button>' : '');
+        wireReset();
+      }
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rk]'), function (r) {
+      r.addEventListener('click', function () { toggleRow(r); });
+      r.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRow(r); }
+      });
+    });
+    function wireReset() {
+      var rs = el('rgst-reset');
+      if (rs) rs.addEventListener('click', function (e) {
+        e.stopPropagation();
+        chk = {}; rgstSaveChecked(per && per.id, chk); renderAll();
+      });
+    }
+    wireReset();
+
+    var cp = el('rgst-copy');
+    if (cp) cp.addEventListener('click', function () {
+      var lines = [], pushItem = function (it) {
+        lines.push((it.receiver || '—') + ' — ' + finRub(it.amount) +
+          (it.dest ? ' — ' + it.dest : '') +
+          (it.status === 'факт' ? ' (выплачено)' : ''));
+      };
+      lines.push('С РАСЧЁТНОГО СЧЁТА');
+      rsg.forEach(function (g) {
+        lines.push('— ' + g.label + ' —');
+        g.items.forEach(pushItem);
+        lines.push('');
+      });
+      if (funds.length) {
+        lines.push('ФОНДЫ (отложили / расходы)');
+        funds.forEach(function (f) {
+          lines.push('— ' + f.name + ' · отложили ' + finRub(f.added) +
+            ' · расходы ' + finRub(f.spent) + ' —');
+          f.items.forEach(pushItem);
+          lines.push('');
+        });
+      }
+      lines.push('Итого к выводу с ВТБ: ' + finRub(R.to_pay));
+      lines.push('Остаток на счёте: ' + finRub(R.rs));
+      var text = lines.join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          showToast('Реестр скопирован', 'вставьте для сверки с банком');
+        }, function () {});
+      }
+    });
+    pageAnim(view);
+  }
+  /* Галочки сверки живут в сессии браузера (на период), а не на сервере: это рабочая
+     пометка одного человека на время сверки. Любой сбой доступа к хранилищу глушим —
+     экран должен работать и в приватном окне, где sessionStorage кидает исключение. */
+  function rgstLoadChecked(pid) {
+    if (!pid) return {};
+    try {
+      var raw = sessionStorage.getItem('rgst_chk_' + pid);
+      return raw ? (JSON.parse(raw) || {}) : {};
+    } catch (e) { return {}; }
+  }
+  function rgstSaveChecked(pid, map) {
+    if (!pid) return;
+    try { sessionStorage.setItem('rgst_chk_' + pid, JSON.stringify(map)); } catch (e) {}
   }
   /* Приложить документ к расходу — расход становится «подтвержден». Файл пока не
      грузим, цепляем название и ссылку: полноценная загрузка артефактов придет с
@@ -24476,15 +24735,108 @@
     });
   }
 
-  // Короткая сводка реквизитов для строки: получатель по счёту и хвост счёта. Полный
-  // счёт в списке не светим — он виден в самой выплате.
+  // Реквизиты в строке отвечают ровно на один вопрос: куда переводить (Роман
+  // 23.10.2026: «ИНН нафиг не нужен, нужен либо номер счёта либо номер телефона»).
+  // Поэтому счёт печатаем целиком вместе с БИК — по ним и делают платёжку, а хвост
+  // заставлял открывать карточку; нет счёта — показываем телефон для перевода.
+  // ИНН в снимке остаётся, но на экране его нет: в платеже физлицу он не участвует.
   function finPayoutReq(p) {
     if (!p) return '';
     var bits = [];
     if (p.receiver) bits.push(p.receiver);
-    if (p.inn) bits.push('ИНН ' + p.inn);
-    else if (p.account) bits.push('счёт …' + String(p.account).slice(-4));
+    // Способы — те же три, что партнер выбирает в своем кабинете. Если он выбрал один,
+    // а заполнено несколько, показываем ВЫБРАННЫЙ: платим туда, куда человек ждет.
+    var m = p.method || (p.account ? 'bank' : (p.wallet ? 'yoomoney' : 'sbp'));
+    if (m === 'yoomoney' && p.wallet) bits.push('ЮMoney ' + p.wallet);
+    else if (m === 'sbp' && p.phone) bits.push('по телефону ' + p.phone);
+    else if (p.account) bits.push('счёт ' + p.account + (p.bic ? ', БИК ' + p.bic : ''));
+    else if (p.phone) bits.push('по телефону ' + p.phone);
+    else if (p.wallet) bits.push('ЮMoney ' + p.wallet);
+    if (p.bank) bits.push(p.bank);
     return bits.join(' · ');
+  }
+
+  /* Реквизиты целиком — по клику на них в строке (Роман 23.10.2026: «может еще
+     кнопку сделать, чтобы можно было открыть реквизиты полностью»). В строке стоит
+     только то, по чему делают перевод, а в карточке — весь снимок выплаты: ИНН,
+     назначение платежа и сумма. Каждое поле копируется отдельной кнопкой: в банк
+     реквизиты переносят по одному, а выделять мышкой кусок подстрочника неудобно. */
+  function finPayoutLines(p, ctx) {
+    var WAY = { sbp: 'перевод по телефону (СБП)', bank: 'на банковский счет',
+                yoomoney: 'кошелек ЮMoney' };
+    var m = p.method || (p.account ? 'bank' : (p.wallet ? 'yoomoney' : 'sbp'));
+    var L = [];
+    if (p.receiver) L.push(['Получатель', p.receiver]);
+    L.push(['Как платим', WAY[m] || WAY.bank]);
+    if (p.phone) L.push(['Телефон', p.phone]);
+    if (p.account) L.push(['Расчетный счет', p.account]);
+    if (p.bic) L.push(['БИК', p.bic]);
+    if (p.bank) L.push(['Банк', p.bank]);
+    if (p.wallet) L.push(['Кошелек ЮMoney', p.wallet]);
+    // ИНН в строке не показываем — в платеже физлицу он не участвует, — но в
+    // карточке он есть: это доказательство, кому ушли деньги.
+    if (p.inn) L.push(['ИНН', p.inn]);
+    if (ctx && ctx.purpose) L.push(['Назначение', ctx.purpose]);
+    // Сумму копируем голым числом: в поле банка пробелы и знак рубля не вставишь.
+    if (ctx && ctx.amount != null) L.push(['Сумма', finRub(ctx.amount), String(ctx.amount)]);
+    return L;
+  }
+
+  function finPayoutCard(p, ctx) {
+    if (!p) return;
+    var lines = finPayoutLines(p, ctx || {});
+    var body = '<div class="rq-lines">' + lines.map(function (l) {
+      return '<div class="rq-l"><span class="rq-k">' + esc(l[0]) + '</span>' +
+        '<span class="rq-v">' + esc(l[1]) + '</span>' +
+        '<button class="rq-c" data-cp="' + esc(l[2] == null ? l[1] : l[2]) +
+        '" title="Скопировать">' + ic('copy', 13) + '</button></div>';
+    }).join('') + '</div>';
+    var m = finModal({
+      eyebrow: 'Куда переводим', title: (ctx && ctx.who) || 'Реквизиты',
+      sub: 'Так было на момент выплаты. Партнер поменяет реквизиты у себя в ' +
+           'кабинете — здесь останутся те, по которым платили.',
+      body: body, ok: 'Скопировать все',
+    });
+    if (!m) return;
+    // «Отмена» тут не к месту: отменять нечего, карточка только показывает.
+    var cancel = m.ov.querySelector('#fm-cancel');
+    if (cancel) cancel.parentNode.removeChild(cancel);
+    Array.prototype.forEach.call(m.ov.querySelectorAll('[data-cp]'), function (b) {
+      b.addEventListener('click', function () { copyText(b.getAttribute('data-cp'), b); });
+    });
+    el('fm-ok').addEventListener('click', function () {
+      copyText(lines.map(function (l) {
+        return l[0] + ': ' + (l[2] == null ? l[1] : l[2]);
+      }).join('\n'), el('fm-ok'));
+    });
+  }
+
+  /* Кнопка с реквизитами в подстрочник строки. Сам снимок кладем в FIN.reqs под
+     коротким ключом: в data-атрибуте ему не место — это ФИО, счет и ИНН человека,
+     и в разметке они лежали бы у каждой строки списка. */
+  function finReqBtn(p, ctx) {
+    if (!p) return '';
+    var txt = finPayoutReq(p);
+    if (!txt) return '';
+    var key = 'r' + (FIN._reqN = (FIN._reqN || 0) + 1);
+    (FIN.reqs || (FIN.reqs = {}))[key] = { p: p, ctx: ctx || {} };
+    // Значка рядом нет намеренно: реквизиты длинные и переносятся, а значок при
+    // переносе оставался один на отдельной строке. Подчеркивания и подсказки хватает,
+    // рядом тем же рецептом нарисована ссылка на счет.
+    return '<button class="rq-open" data-req="' + key +
+      '" title="Открыть реквизиты полностью">' + esc(txt) + '</button>';
+  }
+
+  function finReqWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
+      b.addEventListener('click', function (e) {
+        // Строка траты в фонде кликается целиком (правка расхода) — реквизиты
+        // открываем, не задевая ее.
+        e.stopPropagation();
+        var r = (FIN.reqs || {})[b.getAttribute('data-req')];
+        if (r) finPayoutCard(r.p, r.ctx);
+      });
+    });
   }
 
   // Одна строка истории/периода выплат: дата, получатель с подстрочником, сумма,
@@ -24684,8 +25036,16 @@
 
     // «Без разнесения» — оплаты периода, по которым нет строки листа продаж с тем же
     // paymentId: процент не начислен, потому что ответственного нет или он сервисный.
+    /* Ключ связи дохода и начисления — payment_id строки листа: у кассовой оплаты это
+       id платежа Юкассы, у ручного дохода (прямой перевод на счет) мост кладет
+       «op:<id строки дохода>». Второй случай появился 23.10.2026 вместе с мостом
+       доход → карточка → лист продаж; без него такие доходы вечно висели бы в
+       «без разнесения», хотя процент по ним уже начислен. */
     var accruedPays = {};
     sales.forEach(function (it) { if (it.payment_id) accruedPays[it.payment_id] = true; });
+    var accrued = function (it) {
+      return !!((it.payment_id && accruedPays[it.payment_id]) || accruedPays['op:' + it.id]);
+    };
     // Продления языка: доход, который мост пометил salesSkip='renewal' — процент не
     // начисляем, показываем отдельно. «Без разнесения» — оплаты, где процент мог бы
     // капнуть (нет продления), но некому: нет ответственного или он из сервисной роли.
@@ -24694,7 +25054,7 @@
     });
     var unassigned = incomes.filter(function (it) {
       return it.status === 'факт' && it.included && it.sales_skip !== 'renewal' &&
-             !(it.payment_id && accruedPays[it.payment_id]);
+             !accrued(it);
     });
 
     var tiles = [
@@ -24912,22 +25272,48 @@
     };
 
     var cards = partners.map(function (p) {
-      var reqTail = p.requisites && p.requisites.account
-        ? '…' + String(p.requisites.account).slice(-4) : '';
-      var reqBits = [];
-      if (p.requisites && p.requisites.receiver) reqBits.push(p.requisites.receiver);
-      if (reqTail) reqBits.push('счёт ' + reqTail);
+      // В полосе карточки — тот же способ перевода, что и в строке ведомости, одним
+      // хелпером: два места про одни деньги обязаны говорить одинаково.
+      var reqLineTxt = finPayoutReq(p.requisites);
+      // Откуда реквизиты: партнер внес сам в кабинете или вписали мы. Свежая правка
+      // перед выплатой — то, на что стоит посмотреть глазами: кабинет открывается по
+      // постоянной ссылке, и подмена реквизитов это способ увести выплату.
+      var reqWho = p.pay_updated_at
+        ? (p.pay_by_partner ? 'внес партнер' : 'внесли мы' +
+            (p.pay_updated_by ? ', ' + p.pay_updated_by : '')) + ' ' + finDate(p.pay_updated_at)
+        : '';
+      // Перед переводом важен один вопрос: не переписали ли реквизиты только что. Кабинет
+      // партнера открывается по постоянной ссылке, и подмена счета это способ увести
+      // выплату, поэтому свежая смена и смена с другой фамилией получателя видны строкой,
+      // а не лежат в журнале, куда никто не заглянет (аудит 23.10.2026).
+      var warns = [];
+      var last = (p.pay_changes || [])[0];
+      var fresh = p.pay_updated_at &&
+        (Date.now() - new Date(p.pay_updated_at).getTime()) < 48 * 3600 * 1000;
+      if (fresh && (p.due || 0) > 0) {
+        warns.push('Реквизиты сменили ' + finDate(p.pay_updated_at) +
+          (last && last.dest_old ? ' (было …' + last.dest_old + ', стало …' + last.dest_new + ')' : '') +
+          '. Если партнер об этом не просил, не платите, пока не спросите его.');
+      }
+      if (p.pay_name_odd && (p.due || 0) > 0) {
+        warns.push('Получатель назван не фамилией партнера. Бывает законно, но проверьте.');
+      }
+      var warnBox = warns.length
+        ? '<div class="fin-note fpt-warn">' + ic('alert', 15) +
+            '<span>' + warns.map(esc).join(' ') + '</span></div>'
+        : '';
       // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
       // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
       var foot;
       if ((p.due || 0) > 0 && !p.has_requisites) {
         foot = '<div class="fin-note fpt-foot">' + ic('alert', 15) +
-          '<span>К выплате ' + finRub(p.due) + ', но реквизиты не заданы — некуда платить.</span>' +
+          '<span>К выплате ' + finRub(p.due) + ', но реквизитов нет: нужен телефон для перевода или счёт.</span>' +
           '<button class="qchip add fpt-right" data-req="' + p.id + '">' +
             ic('plus', 12) + 'Куда платить</button></div>';
       } else {
-        var reqLine = reqBits.length
-          ? '<span class="fin-count fpt-req">' + esc(reqBits.join(' · ')) + '</span>'
+        var reqLine = reqLineTxt
+          ? '<span class="fin-count fpt-req">' + esc(reqLineTxt) +
+              (reqWho ? ' <i class="fpt-who">' + esc('· ' + reqWho) + '</i>' : '') + '</span>'
           : '<span class="fin-count fpt-req">реквизиты не заданы</span>';
         var payBtn = (p.due || 0) > 0
           ? '<button class="qchip add fpt-right" data-pay="' + p.id + '" data-due="' + p.due +
@@ -24947,6 +25333,7 @@
           '<span class="list-count fin-count">к выплате <b>' + finRub(p.due || 0) + '</b></span>' +
         '</div>' +
         p.clients.map(clientRow).join('') +
+        warnBox +
         foot +
       '</div>';
     }).join('');
@@ -24992,20 +25379,43 @@
     pageAnim(view);
   }
 
+  // Способы получения — те же три, что партнер выбирает у себя в кабинете; четвертого
+  // в CRM быть не должно, иначе человек ждет денег одним путем, а мы шлем другим.
+  var PAY_WAYS = [['sbp', 'Телефон (СБП)'], ['bank', 'Банковские реквизиты'],
+                  ['yoomoney', 'ЮMoney']];
+
   function finPartnerReqForm(p) {
     var r = p.requisites || {};
-    openSheet('Реквизиты партнёра',
-      'Куда перечисляем вознаграждение. Кто и когда менял — сохраняется: подмена счёта это способ увода выплат.',
-      [['receiver', 'line', 'Получатель (ФИО или ИП)', r.receiver || ''],
+    // Реквизиты заполняет сам партнер в кабинете (Роман 23.10.2026), эта форма —
+    // запасной путь для тех, кто туда не дошел. Контактный телефон из кабинета
+    // ПОДСКАЗЫВАЕМ в подписи, но не подставляем молча: по нему с человеком
+    // связываются, а деньги он мог попросить на другой.
+    var hint = p.pay_by_partner
+      ? 'Эти реквизиты партнер внес сам в кабинете. Правьте, только если он попросил: ' +
+        'ваша правка перебьет его.'
+      : (p.contact_phone
+        ? 'Партнер заполняет их у себя в кабинете. Если не дошел — впишите здесь. ' +
+          'В кабинете он оставлял телефон ' + p.contact_phone + ', спросите, тот ли это номер.'
+        : 'Партнер заполняет их у себя в кабинете. Если не дошел — впишите здесь. ' +
+          'Кто и когда менял, сохраняется: подмена реквизитов это способ увода выплат.');
+    openSheet('Реквизиты партнёра', hint,
+      [['method', 'pick', 'Способ получения', PAY_WAYS, r.method || 'sbp'],
+       ['receiver', 'line', 'Получатель (ФИО или ИП)', r.receiver || ''],
+       ['phone', 'line', 'Телефон для перевода', r.phone || ''],
+       ['wallet', 'line', 'Кошелек ЮMoney', r.wallet || ''],
        ['account', 'line', 'Расчётный счёт', r.account || ''],
        ['bic', 'line', 'БИК', r.bic || ''],
        ['bank', 'line', 'Банк', r.bank || ''],
-       ['inn', 'line', 'ИНН', r.inn || '']],
+       ['inn', 'line', 'ИНН (если платим ИП)', r.inn || '']],
       function (v, close) {
-        if (!String(v.account || '').trim())
-          return 'Впишите расчётный счёт — без него платить некуда';
+        var need = { sbp: ['phone', 'телефон для перевода'],
+                     bank: ['account', 'расчётный счёт'],
+                     yoomoney: ['wallet', 'номер кошелька ЮMoney'] }[v.method || 'sbp'];
+        if (!String(v[need[0]] || '').trim())
+          return 'Для выбранного способа нужен ' + need[1];
         czSend('/admin/api/partners/' + p.id + '/requisites', 'PUT', {
-          receiver: v.receiver, account: v.account, bic: v.bic, bank: v.bank, inn: v.inn,
+          receiver: v.receiver, account: v.account, bic: v.bic, bank: v.bank,
+          inn: v.inn, phone: v.phone, wallet: v.wallet, method: v.method,
         }).then(function () {
           close(); FIN.partners = null; renderAll(); showToast('Реквизиты сохранены');
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
