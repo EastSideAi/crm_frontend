@@ -115,8 +115,10 @@
     finOpen: {},        // какие справочные карточки финансов раскрыты (по умолчанию свернуты)
     mxTab: 'soon',      // EastSide Meeting: ближайшие встречи или записи
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
-    zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     schedWeek: {}, schedOff: 0, schedDayOff: 0, schedView: 'week', schedWho: '', schedEdit: false,
+    // Расписание открывается на своем: человеку нужно «куда мне идти», а не «кто где
+    // свободен» (Павел 26.10.2026). Сетка команды — вторым переключателем.
+    schedScope: 'my', schedHow: false, schedHide: {},
     // Встречи — одна сетка в двух видах: 'slots' (часы на дни, как в расписании)
     // и 'cal' (месяц целиком, как гугл-календарь). Раздела «Расписание» в меню
     // больше нет: 16.09.2026 Павел свел оба места в одно.
@@ -147,7 +149,8 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'schedScope'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -164,6 +167,8 @@
         ganttOpen: state.ganttOpen || {},
         finOpen: state.finOpen || {},
         mxTab: state.mxTab || 'soon',
+        schedScope: state.schedScope || 'my',
+        schedHide: state.schedHide || {},
         pathGran: state.pathGran || 'week',
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
       }));
@@ -8414,54 +8419,16 @@
       '<div class="mt-right">' + fold + rec + right + '</div>' +
     '</div>' + list;
   }
-  // ── Зумы на неделю ─────────────────────────────────────────────────────────
-  // Источник — сам зум: сюда попадает все, что назначено на аккаунтах, хоть из CRM,
-  // хоть из приложения. Так команда, продажники и преподаватели видят, когда какой
-  // зум свободен (Павел 08.09.2026).
-  function zoomWeekStart(off) {
-    var d = new Date(); d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7 * (off || 0));
-    return d;
-  }
-  function loadZoomWeek(lo) {
-    var hi = new Date(lo.getTime() + 7 * 86400000);
-    var key = lo.toISOString().slice(0, 10);
-    state.zoomWeek[key] = 'loading';
-    api('/admin/api/zoom/busy?from=' + encodeURIComponent(lo.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
-      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (onMeetPage()) renderView(); })
-      .catch(function () { state.zoomWeek[key] = 'none'; if (onMeetPage()) renderView(); });
-  }
-  // Окна людей из расписания команды на один день: дневному виду они нужны рядом с
-  // зумами, недельной сетке — нет, поэтому грузим только по запросу дня.
   // Ключ дня — по местным числам, не через toISOString: московская полночь в UTC
   // еще вчера, и окна расписания на «сегодня» не совпадали бы с днем на экране.
   function zoomYmd(d) {
     var m = d.getMonth() + 1, day = d.getDate();
     return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
   }
-  function loadZoomWin(d) {
-    var key = zoomYmd(d), hi = new Date(d.getTime() + 86400000);
-    state.zoomWin[key] = 'loading';
-    api('/admin/api/zoom/windows?from=' + encodeURIComponent(d.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
-      .then(function (r) { state.zoomWin[key] = r || { enabled: false, slots: [] }; if (onMeetPage()) renderView(); })
-      .catch(function () { state.zoomWin[key] = 'none'; if (onMeetPage()) renderView(); });
-  }
-  function zoomDay() {
-    var d = new Date(); d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + (state.zoomDayOff || 0));
-    return d;
-  }
-  // Понедельник недели, которую показывает текущий вид: неделя — по своему сдвигу,
-  // день — та, куда день попадает. Кэш зумов один на оба вида, по этому ключу.
-  function zoomRangeStart() {
-    if (state.zoomView !== 'day') return zoomWeekStart(state.zoomWeekOff || 0);
-    var d = zoomDay(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-    return d;
-  }
-  /* Сетка «Зумы» отдельным блоком (zoomWeekBlock) жила здесь до 16.09.2026 и
-     удалена: сетка теперь одна — слоты расписания вместе с зумами, см.
-     renderSched ниже. Просьба Павла: «слоты перенести в зумы и чтобы
-     расписание отображалось уже там в готовых слотах». */
+  /* Сетка «Зумы» жила здесь отдельным блоком до 16.09.2026, потом зумы
+     подмешивались в сетку расписания. С 26.10.2026 их нет совсем: мы их не
+     оплачиваем и в работе не используем, а в клетке дня каждая лишняя плашка
+     стоила читаемости (Павел: «тут нужно убрать про зумы информацию вообще»). */
 
 
   /* ── Расписание команды: одна сетка на всех ──────────────────────────────────
@@ -8485,6 +8452,9 @@
   // стоят и в 7 утра, и поздно вечером.
   var SC_FROM = 8, SC_TO = 21;
   var SC_WHAT = { teacher: 'урок', curator: 'разбор', staff: 'встреча' };
+  // То же самое первым словом строки, с большой буквы: в ленте своего расписания
+  // род занятия — это название встречи, а не приписка к нему.
+  var SC_WHAT_BIG = { teacher: 'Урок', curator: 'Разбор', staff: 'Встреча' };
 
   function schedWeekStart(off) {
     var d = new Date(); d.setHours(0, 0, 0, 0);
@@ -8516,7 +8486,7 @@
   }
   // Месяц собирается из тех же ручек, что и неделя, поэтому после любой правки
   // его кэш тоже сбрасываем: иначе созданная планерка не появится в клетке дня.
-  function schedReload() { state.schedWeek = {}; state.zoomWeek = {}; state.meetMonthData = {}; renderView(); }
+  function schedReload() { state.schedWeek = {}; state.meetMonthData = {}; renderView(); }
 
   /* «Гудалина Е. С.», «Митрофанова Мария Валерьевна» — в клетке недели помещается
      фамилия, и она же и есть то, чем людей различают на слух. */
@@ -8536,32 +8506,6 @@
   }
   function schedCanEdit(d, s) { return !!(d.can_edit_all || schedMine(d, s)); }
 
-  /* Ответили ли уже зумы за эту неделю: 'wait' — еще спрашиваем, 'none' — ручка
-     молчит, 'ok' — список пришел. Нужно, чтобы не утверждать «зумов такого типа
-     нет» там, где на самом деле ничего не известно. */
-  function schedZoomState(lo) {
-    var data = state.zoomWeek[lo.toISOString().slice(0, 10)];
-    if (data === undefined || data === 'loading') return 'wait';
-    return data === 'none' ? 'none' : 'ok';
-  }
-
-  /* Зумы этой недели из общего кэша: в сетке задач и здесь один и тот же день. */
-  function schedZooms(lo) {
-    var key = lo.toISOString().slice(0, 10), data = state.zoomWeek[key];
-    if (data === undefined) { loadZoomWeek(lo); return []; }
-    if (data === 'loading' || data === 'none' || !data.length) return [];
-    var out = [];
-    data.forEach(function (a) {
-      (a.meetings || []).forEach(function (m) {
-        var st = new Date(m.start);
-        out.push({ day: zoomYmd(st), hour: st.getHours(), topic: m.topic, acc: a.name,
-                   slot: a.slot, id: m.id, kind: m.kind || '', url: m.join_url || '',
-                   mine: !!m.mine });
-      });
-    });
-    return out;
-  }
-
   /* «11:00–13:00» — планерка длиннее часа занимает несколько строк сетки, и без
      границ времени непонятно, одна это встреча или несколько. */
   function schedSpan(m) { return m.hour + ':00–' + (m.hour + (m.duration || 1)) + ':00'; }
@@ -8569,18 +8513,6 @@
   function schedMeetAttr(m) {
     return ' data-sc-meet="' + m.id + '|' + (m.series ? 1 : 0) + '" data-sc-mt="' + esc(m.title) + '"' +
       ' data-sc-md="' + m.date + '|' + m.hour + '" role="button" tabindex="0"';
-  }
-
-  /* Зум в слоте: плашка открывает карточку встречи, кнопка рядом сразу копирует
-     ссылку. Просьба Павла 16.09.2026: «чтобы там же можно было сразу в этом
-     слоте забирать ссылку на зум» — ради ссылки карточку открывать не нужно. */
-  function schedZoomChip(z, withAcc) {
-    return '<span class="sc-chip zoom' + (z.url ? ' has-link' : '') + '" title="' +
-      esc(z.topic + ' · ' + z.acc) + '">' +
-      '<button type="button" class="sc-zopen" data-zm="' + esc(z.slot) + '|' + esc(z.id) + '">' +
-        esc(withAcc ? z.topic + ' · ' + z.acc : z.topic) + '</button>' +
-      (z.url ? '<button type="button" class="sc-zcopy" data-mcopy="' + esc(z.url) + '" ' +
-        'title="Скопировать ссылку на зум">' + ic('copy', 11) + '</button>' : '') + '</span>';
   }
 
   function schedChip(cls, text, title, attr) {
@@ -8593,7 +8525,7 @@
      предварительной настройки. */
   function schedMyName(d) { return (d && d.me && d.me.person) || state.userName || ''; }
 
-  /* Что стоит в этот час этого дня: планерки, занятые окна, свободные окна, зумы.
+  /* Что стоит в этот час этого дня: планерки, занятые окна, свободные окна.
      Порядок один и в неделе, и в дне — сверху то, что уже назначено. */
   /* Свои встречи в сетке расписания. Раньше здесь были только планерки, зумы и
      часы людей, а наш собственный сервис встреч в расписание не попадал вовсе —
@@ -8637,7 +8569,12 @@
       'target="_blank" rel="noopener" title="' + esc(tip) + '">' +
       (live ? 'идет: ' : '') + esc(r.title || 'Встреча') + '</a>';
   }
-  function schedAt(d, zooms, day, hour, who, mineOnly) {
+  // Кого показывать в сетке. Одна Лиана с сорока окнами за неделю закрывает собой
+  // всю сетку, и менеджер продаж, которому нужны только разборы, просматривает ее
+  // глазами целиком (Павел 26.10.2026: «чтобы не наслаивалось»).
+  function schedRoleOn(role) { return !(state.schedHide || {})[role]; }
+
+  function schedAt(d, day, hour, who) {
     var fit = function (p) { return !who || p === who; };
     // Фильтр направления из шапки раздела режет и планерки: отдел у них свой
     // (kind, с 17.09.2026) и справочник тот же, что у зумов.
@@ -8647,32 +8584,26 @@
       return m.date === day && hour >= m.hour && hour < m.hour + m.duration &&
         (!who || (m.people || []).some(function (x) { return x.person === who; }));
     });
-    var slots = (d.slots || []).filter(function (s) { return s.date === day && s.hour === hour && fit(s.person); });
-    // Зум участников не знает: зум знает только владельца аккаунта, а аккаунт общий.
-    // Поэтому в режиме «только я» показываем те, что человек завел сам (mine), а при
-    // выборе другого человека зумы прячем: приписать их ему было бы враньем.
-    var mine = !who || mineOnly
-      ? zooms.filter(function (z) { return z.day === day && z.hour === hour && (!mineOnly || z.mine); })
-      : [];
+    var slots = (d.slots || []).filter(function (s) {
+      return s.date === day && s.hour === hour && fit(s.person) && schedRoleOn(s.role);
+    });
     return {
       meets: meets,
       busy: slots.filter(function (s) { return s.booked; }),
       free: slots.filter(function (s) { return !s.booked && !s.blocked; }),
-      zooms: mine,
       // Своя встреча принадлежит тому, кто ее завел, а не участнику расписания:
       // при выборе конкретного человека ее не показываем, чтобы не приписать.
       rooms: who ? [] : mxRoomsAt(day, hour),
     };
   }
 
-  function schedWeekGrid(d, zooms, lo, today) {
+  function schedWeekGrid(d, lo, today) {
     var days = [], i, todayKey = zoomYmd(today);
     for (i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
-    var who = state.schedWho || '', mineOnly = who && who === schedMyName(d);
+    var who = state.schedWho || '';
     var lo_h = SC_FROM, hi_h = SC_TO;
     (d.slots || []).forEach(function (s) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); });
     (d.meetings || []).forEach(function (m) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); });
-    zooms.forEach(function (z) { lo_h = Math.min(lo_h, z.hour); hi_h = Math.max(hi_h, z.hour); });
     mxRoomHours().forEach(function (h) { lo_h = Math.min(lo_h, h); hi_h = Math.max(hi_h, h); });
 
     var head = '<div class="sc-row head"><span class="sc-h"></span>' + days.map(function (x) {
@@ -8683,7 +8614,7 @@
     var rows = [];
     for (var h = lo_h; h <= hi_h; h++) {
       var cells = days.map(function (x) {
-        var day = zoomYmd(x), at = schedAt(d, zooms, day, h, who, mineOnly), out = [];
+        var day = zoomYmd(x), at = schedAt(d, day, h, who), out = [];
         at.meets.forEach(function (m) {
           var long = (m.duration || 1) > 1;
           out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''), m.title,
@@ -8696,7 +8627,6 @@
             s.person + ' · ' + (SC_WHAT[s.role] || 'занято') + (s.client ? ' · ' + s.client : '')));
         });
         at.rooms.forEach(function (r) { out.push(mxRoomChip(r)); });
-        at.zooms.forEach(function (z) { out.push(schedZoomChip(z, false)); });
         // Свой час всегда отдельным чипом, даже когда остальные схлопнуты в счетчик:
         // «где стоят мои окна» — первый вопрос к этому экрану у того, кто их отмечает.
         var own = at.free.filter(function (s) { return schedMine(d, s); });
@@ -8715,17 +8645,16 @@
     return '<div class="sc-grid">' + head + rows.join('') + '</div>';
   }
 
-  function schedDayList(d, zooms, day, today) {
-    var key = zoomYmd(day), who = state.schedWho || '', mineOnly = who && who === schedMyName(d);
+  function schedDayList(d, day, today) {
+    var key = zoomYmd(day), who = state.schedWho || '';
     var lo_h = SC_FROM, hi_h = SC_TO;
     (d.slots || []).forEach(function (s) { if (s.date === key) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); } });
     (d.meetings || []).forEach(function (m) { if (m.date === key) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); } });
-    zooms.forEach(function (z) { if (z.day === key) { lo_h = Math.min(lo_h, z.hour); hi_h = Math.max(hi_h, z.hour); } });
     mxRoomHours(key).forEach(function (h) { lo_h = Math.min(lo_h, h); hi_h = Math.max(hi_h, h); });
     var nowH = day.getTime() === today.getTime() ? new Date().getHours() : -1;
     var rows = [], seen = 0;
     for (var h = lo_h; h <= hi_h; h++) {
-      var at = schedAt(d, zooms, key, h, who, mineOnly), cells = [];
+      var at = schedAt(d, key, h, who), cells = [];
       // В списке дня планерка стоит один раз, в свой первый час: границы времени
       // написаны прямо в строке, и повтор того же текста в каждом часе только мешает.
       at.meets.forEach(function (m) {
@@ -8744,7 +8673,6 @@
           (SC_WHAT[s.role] || '') && s.person + ' · ' + SC_WHAT[s.role]));
       });
       at.rooms.forEach(function (r) { cells.push(mxRoomChip(r)); });
-      at.zooms.forEach(function (z) { cells.push(schedZoomChip(z, true)); });
       at.free.forEach(function (s) {
         var can = state.schedEdit && schedCanEdit(d, s);
         cells.push(schedChip('free' + (schedMine(d, s) ? ' mine' : '') + (can ? ' off' : ''),
@@ -8764,12 +8692,206 @@
     return body;
   }
 
+  /* ── Мое расписание: куда идти и кто записан ───────────────────────────────
+     Главный вопрос человека к этому экрану — не «кто у нас свободен», а «куда мне
+     идти и кто ко мне придет» (Павел 26.10.2026: «самое ключевое чтобы понятно
+     было на какие встречи тебе нужно прийти и кто к тебе записан»). Сетка
+     команды отвечала на первый вопрос и целиком состояла из чужих имен.
+
+     Три источника — свои занятые часы, планерки со своим участием и свои встречи
+     в нашем сервисе. Все они уже приходят в сетку, второго запроса не нужно. */
+  function schedScope() { return state.schedScope === 'all' ? 'all' : 'my'; }
+
+  function schedMyRows(d, lo) {
+    var myName = schedMyName(d), uid = state.userId;
+    var from = zoomYmd(lo), to = zoomYmd(new Date(lo.getTime() + 6 * 86400000));
+    var out = [];
+    if (myName) {
+      (d.meetings || []).forEach(function (m) {
+        if (!(m.people || []).some(function (p) { return p.person === myName; })) return;
+        out.push({ ymd: m.date, hour: m.hour, cls: 'plan', title: m.title,
+                   sub: schedSpan(m) + ' · команда', url: '', live: false });
+      });
+      (d.slots || []).forEach(function (s) {
+        if (s.person !== myName || !s.booked) return;
+        out.push({ ymd: s.date, hour: s.hour, cls: 'busy',
+                   title: SC_WHAT_BIG[s.role] || 'Встреча',
+                   // Имя приходит только тем, у кого есть доступ к карточкам: это
+                   // персональные данные ребенка. Остальным — что час не пустой.
+                   sub: s.client ? 'записан: ' + s.client
+                        : (d.names ? 'кто записан, видно в карточке' : 'человек записан'),
+                   url: '', live: false });
+      });
+    }
+    var rooms = state.meetRooms;
+    if (rooms && rooms !== 'none' && rooms !== 'loading' && rooms.rooms) {
+      rooms.rooms.forEach(function (r) {
+        if (r.status === 'cancel' || r.status === 'failed' || r.status === 'done') return;
+        if (uid != null && r.created_by !== uid && (r.invited || []).indexOf(uid) === -1) return;
+        var at = r.starts_at ? new Date(r.starts_at)
+          : (r.status === 'live' && r.started_at ? new Date(r.started_at) : null);
+        if (!at || isNaN(at.getTime())) return;
+        var ymd = zoomYmd(at);
+        if (ymd < from || ymd > to) return;
+        out.push({ ymd: ymd, hour: at.getHours(), cls: 'room', title: r.title || 'Встреча',
+                   sub: r.status === 'live' ? 'идет прямо сейчас' : 'наша встреча',
+                   url: r.url || '', live: r.status === 'live' });
+      });
+    }
+    out.sort(function (a, b) { return a.ymd === b.ymd ? a.hour - b.hour : (a.ymd < b.ymd ? -1 : 1); });
+    return out;
+  }
+
+  function schedMyList(d, lo, today) {
+    var rows = schedMyRows(d, lo), todayKey = zoomYmd(today);
+    if (!rows.length) {
+      return '<div class="sc-my-none">' + ic('cal', 18) +
+        '<b>На этой неделе встреч у вас нет</b>' +
+        '<span>Здесь появятся планерки, ваши уроки и консультации с записанными людьми ' +
+        'и встречи, на которые вас позвали. Бот напомнит про каждую за сутки и за час.</span></div>';
+    }
+    var days = [], seen = {};
+    rows.forEach(function (r) {
+      if (!seen[r.ymd]) { seen[r.ymd] = []; days.push(r.ymd); }
+      seen[r.ymd].push(r);
+    });
+    return '<div class="sc-my">' + days.map(function (ymd) {
+      var dt = new Date(ymd + 'T00:00:00');
+      var head = '<div class="sc-my-day' + (ymd === todayKey ? ' now' : '') + '">' +
+        WDAYS_RU[dt.getDay()] + ', ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] +
+        (ymd === todayKey ? '<i>сегодня</i>' : '') + '</div>';
+      return head + seen[ymd].map(function (r) {
+        return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + '">' +
+          '<span class="sc-my-h">' + r.hour + ':00</span>' +
+          '<span class="sc-my-b"><b>' + esc(r.title) + '</b><i>' + esc(r.sub) + '</i></span>' +
+          (r.url ? '<a class="sc-my-go" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
+            (r.live ? 'Войти' : 'Открыть') + '</a>' : '') + '</div>';
+      }).join('') + '';
+    }).join('') + '</div>';
+  }
+
+  /* Как поставить себе часы под консультации — прямо на экране, а не в чужой
+     инструкции, которую никто не открывает (Павел 26.10.2026: «добавь туда
+     пошаговую инструкцию как ставить расписание консультаций, слоты временные»). */
+  function schedHow() {
+    if (!state.schedHow) return '';
+    return '<div class="sc-how">' +
+      '<ol>' +
+        '<li><b>Скажите, кто вы в расписании.</b> Строка «Кто вы в расписании» под фильтрами, ' +
+          'один раз за все время. Проводите консультации — выбирайте «провожу разборы»: ' +
+          'только такие часы видит человек, когда записывается в боте и на сайте.</li>' +
+        '<li><b>Нажмите «Мое время».</b> Экран переходит в режим отметки, ' +
+          'сетка команды становится кликабельной.</li>' +
+        '<li><b>Отметьте свободные часы.</b> Клик по клетке — час свободен, ' +
+          'клик по своему зеленому часу — снова занят. Час идет от ровного времени и длится час.</li>' +
+        '<li><b>Свяжите гугл-календарь.</b> Тогда час, в который вы заняты у себя в календаре, ' +
+          'мы человеку не покажем, даже если он отмечен свободным.</li>' +
+        '<li><b>Готово.</b> Человек выбирает ваш час, комната заводится сама, ' +
+          'ссылка уходит ему и вам. Бот напомнит за сутки и за час.</li>' +
+      '</ol>' +
+      '<p>Снять час с записанным человеком нельзя: сначала отмените запись в его карточке, ' +
+        'иначе он придет в комнату, где никого нет.</p></div>';
+  }
+
+  /* ── Свой гугл-календарь ──────────────────────────────────────────────────
+     Обмен с календарем написан давно: час, в который человек занят у себя,
+     клиенту не показывается, а запись уезжает ему в телефон. Но связь «человек →
+     его календарь» ставилась руками в базе, и 26.10.2026 ее не было ни у кого:
+     вся защита от наложений крутилась вхолостую. Поэтому кнопка стоит на самом
+     экране, с понятной подписью (Павел: «не просто маленькая подпись, а понятная
+     подпись связать гугл календарь»). */
+  function schedGcalBtn(d) {
+    if (!d || !d.gcal_service) return '';
+    var on = !!d.gcal_me;
+    return '<button class="bp ghost sm sc-gcalbtn' + (on ? ' on' : '') + '" id="sc-gcal" ' +
+      'title="' + (on ? 'Календарь связан: ' + esc(d.gcal_me) : 'Занятые часы из вашего календаря перестанут продаваться клиенту') + '">' +
+      ic('cal', 14) + (on ? 'Календарь связан' : 'Связать гугл-календарь') + '</button>';
+  }
+
+  function openSchedGcal(d) {
+    if (document.querySelector('.al-ov.sg-ov')) return;
+    var now = (d && d.gcal_me) || '', srv = (d && d.gcal_service) || '';
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over sg-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head"><div><div class="al-eyebrow">Расписание</div>' +
+          '<div class="al-title">Связать гугл-календарь</div></div>' +
+          '<button class="al-x" id="sg-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">Два следствия сразу: час, в который вы заняты у себя в календаре, ' +
+          'клиенту не покажется, даже если он отмечен свободным. А каждая запись к вам приедет ' +
+          'в ваш календарь и в телефон.</div>' +
+        '<div class="al-body">' +
+          '<ol class="sg-steps">' +
+            '<li>Откройте гугл-календарь, слева наведитесь на свой календарь, ' +
+              'три точки → «Настройки и общий доступ».</li>' +
+            '<li>В разделе «Открыть доступ отдельным пользователям» добавьте нашу служебную почту ' +
+              'с правом <b>«Изменение мероприятий»</b>:' +
+              '<span class="sg-mail"><code>' + esc(srv) + '</code>' +
+              '<button type="button" class="qchip" id="sg-copy">' + ic('copy', 12) + 'Скопировать</button></span></li>' +
+            '<li>Вернитесь сюда, впишите почту своего календаря и нажмите «Проверить и связать». ' +
+              'Мы постучимся в календарь и скажем, пустил он нас или нет.</li>' +
+          '</ol>' +
+          '<label class="al-f"><span class="al-l">Почта вашего рабочего календаря</span>' +
+            '<input id="sg-mail" class="al-in" type="email" maxlength="200" ' +
+              'placeholder="imya@eastside.study" value="' + esc(now) + '"></label>' +
+          '<div class="al-err" id="sg-err"></div>' +
+          // Общий календарь команды — другая история: в него уезжают планерки и
+          // занятые часы всех. Кому удобнее смотреть расписание у себя в гугле,
+          // тот подписывается на него отсюда же.
+          (d && d.gcal ? '<a class="sg-team" href="' + esc(d.gcal) + '" target="_blank" rel="noopener">' +
+            ic('cal', 13) + 'Заодно подписаться на общий календарь команды</a>' : '') +
+        '</div>' +
+        '<div class="al-foot">' +
+          (now ? '<button class="al-cancel" id="sg-off">Отвязать</button>' : '') +
+          '<button class="al-cancel" id="sg-no">Отмена</button>' +
+          '<button class="bp al-save" id="sg-ok">Проверить и связать</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('sg-x').addEventListener('click', close);
+    el('sg-no').addEventListener('click', close);
+    el('sg-copy').addEventListener('click', function () { copyText(srv, el('sg-copy')); });
+    if (el('sg-off')) el('sg-off').addEventListener('click', function () {
+      apiSend('/admin/api/sched/me/gcal', 'DELETE', null, function () {
+        close(); showToast('Календарь отвязан'); schedReload();
+      }, function () { el('sg-err').textContent = 'Не вышло отвязать, попробуйте еще раз'; });
+    });
+    el('sg-ok').addEventListener('click', function () {
+      var mail = (el('sg-mail').value || '').trim();
+      var err = el('sg-err');
+      if (mail.indexOf('@') < 0) { err.textContent = 'Нужен адрес почты, к которой привязан календарь'; return; }
+      el('sg-ok').disabled = true;
+      err.textContent = 'Стучимся в календарь…';
+      apiSend('/admin/api/sched/me/gcal', 'POST', { calendar: mail }, function () {
+        close(); showToast('Календарь связан', 'занятые у вас часы клиенту больше не покажем');
+        schedReload();
+      }, function (code, e) {
+        el('sg-ok').disabled = false;
+        err.textContent = (e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+          'Не вышло связать календарь, попробуйте еще раз';
+      });
+    });
+  }
+
   function renderSched(view) {
     var lo = schedRangeStart(), key = zoomYmd(lo);
     var d = state.schedWeek[key];
     if (d === undefined) { schedLoad(lo); d = 'loading'; }
     var today = new Date(); today.setHours(0, 0, 0, 0);
-    var dayView = schedIsDay(), day = schedDay();
+    var my = schedScope() === 'my';
+    // В своем расписании сетка всегда недельная: «день» отвечает на вопрос «кто
+    // свободен в четверг», а свой день и так виден в ленте строкой. Считаем это
+    // до заголовка периода, иначе на телефоне над недельной лентой стояла бы дата
+    // одного дня.
+    var dayView = !my && schedIsDay(), day = schedDay();
     var atNow = dayView ? !(state.schedDayOff || 0) : !(state.schedOff || 0);
     var range = dayView
       ? WDAYS_RU[day.getDay()] + ' ' + day.getDate() + ' ' + MONTHS_RU[day.getMonth()] +
@@ -8779,23 +8901,23 @@
 
     var ok = d && typeof d === 'object';
     var head = '<div class="sec-head zw-head">' + meetLens() +
-      (mqMobile.matches ? '' :
+      // Первый переключатель экрана — чье расписание смотрим. Он стоит раньше
+      // навигации по датам: сначала «чье», потом «когда».
+      '<div class="due-seg zw-seg sc-scope"><button type="button" class="' + (my ? 'on' : '') + '" data-ss="my">Мое</button>' +
+      '<button type="button" class="' + (my ? '' : 'on') + '" data-ss="all">Вся команда</button></div>' +
+      (my || mqMobile.matches ? '' :
         '<div class="due-seg zw-seg"><button type="button" class="' + (dayView ? '' : 'on') + '" data-sv="week">Неделя</button>' +
         '<button type="button" class="' + (dayView ? 'on' : '') + '" data-sv="day">День</button></div>') +
       '<div class="zw-nav"><button class="icobtn" data-sw="-1" title="' + (dayView ? 'Прошлый день' : 'Прошлая неделя') + '">' + ic('go', 14) + '</button>' +
       '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-sw0 title="' + (atNow ? '' : 'Вернуться к сегодня') + '">' + range + '</button>' +
       '<button class="icobtn" data-sw="1" title="' + (dayView ? 'Следующий день' : 'Следующая неделя') + '">' + ic('go', 14) + '</button></div>' +
-      // Ссылка стоит сразу за датой, а не в конце строки: то и другое про «когда
-      // и где смотреть», и при переносе они остаются вместе, а действия уезжают
-      // на вторую строку группой. Тихая ссылка, а не кнопка: календарь человек
-      // подключает один раз за все время, главное действие экрана — свое время.
-      (ok && d.gcal ? '<a class="sc-gcal" href="' + esc(d.gcal) + '" target="_blank" rel="noopener" ' +
-        'title="Открыть этот календарь в своем гугле">' + ic('cal', 14) + 'В гугл-календарь</a>' : '') +
       // Действия лежат в своем блоке, а не соседями в шапке. Иначе на ноутбуке
       // 1280 «Мое время» оставалось в первом ряду у правого края, а «Планерка»
       // уезжала во второй и вставала слева под заголовком: в одной шапке два
       // разных выравнивания. Блоком они переносятся вместе.
-      (ok && (d.me || d.can_edit_all || can('tasks_all')) ? '<div class="zw-acts">' +
+      (ok ? '<div class="zw-acts">' + schedGcalBtn(d) +
+        '<button class="bp ghost sm sc-how" id="sc-how" aria-expanded="' + (state.schedHow ? 'true' : 'false') + '">' +
+          ic('info', 14) + 'Как ставить часы</button>' +
         (d.me ? '<button class="bp ghost sm sc-edit" id="sc-edit">' +
           ic(state.schedEdit ? 'check' : 'pen', 14) + (state.schedEdit ? 'Готово' : 'Мое время') + '</button>' : '') +
         (d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
@@ -8817,22 +8939,7 @@
       return schedWire(view, d);
     }
 
-    // Зумы фильтруются по типу прямо здесь: отдельной сетки зумов со своим
-    // фильтром больше нет, а вопрос «покажи только занятия» никуда не делся.
-    /* Фильтр направления из шапки раздела режет зумы по типу встречи: своего
-       поля «направление» у зума нет, а один отдел дает несколько типов (продажи
-       ведут и планерки, и продающие консультации). */
-    var deptKinds = state.page === 'meetx' && state.meetxDept ? mxDeptKinds(state.meetxDept) : null;
-    var zooms = schedZooms(lo).filter(function (z) {
-      if (state.zoomKind && z.kind !== state.zoomKind) return false;
-      return !deptKinds || deptKinds.indexOf(z.kind) !== -1;
-    });
     var people = (d.people || []).slice().sort(function (a, b) { return a.person.localeCompare(b.person, 'ru'); });
-    var kindSel = '<label class="al-selwrap sc-kind"><select class="al-sel" id="sc-kind">' +
-      '<option value="">Все зумы</option>' +
-      ZOOM_KINDS.map(function (k) {
-        return '<option value="' + k[0] + '"' + (state.zoomKind === k[0] ? ' selected' : '') + '>' + esc(k[2] || k[1]) + '</option>';
-      }).join('') + '</select></label>';
     // «Только мои встречи» (просьба Павла 17.09.2026) стоит первым и работает до
     // того, как человек выбрал себя в расписании: имя берется из учетки.
     var myName = schedMyName(d);
@@ -8841,14 +8948,21 @@
       (myName ? '<option value="' + esc(myName) + '"' + (state.schedWho === myName ? ' selected' : '') + '>Только мои встречи</option>' : '') +
       people.filter(function (p) { return p.person !== myName; }).map(function (p) {
         return '<option value="' + esc(p.person) + '"' + (state.schedWho === p.person ? ' selected' : '') + '>' + esc(p.person) + '</option>';
-      }).join('') + '</select></label>' + kindSel +
+      }).join('') + '</select></label>' +
+      // Кого показывать: чипы-переключатели рядом с выбором человека. Выключенная
+      // роль не исчезает из расписания, она просто не загромождает эту сетку.
+      '<div class="sc-roles">' + [['curator', 'Разборы'], ['teacher', 'Уроки'], ['staff', 'Команда']]
+        .map(function (r) {
+          return '<button type="button" class="qchip sm' + (schedRoleOn(r[0]) ? ' on' : '') +
+            '" data-srole="' + r[0] + '" aria-pressed="' + (schedRoleOn(r[0]) ? 'true' : 'false') + '">' +
+            r[1] + '</button>';
+        }).join('') + '</div>' +
       // Цвет без слова рядом читается только тем, кто его придумал. Подпись к
       // каждому чипу — что именно он означает в этой сетке (Павел 17.09.2026).
       '<div class="sc-legend">' +
         '<span class="sc-chip free" title="Человек свободен: этот час можно продать клиенту">свободно</span>' +
         '<span class="sc-chip busy" title="Час уже занят уроком или разбором">занято</span>' +
         '<span class="sc-chip meet" title="Внутренняя встреча команды">планерка</span>' +
-        '<span class="sc-chip zoom" title="Встреча в зуме, ссылку видно в слоте">зум</span>' +
         '<span class="sc-chip room" title="Наша встреча: комната EastSide Meeting, ' +
           'нажатие открывает ее">наша встреча</span></div></div>';
 
@@ -8875,28 +8989,19 @@
         '</select></label></div>';
     }
 
-    var body = dayView ? schedDayList(d, zooms, day, today) : schedWeekGrid(d, zooms, lo, today);
-    // Фильтр типов относится только к зумам, и когда их нет, он выглядит сломанным:
-    // человек переключает и не видит разницы. Поэтому говорим прямо — но только
-    // когда зумы уже ответили и ровно про то, что сейчас показано на экране: в
-    // дневном виде «в этом периоде» означает этот день, а не всю неделю.
-    var zoomSt = schedZoomState(lo);
-    var shownZooms = dayView
-      ? zooms.filter(function (z) { return z.day === zoomYmd(day); })
-      : zooms;
-    var when = dayView ? 'в этот день' : 'на этой неделе';
-    var kindNote = '';
-    if (state.zoomKind && zoomSt === 'none') {
-      kindNote = '<div class="zw-note">' + ic('info', 13) +
-        '<span>Зумы не ответили, поэтому фильтр типов сейчас ничего не показывает. Обнови страницу.</span></div>';
-    } else if (state.zoomKind && zoomSt === 'ok' && !shownZooms.length) {
-      kindNote = '<div class="zw-note">' + ic('info', 13) + '<span>Зумов типа «' +
-        esc(zoomKindLabel(state.zoomKind)) + '» ' + when + ' нет. Фильтр типов меняет только зумы: планерки и свободные часы он не трогает.</span></div>';
-    }
+    // В режиме отметки времени сетка нужна и в своем расписании: часы ставят в
+    // ней, а не в ленте. Поэтому «Мое время» временно показывает команду.
+    var grid = !my || state.schedEdit;
+    var body = grid
+      ? (dayView ? schedDayList(d, day, today) : schedWeekGrid(d, lo, today))
+      : schedMyList(d, lo, today);
     var hint = state.schedEdit
       ? '<div class="zw-hint">Клик по клетке отмечает час свободным, клик по своему зеленому часу — убирает. Час с записанным клиентом убрать нельзя: сначала отмените запись в карточке.</div>'
-      : '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Серое — встреча в зуме, ссылку видно прямо в слоте. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>';
-    view.innerHTML = '<div class="card zw sc">' + head + flt + claim + kindNote + body + hint + '</div>';
+      : (grid
+        ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
+        : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
+    view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
+      (grid ? flt : '') + claim + body + hint + '</div>';
     schedWire(view, d);
   }
 
@@ -8912,24 +9017,6 @@
   }
 
   function schedWire(view, d) {
-    // Зум в слоте: плашка — карточка встречи, кнопка рядом — сразу ссылка.
-    Array.prototype.forEach.call(view.querySelectorAll('.sc-zcopy'), function (b) {
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        copyText(b.getAttribute('data-mcopy') || '', b);
-      });
-    });
-    Array.prototype.forEach.call(view.querySelectorAll('.sc-zopen'), function (b) {
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var p = (b.getAttribute('data-zm') || '').split('|');
-        var accs = state.zoomWeek[schedRangeStart().toISOString().slice(0, 10)];
-        if (!accs || typeof accs === 'string') return;
-        var acc = accs.filter(function (a) { return a.slot === p[0]; })[0];
-        var m = acc && (acc.meetings || []).filter(function (x) { return String(x.id) === p[1]; })[0];
-        if (m) openZoomCard(acc, m);
-      });
-    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sw]'), function (b) {
       b.addEventListener('click', function () {
         var step = +b.getAttribute('data-sw');
@@ -8948,8 +9035,24 @@
       b.addEventListener('click', function () { state.schedView = b.getAttribute('data-sv') === 'day' ? 'day' : 'week'; renderView(); });
     });
     if (el('sc-who')) el('sc-who').addEventListener('change', function () { state.schedWho = el('sc-who').value || ''; renderView(); });
-    if (el('sc-kind')) el('sc-kind').addEventListener('change', function () { state.zoomKind = el('sc-kind').value || ''; renderView(); });
     if (el('sc-edit')) el('sc-edit').addEventListener('click', function () { state.schedEdit = !state.schedEdit; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ss]'), function (b) {
+      b.addEventListener('click', function () {
+        state.schedScope = b.getAttribute('data-ss') === 'all' ? 'all' : 'my';
+        // Из чужой сетки в свою ленту режим отметки не переносим: там отмечать нечего.
+        if (state.schedScope === 'my') state.schedEdit = false;
+        saveUi(); renderView();
+      });
+    });
+    if (el('sc-how')) el('sc-how').addEventListener('click', function () { state.schedHow = !state.schedHow; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
+      b.addEventListener('click', function () {
+        var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
+        if (h[r]) delete h[r]; else h[r] = 1;
+        saveUi(); renderView();
+      });
+    });
+    if (el('sc-gcal')) el('sc-gcal').addEventListener('click', function () { openSchedGcal(d); });
     if (el('sc-me')) el('sc-me').addEventListener('change', function () {
       var v = el('sc-me').value; if (!v) return;
       apiSend('/admin/api/sched/me', 'POST',
@@ -10017,11 +10120,11 @@
   /* ── Вид «Календарь»: месяц целиком ─────────────────────────────────────────
      Просьба Павла 16.09.2026: «сделай вид календаря, как гугл календарь». Сетка
      слотов отвечает на вопрос «кто свободен в четверг в три», календарь — на
-     «что вообще происходит в этом месяце». Данные те же самые: зумы из
-     /zoom/busy и планерки из /sched/week, только разложены по дням.
+     «что вообще происходит в этом месяце». Данные те же самые, из /sched/week,
+     только разложены по дням.
 
-     Ссылку на зум видно прямо в дне: кнопка копирования стоит на самой плашке,
-     открывать карточку ради ссылки не нужно. */
+     Зумов тут больше нет: мы их не оплачиваем и в работе не используем
+     (Павел 26.10.2026), а каждая лишняя плашка в клетке дня стоила читаемости. */
   // «Сентябрь 2026» — именительный падеж. Соседние списки месяцев в файле в
   // родительном («9 сентября») и в сокращении («сен»), заголовку нужен третий.
   var MONTHS_FULL_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -10042,27 +10145,12 @@
     var to = new Date(last); to.setDate(to.getDate() + (7 - ((last.getDay() + 6) % 7)));
     state.meetMonthData[key] = 'loading';
     var mid = new Date(from); mid.setDate(mid.getDate() + 21);
-    var busy = function (a, b) {
-      return api('/admin/api/zoom/busy?from=' + a.toISOString() + '&to=' + b.toISOString())
-        .catch(function () { return null; });
-    };
     Promise.all([
-      busy(from, mid), busy(mid, to),
       api('/admin/api/sched/week?from=' + zoomYmd(from) + '&to=' + zoomYmd(mid)).catch(function () { return null; }),
       api('/admin/api/sched/week?from=' + zoomYmd(mid) + '&to=' + zoomYmd(to)).catch(function () { return null; }),
     ]).then(function (r) {
-      var accs = [];
-      [r[0], r[1]].forEach(function (x) {
-        ((x && x.accounts) || []).forEach(function (a) {
-          var seen = accs.filter(function (y) { return y.slot === a.slot; })[0];
-          if (!seen) { accs.push({ slot: a.slot, name: a.name, meetings: (a.meetings || []).slice() }); return; }
-          (a.meetings || []).forEach(function (m) {
-            if (!seen.meetings.some(function (y) { return String(y.id) === String(m.id) && y.start === m.start; })) seen.meetings.push(m);
-          });
-        });
-      });
       var meets = [], gcal = '', busy = {}, seen = {};
-      [r[2], r[3]].forEach(function (x) {
+      [r[0], r[1]].forEach(function (x) {
         if (!x) return;
         gcal = gcal || x.gcal || '';
         (x.meetings || []).forEach(function (m) {
@@ -10081,8 +10169,9 @@
       });
       // Права и список людей нужны кнопке «Планерка»: форма собирает из них
       // галочки участников. Берем из первого ответа — он про те же роли.
-      var w = r[2] || r[3] || {};
-      state.meetMonthData[key] = { accounts: accs, meetings: meets, gcal: gcal, busy: busy,
+      var w = r[0] || r[1] || {};
+      state.meetMonthData[key] = { meetings: meets, gcal: gcal, busy: busy,
+        gcal_me: w.gcal_me || '', gcal_service: w.gcal_service || '',
         can_edit_all: !!w.can_edit_all, people: w.people || [], staff: w.staff || [] };
       if (onMeetPage()) renderView();
     }).catch(function () {
@@ -10091,17 +10180,9 @@
     });
   }
 
-  /* Что показать в дне: зумы и планерки одной лентой, по времени. */
+  /* Что показать в дне: планерки команды по времени. */
   function meetMonthDay(data, ymd) {
     var out = [];
-    (data.accounts || []).forEach(function (a) {
-      (a.meetings || []).forEach(function (m) {
-        var st = new Date(m.start);
-        if (zoomYmd(st) !== ymd) return;
-        out.push({ kind: 'zoom', hour: st.getHours(), min: st.getMinutes(), title: m.topic,
-                   url: m.join_url || '', slot: a.slot, id: m.id, acc: a.name, type: m.kind || '' });
-      });
-    });
     (data.meetings || []).forEach(function (m) {
       if (m.date !== ymd) return;
       out.push({ kind: 'plan', hour: m.hour, min: 0, title: m.title,
@@ -10124,21 +10205,18 @@
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var atNow = !(state.meetMonth || 0);
     var title = MONTHS_FULL_RU[first.getMonth()] + ' ' + first.getFullYear();
-    var gcal = (data && typeof data === 'object' && data.gcal) || '';
     var mayMeet = !!(data && typeof data === 'object' && data.can_edit_all);
     var head = '<div class="sec-head zw-head">' + meetLens() +
       '<div class="zw-nav"><button class="icobtn" data-mm="-1" title="Прошлый месяц">' + ic('go', 14) + '</button>' +
       '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-mm0 title="' +
         (atNow ? '' : 'Вернуться к этому месяцу') + '">' + esc(title) + '</button>' +
       '<button class="icobtn" data-mm="1" title="Следующий месяц">' + ic('go', 14) + '</button></div>' +
-      (gcal ? '<a class="sc-gcal" href="' + esc(gcal) + '" target="_blank" rel="noopener" ' +
-        'title="Открыть этот календарь в своем гугле">' + ic('cal', 14) + 'В гугл-календарь</a>' : '') +
       // Действия и слова те же, что в виде слотов, с одним исключением: «Мое время»
       // здесь нет, потому что отмечать нечего — свои свободные часы человек ставит
       // в клетке часа, а в месяце клетка это целый день.
-      (mayMeet || can('tasks_all') ? '<div class="zw-acts">' +
+      '<div class="zw-acts">' + schedGcalBtn(typeof data === 'object' ? data : null) +
         (mayMeet ? '<button class="bp ghost sm sc-meetnew" id="mm-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
-        '</div>' : '') +
+        '</div>' +
       '</div>';
 
     if (data === 'loading') {
@@ -10161,15 +10239,8 @@
       var isToday = d.getTime() === today.getTime();
       var ev = meetMonthDay(data, ymd);
       var shown = ev.slice(0, MEET_MONTH_MAX).map(function (e) {
-        if (e.kind === 'plan') {
-          return '<div class="mm-ev plan" title="' + esc(e.title + (e.who ? ' · ' + e.who : '')) + '">' +
-            '<b>' + meetTime(e) + '</b> ' + esc(e.title) + '</div>';
-        }
-        return '<div class="mm-ev zoom" title="' + esc(e.title + ' · ' + e.acc) + '">' +
-          '<button type="button" class="mm-open" data-zm="' + esc(e.slot) + '|' + esc(e.id) + '">' +
-            '<b>' + meetTime(e) + '</b> ' + esc(e.title) + '</button>' +
-          (e.url ? '<button type="button" class="mm-copy" data-mcopy="' + esc(e.url) + '" ' +
-            'title="Скопировать ссылку на зум">' + ic('copy', 12) + '</button>' : '') + '</div>';
+        return '<div class="mm-ev plan" title="' + esc(e.title + (e.who ? ' · ' + e.who : '')) + '">' +
+          '<b>' + meetTime(e) + '</b> ' + esc(e.title) + '</div>';
       }).join('');
       var more = ev.length > MEET_MONTH_MAX
         ? '<button type="button" class="mm-more" data-mmday="' + ymd + '">еще ' + (ev.length - MEET_MONTH_MAX) + '</button>' : '';
@@ -10202,24 +10273,7 @@
       b.addEventListener('click', function () { state.meetMonth = 0; renderView(); });
     });
     if (el('mm-meet')) el('mm-meet').addEventListener('click', function () { openSchedMeet(d); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mcopy]'), function (b) {
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        copyText(b.getAttribute('data-mcopy') || '', b);
-      });
-    });
-    Array.prototype.forEach.call(view.querySelectorAll('.mm-open'), function (b) {
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var p = (b.getAttribute('data-zm') || '').split('|');
-        var key = zoomYmd(meetMonthStart(state.meetMonth || 0));
-        var data = state.meetMonthData[key];
-        if (!data || typeof data === 'string') return;
-        var acc = (data.accounts || []).filter(function (a) { return a.slot === p[0]; })[0];
-        var m = acc && (acc.meetings || []).filter(function (x) { return String(x.id) === p[1]; })[0];
-        if (m) openZoomCard(acc, m);
-      });
-    });
+    if (el('sc-gcal')) el('sc-gcal').addEventListener('click', function () { openSchedGcal(d); });
     // Клик по дню уводит в слоты этого дня: месяц отвечает «что происходит»,
     // слоты — «кто свободен и куда влезет еще одна встреча».
     Array.prototype.forEach.call(view.querySelectorAll('[data-mmday]'), function (b) {
@@ -40830,7 +40884,7 @@
                : '<div class="field-empty">Оплат с его отметкой в этом месяце нет.</div>') +
         '<div class="mot-manual" data-motform="' + p.person_id + '">' +
           '<div class="mm-h">Дежурства и диагностики за месяц</div>' +
-          '<div class="mm-grid">' +
+          '<div class="mot-inputs">' +
             '<label>Дежурств (авто ' + (m.shifts_auto || 0) + ')<input data-mf="shifts" data-mf-null="1" inputmode="decimal" placeholder="авто" value="' + (m.shifts_override == null ? '' : m.shifts_override) + '"></label>' +
             '<label>Коэффициент<input data-mf="shift_coef" inputmode="decimal" value="' + (m.shift_coef === undefined ? 1 : m.shift_coef) + '"></label>' +
             '<label>Диагностик до итоговой проверки<input data-mf="diags_base" inputmode="numeric" value="' + (m.diags_base || 0) + '"></label>' +
@@ -40889,7 +40943,7 @@
       '<div class="sec-head"><span class="ic">' + ic('pen', 14) + '</span>' +
       '<div><div class="t">Ставки</div><div class="s">условия Павла 10.09.2026, пока не утверждены окончательно</div></div>' +
       '<button class="qchip" id="mot-rates-close">свернуть</button></div>' +
-      '<div class="mm-grid">' +
+      '<div class="mot-inputs">' +
         '<label>Вел чат и сам провел, %<input data-rf="pct_full" inputmode="decimal" value="' + rv('pct_full') + '"></label>' +
         '<label>Провел диагностику, %<input data-rf="pct_closer" inputmode="decimal" value="' + rv('pct_closer') + '"></label>' +
         '<label>Довел до диагностики, %<input data-rf="pct_setter" inputmode="decimal" value="' + rv('pct_setter') + '"></label>' +
@@ -46577,7 +46631,7 @@
         minutes: +el('zc-min').value || 60, occurrence_id: scope(), at: m.start
       }, function () {
         close(); showToast('Встреча изменена');
-        state.zoomWeek = {}; state.zoomWin = {}; renderView();
+        renderView();
       }, function (code, e) {
         ok.disabled = false;
         err.textContent = (e && e.body && e.body.detail) || 'Не удалось изменить встречу, проверь интернет';
@@ -46590,7 +46644,7 @@
       Array.prototype.forEach.call(ov.querySelectorAll('.zc-delbox .qchip'), function (x) { x.disabled = true; });
       apiSend('/admin/api/zoom/meetings/' + encodeURIComponent(m.id) + q, 'DELETE', null, function () {
         close(); showToast(all && ser ? 'Серия отменена' : 'Встреча отменена');
-        state.zoomWeek = {}; state.zoomWin = {}; renderView();
+        renderView();
       }, function (code, e) {
         Array.prototype.forEach.call(ov.querySelectorAll('.zc-delbox .qchip'), function (x) { x.disabled = false; });
         err.textContent = (e && e.body && e.body.detail) || 'Не удалось отменить встречу, проверь интернет';
