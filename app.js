@@ -23784,7 +23784,7 @@
       view.innerHTML = dashSkeleton(); finLoadReestr(); return;
     }
     if (FIN.reestr === 'none') return finErrView(view);
-    var R = FIN.reestr, groups = R.groups || [], per = finPeriod();
+    var R = FIN.reestr, rsg = R.rs_groups || [], funds = R.funds || [], per = finPeriod();
 
     var bar = statBar([
       { label: 'Остаток на счёте', value: finRub(R.rs), sub: 'ВТБ, расчётный', lead: true },
@@ -23816,44 +23816,68 @@
     // не уходят: это рабочая пометка одного человека на время сверки, а не статус.
     var chk = rgstLoadChecked(per && per.id);
     var allItems = [];
-    groups.forEach(function (g) { g.items.forEach(function (it) { allItems.push(it); }); });
+    rsg.forEach(function (g) { g.items.forEach(function (it) { allItems.push(it); }); });
+    funds.forEach(function (f) { f.items.forEach(function (it) { allItems.push(it); }); });
     var total = allItems.length;
     var doneN = allItems.filter(function (it) { return chk[it.id]; }).length;
 
-    var cards = groups.map(function (g) {
-      var rows = g.items.map(function (it) {
-        var sub = [it.item && it.item !== it.receiver ? it.item : '', it.comment || '']
-          .filter(Boolean).map(esc).join(' · ');
-        return '<div class="trow rgst-row' + (chk[it.id] ? ' done' : '') +
-            '" data-rk="' + esc(it.id) + '" role="button" tabindex="0" ' +
-            'aria-pressed="' + (chk[it.id] ? 'true' : 'false') + '">' +
-          '<span class="rgst-chk" aria-hidden="true">' + ic('check', 13) + '</span>' +
-          '<span class="fo-what rgst-who"><b>' + esc(it.receiver || '—') + '</b>' +
-            (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
-          '<span class="rgst-dest">' + (it.dest ? esc(it.dest) : '—') + '</span>' +
-          '<span class="fo-st rgst-st">' + rgstStatusChip(it.status) + '</span>' +
-          '<span class="num fo-sum rgst-sum">' + finRub(it.amount) + '</span>' +
-        '</div>';
-      }).join('');
+    // Одна строка реестра — и в выплатах с РС, и в расходах фонда рисуется одинаково:
+    // галочка сверки, получатель с подстрочником, счёт, статус, сумма.
+    function rgstRow(it) {
+      var sub = [it.item && it.item !== it.receiver ? it.item : '', it.comment || '']
+        .filter(Boolean).map(esc).join(' · ');
+      return '<div class="trow rgst-row' + (chk[it.id] ? ' done' : '') +
+          '" data-rk="' + esc(it.id) + '" role="button" tabindex="0" ' +
+          'aria-pressed="' + (chk[it.id] ? 'true' : 'false') + '">' +
+        '<span class="rgst-chk" aria-hidden="true">' + ic('check', 13) + '</span>' +
+        '<span class="fo-what rgst-who"><b>' + esc(it.receiver || '—') + '</b>' +
+          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+        '<span class="rgst-dest">' + (it.dest ? esc(it.dest) : '—') + '</span>' +
+        '<span class="fo-st rgst-st">' + rgstStatusChip(it.status) + '</span>' +
+        '<span class="num fo-sum rgst-sum">' + finRub(it.amount) + '</span>' +
+      '</div>';
+    }
+
+    // Секция 1 — с расчётного счёта: прямые выплаты + отчисления в фонды. По ней заслон.
+    var rsCards = rsg.map(function (g) {
       var tot = [g.to_pay ? 'к выводу ' + finRub(g.to_pay) : '',
                  g.paid ? 'выплачено ' + finRub(g.paid) : ''].filter(Boolean).join(' · ');
-      var gico = g.id === 'funds_move' ? 'wallet' : 'rows';
+      var gico = g.id === 'funds_alloc' ? 'wallet' : 'rows';
       return '<div class="card listcard rgst-block">' +
         '<div class="list-tools sec-head"><span class="ic">' + ic(gico, 14) + '</span>' +
           '<div><div class="t">' + esc(g.label) + '</div>' +
           '<div class="s">' + (tot || '—') + '</div></div>' +
           '<span class="list-count fin-count"><b>' + g.items.length + '</b> ' +
             plural(g.items.length, 'строка', 'строки', 'строк') + '</span>' +
-        '</div>' + rows + '</div>';
+        '</div>' + g.items.map(rgstRow).join('') + '</div>';
     }).join('');
 
-    if (!groups.length) {
+    // Секция 2 — фонды: по каждому фонду отложили/расходы + строки расходов из фонда.
+    var fundCards = funds.map(function (f) {
+      var meta = 'отложили ' + finRub(f.added) + ' · расходы ' + finRub(f.spent);
+      var body = f.items.length
+        ? f.items.map(rgstRow).join('')
+        : '<div class="rgst-fund-empty">Расходов из фонда в этом периоде нет.</div>';
+      return '<div class="card listcard rgst-block rgst-fund">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+          '<div><div class="t">' + esc(f.name) + '</div>' +
+          '<div class="s">' + meta + '</div></div>' +
+          (f.items.length ? '<span class="list-count fin-count"><b>' + f.items.length +
+            '</b> ' + plural(f.items.length, 'строка', 'строки', 'строк') + '</span>' : '') +
+        '</div>' + body + '</div>';
+    }).join('');
+
+    var cards = '';
+    if (!rsg.length && !funds.length) {
       cards = '<div class="card"><div class="empty">В этой ведомости выплат пока нет. ' +
-        'Реестр собирается из расходов периода — выплат команде, самозанятым, ' +
-        'поставщикам и выводов на фонды.</div></div>';
+        'Реестр собирается из расходов периода — выплат команде, отчислений в фонды ' +
+        'и расходов из фондов.</div></div>';
+    } else {
+      cards = (rsCards ? '<div class="rgst-sec">С расчётного счёта</div>' + rsCards : '') +
+        (fundCards ? '<div class="rgst-sec">Фонды · отложили и расходы</div>' + fundCards : '');
     }
 
-    var copyBtn = groups.length
+    var copyBtn = (rsg.length || funds.length)
       ? '<button class="qchip" id="rgst-copy">' + ic('copy', 12) + 'Скопировать для сверки</button>'
       : '';
     // Счётчик сверки: сколько строк отмечено из всех. Пока не всё — амбер, всё — зелёный.
@@ -23904,17 +23928,27 @@
 
     var cp = el('rgst-copy');
     if (cp) cp.addEventListener('click', function () {
-      var lines = [];
-      groups.forEach(function (g) {
+      var lines = [], pushItem = function (it) {
+        lines.push((it.receiver || '—') + ' — ' + finRub(it.amount) +
+          (it.dest ? ' — ' + it.dest : '') +
+          (it.status === 'факт' ? ' (выплачено)' : ''));
+      };
+      lines.push('С РАСЧЁТНОГО СЧЁТА');
+      rsg.forEach(function (g) {
         lines.push('— ' + g.label + ' —');
-        g.items.forEach(function (it) {
-          lines.push((it.receiver || '—') + ' — ' + finRub(it.amount) +
-            (it.dest ? ' — ' + it.dest : '') +
-            (it.status === 'факт' ? ' (выплачено)' : ''));
-        });
+        g.items.forEach(pushItem);
         lines.push('');
       });
-      lines.push('Итого к выводу: ' + finRub(R.to_pay));
+      if (funds.length) {
+        lines.push('ФОНДЫ (отложили / расходы)');
+        funds.forEach(function (f) {
+          lines.push('— ' + f.name + ' · отложили ' + finRub(f.added) +
+            ' · расходы ' + finRub(f.spent) + ' —');
+          f.items.forEach(pushItem);
+          lines.push('');
+        });
+      }
+      lines.push('Итого к выводу с ВТБ: ' + finRub(R.to_pay));
       lines.push('Остаток на счёте: ' + finRub(R.rs));
       var text = lines.join('\n');
       if (navigator.clipboard && navigator.clipboard.writeText) {
