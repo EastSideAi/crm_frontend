@@ -279,6 +279,9 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-pill); padding: 7px 13px; cursor: pointer; transition: .15s; white-space: nowrap; }
 .qchip svg { width: 13px; height: 13px; color: var(--ink-3); }
 .qchip:hover { color: var(--ink); background: #EDEFF3; }
+/* «Из офиса» стоит рядом с направлениями, но отвечает на другой вопрос —
+   где прошел разговор. Включенный вид берем общий, у .qchip.on. */
+.mx-office-chip { margin-left: 10px; }
 .qchip .qn { font-size: 11px; font-weight: 700; color: var(--ink-3); }
 .qchip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
 .qchip.on svg, .qchip.on .qn { color: rgba(255,255,255,.75); }

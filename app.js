@@ -103,7 +103,7 @@
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     // EastSide Meeting: журнал встреч, фильтры и раскрытая карточка
-    meetx: null, meetxDept: '', meetxScope: 'all', meetxOpen: null,
+    meetx: null, meetxDept: '', meetxScope: 'all', meetxOpen: null, meetxOffice: false,
     meetxCard: {}, meetxText: {},
     _map: null, mapSeg: '', mapTariff: '', mapQ: '',
     _plat: {},          // кабинет клиента по карточкам: что семья делает на платформе
@@ -28039,6 +28039,9 @@
         ic('play', 11) + 'запись</button>';
     }
     var sub = [];
+    // Разговор из офиса подписываем каналом: «кто завел» у него нет, зато есть
+    // место, где он шел.
+    if (m.channel) sub.push('канал ' + esc(m.channel));
     if (m.by) sub.push(esc(m.by));
     if (m.dept) sub.push(esc(deptLabel(m.dept)));
     sub.push(MX_KIND[m.kind] || MX_KIND.unknown);
@@ -28312,6 +28315,12 @@
         saveUi(); renderHead(); renderView();
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxoffice]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxOffice = !state.meetxOffice;
+        saveUi(); renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxdept]'), function (b) {
       b.addEventListener('click', function () {
         state.meetxDept = b.getAttribute('data-mxdept');
@@ -28351,12 +28360,19 @@
   };
   function mxDeptKinds(d) { return MX_DEPT_KINDS[d] || []; }
   function mxDeptChips() {
+    /* «Из офиса» стоит в том же ряду, что направления, но это другой вопрос:
+       не чья встреча, а где она прошла. Разговоры в голосовых каналах иначе
+       терялись среди назначенных встреч (Павел 26.10.2026). */
+    var office = mxTab() === 'rec'
+      ? '<button type="button" class="qchip mx-office-chip' + (state.meetxOffice ? ' on' : '') +
+          '" data-mxoffice="1">' + ic('mic', 13) + 'Из офиса</button>'
+      : '';
     return '<div class="wk-top mx-top"><div class="dept-seg pay-seg mx-depts">' +
       '<button type="button" class="' + (state.meetxDept ? '' : 'on') + '" data-mxdept="">Все</button>' +
       MX_DEPTS.map(function (d) {
         return '<button type="button" class="' + (state.meetxDept === d ? 'on' : '') +
           '" data-mxdept="' + d + '">' + esc(DEPTS[d]) + '</button>';
-      }).join('') + '</div>' +
+      }).join('') + '</div>' + office +
       '<span class="wk-spacer"></span>' + mxScopeSeg() + '</div>';
   }
   function mxScopeSeg() {
@@ -28496,6 +28512,7 @@
     if (!m) { state.meetxOpen = null; renderMeetx(view); return; }
     var st = MX_STATE[m.state] || MX_STATE.ended;
     var sub = [];
+    if (m.channel) sub.push('канал ' + esc(m.channel));
     if (m.by) sub.push(esc(m.by));
     if (m.dept) sub.push(esc(deptLabel(m.dept)));
     sub.push(MX_KIND[m.kind] || MX_KIND.unknown);
@@ -28691,6 +28708,7 @@
     var chips = mxDeptChips();
 
     var body;
+    if (rec && state.meetxOffice) list = list.filter(function (m) { return !!m.channel; });
     if (rec) {
       var withText = list.filter(function (m) { return m.has_text; }).length;
       var agreed = list.reduce(function (a, m) { return a + (m.agreements || 0); }, 0);
