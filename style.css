@@ -3791,12 +3791,6 @@ button.tr-crumb:hover { color: var(--blue); }
 /* Подпись кнопки в две строки («Мое\nвремя») — не перенос, а поломка: ряд
    действий становится разновысоким. Ширины хватает даже на 390px. */
 .zw-acts .bp { white-space: nowrap; flex: none; }
-/* «В гугл-календарь» — третье действие в шапке, поэтому тихое: акцент на экране
-   один, и он достается главному действию, а не вспомогательной ссылке. */
-.sc-gcal { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;
-  font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-.sc-gcal:hover { color: var(--blue); }
-.sc-gcal svg { opacity: .7; }
 .zw-range { border: 0; background: none; padding: 4px 6px; border-radius: 8px; }
 .zw-range:not(.now):hover { color: var(--blue); background: var(--blue-tint); }
 .zw-fltrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -3888,7 +3882,11 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-who { min-width: 220px; }
 /* Оба фильтра ряда — один кегль и одна высота. Правило было написано только под
    «Все люди», и «Все зумы» рядом с ним стоял на четыре пикселя выше. */
-.sc-who .al-sel, .sc-kind .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+.sc-who .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+/* Кого показывать в сетке. Чипы стоят рядом с выбором человека: это один вопрос
+   «чье расписание смотрим», только с разных сторон. */
+.sc-roles { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.sc-roles .qchip { font-size: 12px; padding: 6px 11px; }
 .sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .sc-legend .sc-chip { cursor: default; }
 /* На телефоне легенда стоила целой строки шапки, а расшифровывала то, что и так
@@ -3899,7 +3897,73 @@ button.tr-crumb:hover { color: var(--blue); }
 @media (max-width: 700px) {
   .sc-legend { margin-left: 0; width: 100%; gap: 6px; flex-wrap: wrap; }
   .sc-legend .sc-chip { font-size: 10.5px; padding: 2px 6px; }
+  /* Четыре действия в ряд на телефоне не помещаются, а переносить было нечему:
+     блок держал flex: none и последняя кнопка уходила за край карточки. */
+  .zw-acts { width: 100%; margin-left: 0; flex-wrap: wrap; }
+  .zw-acts .bp { flex: 1 1 auto; justify-content: center; }
 }
+
+/* ── Мое расписание: лента того, куда идти ─────────────────────────────────
+   Сетка команды отвечает «кто свободен в четверг в три», лента — «куда идти мне
+   и кто ко мне записан» (Павел 26.10.2026). Поэтому у нее другая плотность:
+   строка на встречу, час слева колонкой, день — заголовком группы. */
+.sc-my { margin-top: 4px; }
+.sc-my-day { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 2px;
+  font-size: 12px; font-weight: 700; color: var(--ink-3); text-transform: lowercase;
+  letter-spacing: .01em; }
+.sc-my-day:first-child { margin-top: 6px; }
+.sc-my-day.now { color: var(--blue); }
+.sc-my-day i { font-style: normal; font-weight: 600; color: var(--ink-3); opacity: .75; }
+.sc-my-day.now i { color: var(--blue); opacity: .85; }
+.sc-my-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px;
+  border-radius: 10px; border-top: 1px solid var(--line); }
+.sc-my-day + .sc-my-row { border-top: 0; }
+.sc-my-h { flex: 0 0 46px; font-size: 13px; font-weight: 700; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
+.sc-my-b { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.sc-my-b b { font-size: 14px; font-weight: 650; letter-spacing: -.01em; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-my-b i { font-style: normal; font-size: 12px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Род встречи различает узкая полоса слева, а не заливка строки: строк в ленте
+   немного, и каждая залитая плашка читалась бы как тревога. */
+.sc-my-row.busy { box-shadow: inset 2px 0 0 var(--blue); }
+.sc-my-row.plan { box-shadow: inset 2px 0 0 var(--navy); }
+.sc-my-row.room { box-shadow: inset 2px 0 0 var(--green); }
+.sc-my-row.live { background: var(--blue-tint); box-shadow: inset 2px 0 0 var(--blue); }
+.sc-my-row.live .sc-my-h { color: var(--blue); }
+.sc-my-go { flex: none; padding: 5px 12px; border-radius: 9px; font-size: 12.5px;
+  font-weight: 650; color: var(--blue); background: var(--blue-tint); text-decoration: none;
+  transition: .15s var(--ease); }
+.sc-my-go:hover { filter: brightness(.96); }
+.sc-my-none { display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 34px 20px 30px; text-align: center; }
+.sc-my-none svg { color: var(--ink-3); opacity: .6; margin-bottom: 2px; }
+.sc-my-none b { font-size: 14.5px; letter-spacing: -.01em; }
+.sc-my-none span { max-width: 460px; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+
+/* Инструкция живет на самом экране и раскрывается кнопкой: тем, кто уже умеет,
+   она не мешает, а новому человеку не нужно искать ее в чужом документе. */
+.sc-how { margin: 4px 0 12px; padding: 14px 16px 12px; border-radius: var(--r-lg);
+  background: var(--fill); }
+.sc-how ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; }
+.sc-how li { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.sc-how li b { color: var(--ink); font-weight: 650; }
+.sc-how p { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-3); }
+/* Связанный календарь — состояние, а не действие: кнопка остается тихой, но
+   галочкой цвета говорит, что связь стоит. */
+.sc-gcalbtn.on { color: var(--green-ink); }
+.sc-gcalbtn.on svg { color: var(--green); }
+.sg-steps { margin: 0 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
+.sg-steps li { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.sg-mail { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.sg-team { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.sg-team:hover { color: var(--blue); }
+.sg-team svg { opacity: .7; }
+.sg-mail code { font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: 11.5px;
+  padding: 4px 8px; border-radius: 7px; background: var(--card); border: 1px solid var(--line);
+  color: var(--ink); word-break: break-all; }
 
 .sc-grid { border-top: 1px solid var(--line); }
 .sc-row { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: stretch; border-bottom: 1px solid var(--line); }
@@ -3938,30 +4002,9 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-chip.room.live { box-shadow: inset 0 0 0 2px var(--blue); font-weight: 700; }
 a.sc-chip.room:hover { filter: brightness(.97); }
 a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
-/* Зум — единственный чип без своего цвета, и на клетке «сегодня» (тоже --fill) он
-   сливался с фоном, а в легенде читался просто словом, а не образцом. Тонкое
-   кольцо внутрь: заливка остается тихой, границу видно. */
-.sc-chip.zoom { background: var(--fill); color: var(--ink);
-  outline: 1px solid var(--line-2); outline-offset: -1px; }
-/* Зум в слоте: название открывает карточку встречи, иконка рядом копирует ссылку.
-   Кнопка копирования тихая и проявляется по наведению — в плотной сетке лишняя
-   иконка в каждой клетке читалась бы как шум (тот же прием, что у .dn-undo). */
-.sc-chip.zoom.has-link { display: flex; align-items: center; gap: 4px; padding-right: 3px; }
-.sc-zopen { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-zcopy { flex: none; width: 18px; height: 18px; display: grid; place-items: center;
-  border-radius: 5px; color: var(--ink-3); opacity: 0; transition: .15s; }
-.sc-chip.zoom:hover .sc-zcopy, .sc-zcopy:focus-visible { opacity: 1; }
-.sc-zcopy:hover { color: var(--blue); background: var(--blue-tint); }
-/* На телефоне наведения нет: кнопка видна всегда, только приглушенно. */
-@media (hover: none) { .sc-zcopy { opacity: .5; } }
 /* Название планерки в узкой колонке недели важнее одной ровной строки: «Планерка
    продаж» и «Планерка продукта» обрезаются в одно и то же «Планерка прод…». */
 .sc-grid .sc-chip.meet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-/* У зума ровно та же беда, и она дороже: человек пришел в клетку за ссылкой и
-   должен видеть, чью ссылку берет. «Китайский (Гр…» и «Китайский (Ко…» — не видит. */
-.sc-grid .sc-chip.zoom .sc-zopen { white-space: normal; text-overflow: clip;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sc-chip.act { cursor: pointer; }
 .sc-chip.act:hover { background: var(--line-2); }
 .sc-chip.off { cursor: pointer; }
@@ -4018,7 +4061,7 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
   /* Два фильтра делят одну строку поровну. Порознь они вставали лесенкой: «Все
      люди» во всю ширину, «Все зумы» вполовину — и ряд читался как две разные
      вещи, хотя это один набор. */
-  .sc-who, .sc-kind { min-width: 0; flex: 1 1 140px; }
+  .sc-who { min-width: 0; flex: 1 1 140px; }
   .sc-legend { margin-left: 0; width: 100%; }
   .sc-claimsel { margin-left: 0; width: 100%; }
   .zd-c .sc-chip { white-space: normal; }
@@ -11161,14 +11204,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    флекса не сжимается короче своего текста, и название вылезало за границу дня. */
 .mm-ev.plan { display: block; background: var(--navy-soft); color: var(--navy);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mm-ev.zoom { background: var(--fill); color: var(--ink-2); }
-.mm-open { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mm-copy { flex: none; width: 17px; height: 17px; display: grid; place-items: center;
-  border-radius: 5px; color: var(--ink-3); opacity: 0; transition: .15s; }
-.mm-ev:hover .mm-copy, .mm-copy:focus-visible { opacity: 1; }
-.mm-copy:hover { color: var(--blue); background: var(--blue-tint); }
-@media (hover: none) { .mm-copy { opacity: .5; } }
 .mm-more { align-self: flex-start; font-size: 11px; font-weight: 600; color: var(--ink-3); padding: 1px 3px; }
 .mm-more:hover { color: var(--blue); }
 /* Подпись под сеткой: тихая сноска, а не абзац текста. Без нее строка шла
@@ -12440,17 +12475,20 @@ body.office-full { overflow: hidden; }
 .mot-manual { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 14px 16px;
   display: flex; flex-direction: column; gap: 10px; }
 .mm-h { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
-.mm-grid { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
-.mm-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px;
+/* Форма ручного ввода. Имя класса развели с сеткой месяца в расписании: обе
+   назывались mm-grid, и та, что ниже по файлу, перебивала чужую раскладку —
+   календарь месяца разъезжался в ленту клеток (замечено 26.10.2026). */
+.mot-inputs { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.mot-inputs label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px;
   font-weight: 600; color: var(--ink-3); }
-.mm-grid input { width: 120px; padding: 7px 10px; border: 1px solid var(--line-2);
+.mot-inputs input { width: 120px; padding: 7px 10px; border: 1px solid var(--line-2);
   border-radius: 10px; font: inherit; font-size: 13px; color: var(--ink); background: var(--card);
   font-variant-numeric: tabular-nums; }
-.mm-grid input:focus { outline: 2px solid var(--blue-tint); border-color: var(--blue); }
+.mot-inputs input:focus { outline: 2px solid var(--blue-tint); border-color: var(--blue); }
 .mm-note { font-size: 11.5px; color: var(--ink-3); }
 
 .mot-rates-closed { margin-bottom: 12px; }
-.mot-rates .mm-grid { margin-top: 12px; }
+.mot-rates .mot-inputs { margin-top: 12px; }
 
 .mot-uns { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .mot-un { display: grid; grid-template-columns: minmax(0, 1.4fr) 110px minmax(0, 1fr) minmax(0, 1fr);
@@ -12488,8 +12526,8 @@ body.office-full { overflow: hidden; }
     font: 600 10px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
     color: var(--ink-3); margin-bottom: 2px; }
   .mot-detail { padding: 2px 12px 14px; }
-  .mm-grid input { width: 100%; }
-  .mm-grid label { flex: 1 1 130px; }
+  .mot-inputs input { width: 100%; }
+  .mot-inputs label { flex: 1 1 130px; }
   .mot-stat b { font-size: 20px; }
   .mot-line { grid-template-columns: 44px minmax(0, 1fr) 84px; }
   .mot-line .ml-r { display: none; }
