@@ -9655,39 +9655,76 @@
     setTimeout(function () { var f = ov.querySelector('#ws-title'); if (f) f.focus(); }, 30);
   }
 
-  /* ── Бот эфира: проверка ответов ─────────────────────────────
-     Ручка /admin/api/webinar/efir-try делает тот же разбор, что чат эфира, но ничего
-     никуда не отправляет. История живет только в этой вкладке: это черновик проверки,
-     а не журнал. */
-  var EFB_SAY = {
-    silent: ['Промолчит', 'n-off', 'Это не вопрос: в чат ничего не уйдет, модератору тоже.'],
-    auto: ['Ответит сам', 'n-ok', 'Уйдет в чат сразу, без модератора.'],
-    moderator: ['Модератору', 'n-wait', 'Вопрос с черновиком придет модератору в бот уведомлений. В чат уйдет то, что он одобрит или напишет сам.']
-  };
+  /* ── Бот эфира: репетиция ───────────────────────────────────
+     Окно как чат эфира, только без эфира (Вера 26.10.2026). Человек пишет вопрос
+     зрителем, бот отвечает здесь же. Чего бот не знает — уходит модератору настоящей
+     карточкой с пометкой «проверка», и ее ответ появляется в этом окне: окно раз в
+     несколько секунд спрашивает /admin/api/webinar/efir-try/<id>. В ленту эфира и в
+     карточки CRM ничего не попадает. История живет только во вкладке. */
+  var EFB_POLL_MS = 4000;
+  function efbBubble(who, text, cls) {
+    return '<div class="efb-msg ' + cls + '"><span class="efb-who">' + esc(who) + '</span>' +
+      '<p class="efb-txt">' + esc(text) + '</p></div>';
+  }
+  function efbNote(text) { return '<p class="efb-note">' + esc(text) + '</p>'; }
+  function efbItem(t) {
+    var out = efbBubble('Вы как зритель', t.q, 'me');
+    if (t.pending) return out + efbNote('Бот думает, до 20 секунд…');
+    if (t.err) return out + efbNote(t.err);
+    var r = t.r;
+    if (r.action === 'silent') return out + efbNote('Бот промолчал: это не вопрос. В эфире тоже ничего не напишет.');
+    if (r.action === 'auto') {
+      return out + efbBubble('Бот', r.text, 'bot') +
+        efbNote(r.live ? 'Ответ из базы знаний. В эфире уйдет в чат сразу.'
+          : 'Ответ из базы знаний. Пока автоответ выключен, в эфире этот ответ сначала увидит модератор.');
+    }
+    out += efbNote('Бот не уверен и спросил модератора в боте уведомлений.' +
+      (r.reason ? ' Почему: ' + r.reason + '.' : ''));
+    if (r.text) out += '<div class="efb-draft"><span class="efb-who">Черновик бота</span><p class="efb-txt">' + esc(r.text) + '</p></div>';
+    if (t.st === 'sent') return out + efbBubble('Ответ после модератора', t.final, 'bot');
+    if (t.st === 'skipped') return out + efbNote('Модератор решил не отвечать.');
+    if (t.lost) return out + efbNote('Не получилось узнать ответ модератора. Обнови страницу, если ждешь давно.');
+    return out + efbNote('Ждем ответ модератора…');
+  }
+  function efbPoll() {
+    clearTimeout(state.efbTimer);
+    if (state.page !== 'efirbot') return;
+    var wait = (state.efbTries || []).filter(function (t) {
+      return t.r && t.r.action === 'moderator' && t.r.draft_id && !t.st && !t.lost;
+    });
+    if (!wait.length) return;
+    Promise.all(wait.map(function (t) {
+      return api('/admin/api/webinar/efir-try/' + t.r.draft_id).then(function (j) {
+        if (j.status !== 'pending') { t.st = j.status; t.final = j.text || ''; return true; }
+        return false;
+      }).catch(function (e) { if (e && e.status === 404) { t.lost = true; return true; } return false; });
+    })).then(function (changed) {
+      if (state.page !== 'efirbot') return;
+      if (changed.some(Boolean)) renderEfirBot(document.getElementById('view'));
+      else state.efbTimer = setTimeout(efbPoll, EFB_POLL_MS);
+    });
+  }
   function renderEfirBot(view) {
     var tries = state.efbTries || (state.efbTries = []);
-    var list = tries.map(function (t) {
-      if (t.pending) return '<div class="efb-it"><p class="efb-q">' + esc(t.q) + '</p><p class="efb-why">Бот думает, до 20 секунд…</p></div>';
-      if (t.err) return '<div class="efb-it"><p class="efb-q">' + esc(t.q) + '</p><p class="efb-why">' + esc(t.err) + '</p></div>';
-      var say = EFB_SAY[t.r.action] || EFB_SAY.moderator;
-      var text = t.r.text ? '<p class="efb-a">' + esc(t.r.text) + '</p>'
-        : (t.r.action === 'moderator' ? '<p class="efb-a none">Черновика нет, модератор пишет сам или пропускает.</p>' : '');
-      return '<div class="efb-it"><div class="efb-top"><p class="efb-q">' + esc(t.q) + '</p>' +
-        '<span class="sev ' + say[1] + '">' + say[0] + '</span></div>' + text +
-        '<p class="efb-why">' + esc(say[2]) + (t.r.reason ? ' Почему не сам: ' + esc(t.r.reason) + '.' : '') + '</p></div>';
-    }).join('');
+    var list = tries.map(efbItem).join('');
     view.innerHTML = '<div class="card efb">' +
-      '<p class="efb-lead">Напиши сообщение так, как его написал бы зритель в чате эфира. Увидишь, что сделает бот. В эфир, в CRM и модератору ничего не уходит.</p>' +
+      '<p class="efb-lead">Репетиция чата эфира. Пиши вопрос так, как написал бы зритель. Бот ответит здесь, а чего не знает, спросит модератора, и его ответ появится тут же. В эфир и в CRM ничего не уходит.</p>' +
+      (list ? '<div class="efb-chat" id="efb-chat">' + list + '</div>' : '') +
       '<textarea class="note-ta" id="efb-in" maxlength="1000" placeholder="Например: сколько стоит языковой год?"></textarea>' +
-      '<div class="efb-row"><button class="mk-btn primary" id="efb-go">Проверить</button></div>' +
-      '</div>' + (list ? '<div class="card efb-list">' + list + '</div>' : '');
+      '<div class="efb-row"><button class="mk-btn primary" id="efb-go">Отправить</button></div>' +
+      '</div>';
     var inp = view.querySelector('#efb-in'), go = view.querySelector('#efb-go');
+    var chat = view.querySelector('#efb-chat');
+    if (chat) chat.scrollTop = chat.scrollHeight;
+    inp.value = state.efbDraft || '';
+    inp.addEventListener('input', function () { state.efbDraft = inp.value; });
     function send() {
       var q = (inp.value || '').trim();
       if (!q) { inp.focus(); return; }
+      state.efbDraft = '';
       var t = { q: q, pending: true };
-      tries.unshift(t);
-      if (tries.length > 30) tries.length = 30;
+      tries.push(t);
+      if (tries.length > 30) tries.shift();
       renderEfirBot(view);
       api('/admin/api/webinar/efir-try', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: q }) })
@@ -9700,8 +9737,9 @@
     }
     go.addEventListener('click', send);
     inp.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
+    efbPoll();
   }
 
   function renderNews(view) {
