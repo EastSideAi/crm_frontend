@@ -36003,7 +36003,13 @@
     var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (step != null) {
       var row = document.querySelector('.prc-step[data-i="' + step + '"]');
-      if (row) { row.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'center' }); return; }
+      if (row) {
+        /* перерисовка выбивает фокус на body; с клавиатуры человек должен остаться на шаге */
+        var rb = row.querySelector('.prc-row');
+        if (rb) rb.focus({ preventScroll: true });
+        row.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'center' });
+        return;
+      }
     }
     window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' });
   }
@@ -36251,6 +36257,20 @@
         '<span class="prc-lg-h">«передача» над шагом: работа переходит к другим людям, «возврат»: к тому, кто ее уже отдавал</span></div>';
   }
 
+  /* Концы рядов схемы: число колонок задает CSS (--cols по ширине), а какой блок
+     последний в ряду, знает только раскладка. Конец ряда получает загиб вниз, начало
+     следующего — спуск со стрелкой. */
+  function prcSnake() {
+    var ol = document.querySelector('.prc-scheme');
+    if (!ol) return;
+    var cols = parseInt(getComputedStyle(ol).getPropertyValue('--cols'), 10) || 1;
+    Array.prototype.forEach.call(ol.children, function (li, i) {
+      li.classList.toggle('re', (i + 1) % cols === 0);
+      li.classList.toggle('rs', i > 0 && i % cols === 0);
+    });
+  }
+  window.addEventListener('resize', function () { if (state.page === 'processes') prcSnake(); });
+
   function renderProcessNode(view, nid) {
     var light = prcLight(nid), pid = prcPid(nid), who = state.prcWho || '';
     fetchProcessFull(pid);
@@ -36274,8 +36294,10 @@
     var facts = '<div class="prc-facts">' +
       (owner ? fact('Ведет', esc(owner)) : '') +
       fact('Агент', ag ? esc(ag.name) : (n.agent ? esc(n.agent) : 'нет, ведет человек'),
-        ag ? 'куратор ' + esc(prcPerson(ag.curator).name) : '') +
-      fact('Шагов', z.steps + (z.nodes > 1 ? ' <span>с вложенными</span>' : ''), z.ag ? 'агенту можно отдать ' + z.ag : '') + '</div>';
+        (ag ? 'куратор ' + esc(prcPerson(ag.curator).name) : '') +
+        (z.ag ? (ag ? ' · ' : '') + 'может взять ' + z.ag + ' из ' + z.steps + ' ' + plural(z.steps, 'шага', 'шагов', 'шагов') : '')) +
+      /* число шагов совпадает со схемой под ним; вложенные называем отдельно */
+      fact('Шагов', n.steps.length + '', z.steps > n.steps.length ? 'и еще ' + (z.steps - n.steps.length) + ' внутри них' : '') + '</div>';
     /* Схема процесса как на рисунках Рыбакова (рис. 1 и 12 книги): слева событие,
        с которого все начинается, дальше пронумерованные шаги стрелками рядами, справа
        результат. Это картинка процесса целиком, ее читают первой; подробности — в
@@ -36290,7 +36312,14 @@
             (s.pain ? '<em>проблема</em>' : '') + '</small>' : '') + '</button></li>';
       }).join('') +
       (n.done ? '<li class="prc-sc-end done" title="' + esc(n.done) + '"><span class="po-lbl">' + ic('check', 12) + 'Результат</span><p>' + esc(n.done) + '</p></li>' : '') +
-      '</ol>';
+      '</ol>' +
+      ((n.input || n.output) ? '<div class="prc-io prc-io-top">' +
+        (n.input ? '<div><span class="po-lbl">Что нужно на входе</span><p>' + esc(n.input) + '</p></div>' : '') +
+        (n.output ? '<div><span class="po-lbl">Что получаем на выходе</span><p>' + esc(n.output) + '</p></div>' : '') + '</div>' : '');
+    /* На телефоне схемы нет — линия шагов сама и есть цепочка, поэтому начало и
+       результат встают на ее концы. */
+    var endA = n.trigger ? '<li class="prc-lend start"><span class="po-lbl">Начало</span><p>' + esc(n.trigger) + '</p></li>' : '';
+    var endB = n.done ? '<li class="prc-lend done"><span class="po-lbl">' + ic('check', 12) + 'Результат</span><p>' + esc(n.done) + '</p></li>' : '';
     var lvl = light.variant_of && !light.parent ? 'Вариант шага · один из способов'
       : (n.level || 1) === 1 ? 'Процесс' : 'Подпроцесс · уровень ' + n.level;
 
@@ -36313,14 +36342,13 @@
     };
     var inc = prcIncoming(nid);
     var more = [
-      ['Начинается, когда', n.trigger], ['Закончен, когда', n.done],
-      ['На входе', n.input], ['На выходе', n.output], ['Срок', n.sla],
+      ['Срок', n.sla],
     ].filter(function (x) { return x[1]; });
     var foot = sec('inc', 'Сюда приходит работа из', inc, function (x) {
         return '<li><button type="button" class="prc-goto" data-open="' + esc(x.nid) + '" data-step="' + x.i + '">' + ic('go', 12) +
           esc(prcRootTitle(x.nid)) + ': ' + esc(x.title) + '</button></li>';
       }, 'prc-inc') +
-      sec('io', 'Границы, вход и выход', more.concat([['Передачи', nHand + ' из рук в руки, ' + nBack + ' ' + plural(nBack, 'возврат', 'возврата', 'возвратов')]]), function (x) {
+      sec('io', 'Срок и передачи', more.concat([['Передачи', nHand + ' из рук в руки, ' + nBack + ' ' + plural(nBack, 'возврат', 'возврата', 'возвратов')]]), function (x) {
         return '<li class="prc-kv"><span class="po-lbl">' + x[0] + '</span>' + esc(x[1]) + '</li>';
       }, 'prc-plain') +
       (full ? (
@@ -36342,16 +36370,19 @@
           '<button type="button" class="' + (lens === 'list' ? 'on' : '') + '" data-lens="list" role="tab" aria-selected="' + (lens === 'list') + '">Шаги</button>' +
           '<button type="button" class="' + (lens === 'lanes' ? 'on' : '') + '" data-lens="lanes" role="tab" aria-selected="' + (lens === 'lanes') + '">Дорожки</button>' +
         '</div>' + (f === 'none' ? '<span class="prc-err">инструкции не загрузились, обновите страницу</span>' : '') + '</div>' +
-        (lens === 'lanes' ? prcLanes(n, who) : '<ol class="prc-steps">' + steps + '</ol>') +
+        (lens === 'lanes' ? prcLanes(n, who) : '<ol class="prc-steps">' + endA + steps + endB + '</ol>') +
         (foot ? '<div class="prc-foot">' + foot + '</div>' : '') +
       '</div></div>';
 
     prcWire(view);
+    prcSnake();
     view.querySelectorAll('.prc-step .prc-row').forEach(function (b) {
       b.addEventListener('click', function () {
         var i = +b.parentNode.getAttribute('data-i');
         state.prcStep = state.prcStep === i ? null : i;
         renderView();
+        var nb = view.querySelector('.prc-step[data-i="' + i + '"] .prc-row');
+        if (nb) nb.focus({ preventScroll: true });
       });
     });
     view.querySelectorAll('[data-lens]').forEach(function (b) {

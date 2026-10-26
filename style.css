@@ -12733,20 +12733,36 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .prc-head .prc-span { margin-top: 4px; font-size: 15px; font-weight: 600; color: var(--ink-2); letter-spacing: -.01em; text-wrap: balance; }
 .prc-goal { margin-top: 10px; font-size: 15px; line-height: 1.55; color: var(--ink); max-width: 760px; text-wrap: pretty; }
 /* паспорт процесса: три факта мини-карточками на заливке, вместо таблицы из семи строк */
-.prc-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 18px; max-width: 900px; }
+.prc-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
 .prc-fact { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 11px 14px 12px; border-radius: 13px; background: var(--fill); }
 .prc-fact b { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; line-height: 1.3; }
 .prc-fact b span { font-size: 12px; font-weight: 500; color: var(--ink-2); letter-spacing: 0; }
 .prc-fact small { font-size: 12px; color: var(--ink-2); line-height: 1.35; }
 /* схема процесса по рисункам Рыбакова: начало, шаги прямоугольниками со стрелками
-   рядами, результат. Стрелка — псевдоэлемент в зазоре сетки, у последнего ее нет. */
-.prc-scheme { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px 26px;
-  padding: 18px 46px 22px 24px; border-top: 1px solid var(--line); background: var(--main); }
+   рядами, результат. Колонок фиксированное число (--cols по ширине), поэтому конец
+   ряда известен: там вместо стрелки вбок идет загиб к началу следующего ряда, как
+   дуга на рис. 12, и цепочка читается одной линией. */
+.prc-scheme { --cols: 5; --gx: 28px; --gy: 30px; list-style: none; display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: var(--gy) var(--gx);
+  padding: 20px 24px 24px; border-top: 1px solid var(--line); background: var(--main); }
 .prc-scheme > li { position: relative; display: flex; min-width: 0; }
-.prc-scheme > li:not(:last-child)::after { content: ''; position: absolute; top: 50%; right: -19px; width: 12px; height: 1.5px;
-  background: var(--wire); }
-.prc-scheme > li:not(:last-child)::before { content: ''; position: absolute; top: 50%; right: -19px; width: 6px; height: 6px;
-  margin-top: -2.6px; border-top: 1.5px solid var(--wire); border-right: 1.5px solid var(--wire); transform: rotate(45deg); }
+.prc-scheme > li:not(:last-child)::after { content: ''; position: absolute; top: 50%; right: calc(var(--gx) * -1 + 6px);
+  width: calc(var(--gx) - 12px); height: 10px; margin-top: -5px; background: var(--wire);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 10'%3E%3Cpath d='M0 5h14M10 1l4 4-4 4' fill='none' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E") right center / auto 100% no-repeat,
+    linear-gradient(#000, #000) left center / calc(100% - 4px) 1.5px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 10'%3E%3Cpath d='M0 5h14M10 1l4 4-4 4' fill='none' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E") right center / auto 100% no-repeat,
+    linear-gradient(#000, #000) left center / calc(100% - 4px) 1.5px no-repeat; }
+/* конец ряда: от низа последнего блока вниз и влево, к центру первого столбца */
+.prc-scheme > li.re:not(:last-child)::after { top: 100%; right: 50%; margin-top: 0; height: calc(var(--gy) / 2);
+  width: calc((100% + var(--gx)) * (var(--cols) - 1)); background: none; -webkit-mask: none; mask: none;
+  border-right: 1.5px solid var(--wire); border-bottom: 1.5px solid var(--wire); border-bottom-right-radius: 10px; }
+/* начало ряда: спуск со стрелкой в блок */
+.prc-scheme > li.rs::before { content: ''; position: absolute; bottom: 100%; left: calc(50% - 5px); width: 10px;
+  height: calc(var(--gy) / 2 + 1px); background: var(--wire);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cpath d='M5 0v14M1 10l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E") center bottom / 100% auto no-repeat,
+    linear-gradient(#000, #000) center top / 1.5px 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cpath d='M5 0v14M1 10l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E") center bottom / 100% auto no-repeat,
+    linear-gradient(#000, #000) center top / 1.5px 100% no-repeat; }
 .prc-sc-box { display: flex; flex-direction: column; gap: 4px; width: 100%; min-height: 82px; text-align: left; padding: 10px 12px 11px;
   background: var(--card); border: 1px solid var(--line-2); border-radius: 12px;
   transition: border-color .12s var(--ease), background .12s var(--ease); }
@@ -12755,13 +12771,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .prc-sc-box.on { border-color: var(--blue); background: var(--blue-tint); }
 .prc-sc-box i { font-style: normal; font-size: 11.5px; font-weight: 800; color: var(--ink-3); }
 .prc-sc-box.sub i { color: var(--blue); }
-.prc-sc-box span { font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--ink);
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.prc-sc-box span { font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--ink); overflow-wrap: break-word; hyphens: auto; }
 .prc-sc-box small { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: auto; padding-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--blue); }
 .prc-sc-box small em { font-style: normal; color: var(--amber-ink); }
 .prc-sc-end { flex-direction: column; gap: 4px; width: 100%; padding: 10px 12px 11px; border-radius: 12px; min-height: 82px; }
-.prc-sc-end p { font-size: 12.5px; line-height: 1.4; color: var(--ink-2);
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.prc-sc-end p { font-size: 12.5px; line-height: 1.45; color: var(--ink-2); overflow-wrap: break-word; hyphens: auto; }
+.prc-io-top { padding: 0 24px 20px; background: var(--main); }
+.prc-io-top > div { background: var(--card); border: 1px solid var(--line); }
+/* концы линии шагов — только на телефоне, где схемы нет */
+.prc-lend { display: none; }
 .prc-sc-end.start { background: var(--card); border: 1px dashed var(--wire); }
 .prc-sc-end.done { background: var(--green-soft); }
 .prc-sc-end.done .po-lbl { display: inline-flex; align-items: center; gap: 4px; color: var(--green-ink); }
@@ -12889,6 +12907,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .prc-kv .po-lbl { display: block; margin-bottom: 2px; }
 .prc-fb small { display: block; font-size: 11.5px; color: var(--ink-3); word-break: break-word; }
 
+/* колонок схемы по ширине; концы рядов размечает prcSnake */
+@media (max-width: 1360px) { .prc-scheme { --cols: 4; } }
+@media (max-width: 1100px) { .prc-scheme { --cols: 3; } }
 @media (max-width: 1100px) {
   .prc-person { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
@@ -12911,9 +12932,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .prc-fact { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 9px 12px; }
   .prc-fact .po-lbl { width: 64px; flex: none; }
   .prc-fact small { flex-basis: 100%; padding-left: 74px; }
-  .prc-scheme { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 22px; padding: 14px 30px 16px 16px; }
-  .prc-scheme > li:not(:last-child)::after, .prc-scheme > li:not(:last-child)::before { right: -16px; }
-  .prc-sc-box, .prc-sc-end { min-height: 74px; }
+  .prc-scheme { display: none; }
+  .prc-io-top { padding: 0 16px 16px; background: none; }
+  .prc-lend { display: flex; flex-direction: column; gap: 3px; position: relative; margin: 4px 16px 8px 52px; padding: 9px 12px 10px;
+    border-radius: 11px; font-size: 13px; line-height: 1.45; }
+  .prc-lend::before { content: ''; position: absolute; left: -30px; top: 14px; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--card); border: 1.5px solid var(--wire); }
+  .prc-lend.start { background: var(--fill); color: var(--ink-2); }
+  .prc-lend.done { background: var(--green-soft); color: var(--green-ink); margin-top: 8px; }
+  .prc-lend.done::before { background: var(--green); border-color: var(--green); }
+  .prc-lend.done .po-lbl { display: inline-flex; align-items: center; gap: 4px; color: var(--green-ink); }
   .prc-lens { padding: 10px 16px; }
   .prc-steps::before { left: 27px; }
   .prc-row { grid-template-columns: 24px minmax(0, 1fr) 14px; gap: 12px; padding: 11px 16px; }
