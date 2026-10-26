@@ -8829,9 +8829,15 @@
       // существовал (Павел 17.09.2026): последняя строка заводит его самого,
       // именем из учетки.
       claim = '<div class="sc-claim">' + ic('team', 15) +
-        '<span>Чтобы отмечать свое свободное время, выберите себя в расписании.</span>' +
+        '<span>Чтобы отмечать свое свободное время, выберите себя в расписании. ' +
+          'Берете разборы — выбирайте «провожу разборы»: эти часы лид увидит в боте и на сайте.</span>' +
         '<label class="al-selwrap sc-claimsel"><select class="al-sel" id="sc-me"><option value="">Кто вы в расписании</option>' +
           free.map(function (p) { return '<option value="' + p.id + '">' + esc(p.person) + ' · ' + (SC_WHAT[p.role] || p.role) + '</option>'; }).join('') +
+          /* Разбор — это роль «куратор» в расписании, и ровно ее окна видит лид,
+             когда выбирает время в боте или на сайте. Без этой строки менеджер
+             продаж мог завести себя только как «уроков не веду», и его часы не
+             видел никто (Павел 26.10.2026). */
+          (state.userName ? '<option value="razbor">' + esc(state.userName) + ' · провожу разборы</option>' : '') +
           (state.userName ? '<option value="staff">' + esc(state.userName) + ' · уроков не веду</option>' : '') +
         '</select></label></div>';
     }
@@ -8914,7 +8920,8 @@
     if (el('sc-me')) el('sc-me').addEventListener('change', function () {
       var v = el('sc-me').value; if (!v) return;
       apiSend('/admin/api/sched/me', 'POST',
-        v === 'staff' ? { staff: true } : { person_id: +v },
+        v === 'staff' ? { staff: true }
+          : v === 'razbor' ? { razbor: true } : { person_id: +v },
         function () { schedReload(); },
         function (code, e) { showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — обнови страницу'); });
     });
@@ -28246,6 +28253,14 @@
         '<span class="mx-act-b"><b>Запланировать</b>' +
           '<i>' + (on ? 'позову людей и напомню' : 'тоже ждет сервер встреч') +
           '</i></span></button>',
+      /* Свое свободное время отмечали во вкладке «Расписание», и до него никто не
+         доходил: в сетке продаж не было ни одного окна, а лид в боте и на сайте
+         видит ровно эти окна (Павел 26.10.2026). Теперь это действие раздела, а
+         не настройка внутри вкладки. */
+      '<button type="button" class="mx-act" id="mx-slots">' +
+        '<span class="mx-act-i">' + ic('clock', 17) + '</span>' +
+        '<span class="mx-act-b"><b>Мое время</b>' +
+          '<i>часы, в которые меня можно записать</i></span></button>',
     ];
     return '<div class="mx-top-acts' + (acts.length === 1 ? ' one' : '') +
       (acts.length === 3 ? ' three' : '') + '">' + acts.join('') + '</div>';
@@ -28279,6 +28294,13 @@
     el('mx-plan') && el('mx-plan').addEventListener('click', function () {
       if (!meetOn()) { mxNoServer(); return; }
       openMeetRoom('plan');
+    });
+    el('mx-slots') && el('mx-slots').addEventListener('click', function () {
+      // Открываем расписание сразу в режиме отметки: человек пришел ставить часы,
+      // а не смотреть сетку.
+      state.mxTab = 'sched';
+      state.schedEdit = true;
+      saveUi(); renderHead(); renderView();
     });
     /* Шапка раздела считает идущие встречи тем же счетом, что и список, поэтому
        перерисовывается вместе с ним: иначе на одном экране оказывались два разных
