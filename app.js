@@ -2455,6 +2455,10 @@
     /* Две двери в один раздел: свои приходят по `marketing` и видят все вкладки,
        подрядчик по трафику — по `ads`, и у него остается одна «Реклама» (mkTabsFor). */
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing|ads' },
+    /* «Бот эфира» — проверить, что бот сделает с сообщением из чата эфира, не трогая
+       сам эфир (Вера 26.10.2026): ни ленты, ни карточки лида, ни сообщения модератору.
+       Открыт всем с задачами: вопросы готовят модераторы, спикеры и продажи. */
+    { id: 'efirbot', label: 'Бот эфира', icon: 'dialogs', cap: 'tasks' },
     /* Цифры лежат подряд (просьба Веры 08.10.2026): «Маркетинг, Соцстатистика,
        Аналитика бота рядом друг с другом». До этого соцсети стояли через два
        пункта, а аналитика бота вообще в хвосте меню, за финансовыми разделами, и
@@ -3132,6 +3136,18 @@
           state.dashPeriod = b.getAttribute('data-per');
           saveUi(); renderTopbar(); renderView();
         });
+      });
+    } else if (state.page === 'processes') {
+      /* Быстрый переход: главная раздела и четыре процесса трубы — главная цепочка
+         компании, в ней самые большие процессы (Вера 26.10.2026). */
+      var prc = state._prc && state._prc !== 'none' ? state._prc : null;
+      var curP = prc && state.prcNode ? prcPid(state.prcNode) : null;
+      tb.innerHTML = '<nav class="tabs"><a class="tab' + (state.prcNode ? '' : ' on') + '" data-prc-tab="">Все процессы</a>' +
+        (prc ? prc.processes.filter(function (p) { return p.group === 'core'; }).map(function (p) {
+          return '<a class="tab' + (curP === p.id ? ' on' : '') + '" data-prc-tab="' + esc(p.root) + '" title="' + esc(prcShort(p.nodes[p.root].title)) + '">' + esc(PRC_TAB[p.id] || prcShort(p.nodes[p.root].title)) + '</a>';
+        }).join('') : '') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () { prcOpen(t.getAttribute('data-prc-tab') || null); });
       });
     } else {
       var meta = navMeta(state.page);
@@ -3815,6 +3831,7 @@
     else if (state.page === 'planfact') renderPlanFact(view);
     else if (state.page === 'manage') renderManage(view);
     else if (state.page === 'stories') renderStories(view);
+    else if (state.page === 'efirbot') renderEfirBot(view);
     else if (state.page === 'gifts') renderGifts(view);
     else if (state.page === 'broadcasts') renderBroadcasts(view);
     else if (state.page === 'social') renderSocial(view);
@@ -9636,6 +9653,93 @@
       });
     });
     setTimeout(function () { var f = ov.querySelector('#ws-title'); if (f) f.focus(); }, 30);
+  }
+
+  /* ── Бот эфира: репетиция ───────────────────────────────────
+     Окно как чат эфира, только без эфира (Вера 26.10.2026). Человек пишет вопрос
+     зрителем, бот отвечает здесь же. Чего бот не знает — уходит модератору настоящей
+     карточкой с пометкой «проверка», и ее ответ появляется в этом окне: окно раз в
+     несколько секунд спрашивает /admin/api/webinar/efir-try/<id>. В ленту эфира и в
+     карточки CRM ничего не попадает. История живет только во вкладке. */
+  var EFB_POLL_MS = 4000;
+  function efbBubble(who, text, cls) {
+    return '<div class="efb-msg ' + cls + '"><span class="efb-who">' + esc(who) + '</span>' +
+      '<p class="efb-txt">' + esc(text) + '</p></div>';
+  }
+  function efbNote(text) { return '<p class="efb-note">' + esc(text) + '</p>'; }
+  function efbItem(t) {
+    var out = efbBubble('Вы как зритель', t.q, 'me');
+    if (t.pending) return out + efbNote('Бот думает, до 20 секунд…');
+    if (t.err) return out + efbNote(t.err);
+    var r = t.r;
+    if (r.action === 'silent') return out + efbNote('Бот промолчал: это не вопрос. В эфире тоже ничего не напишет.');
+    if (r.action === 'auto') {
+      return out + efbBubble('Бот', r.text, 'bot') +
+        efbNote(r.live ? 'Ответ из базы знаний. В эфире уйдет в чат сразу.'
+          : 'Ответ из базы знаний. Пока автоответ выключен, в эфире этот ответ сначала увидит модератор.');
+    }
+    out += efbNote('Бот не уверен и спросил модератора в боте уведомлений.' +
+      (r.reason ? ' Почему: ' + r.reason + '.' : ''));
+    if (r.text) out += '<div class="efb-draft"><span class="efb-who">Черновик бота</span><p class="efb-txt">' + esc(r.text) + '</p></div>';
+    if (t.st === 'sent') return out + efbBubble('Ответ после модератора', t.final, 'bot');
+    if (t.st === 'skipped') return out + efbNote('Модератор решил не отвечать.');
+    if (t.lost) return out + efbNote('Не получилось узнать ответ модератора. Обнови страницу, если ждешь давно.');
+    return out + efbNote('Ждем ответ модератора…');
+  }
+  function efbPoll() {
+    clearTimeout(state.efbTimer);
+    if (state.page !== 'efirbot') return;
+    var wait = (state.efbTries || []).filter(function (t) {
+      return t.r && t.r.action === 'moderator' && t.r.draft_id && !t.st && !t.lost;
+    });
+    if (!wait.length) return;
+    Promise.all(wait.map(function (t) {
+      return api('/admin/api/webinar/efir-try/' + t.r.draft_id).then(function (j) {
+        if (j.status !== 'pending') { t.st = j.status; t.final = j.text || ''; return true; }
+        return false;
+      }).catch(function (e) { if (e && e.status === 404) { t.lost = true; return true; } return false; });
+    })).then(function (changed) {
+      if (state.page !== 'efirbot') return;
+      if (changed.some(Boolean)) renderEfirBot(document.getElementById('view'));
+      else state.efbTimer = setTimeout(efbPoll, EFB_POLL_MS);
+    });
+  }
+  function renderEfirBot(view) {
+    var tries = state.efbTries || (state.efbTries = []);
+    var list = tries.map(efbItem).join('');
+    view.innerHTML = '<div class="card efb">' +
+      '<p class="efb-lead">Репетиция чата эфира. Пиши вопрос так, как написал бы зритель. Бот ответит здесь, а чего не знает, спросит модератора, и его ответ появится тут же. В эфир и в CRM ничего не уходит.</p>' +
+      (list ? '<div class="efb-chat" id="efb-chat">' + list + '</div>' : '') +
+      '<textarea class="note-ta" id="efb-in" maxlength="1000" placeholder="Например: сколько стоит языковой год?"></textarea>' +
+      '<div class="efb-row"><button class="mk-btn primary" id="efb-go">Отправить</button></div>' +
+      '</div>';
+    var inp = view.querySelector('#efb-in'), go = view.querySelector('#efb-go');
+    var chat = view.querySelector('#efb-chat');
+    if (chat) chat.scrollTop = chat.scrollHeight;
+    inp.value = state.efbDraft || '';
+    inp.addEventListener('input', function () { state.efbDraft = inp.value; });
+    function send() {
+      var q = (inp.value || '').trim();
+      if (!q) { inp.focus(); return; }
+      state.efbDraft = '';
+      var t = { q: q, pending: true };
+      tries.push(t);
+      if (tries.length > 30) tries.shift();
+      renderEfirBot(view);
+      api('/admin/api/webinar/efir-try', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: q }) })
+        .then(function (r) { t.r = r; })
+        .catch(function (e) {
+          t.err = e.status === 429 ? 'Слишком часто. Подожди минуту и попробуй еще раз.'
+            : 'Не получилось спросить бота. Проверь интернет и попробуй еще раз.';
+        })
+        .then(function () { t.pending = false; if (state.page === 'efirbot') renderEfirBot(view); });
+    }
+    go.addEventListener('click', send);
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+    efbPoll();
   }
 
   function renderNews(view) {
@@ -35951,10 +36055,12 @@
     { id: 'support', label: 'Обеспечивающие' },
     { id: 'manage', label: 'Управление' },
   ];
+  /* Короткие имена процессов трубы для вкладок вверху: полные не влезают в один ряд. */
+  var PRC_TAB = { nulevoy: 'Нулевой этап', vvod: 'Ввод', soprovozhdenie: 'Сопровождение', teplyj: 'Теплый прием' };
   var PRC_EXEC = {
     system: { t: 'машина', c: 'sys' },
-    agent: { t: 'агент', c: 'ag' },
-    agent_supervised: { t: 'агент + человек', c: 'ag' },
+    agent: { t: 'бот', c: 'ag' },
+    agent_supervised: { t: 'бот + человек', c: 'ag' },
     human: { t: 'человек', c: 'hu' },
   };
 
@@ -36057,7 +36163,7 @@
       if (!x || seen[x.id]) return;
       seen[x.id] = 1;
       x.steps.forEach(function (s) {
-        if ((s.who || []).indexOf(who) !== -1) n++;
+        if (prcAll(s).indexOf(who) !== -1) n++;
         if (s.sub) walk(prcLight(s.sub));
         (s.variants || []).forEach(function (v) { walk(prcLight(v)); });
       });
@@ -36094,7 +36200,7 @@
   }
   function prcCan(s) {
     if (s.exec && s.exec !== 'human') return '';
-    return s.can_agent === 'yes' ? 'можно отдать агенту' : s.can_agent === 'supervised' ? 'можно отдать агенту под контролем человека' : '';
+    return s.can_agent === 'yes' ? 'можно отдать боту' : s.can_agent === 'supervised' ? 'можно отдать боту под контролем человека' : '';
   }
 
   function prcOpen(nid, step) {
@@ -36124,6 +36230,7 @@
     }
     if (state.prcNode && !prcLight(state.prcNode)) state.prcNode = null;
     if (state.prcNode) renderProcessNode(view, state.prcNode); else renderProcessHome(view);
+    renderTopbar();
   }
 
   /* Поиск по названиям процессов и шагов на всех уровнях. */
@@ -36264,7 +36371,7 @@
     var can = prcCan(s);
     var small = row('Где', esc(full.where || '')) + row('Проверка', esc(full.check || '')) +
       row('Если не так', /^\s*(—|-|нет\.?)?\s*$/i.test(full.fail || '') ? '' : esc(full.fail)) +
-      row('Срок', esc(full.sla || '')) + row('Агент', can ? esc(can) : '');
+      row('Срок', esc(full.sla || '')) + row('Бот', can ? esc(can) : '');
     var vars = (s.variants || []).length ? '<div class="prc-handoff"><span class="po-lbl">Варианты шага</span><div class="prc-vars">' +
       s.variants.map(function (v) { var t = prcLight(v); return t ? '<button type="button" class="prc-goto" data-open="' + esc(v) + '">' + ic('go', 12) + esc(prcShort(t.title)) + '</button>' : ''; }).join('') +
       '</div></div>' : '';
@@ -36297,27 +36404,31 @@
   }
   function prcPlain(ids) { return ids.map(function (x) { return prcPerson(x).name; }).join(', '); }
   function prcNames(ids) { return ids.map(function (x) { return esc(prcPerson(x).name); }).join(', '); }
-  /* В углу прямоугольника схемы — главный исполнитель и «+N», полный список в подсказке:
-     три-четыре имени в углу ломали прямоугольник на несколько строк. */
-  function prcCorner(ids) {
-    if (!ids.length) return '';
-    return '<b title="' + prcNames(ids) + '">' + esc(prcPerson(ids[0]).name) + (ids.length > 1 ? ' +' + (ids.length - 1) : '') + '</b>';
+  /* У шага один ответственный (Рыбаков; Вера 26.10.2026: «одна роль, один исполнитель»),
+     он и стоит в углу прямоугольника схемы. Если в шаге работают другие, это подпроцесс
+     со своими ответственными внутри, на шаге их не показываем. */
+  function prcCorner(s) {
+    var w = (s.who || [])[0];
+    return w ? '<b>' + esc(prcPerson(w).name) + '</b>' : '';
   }
+  /* Ответственный и те, у кого есть шаги внутри (with). Для фильтра «мои» и дорожек. */
+  function prcAll(s) { return (s.who || []).concat(s.with || []); }
 
   /* Шаг — точка на вертикальной линии: номер, название, под ним одной тихой строкой
      кто делает. Все остальное (подпроцесс, передача дальше, проблема) — короткими
      пометками в той же строке, без плашек: плашки на каждом шаге и делали карту
      нечитаемой (Вера 26.10.2026: «как будто не структурированный вообще»). */
   function prcStepRow(s, i, prev, who, full, open, fl) {
-    var mine = who && s.who.indexOf(who) !== -1;
+    var mine = who && prcAll(s).indexOf(who) !== -1;
     var hand = fl && fl.hand;
     var sub = s.sub ? prcLight(s.sub) : null, subN = sub ? sub.steps.length : 0;
     var handLine = hand ? '<li class="prc-hand' + (fl.back.length ? ' back' : '') + '" role="separator" aria-label="' + esc((fl.back.length ? 'возврат' : 'передача') + ': от ' + prcPlain(fl.from) + ' к ' + prcPlain(fl.to)) + '">' +
       '<span>' + (fl.back.length ? 'возврат к ' + prcNames(fl.to) : 'передача: ' + prcNames(fl.from) + ' ' + ic('go', 10) + ' ' + prcNames(fl.to)) + '</span></li>' : '';
-    var people = s.who.map(function (x) {
+    var pp = function (x) {
       var p = prcPerson(x);
       return '<span class="prc-p' + (x === who ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</span>';
-    }).join('<i>, </i>');
+    };
+    var people = s.who.map(pp).join('<i>, </i>');
     var marks = [];
     if (sub) marks.push('<span class="prc-subn">' + ic('flow', 12) + subN + ' ' + plural(subN, 'шаг', 'шага', 'шагов') + ' внутри</span>');
     if ((s.variants || []).length) marks.push('<span class="prc-subn">' + s.variants.length + ' ' + plural(s.variants.length, 'вариант', 'варианта', 'вариантов') + '</span>');
@@ -36338,7 +36449,7 @@
      — сколько раз работа меняет руки и у кого копится. */
   function prcLanes(n, who) {
     var ppl = [];
-    n.steps.forEach(function (s) { s.who.forEach(function (x) { if (ppl.indexOf(x) === -1) ppl.push(x); }); });
+    n.steps.forEach(function (s) { prcAll(s).forEach(function (x) { if (ppl.indexOf(x) === -1) ppl.push(x); }); });
     var cols = n.steps.length, flow = prcFlow(n.steps);
     var head = '<div class="prc-lh"></div>' + n.steps.map(function (s, i) {
       var f = flow[i];
@@ -36349,10 +36460,10 @@
       var p = prcPerson(pid);
       return '<div class="prc-lp' + (who === pid ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</div>' +
         n.steps.map(function (s, i) {
-          if (s.who.indexOf(pid) === -1) return '<div class="prc-lx"></div>';
-          /* один шаг на нескольких людей: карточка у первого, у остальных отметка
-             участия — иначе три одинаковые плашки читаются как три работы */
-          var lead = s.who.filter(function (x) { return !prcPerson(x).system; })[0] || s.who[0];
+          if (prcAll(s).indexOf(pid) === -1) return '<div class="prc-lx"></div>';
+          /* карточка у ответственного, у участников отметка участия — иначе три
+             одинаковые плашки читаются как три работы */
+          var lead = s.who[0];
           if (lead !== pid) return '<div class="prc-lx"><button type="button" class="prc-lm" data-lane="' + i + '" title="' + esc(s.title) + '">' +
             'участвует в шаге ' + (i + 1) + '</button></div>';
           var e = PRC_EXEC[s.exec] || PRC_EXEC.human;
@@ -36401,7 +36512,7 @@
     var fact = function (k, v, sub) { return '<div class="prc-fact"><span class="po-lbl">' + k + '</span><b>' + v + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
     var facts = '<div class="prc-facts">' +
       (owner ? fact('Ведет', esc(owner)) : '') +
-      fact('Агент', ag ? esc(ag.name) : (n.agent ? esc(n.agent) : 'нет, ведет человек'),
+      fact('Бот', ag ? esc(ag.name) : (n.agent ? esc(n.agent) : 'нет, все делают люди'),
         (ag ? 'куратор ' + esc(prcPerson(ag.curator).name) : '') +
         (z.ag ? (ag ? ' · ' : '') + 'может взять ' + z.ag + ' из ' + z.steps + ' ' + plural(z.steps, 'шага', 'шагов', 'шагов') : '')) +
       /* число шагов совпадает со схемой под ним; вложенные называем отдельно */
@@ -36416,7 +36527,7 @@
       n.steps.map(function (s, i) {
         var sub = s.sub ? prcLight(s.sub) : null;
         return '<li><button type="button" class="prc-sc-box' + (sub ? ' sub' : '') + (state.prcStep === i ? ' on' : '') + '" data-sc="' + i + '" title="' + esc(s.title) + '">' +
-          '<span class="prc-sc-top"><i>' + (i + 1) + '</i>' + prcCorner(s.who || []) + '</span><span>' + esc(s.title) + '</span>' +
+          '<span class="prc-sc-top"><i>' + (i + 1) + '</i>' + prcCorner(s) + '</span><span>' + esc(s.title) + '</span>' +
           ((sub || s.pain) ? '<small>' + (sub ? sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри' : '') +
             (s.pain ? '<em>проблема</em>' : '') + '</small>' : '') + '</button></li>';
       }).join('') +
