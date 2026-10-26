@@ -11322,7 +11322,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .sev.bc-ok      { color: var(--green-ink); background: var(--green-soft); }
 .sev.bc-blocked { color: var(--red-ink);   background: var(--red-soft); }
 .sev.bc-fail    { color: var(--amber-ink); background: var(--amber-soft); }
-.bc-run { grid-template-columns: minmax(0, 1fr) auto 24px; cursor: pointer; }
+.bc-run { grid-template-columns: minmax(0, 1fr) auto auto 24px; cursor: pointer; }
 /* Колонки одинаковой ширины: числа стоят друг под другом от строки к строке.
    Флексом они разъезжались, и взгляд не мог сравнить две рассылки по вертикали. */
 /* Период списка рассылок: отдельная строка под шапкой карточки, а не в сек-хеде —
@@ -11366,6 +11366,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .bc-chat { font-size: 12px; font-weight: 600; color: var(--blue); margin-left: 10px;
   text-decoration: none; white-space: nowrap; }
 .bc-chat:hover { text-decoration: underline; }
+/* Вторая группа чисел в строке рассылки: что сделали люди после отправки. Стоит
+   за тонкой чертой и тише первой — площадка отчиталась «дошло», а это уже отклик. */
+.bc-posle { display: grid; grid-template-columns: repeat(4, 88px); align-items: center;
+  padding-left: 16px; border-left: 1px solid var(--line); }
+.bc-posle .bc-n b { font-size: 15px; color: var(--ink-2); }
+/* Подпись тут длиннее («регистраций»), поэтому на ступеньку мельче: иначе соседние
+   колонки слипаются в «на сайт регистраций». */
+.bc-posle .bc-n small { font-size: 10.5px; }
+/* Итог периода: та же сетка чисел, но на подложке и во всю ширину карточки. */
+.bc-itogo { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: baseline;
+  padding: 12px 24px; background: var(--fill, #F5F6F9); }
+.bc-itogo .bc-n { align-items: flex-start; }
 .bc-n { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
 .bc-n b { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
 .bc-n small { font-size: 11px; font-weight: 600; color: var(--ink-3); margin-top: 3px; }
@@ -11432,6 +11444,13 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .bc-nums, .bc-nums.mail { grid-column: 1 / -1;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     column-gap: 10px; row-gap: 10px; justify-content: stretch; }
+  /* Отклик на телефоне: той же сеткой под цифрами доставки, черта сбоку тут
+     только мешала бы — вместо нее тонкая линия сверху. */
+  .bc-posle { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 10px; row-gap: 10px; padding: 10px 0 0; border-left: 0;
+    border-top: 1px solid var(--line); }
+  .bc-posle .bc-n { align-items: flex-start; }
+  .bc-itogo { padding: 12px 16px; gap: 10px 18px; }
   .bc-n { align-items: flex-start; }
   .bc-go { grid-column: 2; grid-row: 1; align-self: center; }
   /* Адресат: имя и время в одной строке, статус с ответом площадки — под ними.
