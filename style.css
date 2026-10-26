@@ -4184,8 +4184,6 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
 .tsk-attach { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
   font-size: 12.5px; font-weight: 700; color: var(--blue); }
 .tsk-attach:hover { color: var(--blue-d); }
-.tsk-zoom { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
-.tsk-zoom + .tsk-attach { margin-left: 14px; }
 .tsk-reshint { font-size: 11.5px; color: var(--ink-3); }
 .tsk-resrow .al-cancel { margin-left: auto; height: 36px; }
 .tsk-resrow .bp { height: 36px; }
@@ -11814,6 +11812,24 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mm-sum b.mm-ahead { color: var(--ink-2); }
 .mm-sum span { display: block; font-size: 11px; color: var(--ink-3); margin-top: 1px; }
 
+/* Смена в рабочем окне менеджера: открыл/закрыл, уход на консультацию */
+.sh-card { display: flex; align-items: center; gap: 16px; padding: 16px 20px; margin-bottom: 14px; }
+.sh-card.on { border-color: var(--green); background: var(--green-soft); }
+.sh-main { flex: 1 1 auto; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sh-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; background: var(--ink-3); }
+.sh-dot.on { background: var(--green); box-shadow: 0 0 0 4px var(--green-soft); }
+.sh-t { font-size: 15px; font-weight: 650; color: var(--ink); }
+.sh-s { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.sh-badge { font-size: 11px; font-weight: 600; color: var(--amber-ink); background: var(--amber-soft);
+  padding: 2px 8px; border-radius: 999px; margin-left: 4px; }
+.sh-btns { display: flex; gap: 10px; flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .sh-card { flex-wrap: wrap; }
+  .sh-btns { width: 100%; }
+  .sh-btns .bp { flex: 1 1 auto; }
+  .sh-card > .bp { width: 100%; }
+}
+
 .pb-stu { padding: 0; margin-top: 12px; }
 .pb-head { display: flex; align-items: center; gap: 16px; padding: 14px 18px;
   border-bottom: 1px solid var(--line); flex-wrap: wrap; }
@@ -12226,6 +12242,23 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* ── EASTSIDE MEETING: действия, ближайшие, экран одной встречи ──────────────
    Раздел ведет себя как сервис встреч: сначала что сделать, потом что будет и
    что было. Два действия крупными карточками — это главное, зачем сюда заходят. */
+/* ── Офис: каналы прямо в разделе EastSide Meeting ─────────────────────────
+   Рамка с офисом стоит первой: раздел открывается тем, кто сейчас на связи, а
+   уже под ней кнопки «начать встречу» и списки (Павел 26.10.2026: «чтобы сразу
+   открывался такой интерфейс»). Высота дана экраном, а не содержимым: внутри
+   своя колонка каналов со своей прокруткой. */
+.mx-office { height: min(520px, 58vh); margin-bottom: 18px; border-radius: var(--r-xl);
+  border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+.mx-office[hidden] { display: none; }
+.mx-office-f { width: 100%; height: 100%; border: 0; display: block; }
+.mx-office-wait { height: 100%; display: grid; place-items: center;
+  color: var(--ink-3); font-size: 13px; }
+/* На телефоне офис занимает почти экран: колонка каналов там лентой сверху, и
+   на половине высоты от нее остается полоска. */
+@media (max-width: 760px) {
+  .mx-office { height: 74vh; margin-bottom: 14px; }
+}
+
 .mx-top-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px; margin-bottom: 16px; }
 /* Действий может быть одно (своих комнат нет — остается зум) или три (есть и
