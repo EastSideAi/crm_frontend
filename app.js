@@ -122,7 +122,7 @@
     // больше нет: 16.09.2026 Павел свел оба места в одно.
     meetView: 'slots', meetMonth: 0, meetMonthData: {},
     news: null, newsUnread: 0,
-    teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
+    teamMode: 'office', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
     pulse: null, pulseDate: '', pulseTimer: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -181,10 +181,15 @@
     rejected:       { label: 'отказ',           order: 6, dot: '#A2A7B2' },
   };
   var ACTIVE_STATUSES = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent'];
+  /* «Контакты» — один раздел на всех людей (Павел 23.10.2026: раньше были «Лиды» и
+     «Люди», и по названиям было непонятно, чем они отличаются). Вкладки идут по шагу,
+     на котором человек сейчас: написал и ничего не оставил → в работе → оплатил.
+     «Новые» — бывший раздел «Лиды», правило то же (isProspect). */
   var SEGS = {
-    queue:    { label: 'В работе',      hint: 'заявки в работе — от горячих к спокойным' },
-    all:      { label: 'Пользователи',  hint: 'все, кто был на платформе — это ещё не клиенты' },
+    new:      { label: 'Новые',         hint: 'написали или зашли, но ничего не оставили — пока с ними говорит бот' },
+    queue:    { label: 'В работе',      hint: 'оставили заявку или их взяли в работу — от горячих к спокойным' },
     clients:  { label: 'Клиенты',       hint: 'оплатившие и те, кого отметили клиентом вручную' },
+    all:      { label: 'Все',           hint: 'все карточки, кроме архива' },
     rejected: { label: 'Отказы',        hint: 'не сложилось — но контакт остался' },
     archive:  { label: 'Архив',         hint: 'скрытые лиды и тестовые записи — можно вернуть' },
   };
@@ -232,6 +237,8 @@
     cabinet_invite_sent: 'отправили приглашение в кабинет',
     cabinet_invite_issued: 'выпустили приглашение в кабинет',
     cabinet_invite_shown: 'взяли ссылку приглашения',
+    lead_taken: 'взяли в работу',
+    lead_owner_set: 'назначен ответственный',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -267,6 +274,16 @@
     if (e.type === 'cabinet_invite_sent') label += p.channel === 'email' ? ' письмом' : '';
     if (e.type === 'cabinet_invite_issued' || e.type === 'cabinet_invite_shown') {
       label += (p.relation === 'parent' ? ': родитель' : ': ученик') + (p.by ? ' · ' + p.by : '');
+    }
+    if (e.type === 'lead_taken' && p.by) label += ': ' + p.by;
+    /* Кто ведет карточку — поле без истории, а по нему считается процент продавцу.
+       Поэтому «откуда тут этот человек» читается только отсюда (Роман 23.10.2026
+       спросил ровно это про карточку Зайцевых, и ответить было нечем). */
+    if (e.type === 'lead_owner_set') {
+      label = p.to ? 'ведет ' + p.to : 'ответственный снят';
+      if (p.from) label += ', вместо ' + p.from;
+      label += p.by === 'раздача' ? ' · раздача' + (p.why ? ': ' + p.why : '')
+        : (p.by ? ' · поставил ' + p.by : '');
     }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
@@ -955,9 +972,9 @@
       if (seg === 'queue') return inQueue(l);
       if (seg === 'clients') return isClient(l);
       if (seg === 'rejected') return l.crm.status === 'rejected';
-      // Холодные живут в разделе «Лиды» (см. isProspect) — двух списков с одними
-      // и теми же людьми быть не должно, иначе непонятно, где с ними работают.
-      return !isProspect(l);
+      if (seg === 'new') return isProspect(l);
+      // Кому «Новые» не показаны, тому и во «Всех» холодных нет.
+      return segAvail('new') || !isProspect(l);
     });
   }
   var PERIODS = { today: 1, week: 7, month: 30 };
@@ -1030,16 +1047,16 @@
     return arr;
   }
   function counts() {
-    /* «Пользователи» считаются по тому же правилу, что и список: холодные лиды
-       в цифру на вкладке не входят, иначе счетчик спорил бы со строками. Считаем
-       их отдельно (c.cold) — это бейдж раздела «Лиды» в меню. */
+    /* Счетчики вкладок «Контактов» — по тем же правилам, что и списки, иначе цифра
+       спорила бы со строками. c.cold — вкладка «Новые», c.all — «Все» вместе с ними. */
     var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
               anketa: 0, booked: 0, blank: 0, cold: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
       if (isBlankVisit(l)) c.blank++;
+      // «Все» прячет пустые заходы (isBlankVisit), значит и не считает их.
+      else if (segAvail('new') || !isProspect(l)) c.all++;
       if (isProspect(l)) { c.cold++; return; }
-      c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
       if (isClient(l)) c.clients++;
@@ -2379,9 +2396,10 @@
     { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all', hidden: true },
     { id: 'stuck', label: 'Застряло', icon: 'alert', cap: 'tasks_all', hidden: true },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox|inbox_own' },
-    // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
-    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
-    { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
+    /* «Лиды» с 23.10.2026 — вкладка «Новые» внутри «Контактов». Строка осталась
+       скрытой ради старых ссылок и закладок: renderView ведет их на вкладку. */
+    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hidden: true },
+    { id: 'leads', label: 'Контакты', icon: 'leads', cap: 'clients' },
     // «Карта» — клиенты по этапам пути. Рядом с «Людьми» намеренно: те же
     // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
     { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
@@ -2938,8 +2956,8 @@
       var dupN = (state._dup && state._dup !== 'none' && state._dup.groups) ? state._dup.groups.length : 0;
       var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
         (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
-      tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
-        var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
+      tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).filter(segAvail).map(function (s) {
+        var n = s === 'new' ? c.cold : s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
         return '<a class="tab' + (!onDup && state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
       }).join('') + dupTab + '</nav>';
@@ -3189,13 +3207,8 @@
           : 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
         '</span></div></div>';
     }
-    if (state.page === 'prospects') {
-      var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
-      html = '<div><h2>Лиды</h2>' +
-        '<div class="verdict" style="margin-top:8px"><span>' + esc(PR_SEGS[prSeg].hint) + '</span></div></div>';
-    }
     if (state.page === 'leads') {
-      html = '<div><h2>Люди</h2>' +
+      html = '<div><h2>Контакты</h2>' +
         '<div class="verdict" style="margin-top:8px"><span>' + esc(SEGS[state.seg].hint) + '</span></div></div>';
     }
     if (state.page === 'path' && !can('clients')) {
@@ -3765,6 +3778,9 @@
     if (state.page === 'focus' || state.page === 'stuck') {
       state.teamMode = state.page; state.page = 'tasks'; state.taskSeg = 'team';
     }
+    // «Лиды» стали вкладкой «Новые» в «Контактах» (23.10.2026).
+    if (state.page === 'prospects') { state.page = 'leads'; state.seg = 'new'; }
+    if (state.page === 'leads' && !segAvail(state.seg)) state.seg = 'queue';
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
     if (!can(pageCap(state.page)) || pageHidden(state.page)) state.page = firstAllowedPage();
     // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
@@ -3801,7 +3817,6 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'org') renderOrg(view);
     else if (state.page === 'processes') renderProcesses(view);
-    else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'roadmap') renderRoadmap(view);
     else if (state.page === 'dupes') renderDupes(view);
     else if (state.page === 'students') renderStudents(view);
@@ -4108,9 +4123,9 @@
       tip: 'Данные детей нельзя выносить в личные переписки и таблицы. Это не бюрократия, за это штрафуют компанию.',
     },
     clients: {
-      lead: 'Раздел «Люди» — все, кто к нам обратился. Карточка человека это его история: откуда пришел, ' +
+      lead: 'Раздел «Контакты» — все, кто к нам обратился. Карточка человека это его история: откуда пришел, ' +
         'что спрашивал, что решили, что дальше.',
-      art: function () { return gdWin(2, 'Люди', []); },
+      art: function () { return gdWin(2, 'Контакты', []); },
       dos: [
         'Взяли человека в работу — нажмите «Беру». Тогда видно, что он не ничей.',
         'После каждого разговора — короткая запись в карточке: о чем договорились и когда следующий шаг.',
@@ -11095,7 +11110,11 @@
        это как сломанный фильтр. Слева период, справа два управленческих среза,
        между ними черта — выбран всегда ровно один пункт.
        Фокус и застряло переехали сюда из левого меню 06.10.2026. */
+    // Офис стоит первым и открывается по умолчанию (Павел, 24.10.2026): это
+    // ответ на вопрос «кто чем занят сейчас», а периоды — разбор после.
     return '<div class="pay-seg plan-seg tm-seg">' +
+      btns([['office', 'Офис']]) +
+      '<span class="seg-div"></span>' +
       btns([['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']]) +
       '<span class="seg-div"></span>' +
       btns([['focus', 'Фокус'], ['stuck', 'Застряло']]) +
@@ -11344,7 +11363,478 @@
     if (state.teamMode === 'reports') { renderTeamReports(view); return; }
     if (state.teamMode === 'focus') { renderFocus(view); return; }
     if (state.teamMode === 'stuck') { renderStuck(view); return; }
+    if (state.teamMode === 'office') { renderOffice(view); return; }
     renderPulse(view);
+  }
+
+
+  /* ── Офис ───────────────────────────────────────────────────────────────────
+     Павел 23.10.2026: «круто было бы интерактивно, в виде человечков, кто сидит
+     на своем месте, и агенты тоже». Карта отвечает на тот же вопрос, что и
+     пульс, но без чтения: открыл и увидел.
+
+     Важная оговорка, из-за которой карта считает не присутствие, а работу.
+     Сигнала «человек сейчас за компьютером» в системе нет: за сутки команда
+     делает три движения в задачнике, а статус «в работе» висит неделями.
+     Карта присутствия была бы пустой каждый раз и умерла бы за три дня.
+     Поэтому за столом сидит тот, у кого есть работа, и видно ее состояние:
+     идет, стоит или не начата. Живое присутствие по голосовым каналам Мита
+     встанет сюда же, когда он их запустит (meet_participants).
+
+     Данные — тот же /admin/api/team/pulse?mode=day: people (у кого есть работа),
+     seats (все, включая пустые столы) и agent на каждом. Своего запроса у карты
+     нет намеренно: два источника про одно и то же разъезжаются. */
+  var OFFICE_ROOMS = [
+    { id: 'sales',  label: 'Продажи',       roles: ['sales_manager', 'sales_lead', 'tutor_sales', 'manager'] },
+    { id: 'mk',     label: 'Маркетинг',     roles: ['marketer', 'marketing_lead', 'producer'] },
+    { id: 'edu',    label: 'Сопровождение', roles: ['tutor', 'senior_tutor', 'curator', 'diagnostician'] },
+    { id: 'teach',  label: 'Преподаватели', roles: ['teacher'] },
+    { id: 'manage', label: 'Управление',    roles: ['super_admin', 'owner', 'head', 'product_lead',
+                                                    'admin', 'assistant', 'accountant', 'grant_admin'] },
+    // Внешние люди сидят отдельно: подрядчик, посаженный в комнату руководства,
+    // выглядит как сотрудник, и заметить подмену на карте нечем.
+    { id: 'out',    label: 'Подрядчики',    roles: ['partner', 'contractor', 'ads_contractor',
+                                                    'contractor_payer', 'expense_clerk'] },
+  ];
+  // Сколько дней без движения по взятой задаче считаем «стоит». Три: день взял,
+  // день не дошли руки, на третий это уже не работа, а намерение.
+  var OFFICE_SLOW_DAYS = 3;
+  var OFFICE_FREE_MAX = 4;
+  /* Фигуры красим палитрой аватаров, но без красного и амбера: на этом экране
+     красное значит просрочку, амбер — остановившуюся работу, и красный человек
+     в одном ряду с красной меткой читается как сигнал. */
+  var OFFICE_TINT = AVA_PALETTE.filter(function (c) {
+    return ['#e02434', '#e5385f', '#c98207'].indexOf(c) === -1;
+  });
+  function officeTint(seed) {
+    return OFFICE_TINT[hashId(seed == null ? '' : seed) % OFFICE_TINT.length];
+  }
+  /* Имя с буквой фамилии всегда, а не только при совпадении: в команде два
+     Марка и два Павла, и подпись, которая меняется от состава на экране, хуже
+     длинной. */
+  function officeName(name) {
+    var p = String(name || '').trim().split(/\s+/);
+    return p[0] + (p[1] ? ' ' + p[1][0] + '.' : '');
+  }
+
+  /* Обратный словарь «подпись роли → роль»: строится один раз по ROLES, тем же
+     списком, по которому подписи и выдаются. */
+  var OFFICE_BY_LABEL = null;
+  function officeRoleByLabel(label) {
+    if (!OFFICE_BY_LABEL) {
+      OFFICE_BY_LABEL = {};
+      Object.keys(ROLES).forEach(function (k) { OFFICE_BY_LABEL[ROLES[k].label] = k; });
+    }
+    return OFFICE_BY_LABEL[label] || '';
+  }
+  function officeRoom(role) {
+    for (var i = 0; i < OFFICE_ROOMS.length; i++) {
+      if (OFFICE_ROOMS[i].roles.indexOf(role) !== -1) return OFFICE_ROOMS[i].id;
+    }
+    return 'manage';
+  }
+  function daysAgo(iso) {
+    if (!iso) return null;
+    var t = new Date(iso).getTime();
+    if (!t) return null;
+    return Math.floor((Date.now() - t) / 86400000);
+  }
+  /* Состояние стола. Порядок проверок и есть смысл экрана: работа идет, работа
+     стоит, работы набрано но ни одна не взята, работы нет. */
+  function deskState(row) {
+    if (!row) return 'off';
+    if (row.now) {
+      var d = daysAgo(row.now.at);
+      return d !== null && d >= OFFICE_SLOW_DAYS ? 'slow' : 'work';
+    }
+    if (row.open_n) return 'idle';
+    return 'off';
+  }
+  /* Подпись над столом. Короткая: на сцене это реплика, а не строка списка,
+     полный текст приходит по наведению и в карточке задачи. */
+  function officeSay(row, st) {
+    if (st === 'work' || st === 'slow') return row.now.title || '';
+    if (st === 'idle') return row.open_n + ' ' +
+      plural(row.open_n, 'задача', 'задачи', 'задач') + ', в работе ни одной';
+    return '';
+  }
+  var AGENT_SAY = { queued: 'взял задачу', ask: 'ждет ответа', review: 'сдал на приемку' };
+
+  /* ── Пиксельный офис ────────────────────────────────────────────────────────
+     Павел 24.10.2026: плоская схема не подошла, нужен офис сверху с живыми
+     человечками, в нашей стилистике и «про будущее». Сцена рисуется на canvas
+     целиком кодом — ни одной внешней картинки: спрайты собираются из
+     прямоугольников, поэтому карта весит как текст и масштабируется без
+     размытия (image-rendering: pixelated). Пиксель мелкий (S = 2), чтобы у
+     фигур была деталь, а не крупный квадрат.
+     Палитра — ночная сапфировая из design.md платформы (§2): база #03081C,
+     карточка #0A1538, акцент #2B8FFF. Правило двух цветов соблюдается: этаж
+     нейтраль + сапфир, теплое на сцене значит только внимание и просрочку.
+     Подписи лежат HTML-слоем поверх: пиксельный шрифт кириллицу читает плохо,
+     а имена людей и названия задач должны читаться. */
+  var PXO = { S: 2, SEAT_W: 66, SEAT_H: 52, PAD: 16, GAPX: 20, GAPY: 30,
+              SIDE: 30, HALL: 30, WALL: 8, TOPWALL: 20, TICK: 620 };
+  /* Светлая тема (Павел, 24.10.2026): этаж светлый, как сама CRM, акцент
+     сапфировый. Бумага и стекло, а не ночь: пол #E7EBF6, зоны белые, кант
+     перегородки сапфировый, светятся только экраны. */
+  var PXC = {
+    night: '#EEF1FA', panel: '#D3DBEF', card: '#FFFFFF',
+    floor: '#E7EBF6', floor2: '#DFE5F3',
+    glassEdge: 'rgba(43,143,255,.38)', glassTop: 'rgba(255,255,255,.9)',
+    sapp: '#2B8FFF', sapp3: '#9FCBFF',
+    deskTop: '#FFFFFF', deskTop2: '#F4F6FD', deskEdge: '#D2DAEE',
+    deskLine: 'rgba(21,32,59,.07)',
+    mon: '#1B2B4F', monEdge: '#2E3F68', scr: '#2B8FFF', scrHi: '#9FCBFF', scrOff: '#C3CDE4',
+    chair: '#C4D0E9', chair2: '#AFBEE0',
+    skin: ['#f2cda6', '#e7bc90', '#d6a278', '#c08a62'],
+    hair: ['#2a2130', '#4a3426', '#8a5a2a', '#1f2430', '#6b4a7a'],
+    plant: '#2EA06E', plant2: '#1C7E52', pot: '#C9A27A',
+    shade: 'rgba(21,32,59,.13)', glow: 'rgba(43,143,255,.16)'
+  };
+
+  /* Рубашки — холодная гамма: оттенок различает людей, но не спорит с акцентом.
+     Теплое на этом экране означает только внимание, поэтому его тут нет. */
+  var PX_WEAR = ['#2B8FFF', '#5CB4FF', '#3F7FD6', '#2F57B5', '#5B6FD8', '#3BA9C9',
+                 '#2E8F9E', '#6A7BE0', '#4C86E8', '#7A8FF0', '#2F6BA8', '#5F9AD6'];
+  function pxr(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(x, y, w, h); }
+  function pxHash(v) {
+    var s = String(v == null ? '' : v), h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973;
+    return h;
+  }
+  function pxTone(hex, k) {
+    var n = parseInt(hex.slice(1), 16), r0 = n >> 16, g0 = (n >> 8) & 255, b0 = n & 255;
+    function f(v) { return Math.max(0, Math.min(255, Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k))); }
+    return 'rgb(' + f(r0) + ',' + f(g0) + ',' + f(b0) + ')';
+  }
+  function pxWear(id) { return PX_WEAR[pxHash(id) % PX_WEAR.length]; }
+  /* Человек 18x30: три тона на рубашке, два на коже, прядь волос, воротник,
+     кисти рук. frame поднимает фигуру на пиксель — этого хватает, чтобы
+     сидящий «дышал», и не хватает, чтобы это мешало читать экран. */
+  function pxPerson(c, x, y, id, frame) {
+    var up = frame ? 1 : 0, yy = y - up;
+    var sh = pxWear(id), hair = PXC.hair[pxHash(id + 'h') % PXC.hair.length];
+    var skin = PXC.skin[pxHash(id + 's') % PXC.skin.length];
+    var dark = pxTone(sh, -.32), light = pxTone(sh, .22);
+    pxr(c, x + 3, y + 29, 12, 3, PXC.shade);
+    pxr(c, x + 4, yy + 2, 10, 9, skin);
+    pxr(c, x + 3, yy + 3, 1, 7, skin); pxr(c, x + 14, yy + 3, 1, 7, skin);
+    pxr(c, x + 4, yy + 9, 10, 2, pxTone(skin, -.18));
+    pxr(c, x + 3, yy, 12, 4, hair);
+    pxr(c, x + 2, yy + 1, 1, 6, hair); pxr(c, x + 15, yy + 1, 1, 6, hair);
+    pxr(c, x + 4, yy + 4, 3, 1, pxTone(hair, .25));
+    pxr(c, x + 6, yy + 6, 2, 2, '#10131c'); pxr(c, x + 10, yy + 6, 2, 2, '#10131c');
+    pxr(c, x + 8, yy + 9, 2, 1, pxTone(skin, -.3));
+    pxr(c, x + 3, yy + 12, 12, 13, sh);
+    pxr(c, x + 3, yy + 12, 12, 2, light);
+    pxr(c, x + 3, yy + 21, 12, 4, dark);
+    pxr(c, x + 7, yy + 12, 4, 4, pxTone(sh, .34));
+    pxr(c, x + 1, yy + 14, 2, 8, dark); pxr(c, x + 15, yy + 14, 2, 8, dark);
+    pxr(c, x + 1, yy + 21, 2, 3, skin); pxr(c, x + 15, yy + 21, 2, 3, skin);
+  }
+  function pxStanding(c, x, y, id, frame) {
+    pxPerson(c, x, y, id, frame);
+    var up = frame ? 1 : 0, legs = pxTone(pxWear(id), -.62);
+    pxr(c, x + 4, y + 25 - up, 4, 5, legs); pxr(c, x + 10, y + 25 - up, 4, 5, legs);
+    pxr(c, x + 4, y + 29 - up, 4, 1, '#3A4668'); pxr(c, x + 10, y + 29 - up, 4, 1, '#3A4668');
+  }
+  /* Рабочее место 66x52. Геометрия задана один раз и держит всю сцену: кресло
+     и человек наверху, стол под ними с передней кромкой (отсюда глубина),
+     монитор у левого края экраном к нам, клавиатура и кружка перед человеком.
+     Кто не начал ни одной задачи — стоит слева от стола, и это видно раньше
+     любой подписи. */
+  function pxSeat(c, x, y, m, frame) {
+    var busy = m.st === 'work' || m.st === 'slow';
+    pxr(c, x + 24, y + 4, 22, 20, PXC.chair);
+    pxr(c, x + 24, y + 4, 22, 2, PXC.chair2);
+    pxr(c, x + 22, y + 9, 2, 13, PXC.chair2); pxr(c, x + 46, y + 9, 2, 13, PXC.chair2);
+    if (busy) pxPerson(c, x + 26, y, m.id, frame);
+    pxr(c, x + 2, y + 36, 60, 6, PXC.shade);
+    pxr(c, x, y + 26, 64, 10, PXC.deskTop);
+    pxr(c, x, y + 26, 64, 2, PXC.deskTop2);
+    pxr(c, x, y + 36, 64, 5, PXC.deskEdge);
+    pxr(c, x, y + 27, 64, 1, PXC.deskLine);
+    pxr(c, x, y + 41, 64, 1, 'rgba(1,4,14,.6)');
+    pxr(c, x + 3, y + 14, 18, 14, PXC.monEdge);
+    pxr(c, x + 4, y + 15, 16, 12, PXC.mon);
+    pxr(c, x + 5, y + 16, 14, 10, busy ? PXC.scr : PXC.scrOff);
+    if (busy) {
+      pxr(c, x + 5, y + 16, 14, 3, PXC.scrHi);
+      pxr(c, x + 6, y + 21, 8, 1, 'rgba(255,255,255,.55)');
+      pxr(c, x + 6, y + 23, 11, 1, 'rgba(255,255,255,.33)');
+      pxr(c, x + 1, y + 12, 22, 18, PXC.glow);
+      pxr(c, x + 2, y + 30, 20, 6, 'rgba(43,143,255,.10)');
+    }
+    pxr(c, x + 10, y + 28, 4, 2, PXC.monEdge);
+    pxr(c, x + 28, y + 30, 18, 4, '#D7DEF0');      // клавиатура
+    pxr(c, x + 28, y + 30, 18, 1, '#EFF3FC');
+    pxr(c, x + 50, y + 29, 7, 6, busy ? PXC.sapp : '#C3CDE4');   // кружка
+    pxr(c, x + 57, y + 30, 1, 3, busy ? PXC.sapp : '#C3CDE4');
+    if (m.st === 'idle') pxStanding(c, x + 2, y + 8, m.id, frame);
+  }
+  function pxBot(c, x, y, frame) {
+    var up = frame ? 1 : 0;
+    pxr(c, x + 2, y + 20, 14, 3, PXC.shade);
+    pxr(c, x + 2, y + 4 - up, 14, 13, '#E3E9F8');
+    pxr(c, x + 2, y + 4 - up, 14, 2, '#FFFFFF');
+    pxr(c, x + 3, y + 5 - up, 12, 11, '#DCE4F6');
+    pxr(c, x + 4, y + 7 - up, 10, 5, PXC.sapp);
+    pxr(c, x + 5, y + 8 - up, 3, 3, PXC.scrHi);
+    pxr(c, x + 8, y - up, 2, 4, '#C3CDE4'); pxr(c, x + 7, y - 2 - up, 4, 2, PXC.sapp);
+    pxr(c, x + 3, y + 17, 4, 3, '#AFBEE0'); pxr(c, x + 11, y + 17, 4, 3, '#AFBEE0');
+  }
+  function pxPlant(c, x, y) {
+    pxr(c, x + 4, y + 26, 16, 3, PXC.shade);
+    pxr(c, x + 6, y + 18, 12, 9, PXC.pot);
+    pxr(c, x + 6, y + 18, 12, 2, '#DDBA95');
+    pxr(c, x + 2, y + 6, 20, 12, PXC.plant);
+    pxr(c, x + 6, y, 12, 8, PXC.plant2);
+    pxr(c, x + 10, y + 2, 3, 6, pxTone(PXC.plant, .3));
+  }
+  function pxCooler(c, x, y) {
+    pxr(c, x + 2, y + 30, 16, 3, PXC.shade);
+    pxr(c, x + 2, y + 12, 16, 20, '#E9EEFA');
+    pxr(c, x + 2, y + 12, 16, 2, '#FFFFFF');
+    pxr(c, x + 4, y, 12, 12, '#8FD0FF');
+    pxr(c, x + 5, y + 1, 10, 6, '#CFE8FF');
+    pxr(c, x + 6, y + 18, 8, 3, '#C3CDE4');
+  }
+  function pxCouch(c, x, y) {
+    pxr(c, x + 2, y + 22, 48, 4, PXC.shade);
+    pxr(c, x, y + 4, 52, 20, '#C9D4EC');
+    pxr(c, x, y, 52, 6, '#DCE4F6');
+    pxr(c, x + 3, y + 9, 21, 12, '#DCE4F6'); pxr(c, x + 28, y + 9, 21, 12, '#DCE4F6');
+    pxr(c, x, y, 52, 1, 'rgba(255,255,255,.8)');
+  }
+  function pxBoard(c, x, y) {
+    pxr(c, x, y, 52, 18, '#FFFFFF');
+    pxr(c, x, y, 52, 1, PXC.glassEdge);
+    pxr(c, x, y + 17, 52, 1, 'rgba(21,32,59,.10)');
+    pxr(c, x + 5, y + 5, 18, 2, PXC.sapp);
+    pxr(c, x + 5, y + 10, 30, 2, 'rgba(21,32,59,.18)');
+    pxr(c, x + 29, y + 5, 14, 2, 'rgba(21,32,59,.12)');
+  }
+
+  /* Раскладка этажа. Зона встает в ту колонку, где сейчас выше свободное место:
+     так этаж не растет лесенкой, когда в отделах разное число людей. */
+  function pxLayout(zones, cols, perRow) {
+    var P = PXO, zw = P.PAD * 2 + perRow * P.SEAT_W + (perRow - 1) * P.GAPX + P.SIDE;
+    var colY = [], out = [], i;
+    for (i = 0; i < cols; i++) colY.push(P.TOPWALL + 26);
+    zones.forEach(function (z) {
+      var rows = Math.ceil(z.men.length / perRow);
+      var h = 22 + rows * P.SEAT_H + (rows - 1) * P.GAPY + 14;
+      var col = colY.indexOf(Math.min.apply(null, colY));
+      out.push({ z: z, x: P.WALL + col * (zw + P.HALL), y: colY[col], w: zw, h: h });
+      colY[col] += h + P.HALL + 26;
+    });
+    return { rooms: out, w: P.WALL * 2 + cols * zw + (cols - 1) * P.HALL,
+             h: Math.max.apply(null, colY) - 26 + P.WALL };
+  }
+  var PX_TINT = ['rgba(43,143,255,.10)', 'rgba(46,160,110,.09)',
+                 'rgba(122,143,240,.10)', 'rgba(245,200,76,.07)',
+                 'rgba(92,180,255,.09)', 'rgba(47,87,181,.12)'];
+
+  function renderOffice(view) {
+    if (state.pulse === null) {
+      view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div>' + dashSkeleton();
+      wireTeamMode(view); loadPulse(); return;
+    }
+    if (state.pulse === 'none') {
+      view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div>' +
+        '<div class="card"><div class="empty">Не удалось собрать офис. Обнови страницу.</div></div>';
+      wireTeamMode(view); return;
+    }
+    var d = state.pulse, rws = {};
+    (d.people || []).forEach(function (p) { rws[p.id] = p; });
+    /* Сервер старее экрана (между промоутами фронта и бэкенда это норма): мест
+       он еще не отдает. Тогда рассаживаем тех, у кого сегодня было движение, —
+       роль берем по ее подписи. Свободные столы появятся после выкатки. */
+    var seats = d.seats, partial = !d.seats;
+    if (partial) {
+      seats = (d.people || []).map(function (p) {
+        return { id: p.id, name: p.name, role: officeRoleByLabel(p.role_label), agent: null };
+      });
+    }
+
+    var men = seats.map(function (s) {
+      var row = rws[s.id], st = deskState(row);
+      return { id: s.id, name: officeName(s.name), full: s.name, room: officeRoom(s.role), st: st,
+               say: officeSay(row, st), days: st === 'slow' ? daysAgo(row.now.at) : 0,
+               task: st === 'work' || st === 'slow' ? row.now.id : 0,
+               over: (row && row.overdue) || 0, done: (row && row.done_n) || 0,
+               open: (row && row.open_n) || 0,
+               live: !!(row && row.active_at && daysAgo(row.active_at) === 0),
+               bot: s.agent ? (AGENT_SAY[s.agent.state] || 'в работе') : '',
+               botAsk: !!(s.agent && s.agent.state === 'ask') };
+    });
+    var ORD = { work: 0, slow: 1, idle: 2, off: 3 };
+    var zones = OFFICE_ROOMS.map(function (r) {
+      return { name: r.label, men: men.filter(function (m) { return m.room === r.id; })
+        .sort(function (a, b) { return ORD[a.st] - ORD[b.st] || a.name.localeCompare(b.name); }) };
+    }).filter(function (z) { return z.men.length; });
+
+    var wide = window.innerWidth;
+    var cols = wide < 980 ? 1 : 2, perRow = wide < 620 ? 2 : 3;
+    var L = pxLayout(zones, cols, perRow);
+    var live = men.filter(function (m) { return m.st === 'work'; }).length;
+    var stale = men.filter(function (m) { return m.st === 'slow'; }).length;
+
+    var strip = '<div class="om-strip">' +
+      '<span><b class="num">' + live + '</b> за работой</span>' +
+      '<span' + (stale ? ' class="warn"' : '') + '><b class="num">' + stale + '</b> без движения</span>' +
+      '<span><b class="num">' + men.reduce(function (n, m) { return n + m.done; }, 0) +
+        '</b> сделано сегодня</span>' +
+      '<span><b class="num">' + seats.length + '</b> ' +
+        (partial ? 'за столами' : 'мест') + '</span>' +
+      '<i>' + (partial
+        ? 'свободные места и агентов покажем, когда выкатится сервер'
+        : 'на связи покажем, когда заработают голосовые каналы') + '</i>' +
+      '<a class="qchip mr-go om-go" href="' + API + '/meet">' + ic('mic', 13) +
+        '<span>Зайти в офис</span></a>' +
+    '</div>';
+
+    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '</div>' +
+      '<div class="card om-card">' + strip +
+        (zones.length
+          ? '<div class="om-stage" style="aspect-ratio:' + L.w + '/' + L.h + '">' +
+              '<canvas class="om-cv" width="' + (L.w * PXO.S) + '" height="' + (L.h * PXO.S) + '"></canvas>' +
+              '<div class="om-lyr"></div></div>' +
+            '<div class="om-leg">' +
+              '<span class="om-mk bad num">1</span> просрочено' +
+              '<span class="om-mk ok num">1</span> сделано сегодня' +
+              '<span class="om-lg-dot"></span> двигал задачи сегодня' +
+              '<span class="om-lg-bot">' + ic('bot', 12) + '</span> задача у агента' +
+            '</div>'
+          : '<div class="empty">В команде пока некого рассадить.</div>') +
+      '</div>';
+    wireTeamMode(view); wireDeptChips(view);
+    Array.prototype.forEach.call(view.querySelectorAll('.mr-go'), function (a) {
+      a.addEventListener('click', function (e) { enterMeetRoom(e, a); });
+    });
+    if (!zones.length) return;
+
+    var cv = view.querySelector('.om-cv'), lyr = view.querySelector('.om-lyr');
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(PXO.S, 0, 0, PXO.S, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    var pins = [];
+
+    function scene(tick) {
+      var i, P = PXO;
+      pxr(ctx, 0, 0, L.w, L.h, PXC.floor);
+      for (i = 0; i < L.h; i += 16) pxr(ctx, 0, i, L.w, 1, PXC.floor2);
+      for (i = 0; i < L.w; i += 16) pxr(ctx, i, 0, 1, L.h, 'rgba(21,32,59,.045)');
+      pxr(ctx, 0, 0, L.w, P.TOPWALL, PXC.panel);
+      pxr(ctx, 0, 0, L.w, 2, '#B9C4DE');
+      pxr(ctx, 0, P.TOPWALL - 1, L.w, 1, 'rgba(21,32,59,.12)');
+      pxr(ctx, 0, 0, P.WALL, L.h, PXC.panel); pxr(ctx, L.w - P.WALL, 0, P.WALL, L.h, PXC.panel);
+      pxr(ctx, 0, L.h - P.WALL, L.w, P.WALL, PXC.panel);
+      pins = [];
+      L.rooms.forEach(function (R, ri) {
+        pxr(ctx, R.x, R.y, R.w, R.h, PXC.card);
+        pxr(ctx, R.x, R.y, R.w, R.h, PX_TINT[ri % PX_TINT.length]);
+        // Лампы: пятно света на полу через каждые 110, слоями — резких кругов
+        // в пиксельной сетке не бывает, и ступенька тут честнее сглаживания.
+        for (var lx = R.x + 40; lx < R.x + R.w - 20; lx += 110) {
+          pxr(ctx, lx - 28, R.y + 6, 56, R.h - 12, 'rgba(43,143,255,.022)');
+          pxr(ctx, lx - 18, R.y + 4, 36, R.h - 8, 'rgba(43,143,255,.022)');
+          pxr(ctx, lx - 8, R.y + 2, 16, R.h - 4, 'rgba(43,143,255,.028)');
+        }
+        for (var fy = 0; fy < R.h; fy += 16) pxr(ctx, R.x, R.y + fy, R.w, 1, 'rgba(21,32,59,.025)');
+        // Перегородка — стекло: сапфировый кант со свечением наружу.
+        pxr(ctx, R.x - 4, R.y - 4, R.w + 8, 4, 'rgba(43,143,255,.10)');
+        pxr(ctx, R.x - 4, R.y + R.h, R.w + 8, 4, 'rgba(43,143,255,.08)');
+        pxr(ctx, R.x - 2, R.y - 2, R.w + 4, 2, PXC.glassEdge);
+        pxr(ctx, R.x - 2, R.y + R.h, R.w + 4, 2, 'rgba(21,32,59,.18)');
+        pxr(ctx, R.x - 2, R.y - 2, 2, R.h + 4, PXC.glassEdge);
+        pxr(ctx, R.x + R.w, R.y - 2, 2, R.h + 4, PXC.glassEdge);
+        pxBoard(ctx, R.x + R.w - 62, R.y + 8);
+        R.z.men.forEach(function (m, i2) {
+          var sx = R.x + P.PAD + (i2 % perRow) * (P.SEAT_W + P.GAPX);
+          var sy = R.y + 18 + Math.floor(i2 / perRow) * (P.SEAT_H + P.GAPY);
+          pxSeat(ctx, sx, sy, m, m.st === 'off' ? 0 : (tick + i2) % 2);
+          if (m.bot) pxBot(ctx, sx + 58, sy + 14, (tick + i2 + 1) % 2);
+          pins.push({ m: m, x: sx + 35, y: sy - 2, bottom: sy + 44, botY: sy + 58 });
+        });
+        pxPlant(ctx, R.x + R.w - 28, R.y + 26);
+        if (ri % 2) pxCooler(ctx, R.x + R.w - 26, R.y + R.h - 44);
+        else pxCouch(ctx, R.x + R.w - 60, R.y + R.h - 34);
+      });
+    }
+    function pc(v) { return (v / L.w * 100).toFixed(3) + '%'; }
+    function pcY(v) { return (v / L.h * 100).toFixed(3) + '%'; }
+    function tags() {
+      lyr.innerHTML = L.rooms.map(function (R) {
+        var busy = R.z.men.filter(function (m) { return m.st === 'work'; }).length;
+        return '<div class="om-rt" style="left:' + pc(R.x + 2) + ';top:' + pcY(R.y - 6) + '"><b>' +
+          esc(R.z.name) + '<span>' + busy + ' из ' + R.z.men.length + '</span></b></div>';
+      }).join('') + pins.map(function (p) {
+        var m = p.m, marks = '';
+        if (m.over) marks += '<span class="om-mk bad num" role="img" aria-label="просрочено задач: ' +
+          m.over + '">' + m.over + '</span>';
+        // Главный вопрос руководителя к карте: кто сколько сделал и сколько
+        // держит в работе. Поэтому счет идет словами под именем, а не одними
+        // кружками: кружок без подписи читают по-разному.
+        var tally = [];
+        if (m.done) tally.push('<b class="num ok">' + m.done + '</b> сделано');
+        if (m.open) tally.push('<b class="num">' + m.open + '</b> в работе');
+        if (tally.length) marks += '<span class="om-tally">' + tally.join(' · ') + '</span>';
+        var shows = m.st === 'work' || m.st === 'slow';
+        return (shows
+            ? '<div class="om-pin om-' + m.st + '" style="left:' + pc(p.x) + ';top:' + pcY(p.y) + '">' +
+              '<span class="om-say">' + esc(m.say) +
+              (m.days ? '<i class="om-days">стоит ' + m.days + ' ' +
+                plural(m.days, 'день', 'дня', 'дней') + '</i>' : '') + '</span></div>'
+            : '') +
+          '<div class="om-nm' + (m.st === 'off' ? ' off' : '') + '" style="left:' + pc(p.x) +
+            ';top:' + pcY(p.bottom) + '">' +
+            '<b' + (m.task ? ' class="go" tabindex="0" role="button" data-oft="' + m.task + '"' : '') +
+              ' title="' + esc(m.full + (m.say ? ' — ' + m.say : '')) + '">' + esc(m.name) +
+              (m.live ? '<i class="om-live" role="img" aria-label="двигал задачи сегодня"></i>' : '') +
+            '</b>' + (marks ? '<i class="om-marks">' + marks + '</i>' : '') + '</div>' +
+          (m.bot ? '<div class="om-bot' + (m.botAsk ? ' ask' : '') + '" style="left:' + pc(p.x) +
+            ';top:' + pcY(p.botY) + '">' + m.bot + '</div>' : '');
+      }).join('');
+      Array.prototype.forEach.call(lyr.querySelectorAll('[data-oft]'), function (b) {
+        function go() { openTask(+b.getAttribute('data-oft')); }
+        b.addEventListener('click', go);
+        b.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+        });
+      });
+    }
+    var tick = 0;
+    scene(0); tags();
+    // Кадр раз в 620 мс, подписи при этом не трогаем: они не меняются, а их
+    // перерисовка снимала бы фокус с клавиатуры.
+    officeStop();
+    if (!pxReduceMotion()) {
+      state.officeAnim = setInterval(function () {
+        if (!document.body.contains(cv)) { officeStop(); return; }
+        tick++; scene(tick);
+      }, PXO.TICK);
+    }
+    if (d.is_today) state.pulseTimer = setInterval(function () { loadPulse(true); }, 60000);
+    // Этаж складывается по ширине окна: на телефоне одна колонка и два стола
+    // в ряд. Пересобираем только когда ширина реально поменяла раскладку.
+    if (!state.officeResize) {
+      state.officeResize = function () {
+        var w = window.innerWidth;
+        if ((((w < 980) ? 1 : 2) !== cols || ((w < 620) ? 2 : 3) !== perRow) &&
+            state.teamMode === 'office' && state.page === 'tasks' && state.taskSeg === 'team') renderView();
+      };
+      window.addEventListener('resize', function () {
+        clearTimeout(state.officeResizeT);
+        state.officeResizeT = setTimeout(function () { state.officeResize(); }, 180);
+      });
+    }
+  }
+  function officeStop() {
+    if (state.officeAnim) { clearInterval(state.officeAnim); state.officeAnim = null; }
+  }
+  function pxReduceMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
   /* ── Пульс команды ──────────────────────────────────────────────────────────
@@ -11365,7 +11855,11 @@
   }
   function loadPulse(silent) {
     var mode = state.teamMode === 'week' ? 'week' : 'day';
-    var q = '/admin/api/team/pulse?mode=' + mode + '&date=' + pulseDate() + deptQ();
+    /* Карта офиса — всегда про сейчас. Стрелки дня она не показывает, но дату
+       делит с пульсом: посмотрел вчерашний день, перешел на карту — и она
+       рисовала «сделано» и «был в работе» по вчера, молча и без подписи. */
+    var day = state.teamMode === 'office' ? '' : pulseDate();
+    var q = '/admin/api/team/pulse?mode=' + mode + '&date=' + day + deptQ();
     if (!silent) state.tasksLoading = true;
     api(q).then(function (r) {
       state.tasksLoading = false;
@@ -11622,6 +12116,9 @@
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
         state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null; state.teamStats = null; state.teamPerson = null; state.gantt = null;
+        // Карта офиса тоже собрана под направление: без сброса чип включается,
+        // а рассадка остается от прошлого фильтра.
+        state.pulse = null;
         state.boardGoal = '';
         saveUi(); renderHead(); renderView();
       });
@@ -20500,14 +20997,24 @@
       accById[a.id] = a;
       if (a.id === 'vtb') vtb = a;
     });
+    /* Четыре одинаковых числа заставляли обходить полосу по кругу каждый раз: якоря
+       не было ни одного. Крупной идет первая строка каскада — доход периода, с нее
+       экран и читается сверху вниз; порядок и названия прежние (Роман 20.10.2026). */
     var bar = statBar([
-      { label: 'Доход к зачислению', value: finRub(c.income), sub: 'уже за вычетом комиссии' },
+      { label: 'Доход к зачислению', value: finRub(c.income),
+        /* Рядом с зачислением — сколько заплатили клиенты, до комиссии эквайринга
+           (Роман 20.10.2026). Брутто считает бэкенд (period_gross); там, где его не
+           знают, оно равно зачислению, и вторая сумма превратилась бы в дубль. */
+        sub: (c.income_gross && c.income_gross > c.income)
+          ? 'до комиссии ' + finRub(c.income_gross)
+          : 'уже за вычетом комиссии',
+        lead: true },
       { label: 'Дивиденды', value: finRub(c.dividends), sub: 'после всех отчислений' },
       { label: 'Денег в фондах', value: finRub(m.in_funds), sub: 'по всем фондам сразу' },
       { label: 'Остаток на р/с', value: finRub(vtb ? vtb.live : m.on_vtb),
         sub: vtb && vtb.opening ? 'с учетом ' + finRub(vtb.opening) + ' с прошлого'
                                 : 'сколько реально на ВТБ' },
-    ]);
+    ], 'lead');
 
     /* Правило фонда правится там же, где видно его действие: строка каскада — это и
        есть результат правила, и открывать ради нее отдельный экран незачем. */
@@ -21353,16 +21860,18 @@
           'Добавить выплату</button>' : '') + '</div>' +
       ((f.operations || []).length
         ? '<div class="fin-list">' + f.operations.map(function (o) {
-            // Выплата подрядчику (ручной расход фонда) открывается на правку по клику;
-            // автострока и чужая статья (продукт в этом же фонде) — только показ.
-            var payRow = isContractors && o.source === 'фонд' && !o.auto;
+            // Ручной расход фонда открывается на правку по клику (o.editable с бэка:
+            // не автострока и не списание сервиса). У подрядчиков это выплата с
+            // реквизитами и чеком, у остальных фондов — обычная трата.
+            var editRow = !!o.editable;
+            var payRow = isContractors && editRow;
             var docChip = !payRow ? ''
               : (o.doc ? ' <span class="fst doc">' + ic('check', 11) +
                     esc(o.doc.name || 'документ') + '</span>'
                  : (o.status === 'факт' ? ' <span class="fst wait">нет документа</span>' : ''));
-            return '<div class="fl-row fl-2' + (payRow ? ' click' : '') +
+            return '<div class="fl-row fl-2' + (editRow ? ' click' : '') +
               (o.status === 'факт' ? ' paid' : '') + '"' +
-              (payRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
+              (editRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
               '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
               (o.offering ? ' · ' + esc(o.offering) : '') + docChip + '</span>' +
@@ -21483,14 +21992,19 @@
       else finLineForm(null, { form: 'фонд', section: FIN.fundId });
     });
     finPaidBind(view);
-    // Строки-выплаты фонда подрядчиков открываются на правку прямо здесь — форма выплаты
-    // в ведомости той строки (period_id), а не в текущей выбранной.
+    // Ручной расход фонда открывается на правку прямо здесь. Подрядчики — форма выплаты
+    // (реквизиты + чек) в ведомости той строки (period_id). Остальные фонды — обычная
+    // форма расхода, та же, что при заводе; список трат тут за выбранную ведомость,
+    // поэтому правка уходит в неё (finLineForm берёт текущий период).
     Array.prototype.forEach.call(view.querySelectorAll('[data-fpay]'), function (r) {
       r.addEventListener('click', function () {
         var id = r.getAttribute('data-fpay');
         var ops = (FIN.fund && FIN.fund.operations) || [];
         for (var i = 0; i < ops.length; i++) {
-          if (ops[i].id === id) return finPayoutForm(ops[i], { period_id: ops[i].period_id });
+          if (ops[i].id !== id) continue;
+          var o = ops[i];
+          if (isContractors) return finPayoutForm(o, { period_id: o.period_id });
+          return finLineForm(finFundOpToLine(o), { form: 'фонд' });
         }
       });
     });
@@ -22549,6 +23063,83 @@
     });
   }
 
+  /* Поиск карточки — ПО СЛОВАМ, а не одной строкой подряд. Подстрочный поиск врал
+     дважды: «Зайцевы» не находило «Зайцев», а «Зайцев Николай» не находило карточку
+     «Николай Зайцев» — слова переставлены, и для строки это разные тексты. Деньги
+     из-за этого уезжали на первую похожую карточку (Роман 23.10.2026, доход
+     Зайцевых сел на пустой дубль). Слово длиннее четырёх букв ищем по корню:
+     окончание в русском меняется чаще, чем человек готов подбирать его в поиске. */
+  function pkWords(v) {
+    return String(v || '').toLowerCase().replace(/ё/g, 'е')
+      .split(/[^0-9a-zа-я@._+]+/).filter(Boolean);
+  }
+  function pkStem(w) { return w.length > 4 ? w.slice(0, w.length - 1) : w; }
+  function pkFilter(all, q) {
+    var words = pkWords(q);
+    if (!words.length) return all;
+    return all.filter(function (l) {
+      var hay = pkWords((leadName(l) || '') + ' ' + (l.name || '') + ' ' +
+                        (l.contact || '') + ' ' + (l.email || ''));
+      return words.every(function (w) {
+        var stem = pkStem(w);
+        return hay.some(function (h) { return h.indexOf(stem) === 0 || h.indexOf(w) >= 0; });
+      });
+    });
+  }
+  /* Чем карточка живее, тем выше. Пустой заход внизу: именно его и выбирают по ошибке,
+     когда две строки выглядят одинаково. */
+  function pkRank(l) {
+    var crm = l.crm || {};
+    var r = 0;
+    if (l.paid) r += 8;
+    if (crm.status === 'client') r += 6;
+    if (crm.owner && crm.owner.id) r += 3;
+    if (l.booking) r += 2;
+    if (l.status !== 'visited') r += 1;
+    if (!l.name && !(l.contact || l.email)) r -= 4;
+    return r;
+  }
+  /* Один и тот же телефон, почта или телеграм в двух карточках. Склеенные дубли в
+     списках не показываются вовсе, а несклеенные выглядят как два разных человека — и
+     деньги уходят на тот, который пустой. Пишем ровно факт «контакт как у другой
+     карточки», а не «дубль»: тем же контактом бывает подписана и карточка мамы, и
+     карточка ребенка, и это не ошибка. Считаем по списку, который и так загружен:
+     отдельная ручка означала бы запрос на каждое открытие окна. */
+  function pkKeys(l) {
+    var out = [];
+    [l.contact, l.email, (l.booking || {}).contact].forEach(function (v) {
+      var raw = String(v || '').trim().toLowerCase().replace(/\s+/g, '');
+      if (!raw) return;
+      if (raw.indexOf('@') > 0) { out.push('m:' + raw.replace(/^mailto:/, '')); return; }
+      if (raw.charAt(0) === '@') { out.push('t:' + raw.slice(1)); return; }
+      var dig = raw.replace(/\D/g, '');
+      if (dig.length >= 10) out.push('p:' + dig.slice(-10));
+      else if (raw.length >= 4) out.push('t:' + raw.replace(/^https?:\/\/(t\.me|vk\.com)\//, ''));
+    });
+    return out;
+  }
+  function pkDupes(all) {
+    var seen = {}, dup = {};
+    (all || []).forEach(function (l) {
+      pkKeys(l).forEach(function (k) {
+        if (seen[k] && seen[k] !== l.id) { dup[l.id] = 1; dup[seen[k]] = 1; }
+        else seen[k] = l.id;
+      });
+    });
+    return dup;
+  }
+  function pkMarks(l, dup) {
+    var crm = l.crm || {};
+    var out = [];
+    if (l.paid) out.push('<em class="pk-m pk-m--on">платил</em>');
+    if (crm.status === 'client') out.push('<em class="pk-m pk-m--on">клиент</em>');
+    if (crm.owner && crm.owner.name) out.push('<em class="pk-m">ведет ' + esc(crm.owner.name) + '</em>');
+    if (!l.paid && l.booking) out.push('<em class="pk-m">записан на разбор</em>');
+    if (dup && dup[l.id]) out.push('<em class="pk-m pk-m--warn">контакт как у другой карточки</em>');
+    if (!l.name && !(l.contact || l.email)) out.push('<em class="pk-m pk-m--off">пустая карточка</em>');
+    return out.join('');
+  }
+
   /* Пикер карточки клиента для строки дохода без привязки. Список лидов ищем по имени и
      контакту; выбор пишет meta.case_id, после чего имя дохода станет ссылкой в карточку.
      Прямой и ручной платёж приходит без клиента, и здесь его привязывают руками. */
@@ -22583,7 +23174,7 @@
     el('pk-cancel').addEventListener('click', close);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
-    var box = el('pk-list'), all = null;
+    var box = el('pk-list'), all = null, dup = {};
     var pick = function (cid) {
       finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
         'Привязал к клиенту');
@@ -22591,18 +23182,15 @@
     };
     var draw = function (q) {
       if (!all) return;
-      q = (q || '').trim().toLowerCase();
-      var list = all;
-      if (q) list = all.filter(function (l) {
-        return ((leadName(l) || '') + ' ' + (l.contact || '') + ' ' + (l.email || ''))
-          .toLowerCase().indexOf(q) >= 0;
-      });
+      var list = pkFilter(all, q);
       if (!list.length) { box.innerHTML = '<div class="empty">Никого не нашли</div>'; return; }
+      list = list.slice().sort(function (a, b) { return pkRank(b) - pkRank(a); });
       box.innerHTML = list.slice(0, 60).map(function (l) {
         var c = (l.contact || l.email || '').trim();
         return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
           '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
-          (c ? '<i>' + esc(c) + '</i>' : '') + '</button>';
+          (c ? '<i>' + esc(c) + '</i>' : '') +
+          '<span class="pk-marks">' + pkMarks(l, dup) + '</span></button>';
       }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
       Array.prototype.forEach.call(box.querySelectorAll('.pk-row'), function (b) {
         b.addEventListener('click', function () { pick(b.getAttribute('data-pick')); });
@@ -22610,6 +23198,7 @@
     };
     var have = function (leads) {
       all = leads || [];
+      dup = pkDupes(all);
       draw(presetName || '');
       var q = el('pk-q');
       if (q) { q.value = presetName || ''; q.focus(); q.select(); }
@@ -22645,6 +23234,16 @@
   function finDirectToLine(it, blockId) {
     return { id: it.id, date: it.date, status: it.status, counterparty: it.counterparty,
       item: it.item, comment: it.comment, amount: it.amount, section: blockId,
+      included: true, payout_to: '', sale_amount: '', percent: '', product: '',
+      payment_id: '' };
+  }
+
+  // Строка расхода фонда (экран «Расходы фонда») → строка для формы расхода. Фонд, с
+  // которого платили, — это текущий открытый на экране фонд (FIN.fundId): список трат тут
+  // за него одного.
+  function finFundOpToLine(o) {
+    return { id: o.id, date: o.date, status: o.status, counterparty: o.counterparty,
+      item: o.item, comment: o.comment, amount: o.amount, section: FIN.fundId,
       included: true, payout_to: '', sale_amount: '', percent: '', product: '',
       payment_id: '' };
   }
@@ -23921,7 +24520,14 @@
      Начисление = ставка × оплаты клиента; ставку (5% от оплат по умолчанию или фикс
      за клиента) задают прямо тут. Считает вознаграждение сервер — своей копии правила
      во фронте нет. Экран сквозной: партнёр ведёт клиента не один период, своей полосы
-     периодов тут нет (как у «Программ»). */
+     периодов тут нет (как у «Программ»).
+
+     Партнёрской программы тут НЕТ и быть не должно (правка Романа 22.10.2026: «нахрена
+     она нужна в финансах, если у нас в другом месте всё реализовано»). Реферальную
+     ссылку партнёр берёт в своём кабинете и в боте, который его зарегистрировал, —
+     вторая кнопка с той же ссылкой в ведомости только размывала границу: здесь деньги,
+     а не работа с партнёрами. По той же причине экран не показывает заведённых
+     партнёров без клиентов: в ведомости они ничего не значат. */
   function finLoadPartners() {
     finBusy('partners', function (done) {
       api('/admin/api/partners/payouts').then(function (r) {
@@ -23953,13 +24559,10 @@
     if (FIN.partners === 'none') return finErrView(view);
     var P = FIN.partners;
     var allPartners = P.partners || [];
-    // С начислениями — полной карточкой (кому и за кого платим). Без клиентов — заведён,
-    // но ещё никого не привёл: показываем компактно, чтобы можно было скопировать ссылку
-    // и отдать партнёру (раньше таких прятали как шум, но теперь партнёров заводим здесь же).
+    // Показываем только тех, у кого есть приведённые клиенты: это разговор про деньги.
+    // Заведённый партнёр без клиентов — факт партнёрской программы, а не ведомости.
     var partners = allPartners.filter(function (p) { return (p.clients || []).length > 0; });
-    var idle = allPartners.filter(function (p) { return (p.clients || []).length === 0; });
     var def = finPartnerDefRate(P);
-    var partnerLink = function (code) { return MK_GO + encodeURIComponent(code || ''); };
 
     var totalDue = 0, clientsDue = 0;
     partners.forEach(function (p) {
@@ -24052,34 +24655,17 @@
               (p.clients.length) + ' ' +
               plural(p.clients.length, 'клиент', 'клиента', 'клиентов') + '</div></div>' +
           '<span class="list-count fin-count">к выплате <b>' + finRub(p.due || 0) + '</b></span>' +
-          '<button class="qchip fpt-right" data-copylink="' + esc(partnerLink(p.ref_code)) +
-            '">' + ic('card', 12) + 'Ссылка</button>' +
         '</div>' +
         p.clients.map(clientRow).join('') +
         foot +
       '</div>';
     }).join('');
 
-    // Партнёры без клиентов — компактной карточкой: имя, код и кнопка скопировать ссылку,
-    // чтобы было видно, кому ещё не капало, и под рукой была его реф-ссылка.
-    var idleCards = idle.map(function (p) {
-      return '<div class="card listcard fs-seller"><div class="list-tools">' +
-        '<div><div class="t fe-t">' + esc(p.name || 'Партнёр') + '</div>' +
-          '<div class="s fe-s">код ' + esc(p.ref_code || '—') + ' · пока не привёл клиентов</div></div>' +
-        '<button class="qchip fpt-right" data-copylink="' + esc(partnerLink(p.ref_code)) +
-          '">' + ic('card', 12) + 'Скопировать ссылку</button>' +
-      '</div></div>';
-    }).join('');
-    var idleBlock = idleCards
-      ? '<div class="sec-head" style="margin:22px 4px 10px"><span class="ic">' + ic('team', 14) +
-        '</span><div><div class="t">Заведены, ждут клиентов</div>' +
-        '<div class="s">скопируйте ссылку и отдайте партнёру — как приведёт клиента, он поднимется наверх</div>' +
-        '</div></div>' + idleCards
-      : '';
-
-    var body = (cards || idleCards)
-      ? cards + idleBlock
-      : '<div class="card listcard"><div class="empty">Партнёров пока нет.</div></div>';
+    var body = cards
+      ? cards
+      : '<div class="card listcard"><div class="empty">' +
+        'Начислений пока нет: никто из партнёров не привёл оплатившего клиента.' +
+        '</div></div>';
 
     // Заголовок раздела и пояснение уже стоят в шапке страницы (renderHead) — второй
     // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
@@ -24089,9 +24675,6 @@
 
     var rb = el('fpt-rate');
     if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-copylink]'), function (b) {
-      b.addEventListener('click', function () { copyText(b.getAttribute('data-copylink'), b); });
-    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
       b.addEventListener('click', function () {
         var p = partners.filter(function (x) { return String(x.id) === b.getAttribute('data-req'); })[0];
@@ -27474,7 +28057,10 @@
        аккаунтом школы гость подписан одним именем, тезок в базе по несколько, и она
        честно не угадывает. Привязать было негде, и такие записи копились — 30 штук к
        12.10.2026, среди них настоящие диагностики (Вера 12.10.2026). */
-    var canTie = !c.session_id && m.key.charAt(0) === 'f' && can('clients');
+    /* Привязать можно и запись из зума, и нашу комнату: ученика при создании
+       встречи почти не выбирают, и тогда разговор с семьей не попадает в
+       карточку (23.10.2026 — так лежали все девять консультаций). */
+    var canTie = !c.session_id && 'fr'.indexOf(m.key.charAt(0)) >= 0 && can('clients');
     var acts = [];
     if (c.text_chars && !text) {
       acts.push('<button type="button" class="qchip" data-mxtext="' + esc(m.key) + '">' +
@@ -37871,7 +38457,9 @@
       var foot = s.delta
         ? '<span class="kd ' + (s.deltaCls || '') + '">' + s.delta + '</span>'
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
-      return '<button class="stat' + (s.go || s.ebl ? ' go' : '') + '"' +
+      /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
+         получает модификатор .lead, плитка — тот же класс (см. style.css). */
+      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') + '"' +
         (s.go ? ' data-go="' + s.go + '"' : '') +
         /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
            вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
@@ -38011,7 +38599,7 @@
       '<div class="sec-head"><div class="t">Куда нажимать</div></div>' +
       '<div class="s" style="margin:-6px 0 6px">три экрана на каждый день</div>' +
       navRow('inbox', 'dialogs', 'Диалоги', 'переписки с клиентами') +
-      navRow('leads', 'leads', 'Люди', 'все мои клиенты и карточки') +
+      navRow('leads', 'leads', 'Контакты', 'все мои клиенты и карточки') +
       navRow('tasks', 'task', 'Задачи', 'что поставлено и на мне') + '</div>';
 
     return '<div class="dash">' +
@@ -38364,7 +38952,7 @@
      канал, повод прихода и когда человек последний раз о себе напоминал. */
   var PR_SEGS = {
     all:   { label: 'Все',   hint: 'все, кто с нами связался, но еще ничего не оставил' },
-    fresh: { label: 'Новые', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
+    fresh: { label: 'За неделю', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
     quiet: { label: 'Молчат', hint: 'больше двух недель тишины — нужен повод написать снова' },
   };
   var PR_QUIET_DAYS = 14;
@@ -38448,13 +39036,13 @@
     apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/take', 'POST', null, function () {
       var l = findLead(id);
       /* Двигаем локально ровно то же, что записал сервер: строка уезжает из
-         «Лидов» сразу, без перезагрузки всего списка. */
+         «Новых» сразу, без перезагрузки всего списка. */
       if (l) {
         l.status = 'manual';
         if (l.crm.status === 'new') l.crm.status = 'contacted';
       }
       renderAll();
-      showToast('В работе — карточка в «Людях»', '', id);
+      showToast('Взяли в работу — карточка во вкладке «В работе»', '', id);
     }, function () {
       if (btn) { btn.disabled = false; btn.textContent = 'Беру в работу'; }
       showToast('Не получилось — проверь сеть');
@@ -38514,7 +39102,7 @@
           '<input id="search" class="search" type="search" placeholder="Имя, контакт или повод прихода" autocomplete="off">' +
           '<button class="s-clear" id="s-clear" title="Очистить">' + ic('x', 12) + '</button></div>' +
         '<span class="list-count num">' + '<b>' + c.all + '</b> ' +
-          plural(c.all, 'лид', 'лида', 'лидов') + '</span>' +
+          plural(c.all, 'человек', 'человека', 'человек') + '</span>' +
       '</div>' +
       // Один-единственный чип «Все» выбора не дает — тогда полосы срезов нет вовсе.
       (chips.replace(/\s/g, '') ? '<div class="list-quick">' + chips + '</div>' : '');
@@ -38553,7 +39141,13 @@
     });
   }
 
+  /* Вкладка доступна роли? «Новые» тьютору не показываем: холодные лиды — работа
+     продаж, тьютор ведет своих учеников (Павел 11.09.2026). */
+  function segAvail(s) {
+    return !!SEGS[s] && !(s === 'new' && state.role === 'tutor');
+  }
   function renderLeads(view) {
+    if (state.seg === 'new' && state.loaded) return renderProspects(view);
     view.innerHTML = '<div class="card listcard">' + leadsToolbar() + '<div class="list-body" id="list-body"></div></div>';
     attachToolbarHandlers();
     renderListBody();
@@ -38579,31 +39173,12 @@
     }).join('') + '</div>';
   }
 
-  /* Куда делись холодные. Раньше пустые заходы сворачивались прямо здесь; с
-     появлением раздела «Лиды» (решение Веры 20.08.2026) они уехали туда целиком,
-     и в «Людях» о них остается одна строка со ссылкой — иначе менеджер решит,
-     что трафика нет вовсе. */
-  function blankNote() {
-    var n = counts().cold;
-    if (!n || state.seg !== 'all') return '';
-    return '<div class="list-foot">' +
-      '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
-      '<span class="lf-t"><b class="num">' + n + '</b> ' + plural(n, 'человек написал', 'человека написали', 'человек написали') +
-        ' или зашли, но ничего пока не оставили. Они в разделе «Лиды», с ними говорит бот.</span>' +
-      '<button class="lf-btn" id="lf-blank">Открыть</button>' +
-    '</div>';
-  }
-  function attachBlankNote(host) {
-    var b = host.querySelector('#lf-blank');
-    if (b) b.addEventListener('click', function () { setPage('prospects'); });
-  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
-      host.innerHTML = blankNote() + emptyState();
+      host.innerHTML = emptyState();
       var lc = el('le-clear');
       if (lc) lc.addEventListener('click', function () { state.q = ''; state.quick = ''; renderView(); });
-      attachBlankNote(host);
       return;
     }
     var rows = arr.map(function (l) {
@@ -38638,7 +39213,7 @@
       '</div>';
     }).join('');
 
-    host.innerHTML = blankNote() +
+    host.innerHTML =
       '<div class="trow lr-grid thead">' +
         thCell('crm', 'Статус', '') +
         thCell('name', 'Лид', '') +
@@ -38647,7 +39222,6 @@
         thCell('created', 'Пришел', ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
-    attachBlankNote(host);
 
     Array.prototype.forEach.call(host.querySelectorAll('.th.sortable'), function (th) {
       th.addEventListener('click', function () {
@@ -40479,7 +41053,7 @@
     if (!d.found && can('contractors')) {
       return (d.can_create
         ? '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
-          'title="Карточки в «Людях» нет — завести ее из этого диалога">' + ic('plus', 14) +
+          'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
           '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>'
         : '') +
         '<button class="tg-cact czmark" data-czmark="' + esc(uid) + '" ' +
@@ -40494,7 +41068,7 @@
     }
     if (d.can_create) {
       return '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
-        'title="Карточки в «Людях» нет — завести ее из этого диалога">' + ic('plus', 14) +
+        'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
         '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>';
     }
     return '';
@@ -49615,7 +50189,7 @@
     leads: {
       get: function () { return SEGS[state.seg] ? state.seg : ''; },
       set: function (s) {
-        if (!SEGS[s] || s === state.seg) return false;
+        if (!segAvail(s) || s === state.seg) return false;
         state.seg = s; state.sort = null;
         // архив тянет ОТДЕЛЬНЫЙ набор (скрытые) — тот же порядок, что у вкладки
         if (s === 'archive') loadLeads(false);
@@ -49781,7 +50355,7 @@
       // Ссылка на клиента в руках того, кому карточки не открыты: без этой строки
       // он видит свой обычный экран и думает, что ссылка битая.
       if (hashLeadId()) {
-        denyLink('lead', 'Люди', 'Карточка клиента вам не открыта', 'раздела «Люди» нет в вашем доступе');
+        denyLink('lead', 'Контакты', 'Карточка клиента вам не открыта', 'раздела «Контакты» нет в вашем доступе');
       }
       renderView();
     }
