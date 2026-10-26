@@ -12236,6 +12236,23 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* ── EASTSIDE MEETING: действия, ближайшие, экран одной встречи ──────────────
    Раздел ведет себя как сервис встреч: сначала что сделать, потом что будет и
    что было. Два действия крупными карточками — это главное, зачем сюда заходят. */
+/* ── Офис: каналы прямо в разделе EastSide Meeting ─────────────────────────
+   Рамка с офисом стоит первой: раздел открывается тем, кто сейчас на связи, а
+   уже под ней кнопки «начать встречу» и списки (Павел 26.10.2026: «чтобы сразу
+   открывался такой интерфейс»). Высота дана экраном, а не содержимым: внутри
+   своя колонка каналов со своей прокруткой. */
+.mx-office { height: min(520px, 58vh); margin-bottom: 18px; border-radius: var(--r-xl);
+  border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+.mx-office[hidden] { display: none; }
+.mx-office-f { width: 100%; height: 100%; border: 0; display: block; }
+.mx-office-wait { height: 100%; display: grid; place-items: center;
+  color: var(--ink-3); font-size: 13px; }
+/* На телефоне офис занимает почти экран: колонка каналов там лентой сверху, и
+   на половине высоты от нее остается полоска. */
+@media (max-width: 760px) {
+  .mx-office { height: 74vh; margin-bottom: 14px; }
+}
+
 .mx-top-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px; margin-bottom: 16px; }
 /* Действий может быть одно (своих комнат нет — остается зум) или три (есть и

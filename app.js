@@ -3793,6 +3793,11 @@
       else view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
       return;
     }
+    /* Офис показываем до разбора страниц: часть из них выходит по return, и
+       рамка оставалась бы висеть поверх чужого раздела. Внутри карточки встречи
+       она тоже лишняя — там весь экран занят конспектом. */
+    if (state.page === 'meetx' && !state.meetxOpen && meetOn()) officeShow();
+    else officeHide();
     // «Диалоги» = одна поверхность с тумблером: переписки бота ↔ обсуждения по задачам
     if (state.page === 'inbox') return state.inboxMode === 'threads' ? renderThreads(view) : renderInbox(view);
     if (state.page === 'dash') renderDash(view);
@@ -10233,6 +10238,53 @@
      забираем пропуск здесь и передаем его комнате в хвосте ссылки после решетки.
      Хвост не уходит на сервер и не попадает в логи, а страница встречи стирает
      его из адреса сразу, как прочитает. */
+  /* ── Офис в разделе EastSide Meeting ────────────────────────────────────
+     Каналы висят всегда, и человек в них просто сидит. Поэтому рамка с офисом
+     живет ОТДЕЛЬНО от перерисовок раздела: пересобрать ее на каждый ответ
+     сервера значит выбросить человека из разговора на полуслове. Она стоит
+     своим слоем в .content и на других страницах просто прячется — звук при
+     этом никуда не девается, и коллега остается на связи, пока ходит по CRM
+     (Павел 26.10.2026: «хочется чтобы сидели и были на связи»). */
+  var officeBox = null;
+  function officeDock() {
+    if (officeBox) return officeBox;
+    var c = document.querySelector('.content'), v = el('view');
+    if (!c || !v) return null;
+    officeBox = document.createElement('div');
+    officeBox.className = 'mx-office';
+    officeBox.id = 'office-dock';
+    officeBox.hidden = true;
+    c.insertBefore(officeBox, v);
+    return officeBox;
+  }
+  function officeShow() {
+    var d = officeDock();
+    if (!d) return;
+    d.hidden = false;
+    if (d.getAttribute('data-on')) return;
+    d.setAttribute('data-on', '1');
+    d.innerHTML = '<div class="mx-office-wait">Открываю офис…</div>';
+    /* Пропуск «я из команды» отдаем рамке хвостом ссылки: хвост браузер на
+       сервер не шлет, и в логах его не будет. Вход в CRM и есть доказательство,
+       что человек свой, — подтверждаться еще раз в боте не просим. */
+    api('/admin/api/meet/pass').then(function (r) {
+      var f = document.createElement('iframe');
+      f.className = 'mx-office-f';
+      f.title = 'Офис команды';
+      f.allow = 'camera; microphone; display-capture; autoplay; clipboard-write; fullscreen';
+      f.setAttribute('allowfullscreen', '');
+      f.src = API + '/meet?embed=1&theme=light' + (r && r.pass
+        ? '#p=' + encodeURIComponent(r.pass) + '&n=' + encodeURIComponent(r.name || '')
+        : '');
+      d.innerHTML = '';
+      d.appendChild(f);
+    }).catch(function () {
+      d.removeAttribute('data-on');
+      d.innerHTML = '<div class="mx-office-wait">Не вышло открыть офис. Обнови страницу.</div>';
+    });
+  }
+  function officeHide() { if (officeBox) officeBox.hidden = true; }
+
   function enterMeetRoom(e, a) {
     var url = a.getAttribute('href');
     if (!url || e.metaKey || e.ctrlKey || e.shiftKey || e.button > 0) return;
