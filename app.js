@@ -29762,6 +29762,20 @@
   function mkUrl(code) {
     return MK_GO + code;
   }
+  /* Каналы, где бот админ. Тянем один раз на сессию: список меняется раз в полгода,
+     а мастер ссылки перерисовывается на каждый клик. */
+  function fetchMkChans() {
+    if (state._mkChansWait) return;
+    state._mkChansWait = true;
+    api('/admin/api/marketing/channels').then(function (r) {
+      state._mkChansWait = false; state._mkChans = (r && r.channels) || [];
+      if (state._mk) mkModal(state._mk);
+    }).catch(function () {
+      state._mkChansWait = false; state._mkChans = 'none';
+      if (state._mk) mkModal(state._mk);
+    });
+  }
+
   function mkKind(kind) {
     return MK_KIND_INFO[kind] || MK_KIND_INFO.page;
   }
@@ -29921,7 +29935,7 @@
         var ans = answerRows.filter(function (a) { return a.funnel_code === sf.code; }).map(function (a) {
           return '<div class="mk-ans-r"><span>' + esc(a.key) + ' · ' + esc(a.value) + '</span><span class="num">' + a.count + '</span></div>';
         }).join('');
-        var st = (d && d.stats) || { clicks: {}, users: {}, handoffs: {} };
+        var st = (d && d.stats) || { clicks: {}, users: {}, handoffs: {}, joins: {} };
         function sn(map, code) { return (map && map[code]) || 0; }
         var flinks = ((d && d.links) || []).filter(function (l) {
           var src = l.utm && l.utm.source;
@@ -29933,7 +29947,12 @@
             '<div class="mk-i"><div class="mk-n">' + esc(l.title || l.code) + '</div>' +
             '<div class="mk-l"><span class="mk-kind">' + kind.short + '</span> <span class="mk-code num">' + esc(l.code) + '</span> · ' +
             esc(mkSourceName(l.utm && l.utm.source)) + (l.note ? '<span class="mk-note">' + esc(l.note) + '</span>' : '') + '</div></div>' +
-            '<div class="mk-st num" title="кликов по ссылке">' + sn(st.clicks, l.code) + '</div>' +
+            '<div class="mk-st num" title="кликов по ссылке">' + sn(st.clicks, l.code) +
+              /* Вступление в закрытый канал — то, ради чего ссылку в канал и давали.
+                 Показываем только там, где оно есть: у ссылки на страницу этой цифры
+                 не бывает, и ноль рядом с кликами читался бы как провал. */
+              (sn(st.joins, l.code) ? '<i class="mk-join num" title="вступили в канал">+' +
+                sn(st.joins, l.code) + ' в канал</i>' : '') + '</div>' +
             mkChips(l.code, [kind.short]) + '<button class="mk-btn danger" data-dellink="' + esc(l.code) + '">' + ic('x', 12) + '</button></div>';
         }).join('');
         /* шаги показываем, если они есть в БД — даже пока файл агента не подцепился
@@ -29996,9 +30015,32 @@
           return '<button class="mk-chip2' + (sel === it.id ? ' on' : '') + '" data-' + attr + '="' + esc(it.id) + '">' + esc(it.label) + '</button>';
         }).join('') + '</div>';
       }
-      var targetBlock = w.kind === 'page'
-        ? '<div class="mk-qblock"><div class="mk-q">Куда ведёт страница?</div><input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="истсайд.рф/shanghai_summer.html"></div>'
-        : '';
+      /* У страницы две цели: обычный адрес и закрытый канал. Для канала адрес руками
+         не вписываем — бот заводит ИМЕННУЮ пригласительную ссылку с именем = код
+         размещения. Иначе все рассылки зовут одной ссылкой, и вступления видны
+         только суммой (владелец, 26.10.2026: «а почему нельзя отследить?»). */
+      var chans = state._mkChans;
+      if (w.kind === 'page' && chans === undefined) fetchMkChans();
+      var targetBlock = '';
+      if (w.kind === 'page') {
+        var chanList = (chans && chans !== 'none') ? chans : [];
+        targetBlock = '<div class="mk-qblock"><div class="mk-q">Куда именно?</div>' +
+          chips2([{ id: 'url', label: 'На страницу' }, { id: 'chat', label: 'В закрытый канал' }],
+                 w.mode || 'url', 'wt') +
+          (w.mode === 'chat'
+            ? (chanList.length
+              ? '<div class="mk-chan" style="margin-top:10px">' + chanList.map(function (c) {
+                  return '<button class="mk-chip2' + (String(w.chat) === String(c.chat_id) ? ' on' : '') +
+                    '" data-wch="' + esc(String(c.chat_id)) + '">' + esc(c.title) +
+                    ' <span class="mk-q-s num">' + c.members + '</span></button>';
+                }).join('') + '</div>' +
+                '<div class="mk-q-s" style="margin-top:8px">Бот сделает отдельную ссылку в этот канал и назовёт её кодом размещения — вступления будут видны по источнику.</div>'
+              : (chans === 'none'
+                ? '<div class="mk-q-s" style="margin-top:10px">Список каналов не загрузился — обнови страницу.</div>'
+                : '<div class="mk-q-s" style="margin-top:10px">Загружаю каналы…</div>'))
+            : '<input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="истсайд.рф/shanghai_summer.html" style="margin-top:10px">') +
+        '</div>';
+      }
       inner = '<div class="mk-modal-t">Новая ссылка · <span class="mk-code num">' + esc(w.funnel) + '</span></div>' +
         '<div class="mk-qblock"><div class="mk-q">Куда ведёт?</div>' + chips2(MK_KINDS, w.kind, 'wk') + '</div>' + targetBlock +
         '<div class="mk-qblock"><div class="mk-q">Где будет размещена?</div>' + chips2(MK_CHANNELS, w.chan, 'wc') + '</div>' +
@@ -30118,6 +30160,21 @@
       var nn = el('mk-ln'); if (nn) w.note = nn.value;
       var c = el('mk-lc'); if (c && c.value !== w.code) { w.code = c.value; w.touched = true; }
     }
+    Array.prototype.forEach.call(host.querySelectorAll('[data-wt]'), function (b) {
+      b.addEventListener('click', function () {
+        keep();
+        state._mkL.mode = b.getAttribute('data-wt');
+        if (state._mkL.mode === 'chat') state._mkL.target = '';
+        mkModal(d);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-wch]'), function (b) {
+      b.addEventListener('click', function () {
+        keep();
+        state._mkL.chat = b.getAttribute('data-wch');
+        mkModal(d);
+      });
+    });
     ['wk', 'wc', 'wm'].forEach(function (attr) {
       Array.prototype.forEach.call(host.querySelectorAll('[data-' + attr + ']'), function (b) {
         b.addEventListener('click', function () {
@@ -30139,7 +30196,9 @@
       var w = state._mkL;
       var code = (w.code || '').trim().toLowerCase();
       if (!MK_CODE_RE.test(code)) { showToast('Код — латиницей, без пробелов (leto_tg_inst)'); return; }
-      if (w.kind === 'page' && !(w.target || '').trim()) { showToast('Укажи адрес страницы'); return; }
+      var vKanal = w.kind === 'page' && w.mode === 'chat';
+      if (vKanal && !w.chat) { showToast('Выбери канал'); return; }
+      if (w.kind === 'page' && !vKanal && !(w.target || '').trim()) { showToast('Укажи адрес страницы'); return; }
       var chan = MK_CHANNELS.filter(function (c) { return c.id === w.chan; })[0] || MK_CHANNELS[0];
       var med = MK_MEDIUMS.filter(function (m) { return m.id === w.med; })[0] || MK_MEDIUMS[0];
       var kind = mkKind(w.kind);
@@ -30147,7 +30206,8 @@
         code: code,
         title: kind.short + ' · ' + chan.label + (med.id !== 'post' ? ' · ' + med.label : ''),
         funnel_code: w.funnel, kind: w.kind,
-        target_url: w.kind === 'page' ? w.target.trim() : null,
+        target_url: (w.kind === 'page' && !vKanal) ? w.target.trim() : null,
+        invite_chat_id: vKanal ? parseInt(w.chat, 10) : null,
         utm: { source: chan.src, medium: med.utm },
         note: (w.note || '').trim() || null,
       }).then(function () {
