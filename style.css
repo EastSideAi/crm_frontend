@@ -1016,6 +1016,26 @@ a { color: inherit; text-decoration: none; }
 .cvc-p { font-size: 13px; color: var(--ink-3); text-align: right; white-space: nowrap; }
 .cvc-row.weak .cvc-p { color: var(--coral); font-weight: 600; }
 
+/* ── Сводка руководителя (finboss) ── */
+/* Карточки по высоте контента, а не растянуты под соседа: в плотной сводке
+   полупустая карточка читается как баг (design-review 26.10.2026). */
+.boss-grid { align-items: start; }
+.boss-pf { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.boss-pf-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.boss-pf-l { font-size: 13px; color: var(--ink-2); }
+.boss-pf-l.muted { color: var(--ink-3); }
+.boss-pf-v { font-size: 19px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.boss-pf-v.muted { font-size: 14px; font-weight: 600; color: var(--ink-3); }
+.boss-sub { margin: 18px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.boss-pnl { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.boss-pnl .boss-pf-l { font-size: 14px; }
+.boss-pnl .boss-pf-v { font-size: 15px; font-weight: 600; }
+.boss-pnl .boss-pf-row.strong { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.boss-pnl .boss-pf-row.strong .boss-pf-l { font-weight: 600; color: var(--ink); }
+.boss-pnl .boss-pf-row.strong .boss-pf-v { font-size: 19px; font-weight: 700; }
+.pl-fact.over { color: var(--red-ink); font-weight: 600; }
+
 /* ── Рабочее окно менеджера продаж: очередь «Сейчас», метка источника, навигация ── */
 .dq-band { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); padding: 14px 24px 6px; }
