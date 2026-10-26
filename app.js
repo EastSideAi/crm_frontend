@@ -2292,13 +2292,13 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'ads', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'ads', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact', 'org'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact', 'org'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
-    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors', 'academy', 'planfact'] },
-    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'portal', 'academy'] },
+    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'portal', 'contractors', 'academy', 'planfact'] },
+    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'portal', 'academy', 'pay_create'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'org'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['cabinet_invite', 'dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
     // Тьютор ведет учеников: карточки, обучение и переписка со СВОИМИ семьями
@@ -2318,7 +2318,7 @@
     // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
     // не видит маркетинг, а «Руководитель» — это заодно выплаты команды и документы
     // учеников. Ведомости нет вовсе: там ввод процентов и выплат людям.
-    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact', 'finmodel_marketing', 'org'] },
+    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'marketing', 'portal', 'planfact', 'finmodel_marketing', 'org'] },
     // Решение владельца от 2026-09-02: продюсер ведёт маркетинг и продажи запуска —
     // контроль, отчётность, планирование и переписки с клиентами. Набор прав сейчас
     // такой же, как у руководителя маркетинга: владелец просил роль без права менять
@@ -2326,7 +2326,7 @@
     // Просмотр-без-правки — второй шаг, там роли и разойдутся. Ведомости нет: процент
     // продюсера от чистой прибыли — отдельный расчётный лист. Зеркало ROLE_CAPS в
     // backend/app/routers/admin.py.
-    producer:      { label: 'Продюсер',               short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact', 'team_view', 'org'] },
+    producer:      { label: 'Продюсер',               short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'marketing', 'portal', 'planfact', 'team_view', 'org'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     /* Подрядчик по рекламе (Вера 22.10.2026): одна дверь — вкладка «Реклама».
@@ -2343,10 +2343,10 @@
     // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
     // (ведет всю финансовую работу); ведомостью управляет, поэтому есть и правка
     // (finmodel_edit): экраны ввода Доходы и листы работают только с ней.
-    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'contractors', 'finmodel', 'finmodel_edit'] },
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'pay_create', 'contractors', 'finmodel', 'finmodel_edit'] },
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
-    accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance', 'cz_pay'] },
+    accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance', 'pay_create', 'cz_pay'] },
     // Отвечает только за выплаты подрядчикам (Роман 11.09.2026): вносит выплаты в
     // дашборд, они падают расходом фонда подрядчиков. Всю ведомость не видит. Зеркало
     // ROLE_CAPS в backend/app/routers/admin.py.
@@ -41152,13 +41152,16 @@
         '<div class="empty">Платящих клиентов пока нет.</div></div>';
     }
 
+    var channelsCard = finChannelsCard(f.by_channel);
+
     view.innerHTML = '<div class="dash">' + banner + bar +
-      '<div class="grid">' + statusCard + monthsCard + prodCard + clientsCard + '</div></div>';
+      '<div class="grid">' + statusCard + monthsCard + prodCard + clientsCard + channelsCard + '</div></div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('.fin-client[data-id]'), function (n) {
       n.addEventListener('click', function () { openDrawer(n.getAttribute('data-id'), [n.getAttribute('data-id')]); });
       n.addEventListener('mouseenter', function () { warm(n.getAttribute('data-id')); });
     });
+    wireFinChannels(view);
   }
   /* донат по продуктам (на базе DONUT_COLORS, но по суммам) */
   function finDonut(products) {
@@ -41189,6 +41192,83 @@
       '<div class="distr-body"><div class="dwrap"><div class="dpie" style="background:conic-gradient(' + grad + ')"></div>' +
       '<div class="dctr"><div><div class="dn num" style="font-size:20px">' + fmtMoney(total) + '</div><div class="ds">₽ всего</div></div></div></div>' +
       '<div class="dleg">' + legend + '</div></div></div>';
+  }
+
+  /* Выручка по каналам привлечения + управление справочником каналов. Бары —
+     классы воронки (cvc-*), чтобы не плодить CSS. Управление (добавить/спрятать) —
+     только финансовой роли; менеджер канал видит и ставит на оплате, но список не
+     правит (Павел 2026-10-26). */
+  function finChannelsCard(byChannel) {
+    var list = (byChannel || []).slice();
+    var maxV = Math.max.apply(null, list.map(function (c) { return c.amount; }).concat([1]));
+    var total = list.reduce(function (s, c) { return s + c.amount; }, 0) || 1;
+    var rows = list.length ? list.map(function (c, i) {
+      var w = Math.max(4, Math.round(c.amount / maxV * 100));
+      return '<div class="cvc-row' + (i === 0 && c.amount ? ' weak' : '') + '">' +
+        '<div class="cvc-nm">' + esc(c.name) + '</div>' +
+        '<div class="cvc-track"><div class="cvc-fill" style="width:' + w + '%"></div></div>' +
+        '<div class="cvc-c num">' + fmtMoney(c.amount) + '</div>' +
+        '<div class="cvc-p num">' + Math.round(c.amount / total * 100) + '%</div></div>';
+    }).join('') : '<div class="empty">Оплат с каналом пока нет. Проставьте канал на оплатах в карточках — и выручка разложится по каналам.</div>';
+    var manage = can('finance')
+      ? '<div class="fin-chman"><div class="m-sec-h" style="margin-top:4px">Каналы: добавить и спрятать</div>' +
+          '<div class="fin-chadd"><input id="fin-chan-new" placeholder="Новый канал, например «Telegram Ads»">' +
+          '<button class="bp sm" id="fin-chan-add">' + ic('plus', 12) + 'Добавить</button></div>' +
+          '<div id="fin-chan-list" class="fin-chips"><span class="field-empty">Загружаю каналы…</span></div></div>'
+      : '';
+    return '<div class="card" style="grid-column:1/-1;padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
+      '<div><div class="t">Выручка по каналам</div><div class="s">с какого канала приходит больше денег</div></div>' +
+      '<span class="cnt num">' + fmtMoney(total) + ' ₽</span></div>' +
+      '<div class="cvc-rows" style="margin-top:12px">' + rows + '</div>' + manage + '</div>';
+  }
+
+  /* Наполнить и оживить управление каналами на странице Платежи (после рендера). */
+  function wireFinChannels(view) {
+    var listBox = view.querySelector('#fin-chan-list');
+    if (!listBox) return;   // нет блока управления (не финансовая роль)
+    function paint(chans) {
+      state._revChans = chans.filter(function (c) { return !c.archived; });
+      listBox.innerHTML = chans.length
+        ? chans.map(function (c) {
+            return '<span class="qchip' + (c.archived ? ' off' : '') + '" data-ch="' + c.id + '">' +
+              esc(c.name) +
+              (c.archived
+                ? '<button class="fch-x" data-charch="' + c.id + '" data-arch="0" title="Вернуть">' + ic('refresh', 11) + '</button>'
+                : '<button class="fch-x" data-charch="' + c.id + '" data-arch="1" title="Спрятать">' + ic('x', 11) + '</button>') +
+              '</span>';
+          }).join('')
+        : '<span class="field-empty">Каналов пока нет — добавьте первый.</span>';
+      Array.prototype.forEach.call(listBox.querySelectorAll('[data-charch]'), function (b) {
+        b.addEventListener('click', function () {
+          var want = b.getAttribute('data-arch') === '1';
+          b.disabled = true;
+          apiSend('/admin/api/revenue-channels/' + b.getAttribute('data-charch'), 'PATCH',
+            { archived: want }, function () { load(); });
+        });
+      });
+    }
+    function load() {
+      api('/admin/api/revenue-channels?include_archived=1')
+        .then(function (r) { paint((r && r.channels) || []); })
+        .catch(function () { listBox.innerHTML = '<span class="field-empty">Не удалось загрузить каналы.</span>'; });
+    }
+    load();
+    var addBtn = view.querySelector('#fin-chan-add'), addIn = view.querySelector('#fin-chan-new');
+    function add() {
+      var name = (addIn.value || '').trim();
+      if (!name) { addIn.focus(); return; }
+      addBtn.disabled = true;
+      apiSend('/admin/api/revenue-channels', 'POST', { name: name }, function (r) {
+        addBtn.disabled = false;
+        if (r && r.ok) { addIn.value = ''; load(); }
+      }, function (code, e) {
+        addBtn.disabled = false;
+        showToast((e && e.body && e.body.detail) || 'Канал не добавился');
+      });
+    }
+    if (addBtn) addBtn.addEventListener('click', add);
+    if (addIn) addIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
   }
 
   /* ════ ОМНИКАНАЛЬНЫЙ БОТ — диалоги + аналитика ════ */
@@ -43897,10 +43977,11 @@
     var nm = ov(ctx, 'name');
     var ownHd = crm.owner || null;
     var openTasks = (crm.tasks || []).filter(function (t) { return !t.done; }).length;
-    // Оплаты в карточке — только финансовой роли: тьютор ведет ученика, но сколько
-    // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
+    // Оплаты в карточке — финансовой роли и тому, кто принимает платёж (pay_create,
+    // менеджер с 2026-10-26): он выставляет счёт и записывает оплату. Тьютор не видит
+    // ни того, ни другого (бэк такую карточку и не отдаёт, см. can_money = may_money).
     var navHtml = MODAL_SECTIONS.filter(function (sct) {
-      if (sct.id === 'pay') return can('finance');
+      if (sct.id === 'pay') return can('finance|pay_create');
       // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
       if (sct.id === 'consult') return can('clients');
       // Переписка закрыта тем же правом, что и раздел «Диалоги»: пункт, который
@@ -44027,9 +44108,9 @@
     if (!host || !id) return;
     var ctx = leadCtx(id);
     var s = state.modalSection;
-    // Секцию оплат без финансовой роли не открыть даже прямым переключением
-    // состояния — уводим на «Главное».
-    if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
+    // Секцию оплат без права на деньги не открыть даже прямым переключением
+    // состояния — уводим на «Главное». Право = finance или pay_create (приём платежа).
+    if (s === 'pay' && !can('finance|pay_create')) { s = state.modalSection = 'main'; }
     if (s === 'consult' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'mail' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'points' && !can('clients')) { s = state.modalSection = 'main'; }
@@ -47651,6 +47732,7 @@
         '<div class="pay-who">' +
           '<label>продал<select class="pay-sel" data-payseller="' + p.id + '" data-cur="' + (p.seller_id || '') + '"></select></label>' +
           '<label>довел<select class="pay-sel" data-paysetter="' + p.id + '" data-cur="' + (p.setter_id || '') + '"></select></label>' +
+          '<label>канал<select class="pay-sel pay-chansel" data-paychan="' + p.id + '" data-cur="' + (p.channel_id || '') + '"></select></label>' +
         '</div></div>';
     }).join('');
 
@@ -47723,6 +47805,10 @@
                  и взнос, а продукт отвечает на вопрос «что продали». */
               '<span class="pay-selwrap"><select class="ord-sel" id="pay-prod">' +
                 '<option value="">За что платят — выберите продукт</option></select></span>' +
+              // Канал привлечения: откуда пришёл клиент — для «выручки по каналам».
+              // Необязательно; список каналов ведёт руководитель на странице Платежи.
+              '<span class="pay-selwrap"><select class="ord-sel" id="pay-chan">' +
+                '<option value="">Канал — откуда клиент (необязательно)</option></select></span>' +
               '<input id="pay-title" placeholder="Строкой: например «Договор 57, первый платеж 50%»">' +
               '<div class="pay-grid">' +
                 '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
@@ -49134,7 +49220,7 @@
 
     /* Выпадашки «кто продал» и «кто довел». Список людей один на сессию (fetchPeople),
        поэтому наполняем их после отрисовки, а не тянем сервер на каждую карточку. */
-    var paySels = host.querySelectorAll('select.pay-sel');
+    var paySels = host.querySelectorAll('select.pay-sel:not(.pay-chansel)');
     if (paySels.length) fetchPeople(function (people) {
       Array.prototype.forEach.call(paySels, function (sel) {
         var cur = sel.getAttribute('data-cur');
@@ -49158,6 +49244,42 @@
         });
       });
     });
+
+    /* Каналы привлечения: заполняем селект в форме и в строках оплат (откуда клиент).
+       Список кэшируем на сессию (state._revChans), как и людей. В строках — смена
+       канала пишется сразу PATCH-ем, в форме значение уедет с новым платежом. */
+    var chanSels = host.querySelectorAll('select.pay-chansel, #pay-chan');
+    function fillChans(list) {
+      Array.prototype.forEach.call(chanSels, function (sel) {
+        var cur = sel.getAttribute('data-cur') || '';
+        var isForm = sel.id === 'pay-chan';
+        sel.innerHTML = (isForm
+            ? '<option value="">Канал — откуда клиент (необязательно)</option>'
+            : '<option value="">— канал —</option>') +
+          list.map(function (c) {
+            return '<option value="' + c.id + '"' + (String(c.id) === String(cur) ? ' selected' : '') +
+              '>' + esc(c.name) + '</option>';
+          }).join('');
+        if (isForm) return;
+        var pid = sel.getAttribute('data-paychan');
+        sel.addEventListener('change', function () {
+          var body = sel.value ? { channel_id: parseInt(sel.value, 10) } : { clear_channel: true };
+          apiSend('/admin/api/payments/' + pid, 'PATCH', body, function () {
+            showToast('Канал записан');
+            refreshDetail(id, function () {
+              if (state.drawerId === id && state.modalSection === 'pay') renderDrawer(true);
+            });
+          });
+        });
+      });
+    }
+    if (chanSels.length) {
+      if (state._revChans) fillChans(state._revChans);
+      else api('/admin/api/revenue-channels').then(function (r) {
+        state._revChans = (r && r.channels) || [];
+        fillChans(state._revChans);
+      }).catch(function () { /* каналов нет — селекты останутся с «— канал —» */ });
+    }
 
     var payBtn = el('pay-add-btn');
     if (payBtn) {
@@ -49204,6 +49326,8 @@
         var body = { title: title, amount_rub: amt, status: payStatus,
                      included: incEl ? !!incEl.checked : true };
         if (prod && prod !== '-') body.product_id = prod;
+        var chanEl = el('pay-chan');
+        if (chanEl && chanEl.value) body.channel_id = parseInt(chanEl.value, 10);
         if (payStatus === 'paid' || payStatus === 'refunded') body.paid_at = date;
         var selA = el('pay-seller'), selB = el('pay-setter');
         if (selA && selA.value) body.seller_id = parseInt(selA.value, 10);

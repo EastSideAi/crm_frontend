@@ -13764,3 +13764,16 @@ video.cs-media { background: #000; }
   font-size: 12px; line-height: 1.45; color: var(--ink-3); }
 .efb-row { display: flex; justify-content: flex-end; margin-top: 10px; }
 @media (max-width: 600px) { .efb { padding: 14px; } .efb-msg, .efb-draft { max-width: 92%; } }
+
+/* ── Каналы привлечения (справочник на странице Платежи) ── */
+.fin-chman { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.fin-chadd { display: flex; gap: 8px; margin: 8px 0 12px; }
+.fin-chadd input { flex: 1; min-width: 0; }
+.fin-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.fin-chips .qchip { display: inline-flex; align-items: center; gap: 6px; }
+.fin-chips .qchip.off { opacity: .5; }
+.fch-x { display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: none; background: transparent;
+  color: var(--ink-3); cursor: pointer; border-radius: 5px; }
+.fch-x:hover { background: var(--line); color: var(--ink); }
+.pay-chansel { max-width: 180px; }
