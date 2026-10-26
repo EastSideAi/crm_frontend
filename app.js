@@ -34445,6 +34445,40 @@
       '<div style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
+  /* Итог за выбранный период одной строкой. Без него человек складывает в уме
+     четыре колонки по десятку рассылок — и складывает неправильно. */
+  function bcItogo(it, n) {
+    if (!it || !n) return '';
+    var cells = [[it.delivered, 'дошло'], [it.v_kanal, 'переходов в канал'],
+                 [it.na_sayt, 'переходов на сайт'], [it.regs, 'регистраций'],
+                 [it.vstupili, 'вступили в канал']];
+    return '<div class="bc-itogo">' + cells.map(function (c) {
+      return '<span class="bc-n"><b class="num">' + (c[0] || 0) + '</b><small>' + c[1] + '</small></span>';
+    }).join('') + '</div>';
+  }
+
+  /* Что человек сделал ПОСЛЕ отправки: переходы по ссылкам рассылки, регистрации
+     и вступления в закрытый канал. Отдельной группой, а не в общем ряду цифр:
+     слева — что сделала площадка, справа — что сделали люди, и путать их нельзя.
+     Вступления в MAX не считаются вовсе: id участника канала и id пользователя
+     бота там из разных пространств, совпадений ноль из 55. Честный прочерк. */
+  function bcPosle(r) {
+    var max = /max/i.test(r.channel || '');
+    var cells = [
+      [r.v_kanal, 'в канал', ''],
+      [r.na_sayt, 'на сайт', ''],
+      [r.regs, 'регистраций', ''],
+      [max ? null : r.vstupili, 'вступили',
+       max ? 'MAX не связывается с получателями, смотрите переходы'
+           : (r.vstupili_tochno ? r.vstupili_tochno + ' по ссылке рассылки, остальные по последнему касанию' : '')]
+    ];
+    return '<div class="bc-posle">' + cells.map(function (c) {
+      var znak = (c[0] === null || c[0] === undefined) ? '—' : (c[0] || 0);
+      return '<span class="bc-n"' + (c[2] ? ' title="' + esc(c[2]) + '"' : '') + '>' +
+        '<b class="num">' + znak + '</b><small>' + c[1] + '</small></span>';
+    }).join('') + '</div>';
+  }
+
   function bcCohort(title, hint, rows) {
     var body = (rows || []).length ? rows.map(function (c) {
       var base = c.delivered || 0;
@@ -34595,6 +34629,7 @@
               '</b><small>' + n[1] + '</small></span>';
           }).join('') +
         '</div>' +
+        bcPosle(r) +
         '<div class="bc-go">' + ic('go', 14) + '</div>' +
       '</div>';
     }).join('') : (notReady
@@ -34673,6 +34708,7 @@
           '<button data-per="custom" class="dp-custom' + (q.per === 'custom' ? ' on' : '') + '">' +
             ic('cal', 12) + esc(bcPerLabel()) + '</button>' +
         '</div></div>' +
+        bcItogo(state._bcList.itogo, runs.length) +
         '<div style="border-top:1px solid var(--line)">' + rows + '</div></div>' +
       sumCohorts +
     '</div>';
