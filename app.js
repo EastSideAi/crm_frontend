@@ -40770,6 +40770,9 @@
       var tc = (r.top_clients || []).map(function (x) {
         return { lead_id: x.lead_id || x.session_id, name: x.name, amount: x.amount != null ? x.amount : (x.sum_rub || 0), count: x.count || 0 };
       });
+      var bc = (r.by_channel || []).map(function (x) {
+        return { channel_id: x.channel_id != null ? x.channel_id : null, name: x.name || x.title, amount: x.amount != null ? x.amount : (x.sum_rub || 0), count: x.count || 0 };
+      });
       var paidTotal = T.paid != null ? T.paid : (r.paid_total || 0);
       var paidCount = T.count_paid != null ? T.count_paid : (r.paid_count || 0);
       var fin = {
@@ -40784,7 +40787,7 @@
           { key: 'pending', label: 'Ожидается', amount: T.pending != null ? T.pending : (r.pending_total || 0) },
           { key: 'refunded', label: 'Возвраты', amount: T.refunded != null ? T.refunded : (r.refunded_total || 0) },
         ],
-        by_month: bm, by_product: bp, top_clients: tc,
+        by_month: bm, by_product: bp, top_clients: tc, by_channel: bc,
         archived_total: r.archived_total || 0, archived_count: r.archived_count || 0,
         pay_conv: payConvLocal(r.paying_lead_ids ? indexBy(r.paying_lead_ids) : null),
       };
@@ -41204,7 +41207,9 @@
     var total = list.reduce(function (s, c) { return s + c.amount; }, 0) || 1;
     var rows = list.length ? list.map(function (c, i) {
       var w = Math.max(4, Math.round(c.amount / maxV * 100));
-      return '<div class="cvc-row' + (i === 0 && c.amount ? ' weak' : '') + '">' +
+      // Лидер по выручке — это хорошо, поэтому без «weak» (коралловой) подсветки,
+      // как в воронке потерь: все каналы в фирменном синем, разницу держит длина.
+      return '<div class="cvc-row">' +
         '<div class="cvc-nm">' + esc(c.name) + '</div>' +
         '<div class="cvc-track"><div class="cvc-fill" style="width:' + w + '%"></div></div>' +
         '<div class="cvc-c num">' + fmtMoney(c.amount) + '</div>' +
