@@ -3905,6 +3905,29 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-who .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
 /* Кого показывать в сетке. Чипы стоят рядом с выбором человека: это один вопрос
    «чье расписание смотрим», только с разных сторон. */
+/* Свой часовой пояс. Строка стоит там, где человек отмечает часы: все расписание
+   считается по Москве, а тьюторы продаж сидят в Китае (+5), и до 27.10.2026 на
+   экране об этом не было сказано ни слова. */
+.sc-tz { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 9px 12px; margin: 10px 0 2px; border-radius: 10px; background: var(--fill);
+  font-size: 12.5px; color: var(--ink-2); }
+.sc-tz svg { color: var(--ink-3); flex: none; }
+.sc-tz.on { background: var(--blue-tint); color: var(--navy); }
+.sc-tz.on svg { color: var(--blue); }
+.sc-tz em { font-style: normal; color: var(--ink-3); font-size: 12px; }
+.sc-tzsel .al-sel { font-size: 12.5px; padding: 5px 26px 5px 10px; }
+/* Два времени в одной подписи: свое крупно, московское мелким под ним. */
+.sc-h.two, .zd-h.two, .sc-my-h.two { line-height: 1.25; }
+.sc-h.two b, .zd-h.two b, .sc-my-h.two b { display: block; font-size: 12.5px;
+  font-weight: 700; color: var(--ink-2); }
+.sc-my-h.two b { font-size: 13px; }
+.sc-h.two i, .zd-h.two i, .sc-my-h.two i { display: block; font-style: normal;
+  font-size: 10.5px; color: var(--ink-3); }
+.sc-h.two .sc-nx, .zd-h.two .sc-nx, .sc-my-h.two .sc-nx { display: inline; margin-left: 3px;
+  font-size: 10px; color: var(--blue); font-weight: 700; }
+.sc-grid.two .sc-row { grid-template-columns: 64px repeat(7, minmax(0, 1fr)); }
+.zd-h.two { flex-basis: 62px; }
+.sc-my-h.two { flex-basis: 58px; }
 .sc-roles { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .sc-roles .qchip { font-size: 12px; padding: 6px 11px; }
 .sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }

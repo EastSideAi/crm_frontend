@@ -8458,6 +8458,19 @@
   }
   // Ключ дня — по местным числам, не через toISOString: московская полночь в UTC
   // еще вчера, и окна расписания на «сегодня» не совпадали бы с днем на экране.
+  /* Московские сутки и час у момента времени. Сетка расписания живет по Москве, а
+     встречи нашего сервиса приходят меткой времени с зоной, и до 27.10.2026 они
+     раскладывались по часам компьютера: у тьютора в Китае собственная встреча
+     стояла в сетке на пять часов правее, чем у коллеги в Москве. */
+  function mskHour(dt) {
+    var g = {};
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', hour12: false
+    }).formatToParts(dt).forEach(function (x) { g[x.type] = x.value; });
+    return { ymd: g.year + '-' + g.month + '-' + g.day, hour: (+g.hour) % 24 };
+  }
+
   function zoomYmd(d) {
     var m = d.getMonth() + 1, day = d.getDate();
     return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
@@ -8492,6 +8505,50 @@
   // То же самое первым словом строки, с большой буквы: в ленте своего расписания
   // род занятия — это название встречи, а не приписка к нему.
   var SC_WHAT_BIG = { teacher: 'Урок', curator: 'Разбор', staff: 'Встреча' };
+
+  /* ── Часовые пояса ─────────────────────────────────────────────────────────
+     Все расписание считается по Москве: час слота, планерка, напоминание бота.
+     Тьюторы продаж сидят в Китае, это +5 к Москве, и на экране об этом не было
+     сказано ни слова (Павел 27.10.2026: «нужно помнить что тьюторы продажники у
+     нас в Китае, у них +5 к мск»). Человек отмечал 18:00, имея в виду свой
+     вечер, а час продавался как московский, то есть 23:00 у него.
+
+     Смещение человек выбирает один раз, хранится оно в его строке расписания
+     (sched_person.tz_shift), и дальше рядом с московским часом везде стоит его
+     собственный. Часы, а не названия зон: минут в расписании нет, переходов на
+     летнее время в наших странах тоже. */
+  var SC_TZ = [
+    [-1, 'Калининград'], [0, 'Москва, Минск'], [1, 'Тбилиси, Ереван, Дубай'],
+    [2, 'Екатеринбург, Ташкент'], [3, 'Алматы, Бишкек, Омск'],
+    [4, 'Новосибирск, Красноярск'], [5, 'Китай, Иркутск'], [6, 'Якутск'],
+    [7, 'Владивосток']
+  ];
+
+  function schedTz(d) { return (d && d.me && +d.me.tz) || 0; }
+
+  /* Подпись часа: московский и свой, если они разные. Сутки в сетке московские,
+     поэтому у края дня свой час уезжает на следующий — об этом говорит «+1».  */
+  function schedHourTxt(h, tz) {
+    if (!tz) return String(h) + ':00';
+    var loc = h + tz, plus = loc >= 24 ? '<i class="sc-nx">+1</i>' : (loc < 0 ? '<i class="sc-nx">-1</i>' : '');
+    loc = ((loc % 24) + 24) % 24;
+    return '<b>' + loc + ':00</b>' + plus + '<i>' + h + ':00 мск</i>';
+  }
+
+  /* Строка «вы работаете по времени такого-то города». Стоит там же, где человек
+     отмечает часы: это единственное место, где ошибка в поясе стоит денег. */
+  function schedTzRow(d) {
+    if (!d || !d.me) return '';
+    var tz = schedTz(d);
+    return '<div class="sc-tz' + (tz ? ' on' : '') + '">' + ic('clock', 14) +
+      '<span>Сетка по Москве. Ваше время:</span>' +
+      '<label class="al-selwrap sc-tzsel"><select class="al-sel" id="sc-tz">' +
+      SC_TZ.map(function (z) {
+        return '<option value="' + z[0] + '"' + (z[0] === tz ? ' selected' : '') + '>' +
+          z[1] + (z[0] ? ' (' + (z[0] > 0 ? '+' : '') + z[0] + ' к Москве)' : '') + '</option>';
+      }).join('') + '</select></label>' +
+      (tz ? '<em>крупно ваш час, мелким московский</em>' : '') + '</div>';
+  }
 
   function schedWeekStart(off) {
     var d = new Date(); d.setHours(0, 0, 0, 0);
@@ -8545,7 +8602,10 @@
 
   /* «11:00–13:00» — планерка длиннее часа занимает несколько строк сетки, и без
      границ времени непонятно, одна это встреча или несколько. */
-  function schedSpan(m) { return m.hour + ':00–' + (m.hour + (m.duration || 1)) + ':00'; }
+  function schedSpan(m, tz) {
+    var a = m.hour + (tz || 0), b = a + (m.duration || 1);
+    return ((a % 24) + 24) % 24 + ':00–' + ((b % 24) + 24) % 24 + ':00';
+  }
 
   function schedMeetAttr(m) {
     return ' data-sc-meet="' + m.id + '|' + (m.series ? 1 : 0) + '" data-sc-mt="' + esc(m.title) + '"' +
@@ -8577,7 +8637,8 @@
       var at = r.starts_at ? new Date(r.starts_at) : (r.status === 'live' && r.started_at
         ? new Date(r.started_at) : null);
       if (!at || isNaN(at.getTime())) return false;
-      return zoomYmd(at) === day && at.getHours() === hour;
+      var m = mskHour(at);
+      return m.ymd === day && m.hour === hour;
     });
   }
   // Часы, в которые стоят свои встречи: по ним растягивается сетка, иначе
@@ -8590,8 +8651,9 @@
       var at = r.starts_at ? new Date(r.starts_at)
         : (r.status === 'live' && r.started_at ? new Date(r.started_at) : null);
       if (!at || isNaN(at.getTime())) return;
-      if (day && zoomYmd(at) !== day) return;
-      out.push(at.getHours());
+      var m = mskHour(at);
+      if (day && m.ymd !== day) return;
+      out.push(m.hour);
     });
     return out;
   }
@@ -8635,7 +8697,7 @@
   }
 
   function schedWeekGrid(d, lo, today) {
-    var days = [], i, todayKey = zoomYmd(today);
+    var days = [], i, todayKey = zoomYmd(today), tz = schedTz(d);
     for (i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
     var who = state.schedWho || '';
     var lo_h = SC_FROM, hi_h = SC_TO;
@@ -8655,7 +8717,7 @@
         at.meets.forEach(function (m) {
           var long = (m.duration || 1) > 1;
           out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''), m.title,
-            m.title + ' · ' + schedSpan(m) + ' · ' + (m.people || []).map(function (p) { return p.person; }).join(', ') +
+            m.title + ' · ' + schedSpan(m, tz) + ' · ' + (m.people || []).map(function (p) { return p.person; }).join(', ') +
             (d.can_edit_all ? ' · нажмите, чтобы изменить или снять' : ''),
             d.can_edit_all ? schedMeetAttr(m) : ''));
         });
@@ -8677,13 +8739,15 @@
             ' title="' + (own.length ? 'Убрать свой свободный час' : 'Отметить этот час свободным') + '"' : '') + '>' +
           out.join('') + '</span>';
       }).join('');
-      rows.push('<div class="sc-row">' + '<span class="sc-h">' + h + ':00</span>' + cells + '</div>');
+      rows.push('<div class="sc-row">' +
+        '<span class="sc-h' + (tz ? ' two' : '') + '">' + schedHourTxt(h, tz) + '</span>' +
+        cells + '</div>');
     }
-    return '<div class="sc-grid">' + head + rows.join('') + '</div>';
+    return '<div class="sc-grid' + (tz ? ' two' : '') + '">' + head + rows.join('') + '</div>';
   }
 
   function schedDayList(d, day, today) {
-    var key = zoomYmd(day), who = state.schedWho || '';
+    var key = zoomYmd(day), who = state.schedWho || '', tz = schedTz(d);
     var lo_h = SC_FROM, hi_h = SC_TO;
     (d.slots || []).forEach(function (s) { if (s.date === key) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); } });
     (d.meetings || []).forEach(function (m) { if (m.date === key) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); } });
@@ -8697,7 +8761,7 @@
       at.meets.forEach(function (m) {
         if (m.hour !== h) return;
         cells.push(schedChip('meet' + (d.can_edit_all ? ' act' : ''),
-          m.title + ((m.duration || 1) > 1 ? ' · ' + schedSpan(m) : '') + ' · ' +
+          m.title + ((m.duration || 1) > 1 ? ' · ' + schedSpan(m, tz) : '') + ' · ' +
           (m.people || []).map(function (p) { return schedShort(p.person); }).join(', '),
           d.can_edit_all ? 'Нажмите, чтобы изменить или снять планерку' : (m.note || ''),
           d.can_edit_all ? schedMeetAttr(m) : ''));
@@ -8721,7 +8785,8 @@
       var pick = state.schedEdit && d.me
         ? '<button type="button" class="sc-add" data-sc-cell="' + key + '|' + h + '" title="Отметить этот час свободным">' + ic('plus', 12) + '</button>'
         : '';
-      rows.push('<div class="zd-row' + (h === nowH ? ' now' : '') + '"><span class="zd-h">' + h + ':00</span>' +
+      rows.push('<div class="zd-row' + (h === nowH ? ' now' : '') + '">' +
+        '<span class="zd-h' + (tz ? ' two' : '') + '">' + schedHourTxt(h, tz) + '</span>' +
         '<span class="zd-c">' + cells.join('') + pick + '</span></div>');
     }
     var body = '<div class="zd-tbl">' + rows.join('') + '</div>';
@@ -8739,6 +8804,20 @@
      в нашем сервисе. Все они уже приходят в сетку, второго запроса не нужно. */
   function schedScope() { return state.schedScope === 'all' ? 'all' : 'my'; }
 
+  /* Сутки в ленте — свои, а не московские. Для Китая встреча в 21:00 по Москве
+     стоит в его ночь следующего дня, и в московском дне она отвечала бы на вопрос
+     «куда мне идти сегодня» неверно. Московский час при этом остается подписью. */
+  function schedLocal(ymd, hour, tz) {
+    if (!tz) return { ymd: ymd, hour: hour, msk: hour };
+    var h = hour + tz, shift = Math.floor(h / 24);
+    if (shift) {
+      var dt = new Date(ymd + 'T00:00:00');
+      dt.setDate(dt.getDate() + shift);
+      ymd = zoomYmd(dt);
+    }
+    return { ymd: ymd, hour: ((h % 24) + 24) % 24, msk: hour };
+  }
+
   function schedMyRows(d, lo) {
     var myName = schedMyName(d), uid = state.userId;
     var from = zoomYmd(lo), to = zoomYmd(new Date(lo.getTime() + 6 * 86400000));
@@ -8747,7 +8826,7 @@
       (d.meetings || []).forEach(function (m) {
         if (!(m.people || []).some(function (p) { return p.person === myName; })) return;
         out.push({ ymd: m.date, hour: m.hour, cls: 'plan', title: m.title,
-                   sub: schedSpan(m) + ' · команда', url: '', live: false });
+                   sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false });
       });
       (d.slots || []).forEach(function (s) {
         if (s.person !== myName || !s.booked) return;
@@ -8768,9 +8847,9 @@
         var at = r.starts_at ? new Date(r.starts_at)
           : (r.status === 'live' && r.started_at ? new Date(r.started_at) : null);
         if (!at || isNaN(at.getTime())) return;
-        var ymd = zoomYmd(at);
+        var mk = mskHour(at), ymd = mk.ymd;
         if (ymd < from || ymd > to) return;
-        out.push({ ymd: ymd, hour: at.getHours(), cls: 'room', title: r.title || 'Встреча',
+        out.push({ ymd: ymd, hour: mk.hour, cls: 'room', title: r.title || 'Встреча',
                    sub: r.status === 'live' ? 'идет прямо сейчас' : 'наша встреча',
                    url: r.url || '', live: r.status === 'live' });
       });
@@ -8780,7 +8859,15 @@
   }
 
   function schedMyList(d, lo, today) {
-    var rows = schedMyRows(d, lo), todayKey = zoomYmd(today);
+    var rows = schedMyRows(d, lo), todayKey = zoomYmd(today), tz = schedTz(d);
+    if (tz) {
+      rows = rows.map(function (r) {
+        var at = schedLocal(r.ymd, r.hour, tz);
+        var copy = {}; for (var k in r) copy[k] = r[k];
+        copy.ymd = at.ymd; copy.hour = at.hour; copy.msk = at.msk;
+        return copy;
+      }).sort(function (a, b) { return a.ymd === b.ymd ? a.hour - b.hour : (a.ymd < b.ymd ? -1 : 1); });
+    }
     if (!rows.length) {
       return '<div class="sc-my-none">' + ic('cal', 18) +
         '<b>На этой неделе встреч у вас нет</b>' +
@@ -8799,7 +8886,8 @@
         (ymd === todayKey ? '<i>сегодня</i>' : '') + '</div>';
       return head + seen[ymd].map(function (r) {
         return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + '">' +
-          '<span class="sc-my-h">' + r.hour + ':00</span>' +
+          '<span class="sc-my-h' + (tz ? ' two' : '') + '">' +
+            (tz ? '<b>' + r.hour + ':00</b><i>' + r.msk + ':00 мск</i>' : r.hour + ':00') + '</span>' +
           '<span class="sc-my-b"><b>' + esc(r.title) + '</b><i>' + esc(r.sub) + '</i></span>' +
           (r.url ? '<a class="sc-my-go" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
             (r.live ? 'Войти' : 'Открыть') + '</a>' : '') + '</div>';
@@ -8817,6 +8905,9 @@
         '<li><b>Скажите, кто вы в расписании.</b> Строка «Кто вы в расписании» под фильтрами, ' +
           'один раз за все время. Проводите консультации — выбирайте «провожу разборы»: ' +
           'только такие часы видит человек, когда записывается в боте и на сайте.</li>' +
+        '<li><b>Скажите, где вы живете по часам.</b> Строка «Сетка по Москве. Ваше время» — ' +
+          'выберите свой город. Вся система считает по Москве, и если вы в Китае, ' +
+          'без этого вы отметите московский вечер вместо своего.</li>' +
         '<li><b>Нажмите «Мое время».</b> Экран переходит в режим отметки, ' +
           'сетка команды становится кликабельной.</li>' +
         '<li><b>Отметьте свободные часы.</b> Клик по клетке — час свободен, ' +
@@ -9038,7 +9129,7 @@
         ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
         : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
     view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
-      (grid ? flt : '') + claim + body + hint + '</div>';
+      (grid ? flt : '') + claim + schedTzRow(d) + body + hint + '</div>';
     schedWire(view, d);
   }
 
@@ -9097,6 +9188,17 @@
           : v === 'razbor' ? { razbor: true } : { person_id: +v },
         function () { schedReload(); },
         function (code, e) { showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — обнови страницу'); });
+    });
+    if (el('sc-tz')) el('sc-tz').addEventListener('change', function () {
+      var v = +el('sc-tz').value || 0;
+      apiSend('/admin/api/sched/me/tz', 'POST', { shift: v }, function () {
+        showToast(v ? 'Запомнил: ваше время отличается от московского на ' + (v > 0 ? '+' : '') + v + ' ч'
+                    : 'Запомнил: вы живете по московскому времени');
+        schedReload();
+      }, function (code, e) {
+        showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+          'Не получилось сохранить, попробуйте еще раз');
+      });
     });
     if (el('sc-meet')) el('sc-meet').addEventListener('click', function () { openSchedMeet(d); });
     if (!d || !d.enabled) return;
