@@ -3995,6 +3995,11 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-how p { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-3); }
 /* Связанный календарь — состояние, а не действие: кнопка остается тихой, но
    галочкой цвета говорит, что связь стоит. */
+/* Не связан — единственная заливка в ряду серых кнопок: это и есть то, что на
+   этом экране надо сделать один раз. Связан — тихая кнопка с галочкой. */
+.sc-gcalbtn.call { background: var(--blue); color: #fff; border: 0; }
+.sc-gcalbtn.call svg { color: #fff; }
+.sc-gcalbtn.call:hover { background: var(--blue-d); }
 .sc-gcalbtn.on { color: var(--green-ink); }
 .sc-gcalbtn.on svg { color: var(--green); }
 .sg-steps { margin: 0 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
