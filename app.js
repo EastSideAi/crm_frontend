@@ -2626,6 +2626,11 @@
        продуктового портала, который живет файлом и меняется выкаткой. */
     { id: 'finkb', label: 'База знаний', icon: 'doc', cap: 'finmodel', space: 'fin' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team|team_view' },
+    /* База знаний команды «Регламенты»: как мы работаем, инструкции по отделам.
+       Движок тот же, что у финансовой базы (routers/kb.py, раздел reglament),
+       экран — тот же двухпанельный renderFinKb. Читает вся команда (cap dash),
+       правят руководители (cap team на бэке). Рядом с «Командой» намеренно. */
+    { id: 'reglament', label: 'Регламенты', icon: 'doc', cap: 'dash' },
   ];
 
   /* ── Два рабочих пространства в одной CRM ─────────────────────────────────
@@ -3432,6 +3437,13 @@
         'Скорость ответа, каналы, конверсии и расход AI — живые данные из бота. Расход AI — оценка.' +
         '</span></div></div>';
     }
+    if (state.page === 'reglament') {
+      html = '<div><h2>Регламенты</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' +
+        'Как мы работаем: инструкции по отделам. Отсюда их читают и команда, и агенты, ' +
+        'поэтому правка видна сразу всем.' +
+        '</span></div></div>';
+    }
     if (state.page === 'finance') {
       var f = state.finance;
       var phrase2;
@@ -3815,8 +3827,8 @@
   function renderViewBody() {
     var view = el('view');
     if (!view) return;
-    /* Режим чтения правила живет только на экране базы знаний (см. renderFinKb). */
-    if (state.page !== 'finkb') document.body.classList.remove('fkb-reading');
+    /* Режим чтения правила живет только на экранах базы знаний (финансы и регламенты). */
+    if (state.page !== 'finkb' && state.page !== 'reglament') document.body.classList.remove('fkb-reading');
     if (noSections()) {
       view.innerHTML = '<div class="card"><div class="empty">Разделов для вашей учетки пока нет. ' +
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
@@ -3913,6 +3925,7 @@
     else if (state.page === 'finpaycheck') renderFinPayCheck(view);
     else if (state.page === 'finsup') renderFinSuppliers(view);
     else if (state.page === 'finkb') renderFinKb(view);
+    else if (state.page === 'reglament') renderFinKb(view);
     else if (state.page === 'finboss') renderFinBoss(view);
     else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplandept') renderFinPlanDept(view);
@@ -26739,9 +26752,32 @@
 
   function kbReset() { KB = { items: null, cur: null, q: '', err: false, edit: null, hist: null, busy: false, pane: 'list' }; }
 
+  /* Один и тот же экран базы знаний обслуживает два раздела: правила ведомости
+     (страница finkb, раздел finance) и управленческие регламенты (страница
+     reglament, раздел reglament). Раздел и право на правку выводим из открытой
+     страницы, чтобы состояние не разъезжалось с тем, что на экране. */
+  function kbSection() { return state.page === 'reglament' ? 'reglament' : 'finance'; }
+  function kbEditCap() { return state.page === 'reglament' ? 'team' : 'finmodel_edit'; }
+  /* Регламенты группируются в оглавлении ПО ОТДЕЛАМ — отдел берём из префикса слага
+     (upravlenie-… → «Управление»). Это та же механика, что у финансовой базы с
+     process-/spravka-, только пачки другие. Слаг автор задаёт сам; не попал в список —
+     регламент ляжет в «Прочее». */
+  var KB_DEPTS = [
+    ['upravlenie', 'Управление'], ['prodazhi', 'Продажи'], ['marketing', 'Маркетинг'],
+    ['administrirovanie', 'Администрирование'], ['produkt', 'Продукт'],
+    ['servis', 'Сервис и поддержка'], ['hr', 'Команда и найм'],
+  ];
+  function kbDept(slug) {
+    for (var i = 0; i < KB_DEPTS.length; i++) {
+      var p = KB_DEPTS[i][0];
+      if (slug === p || slug.indexOf(p + '-') === 0) return KB_DEPTS[i][1];
+    }
+    return 'Прочее';
+  }
+
   function kbLoad() {
     var q = KB.q;
-    api('/admin/api/kb?section=finance' + (q ? '&q=' + encodeURIComponent(q) : ''))
+    api('/admin/api/kb?section=' + kbSection() + (q ? '&q=' + encodeURIComponent(q) : ''))
       .then(function (r) {
         KB.items = r.items || [];
         KB.err = false;
@@ -26759,7 +26795,7 @@
      первая глава на входе, чтобы на широком экране правая половина не пустовала. */
   function kbOpen(slug, quiet) {
     KB.edit = null; KB.hist = null;
-    api('/admin/api/kb/article/' + encodeURIComponent(slug) + '?section=finance')
+    api('/admin/api/kb/article/' + encodeURIComponent(slug) + '?section=' + kbSection())
       .then(function (r) {
         KB.cur = r.article;
         if (!quiet) { KB.pane = 'doc'; kbTop(); }
@@ -26836,7 +26872,7 @@
         .then(function () { kbOpen(KB.cur ? KB.cur.slug : ''); done(); }).catch(fail);
     } else {
       api('/admin/api/kb', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ section: 'finance', title: title, summary: summary, body: body }) })
+        body: JSON.stringify({ section: kbSection(), title: title, summary: summary, body: body }) })
         .then(function (r) { KB.cur = null; kbOpen(r.article.slug); done(); }).catch(fail);
     }
   }
@@ -26874,8 +26910,16 @@
        а во время чтения он уже не нужен — прячем его на время статьи (стиль
        .kb-reading), на широком экране он остается всегда. */
     document.body.classList.toggle('fkb-reading', KB.pane === 'doc');
+    /* Переключились между финансовой базой и регламентами — состояние прошлого
+       раздела сбрасываем, иначе откроются чужие статьи и оглавление. */
+    if (KB.section !== kbSection()) {
+      KB.section = kbSection();
+      KB.items = null; KB.cur = null; KB.edit = null; KB.hist = null;
+      KB.q = ''; KB.pane = 'list';
+    }
     if (KB.items === null) { view.innerHTML = kbSkeleton(); kbLoad(); return; }
-    var canEdit = can('finmodel_edit');
+    var isReg = kbSection() === 'reglament';
+    var canEdit = can(kbEditCap());
 
     /* Оглавление делится на две пачки: процессы (их проходят по шагам) и справки
        (в них подсматривают по ходу). Группа видна по слагу, а не по отдельному
@@ -26883,6 +26927,7 @@
        каждому, кто пишет правило. Слаг у новых правил ставит сам автор, и если
        он не попал в эти две пачки — правило просто ляжет в «Главы». */
     var kbGroup = function (slug) {
+      if (isReg) return kbDept(slug);
       if (/^process-/.test(slug)) return 'Процессы';
       if (/^spravka-/.test(slug)) return 'Справочник';
       return 'Главы';
@@ -26903,7 +26948,8 @@
          спрятана, и «сервер не ответил» читалось бы как «правил нет». */
       nav = '<div class="fkb-nav-empty">' +
         (KB.err ? 'База знаний не отвечает. Обновите страницу.'
-                : (KB.q ? 'По запросу ничего нет' : 'Правил пока нет')) + '</div>';
+                : (KB.q ? 'По запросу ничего нет'
+                        : (isReg ? 'Регламентов пока нет' : 'Правил пока нет'))) + '</div>';
     }
 
     var right;
@@ -26926,7 +26972,7 @@
     } else if (!KB.cur) {
       right = '<div class="fkb-doc"><div class="empty">' +
         (KB.err ? 'База знаний не отвечает. Обновите страницу.'
-                : 'Выберите правило в оглавлении') +
+                : (isReg ? 'Выберите регламент в оглавлении' : 'Выберите правило в оглавлении')) +
         '</div></div>';
     } else {
       var a = KB.cur;
@@ -26962,9 +27008,11 @@
       '<div class="fkb-wrap' + (KB.pane === 'doc' ? ' on-doc' : ' on-list') + '">' +
         '<div class="fkb-nav">' +
           '<div class="fkb-search">' +
-            '<input id="kb-q" class="al-in" placeholder="Найти правило" value="' + esc(KB.q) + '">' +
+            '<input id="kb-q" class="al-in" placeholder="' +
+              (isReg ? 'Найти регламент' : 'Найти правило') + '" value="' + esc(KB.q) + '">' +
           '</div>' +
-          (canEdit ? '<button class="qchip fkb-add" id="kb-new">+ правило</button>' : '') +
+          (canEdit ? '<button class="qchip fkb-add" id="kb-new">+ ' +
+            (isReg ? 'регламент' : 'правило') + '</button>' : '') +
           nav +
         '</div>' +
         '<div class="fkb-main">' +
@@ -26972,7 +27020,8 @@
              одним касанием она стирала бы набранный черновик. Выход из правки —
              «Сохранить» или «Отмена». */
           (KB.edit ? '' :
-            '<button class="bp sm ghost fkb-back" id="kb-back">' + ic('go', 13) + 'Все главы</button>') +
+            '<button class="bp sm ghost fkb-back" id="kb-back">' + ic('go', 13) +
+              (isReg ? 'Все регламенты' : 'Все главы') + '</button>') +
           right +
         '</div>' +
       '</div>';
