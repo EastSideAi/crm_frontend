@@ -36528,7 +36528,7 @@
     { id: 'manage', label: 'Управление' },
   ];
   /* Короткие имена процессов трубы для вкладок вверху: полные не влезают в один ряд. */
-  var PRC_TAB = { nulevoy: 'Нулевой этап', vvod: 'Онбординг клиента', soprovozhdenie: 'Сопровождение', teplyj: 'Теплый прием' };
+  var PRC_TAB = { nulevoy: 'Нулевой этап', vvod: 'Онбординг семьи', soprovozhdenie: 'Сопровождение', teplyj: 'Теплый прием' };
   var PRC_INNER = ['support', 'manage'];
   var PRC_EXEC = {
     system: { t: 'машина', c: 'sys' },
