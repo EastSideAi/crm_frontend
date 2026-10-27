@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Регламенты — превью</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --ink:#14161A;--ink2:#3C4149;--ink3:#6B7280;--ink4:#9AA2AD;
+    --line:#E7EAEE;--line2:#ECEEF1;--fill:#F5F6F8;--bg:#EEF1F5;
+    --blue:#2F6BFF;--blue-tint:#EEF3FF;--green:#0E7A52;--green-bg:#EAF6F0;--amber:#B45309;
+  }
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--ink);
+    -webkit-font-smoothing:antialiased;font-feature-settings:"ss01","cv01";display:flex;height:100vh;overflow:hidden}
+
+  /* ── Левое меню CRM ── */
+  .app{width:234px;flex:none;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;overflow-y:auto}
+  .brand{display:flex;align-items:center;gap:9px;padding:6px 9px 14px}
+  .brand .dot{width:22px;height:22px;border-radius:7px;background:var(--ink)}
+  .brand b{font-size:13px;font-weight:750;letter-spacing:-.01em}
+  .sp{font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink4);padding:12px 10px 5px}
+  .nav{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;font-size:12px;color:var(--ink2);font-weight:550;cursor:default}
+  .nav .ic{width:15px;height:15px;border-radius:5px;background:#E4E7EC;flex:none}
+  .nav.on{background:var(--blue-tint);color:var(--blue);font-weight:700}
+  .nav.on .ic{background:var(--blue)}
+
+  /* ── Контент: база знаний ── */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .bar{height:48px;flex:none;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:8px;background:#fff}
+  .bar .crumb{font-size:12.5px;color:var(--ink3)}
+  .bar .crumb b{color:var(--ink);font-weight:650}
+  .book{flex:1;display:flex;overflow:hidden}
+
+  .toc{width:286px;flex:none;border-right:1px solid var(--line2);background:#FCFCFD;overflow-y:auto;padding:16px 12px}
+  .toc h2{font-size:15px;font-weight:800;letter-spacing:-.02em;padding:2px 8px 12px}
+  .search{width:100%;margin:0 0 10px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;font-size:12px;font-family:inherit;color:var(--ink);outline:none}
+  .search::placeholder{color:var(--ink4)}
+  .dept{font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink4);padding:13px 10px 5px}
+  .art{padding:7px 10px;border-radius:8px;font-size:12.3px;color:var(--ink2);font-weight:550;line-height:1.3;cursor:pointer}
+  .art:hover{background:var(--fill)}
+  .art.on{background:var(--blue-tint);color:var(--blue);font-weight:700}
+  .art .soon{display:inline-block;margin-left:6px;font-size:9px;font-weight:700;letter-spacing:.03em;color:var(--ink4);vertical-align:1px}
+
+  .page{flex:1;overflow-y:auto;padding:30px 40px 60px}
+  .wrap{max-width:720px}
+  .eye{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:9px}
+  h1{font-size:27px;line-height:1.12;font-weight:800;letter-spacing:-.025em}
+  .lede{margin-top:10px;font-size:13px;line-height:1.55;color:var(--ink3)}
+  .meta{margin-top:16px;display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .meta .m{flex:1;padding:11px 15px}
+  .meta .m+.m{border-left:1px solid var(--line)}
+  .ml{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink4);margin-bottom:3px}
+  .mv{font-size:11.5px;line-height:1.4;color:var(--ink2)}
+  .sec-h{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:24px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+  .step{margin-bottom:14px;border:1px solid var(--line);border-radius:13px;padding:13px 16px}
+  .step-h{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .step-n{width:23px;height:23px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+  .step-t{font-size:14px;font-weight:700;letter-spacing:-.01em}
+  .cmd{margin-bottom:9px;font-size:11.5px}
+  .cmd .lbl{color:var(--ink4);font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-right:7px}
+  .cmd .k{display:inline-block;font-weight:600;color:var(--blue);background:var(--blue-tint);border-radius:7px;padding:2px 8px}
+  .who{margin-bottom:7px;font-size:12px;line-height:1.5;color:var(--ink2)}
+  .who .tag{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:6px;margin-right:7px;vertical-align:1px}
+  .who.human .tag{background:var(--fill);color:var(--ink2)}
+  .who.bot .tag{background:var(--blue-tint);color:var(--blue)}
+  .who.sys .tag{background:#F1F0FB;color:#5B4BC4}
+  .who b{color:var(--ink);font-weight:650}
+  .done{margin-top:8px;padding:7px 11px;background:var(--green-bg);border-radius:9px;font-size:11.5px;line-height:1.45;color:var(--green)}
+  .done b{color:var(--green)}
+  .soonbox{margin-top:40px;padding:26px;border:1px dashed var(--line);border-radius:14px;text-align:center;color:var(--ink3);font-size:13px;line-height:1.6}
+  .soonbox b{color:var(--ink);font-weight:650;display:block;margin-bottom:6px;font-size:15px}
+  @media(max-width:720px){.app{display:none}.toc{width:200px}.page{padding:22px 18px 50px}}
+</style>
+</head>
+<body>
+  <!-- Левое меню CRM (имитация, для контекста) -->
+  <aside class="app">
+    <div class="brand"><span class="dot"></span><b>EastSide CRM</b></div>
+    <div class="sp">Клиенты</div>
+    <div class="nav"><span class="ic"></span>Заявки</div>
+    <div class="nav"><span class="ic"></span>Клиенты</div>
+    <div class="nav"><span class="ic"></span>Структура</div>
+    <div class="nav on"><span class="ic"></span>Регламенты</div>
+    <div class="sp">Самозанятые</div>
+    <div class="nav"><span class="ic"></span>Исполнители</div>
+    <div class="nav"><span class="ic"></span>Выплаты</div>
+    <div class="sp">Финансы</div>
+    <div class="nav"><span class="ic"></span>Ведомость</div>
+    <div class="nav"><span class="ic"></span>P&amp;L</div>
+    <div class="nav"><span class="ic"></span>База знаний</div>
+    <div class="sp">Моя работа</div>
+    <div class="nav"><span class="ic"></span>Главная</div>
+    <div class="nav"><span class="ic"></span>Задания</div>
+  </aside>
+
+  <div class="main">
+    <div class="bar"><span class="crumb">Клиенты&nbsp; ·&nbsp; <b>Регламенты</b></span></div>
+    <div class="book">
+      <nav class="toc">
+        <h2>Регламенты</h2>
+        <input class="search" id="q" placeholder="Поиск по инструкциям…" oninput="filter()">
+        <div id="list"></div>
+      </nav>
+      <div class="page"><div class="wrap" id="article"></div></div>
+    </div>
+  </div>
+
+<script>
+var DOGOVOR = ''
+ + '<div class="eye">Управление · Самозанятые</div>'
+ + '<h1>Договор с самозанятым: по шагам</h1>'
+ + '<div class="lede">Как оформить исполнителя на НПД и собрать договор, пошагово. У каждого шага своё входное слово и точка выхода, и видно, что делает человек, а что песочница.</div>'
+ + '<div class="meta"><div class="m"><div class="ml">Точка входа</div><div class="mv">Появился человек, которому будем платить за услуги как самозанятому.</div></div>'
+ + '<div class="m"><div class="ml">Точка выхода</div><div class="mv">Договор подписан, карточка «готов к работе» — можно давать задания и платить.</div></div></div>'
+ + '<div class="sec-h">Шаги</div>'
+ + step(1,'Проверить, что человек идёт как самозанятый','новый исполнитель ИМЯ',
+     [['human','Человек','Определяет, какую услугу с результатом человек будет оказывать, и оформляет это договором оказания услуг. Ограничение по закону одно: с тем, кто был у нас в штате, НПД-договор заключаем не раньше чем через 2 года после увольнения (422-ФЗ).'],
+      ['bot','Песочница','По запросу помогает описать услугу и её результат и напоминает про ограничение по бывшим штатным.']],
+     'решено — оформляем самозанятым.')
+ + step(2,'Завести карточку и выдать анкету','заведи карточку ИМЯ',
+     [['human','Человек','В разделе «Самозанятые» открывает «Новый исполнитель», вводит имя, выбирает вид «Самозанятый», жмёт «Выпустить ссылку на анкету» и отправляет её человеку.'],
+      ['bot','Песочница','По просьбе готовит текст приглашения со ссылкой.']],
+     'у человека ссылка на анкету (действует 7 дней).')
+ + step(3,'Исполнитель заполняет анкету','— ход за исполнителем',
+     [['human','Исполнитель','Вносит ФИО, ИНН, паспорт, адрес, реквизиты счёта и прямо в анкете принимает два документа — согласие на обработку данных и соглашение об электронной подписи — кодом.'],
+      ['sys','Система','Проверяет статус самозанятого по базе ФНС (автопроверка каждый день + кнопка ручной) и фиксирует приём документов с версией, временем и адресом.']],
+     'анкета заполнена, согласие и э-подпись приняты, статус НПД активен.')
+ + step(4,'Собрать договор','подготовь договор с ИМЯ на РОЛЬ',
+     [['bot','Песочница','По команде собирает проект сама: проверяет по ИНН, что статус НПД активен; берёт нашу форму; подставляет реквизиты из карточки; присваивает номер и дату (и в Приложение № 1); отмечает направление по роли; отдаёт готовый проект на проверку.'],
+      ['human','Человек','Либо собирает руками с чистого листа по анатомии договора (12 разделов) — полная инструкция в полной версии статьи.']],
+     'проект договора собран — остаётся проверить и отправить на подпись.')
+ + step(5,'Отправить на подпись и подписать','отправь договор ИМЯ на подпись',
+     [['human','Человек','Отправляет проект исполнителю, ставит статус «отправлен». Получив подписанный — кладёт в папку договоров на Диске и ставит «подписан».'],
+      ['bot','Исполнитель','Подписывает: кто сейчас — кодом, кто раньше — сканом (п. 1.3.1).']],
+     'договор подписан, в карточке статус «подписан».')
+ + step(6,'Передать реквизиты бухгалтеру','передай реквизиты ИМЯ бухгалтеру',
+     [['human','Человек','Отправляет бухгалтеру ФИО и реквизиты счёта для платёжки.'],
+      ['bot','Песочница','По просьбе собирает сообщение бухгалтеру по шаблону.']],
+     'реквизиты у бухгалтера, человека можно включать в выплаты.')
+ + step(7,'Проверить готовность','готов ли ИМЯ к работе',
+     [['sys','Система','Показывает «готов к работе», если есть ИНН, активный статус НПД (не старше 7 дней), реквизиты, подписанный договор и согласие на ПДн. Это те же проверки, что на воротах выплаты.'],
+      ['human','Человек','Чего не хватает — закрывает по подсказке системы.']],
+     'карточка «готов к работе» — можно давать задания и платить.');
+
+function step(n,t,cmd,whos,out){
+  var h='<div class="step"><div class="step-h"><span class="step-n">'+n+'</span><span class="step-t">'+t+'</span></div>';
+  h+='<div class="cmd"><span class="lbl">Входное слово</span><span class="k">'+cmd+'</span></div>';
+  whos.forEach(function(w){h+='<div class="who '+w[0]+'"><span class="tag">'+w[1]+'</span>'+w[2]+'</div>';});
+  h+='<div class="done"><b>Выход:</b> '+out+'</div></div>';
+  return h;
+}
+function soon(title){
+  return '<div class="eye">В работе</div><h1>'+title+'</h1>'
+    +'<div class="soonbox"><b>Инструкция в работе</b>Эту инструкцию мы ещё готовим. Собираем их по одной: пишем, согласовываем, потом добавляем сюда. Как будет готова — появится здесь полным текстом, как «Договор с самозанятым».</div>';
+}
+
+var ARTICLES=[
+  {dept:'Управление',title:'Договор с самозанятым',full:true,html:DOGOVOR},
+  {dept:'Управление',title:'Налоги и юридические вопросы'},
+  {dept:'Управление',title:'Онбординг и доступы'},
+  {dept:'Управление',title:'Деловая переписка'},
+  {dept:'Управление',title:'Организация встреч'},
+  {dept:'Управление',title:'Учёт сервисов и оплата'},
+  {dept:'Управление',title:'Контроль парольных листов'},
+  {dept:'Продажи',title:'Регламент отдела продаж'},
+  {dept:'Продажи',title:'Работа с возражениями'},
+  {dept:'Маркетинг',title:'Запуск рекламной кампании'},
+  {dept:'Администрирование',title:'Приёмка подачи'}
+];
+var cur=0;
+function renderList(flt){
+  flt=(flt||'').toLowerCase();
+  var byDept={},order=[];
+  ARTICLES.forEach(function(a,i){
+    if(flt && a.title.toLowerCase().indexOf(flt)<0) return;
+    if(!byDept[a.dept]){byDept[a.dept]=[];order.push(a.dept);}
+    byDept[a.dept].push(i);
+  });
+  var h='';
+  order.forEach(function(d){
+    h+='<div class="dept">'+d+'</div>';
+    byDept[d].forEach(function(i){
+      var a=ARTICLES[i];
+      h+='<div class="art'+(i===cur?' on':'')+'" onclick="open_('+i+')">'+a.title
+        +(a.full?'':'<span class="soon">в работе</span>')+'</div>';
+    });
+  });
+  document.getElementById('list').innerHTML=h || '<div class="dept">ничего не найдено</div>';
+}
+function open_(i){cur=i;renderList(document.getElementById('q').value);
+  var a=ARTICLES[i];
+  document.getElementById('article').innerHTML=a.full?a.html:soon(a.title);
+  document.querySelector('.page').scrollTop=0;
+}
+function filter(){renderList(document.getElementById('q').value);}
+open_(0);
+</script>
+</body>
+</html>
