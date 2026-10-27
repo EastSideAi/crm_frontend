@@ -3157,7 +3157,7 @@
       var curP = prc && state.prcNode ? prcPid(state.prcNode) : null;
       var curG = curP ? prc.processes.filter(function (p) { return p.id === curP; })[0].group : null;
       var inner = state.prcNode ? PRC_INNER.indexOf(curG) !== -1 : !!state.prcInner;
-      tb.innerHTML = '<nav class="tabs"><a class="tab' + (state.prcNode || inner ? '' : ' on') + '" data-prc-tab="">Все процессы</a>' +
+      tb.innerHTML = '<nav class="tabs prc-tabs"><a class="tab' + (state.prcNode || inner ? '' : ' on') + '" data-prc-tab="">Все процессы</a>' +
         (prc ? prc.processes.filter(function (p) { return p.group === 'core'; }).map(function (p) {
           return '<a class="tab' + (curP === p.id ? ' on' : '') + '" data-prc-tab="' + esc(p.root) + '" title="' + esc(prcShort(p.nodes[p.root].title)) + '">' + esc(PRC_TAB[p.id] || prcShort(p.nodes[p.root].title)) + '</a>';
         }).join('') : '') +
@@ -36528,7 +36528,7 @@
     { id: 'manage', label: 'Управление' },
   ];
   /* Короткие имена процессов трубы для вкладок вверху: полные не влезают в один ряд. */
-  var PRC_TAB = { nulevoy: 'Нулевой этап', vvod: 'Онбординг', soprovozhdenie: 'Сопровождение', teplyj: 'Теплый прием' };
+  var PRC_TAB = { nulevoy: 'Нулевой этап', vvod: 'Онбординг клиента', soprovozhdenie: 'Сопровождение', teplyj: 'Теплый прием' };
   var PRC_INNER = ['support', 'manage'];
   var PRC_EXEC = {
     system: { t: 'машина', c: 'sys' },
