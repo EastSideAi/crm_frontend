@@ -13797,3 +13797,6 @@ video.cs-media { background: #000; }
   color: var(--ink-3); cursor: pointer; border-radius: 5px; }
 .fch-x:hover { background: var(--line); color: var(--ink); }
 .pay-chansel { max-width: 180px; }
+
+/* Вкладки раздела «Процессы»: семь штук, на 1280 без переноса во вторую строку. */
+.prc-tabs .tab { padding-left: 13px; padding-right: 13px; }
