@@ -1035,7 +1035,12 @@
         return (av - bv) * s.dir;
       });
     } else if (seg === 'queue') {
+      /* Горячие (оставил заявку и ещё не в работе) всегда наверху — без фильтра:
+         менеджер видит, кому звонить первым, сразу при открытии «Контактов». */
       arr.sort(function (a, b) {
+        var ah = (a.booking && a.crm.status === 'new') ? 0 : 1;
+        var bh = (b.booking && b.crm.status === 'new') ? 0 : 1;
+        if (ah !== bh) return ah - bh;
         var d = CRM[a.crm.status].order - CRM[b.crm.status].order;
         if (d) return d;
         return new Date(b.created_at) - new Date(a.created_at);
