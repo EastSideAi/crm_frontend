@@ -2539,6 +2539,11 @@
     /* Операционные расходы: узкий экран для того, кто вносит хозяйственные траты
        (сервисы, административное), но всю ведомость с выплатами не видит. У кого есть
        ведомость целиком — вносит их на «Прямых расходах», поэтому пункт ему скрыт. */
+    /* Сводка руководителя — отдельный экран: план-факт выручки, расходы по отделам,
+       прибыль и платежи в одном месте, всё живьём из Финансов. Стоит первым пунктом
+       раздела (группа «Сводка» в FIN_GROUPS). Данные тянутся из план выручки / план
+       отделов / P&L / оплат — экран их только показывает, ничего не хранит. */
+    { id: 'finboss', label: 'Сводка руководителя', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finopex', label: 'Операционные расходы', icon: 'wallet', space: 'fin',
       cap: 'finmodel|finmodel_ops', hideCap: 'finmodel' },
     { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
@@ -2656,6 +2661,8 @@
      Группа с одним доступным пунктом заголовка не получает: подпись над одиночкой
      больше мешает, чем помогает. */
   var FIN_GROUPS = [
+    // Сводка руководителя — первым, одиночкой (заголовок у одиночной группы не рисуется).
+    { label: 'Сводка', ids: ['finboss'] },
     { label: 'Ведомость периода',
       ids: ['finsheet', 'finincome', 'finspend', 'finreestr', 'finopex', 'findirect',
             'finedit', 'finpartners', 'finref'] },
@@ -3113,7 +3120,7 @@
          отвечает на один вопрос, за какой период смотрим, и молчит там, где периода нет
          (Роман 20.10.2026: глаза бегают, потому что сверху на каждом экране свое). */
       tb.innerHTML = '';
-    } else if (state.page === 'finsheet' || state.page === 'finops' ||
+    } else if (state.page === 'finboss' || state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finfund' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
@@ -3593,7 +3600,8 @@
       // период. Именно от него зависит, тянуть период дальше или платить.
       var per = finPeriod();
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
-      var titles = { finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
+      var titles = { finboss: 'Сводка руководителя',
+                     finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
                      finops: 'Карта операций', finref: 'Сервисы и долги',
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы по фондам и выплаты', findirect: 'Прямые расходы',
@@ -3609,6 +3617,10 @@
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
+      else if (state.page === 'finboss') {
+        ph = 'План и факт за месяц в одном месте: выручка, расходы по отделам и прибыль. ' +
+          'Цифры тянутся из планов и ведомости сами — здесь их только смотрят, заносят на своих экранах.';
+      }
       else if (state.page === 'finref') {
         ph = 'Что списывается само и что мы должны. Сервис с наступившим сроком ' +
           'проставляется фактом сам — сумму потом проверьте. Остаток долга едет в ' +
@@ -3903,6 +3915,7 @@
     else if (state.page === 'finpaycheck') renderFinPayCheck(view);
     else if (state.page === 'finsup') renderFinSuppliers(view);
     else if (state.page === 'finkb') renderFinKb(view);
+    else if (state.page === 'finboss') renderFinBoss(view);
     else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplandept') renderFinPlanDept(view);
     else if (state.page === 'finplan') renderFinPlan(view);
@@ -21218,6 +21231,7 @@
     FIN.reestr = null;
     FIN.salesSheet = null; FIN.planstatus = null; FIN.planlines = null;
     FIN.receipts = null; FIN.partners = null; FIN.sup = null;
+    FIN.boss = null;
     // Справочник получателей для пикера формы: новая строка расхода заводит в нем
     // запись, и без сброса нового получателя не выбрать до перезагрузки страницы.
     FIN_SUPS = null;
@@ -26104,6 +26118,221 @@
     if (el('rem-off')) el('rem-off').onclick = function () {
       finRemSave({ on: !((FIN.reminders.settings || {}).on) });
     };
+  }
+
+  /* ── СВОДКА РУКОВОДИТЕЛЯ (finboss) ─────────────────────────────────────────
+     Отдельный экран руководителя: план-факт выручки, расходы по отделам, прибыль
+     и платежи — всё в одном месте и всё живьём из раздела Финансы. Экран ничего
+     не хранит: цифры тянутся из уже существующих источников (план выручки, план
+     отделов, P&L ведомости, оплаты клиентов), поэтому всегда свежие. Заносятся
+     планы по-прежнему на своих экранах — отсюда на них ведут кнопки.
+
+     Деградация по доступу: оплаты и каналы требуют права finance, а план/прибыль/
+     расходы — finmodel (ведомость). У кого права на ведомость нет — эти карточки
+     показывают заглушку, а оплаты всё равно видны. Экран не падает целиком. */
+  function bossMonth() {
+    var p = (FIN.periods || []).filter(function (x) { return x.id === FIN.id; })[0];
+    var s = p && (p.starts_on || p.ends_on);
+    return s ? String(s).slice(0, 7) : finThisMonth();
+  }
+  function finLoadBoss() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadBoss(); });
+    finBusy('boss', function (done) {
+      var out = { _id: FIN.id }, left = 4;
+      var tick = function () {
+        if (--left > 0) return;
+        if (out._id === FIN.id) { FIN.boss = out; if (curSpace() === 'fin') renderAll(); }
+        done();
+      };
+      var errOf = function (e) { return (e && e.message === '403') ? 'forbidden' : 'error'; };
+      api('/admin/api/fin/revenue-plan' + finQ())
+        .then(function (r) { if (!finStale(r)) out.rev = r; })
+        .catch(function (e) { out.revErr = errOf(e); }).then(tick);
+      api('/admin/api/fin/pnl' + finQ('scope=period'))
+        .then(function (r) { if (!finStale(r)) out.pnl = r; })
+        .catch(function (e) { out.pnlErr = errOf(e); }).then(tick);
+      api('/admin/api/fin/plan-status?month=' + bossMonth())
+        .then(function (r) { out.ps = r; })
+        .catch(function (e) { out.psErr = errOf(e); }).then(tick);
+      api('/admin/api/finance')
+        .then(function (r) { out.fin = r; })
+        .catch(function (e) { out.finErr = errOf(e); }).then(tick);
+    });
+  }
+  // Полоса план-факт: синяя заливка до доли факта от плана, перебор (>100%) — коралл.
+  function bossBar(fact, plan) {
+    var pct = plan > 0 ? Math.round(fact / plan * 100) : 0;
+    var w = Math.max(2, Math.min(100, pct));
+    var over = plan > 0 && fact > plan;
+    return '<div class="cvc-track" style="height:10px"><div class="cvc-fill" style="width:' + w + '%' +
+      (over ? ';background:var(--coral)' : '') + '"></div></div>';
+  }
+  // Строки-бары для разбивки (направления, каналы): имя — полоса — сумма — доля.
+  function bossBars(list, nameKey) {
+    var rows = (list || []).slice(0, 6);
+    var maxV = Math.max.apply(null, rows.map(function (c) { return c.amount || 0; }).concat([1]));
+    var total = rows.reduce(function (s, c) { return s + (c.amount || 0); }, 0) || 1;
+    return rows.map(function (c) {
+      var w = Math.max(4, Math.round((c.amount || 0) / maxV * 100));
+      return '<div class="cvc-row">' +
+        '<div class="cvc-nm">' + esc(c[nameKey] || c.name || c.title || '—') + '</div>' +
+        '<div class="cvc-track"><div class="cvc-fill" style="width:' + w + '%"></div></div>' +
+        '<div class="cvc-c num">' + fmtMoney(c.amount || 0) + '</div>' +
+        '<div class="cvc-p num">' + Math.round((c.amount || 0) / total * 100) + '%</div></div>';
+    }).join('');
+  }
+  function bossLock(icon, title, what) {
+    return '<div class="card sp5" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic(icon, 14) + '</span>' +
+      '<div><div class="t">' + title + '</div></div></div>' +
+      '<div class="empty">Нужен доступ к ведомости, чтобы показать ' + what +
+      '. Скажи руководителю.</div></div>';
+  }
+  // Карточка без данных за период (ведомость пуста или читается с боевого сервера).
+  function bossNote(icon, title, text) {
+    return '<div class="card sp5" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic(icon, 14) + '</span>' +
+      '<div><div class="t">' + title + '</div></div></div>' +
+      '<div class="empty">' + text + '</div></div>';
+  }
+
+  function renderFinBoss(view) {
+    if (!FIN.boss || FIN.boss._id !== FIN.id) {
+      if (FIN.err && !FIN.periods) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadBoss(); return;
+    }
+    var b = FIN.boss;
+    var mon = bossMonth();
+    var rev = (b.rev && b.rev.totals) || null;
+    var pnl = (b.pnl && b.pnl.totals) || null;
+    var fin = b.fin || null;
+    var ps = b.ps || null;
+
+    // Выручка-факт: оплаты клиентов за месяц ведомости (брутто, как в Платежах).
+    // Нет доступа к оплатам — берём приход из ведомости (чистыми), чтобы цифра была.
+    var payMonth = null;
+    if (fin) {
+      var bm = (fin.by_month || []).filter(function (m) {
+        return String(m.ym || m.month || '').slice(0, 7) === mon;
+      })[0];
+      payMonth = bm ? (bm.amount != null ? bm.amount : bm.sum_rub) : 0;
+    }
+    var revFact = payMonth != null ? payMonth : (rev ? rev.income_fact : null);
+    var planRev = rev ? rev.planned_revenue : null;
+    var revPct = (planRev && revFact != null) ? Math.round(revFact / planRev * 100) : null;
+
+    var factExp = ps ? (ps.sections || []).reduce(function (a, s) { return a + (s.fact || 0); }, 0) : null;
+    var planExp = ps ? (ps.sections || []).reduce(function (a, s) { return a + (s.plan || 0); }, 0) : null;
+
+    var tiles = [
+      { label: 'Выручка за месяц', lead: true,
+        value: revFact != null ? finRub(revFact, 0) : '—',
+        sub: planRev != null ? ('план ' + finRub(planRev, 0) + (revPct != null ? ' · ' + revPct + '%' : ''))
+          : (b.revErr === 'forbidden' ? 'план в ведомости' : 'оплаты клиентов') },
+      { label: 'Чистая прибыль',
+        value: pnl ? finRub(pnl.net, 0) : '—',
+        sub: pnl ? ('выручка ' + finRub(pnl.revenue, 0)) : 'нужен доступ к ведомости' },
+      { label: 'Расходы отделов',
+        value: factExp != null ? finRub(factExp, 0) : '—',
+        sub: planExp != null ? ('план ' + finRub(planExp, 0)) : 'нужен доступ к ведомости' },
+      { label: 'Сдали план',
+        value: ps ? (ps.submitted + ' из ' + ps.total) : '—',
+        sub: ps ? 'отделов за месяц' : '' },
+    ];
+
+    // Карточка выручки: план-факт + разбивка по направлениям + кнопка к плану.
+    var revCard;
+    if (b.revErr === 'forbidden') {
+      revCard = bossLock('target', 'Выручка', 'план и факт по выручке');
+    } else {
+      var dirs = fin ? bossBars(fin.by_product, 'title') : '';
+      revCard = '<div class="card sp7" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('target', 14) + '</span>' +
+        '<div><div class="t">Выручка за месяц</div><div class="s">план и сколько пришло</div></div>' +
+        '<button class="bp sm ghost" data-goto="finplan">Заполнить план</button></div>' +
+        '<div class="boss-pf">' +
+          '<div class="boss-pf-row"><span class="boss-pf-l">Факт</span>' +
+            '<span class="boss-pf-v num">' + (revFact != null ? finRub(revFact, 0) : '—') + '</span></div>' +
+          bossBar(revFact || 0, planRev || 0) +
+          '<div class="boss-pf-row"><span class="boss-pf-l muted">План</span>' +
+            '<span class="boss-pf-v num muted">' + (planRev != null ? finRub(planRev, 0) : '—') +
+            (revPct != null ? ' · ' + revPct + '%' : '') + '</span></div>' +
+        '</div>' +
+        (dirs ? '<div class="boss-sub">за что платят</div><div class="cvc-rows">' + dirs + '</div>' : '') +
+        '</div>';
+    }
+
+    // Карточка расходов по отделам: план-факт на отдел, перебор красным.
+    var expCard;
+    if (b.psErr === 'forbidden') {
+      expCard = bossLock('wallet', 'Расходы по отделам', 'план и факт по отделам');
+    } else if (ps) {
+      var secs = (ps.sections || []).map(function (s) {
+        var over = s.plan > 0 && s.fact > s.plan;
+        return '<div class="pl-row">' +
+          '<span class="pl-nm">' + esc(s.label) + '</span>' +
+          '<span class="pl-val"><span class="pl-sum num' + (s.plan ? '' : ' muted') + '">' +
+            (s.plan ? finRub(s.plan, 0) : '—') + '</span>' +
+          '<span class="pl-fact num' + (over ? ' over' : s.fact ? '' : ' muted') + '">факт ' +
+            (s.fact ? finRub(s.fact, 0) : '—') + '</span></span></div>';
+      }).join('');
+      expCard = '<div class="card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+        '<div><div class="t">Расходы по отделам</div><div class="s">' + esc(finMonthLabel(mon)) + '</div></div>' +
+        '<button class="bp sm ghost" data-goto="finplans">План отделов</button></div>' +
+        '<div class="pl-list" style="margin-top:6px">' + secs + '</div></div>';
+    } else {
+      expCard = bossNote('wallet', 'Расходы по отделам', 'Цифры из ведомости за этот период появятся, когда отделы внесут план расходов.');
+    }
+
+    // Карточка прибыли из ведомости.
+    var pnlCard;
+    if (b.pnlErr === 'forbidden') {
+      pnlCard = bossLock('chart', 'Прибыль', 'прибыль из ведомости');
+    } else if (pnl) {
+      var pnlRow = function (lab, val, strong) {
+        return '<div class="boss-pf-row' + (strong ? ' strong' : '') + '">' +
+          '<span class="boss-pf-l">' + lab + '</span>' +
+          '<span class="boss-pf-v num">' + finRub(val, 0) + '</span></div>';
+      };
+      pnlCard = '<div class="card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+        '<div><div class="t">Прибыль</div><div class="s">из ведомости, после расходов</div></div></div>' +
+        '<div class="boss-pnl">' +
+          pnlRow('Выручка', pnl.revenue) +
+          pnlRow('Переменные', -(pnl.variable || 0)) +
+          pnlRow('Постоянные', -(pnl.fixed || 0)) +
+          pnlRow('Налоги', -(pnl.taxes || 0)) +
+          pnlRow('Чистая прибыль', pnl.net, true) +
+        '</div></div>';
+    } else {
+      pnlCard = bossNote('chart', 'Прибыль', 'Прибыль посчитается из ведомости за период, когда в ней есть доходы и расходы.');
+    }
+
+    // Карточка платежей и каналов.
+    var payCard;
+    if (b.finErr === 'forbidden') {
+      payCard = '';   // нет доступа к оплатам — просто не показываем, не заглушка
+    } else if (fin) {
+      var chans = bossBars(fin.by_channel, 'name');
+      payCard = '<div class="card sp7" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Платежи по каналам</div><div class="s">откуда приходит выручка</div></div>' +
+        '<button class="bp sm ghost" data-goto="finance">Открыть Платежи</button></div>' +
+        (chans ? '<div class="cvc-rows" style="margin-top:12px">' + chans + '</div>'
+          : '<div class="empty">Проставьте канал на оплатах — и выручка разложится по каналам.</div>') +
+        '</div>';
+    } else {
+      payCard = '';
+    }
+
+    view.innerHTML = statBar(tiles) +
+      '<div class="grid boss-grid">' + revCard + expCard + pnlCard + payCard + '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goto]'), function (btn) {
+      btn.addEventListener('click', function () { setPage(btn.getAttribute('data-goto')); });
+    });
+    pageAnim(view);
   }
 
   function renderFinPlans(view) {
