@@ -27487,6 +27487,18 @@
         '<span class="sv-hint"><span class="sv-hint-t">' + esc(hint) + '</span>' +
           (canFix && open
             ? '<span class="sv-paid">' +
+              // Строка проставлена по сроку — сумму надо подтвердить глазами. Раньше
+              // пометка снималась только правкой поля факта, и строку с верной
+              // плановой суммой (её менять незачем) подтвердить было нечем — ведомость
+              // из-за этого не закрывалась (Роман 27.10.2026). Явная кнопка снимает
+              // пометку, не трогая сумму.
+              (x.auto
+                ? '<button class="qchip mini go fsv-ok" data-svok="' + x.id +
+                  '" data-svokval="' +
+                  (x.fact !== null ? x.fact : x.planned).toFixed(2) +
+                  '" title="Сумма верна — снять пометку «проставлено по сроку»">' +
+                  'сумма верна</button>'
+                : '') +
               finPaidCell(x.id, x.fact === null ? 'план' : 'факт', true) +
               // Сервис больше не нужен — убираем его из плана прямо здесь (Роман
               // 19.10.2026). У списавшегося кнопки нет: деньги уже ушли, и строка — факт.
@@ -27643,6 +27655,17 @@
       // «Убрать» у плановой строки сервиса отключает сам сервис, а не стирает строку:
       // план ведомости собирается из активных сервисов заново (generate_services), и удаленная
       // строка вернулась бы на следующей правке любого сервиса. История при этом цела.
+      // «Сумма верна» у строки, проставленной по сроку: подтверждаем текущую сумму как
+      // факт, сервер снимает пометку auto. Без этого строку с верной плановой суммой
+      // нечем было подтвердить, и ведомость не закрывалась (Роман 27.10.2026).
+      Array.prototype.forEach.call(view.querySelectorAll('[data-svok]'), function (b) {
+        b.addEventListener('click', function () {
+          finDo('/admin/api/fin/service/row', 'POST', {
+            operation_id: b.getAttribute('data-svok'),
+            fact: b.getAttribute('data-svokval'),
+          }, 'Сумма подтверждена');
+        });
+      });
       Array.prototype.forEach.call(view.querySelectorAll('[data-svdrop]'), function (b) {
         b.addEventListener('click', function () {
           var id = b.getAttribute('data-svdrop'), svc = null;
