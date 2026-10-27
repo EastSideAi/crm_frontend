@@ -15351,6 +15351,20 @@
               '<input id="mr-date" class="al-in" type="date">' +
               '<input id="mr-time" class="al-in" type="time" step="900" value="11:00">' +
             '</div></div>') +
+          /* Повтор. Регулярная встреча — это не «поставить двенадцать раз
+             руками»: раньше серию умела только «Планерка», и человек искал
+             повтор здесь (Павел 27.10.2026: «нет кнопки чтобы она повторялась
+             еженедельно, почему ты ее убрал»). У каждой встречи серии своя
+             комната и своя ссылка: одна ссылка на полгода — это запись
+             прошлого разговора, открытая всем будущим. */
+          (edit ? '' :
+          '<label class="al-f mr-at" id="mr-rep" hidden><span class="al-l">Повторять</span>' +
+            '<span class="al-selwrap"><select id="mr-repeat" class="al-sel">' +
+              '<option value="1" selected>один раз</option>' +
+              '<option value="4">каждую неделю, 4 недели</option>' +
+              '<option value="12">каждую неделю, 12 недель</option>' +
+              '<option value="26">каждую неделю, полгода</option>' +
+            '</select></span></label>') +
           '<div class="al-f"><span class="al-l">Кого позвать</span>' +
             '<div id="mr-who"></div>' +
             '<span class="al-hint">' + (edit
@@ -15447,6 +15461,7 @@
         x.classList.toggle('on', x.getAttribute('data-when') === 'plan');
       });
       el('mr-at').hidden = false;
+      if (el('mr-rep')) el('mr-rep').hidden = false;
       if (!el('mr-date').value) {
         var d0 = new Date(Date.now() + 86400000);
         el('mr-date').value = d0.getFullYear() + '-' +
@@ -15461,6 +15476,7 @@
           x.classList.toggle('on', x === b);
         });
         el('mr-at').hidden = when !== 'plan';
+        if (el('mr-rep')) el('mr-rep').hidden = when !== 'plan';
         if (when === 'plan' && !el('mr-date').value) {
           // По умолчанию завтра: встречу назначают на будущее, и пустое поле
           // даты человеку приходится заполнять каждый раз одним и тем же.
@@ -15495,6 +15511,8 @@
         var day = el('mr-date').value, hm = el('mr-time').value;
         if (!day || !hm) { show('Поставь дату и время встречи', true); return; }
         body.starts_at = day + 'T' + hm + ':00';
+        var rep = +((el('mr-repeat') || {}).value || 1);
+        if (rep > 1) body.repeat = rep;
       }
       go.disabled = true; go.classList.add('loading');
       if (edit) {
@@ -15560,6 +15578,15 @@
             ? 'Ссылку уже отправил ботом: ' + told + ' ' + plural(told, 'человек', 'человека', 'человек') + '.'
             : 'Открывается в браузере, на телефоне тоже. Кто получил ссылку, тот войдет, ' +
               'поэтому не выкладывай ее публично.');
+      // Серия: ссылка в окне от первой встречи, у остальных свои. Сказать об
+      // этом надо прямо здесь, иначе человек скопирует эту и разошлет на все
+      // двенадцать недель.
+      var more = +(r.repeated || 0) - 1;
+      if (more > 0) {
+        note += ' Поставил еще ' + more + ' ' +
+          plural(more, 'встречу', 'встречи', 'встреч') + ' по тем же дням и часам, ' +
+          'у каждой своя ссылка — они придут людям перед встречей.';
+      }
       el('mr-body').innerHTML =
         '<label class="al-f"><span class="al-l">Ссылка на встречу</span>' +
           '<input id="mr-link" class="al-in" type="text" readonly value="' + esc(humanUrl(r.url)) + '"></label>' +
@@ -29473,6 +29500,54 @@
           '<button type="button" class="qchip mx-cancel" data-mxcancel="' + r.id + '">Отменить</button>') +
     '</div>';
   }
+  /* Отмена встречи. Отдельной функцией, потому что у серии спрашиваем, что
+     именно снять, и ответ уходит той же ручкой с пометкой series. */
+  function mxCancel(btn, id, vsyu) {
+    if (btn) btn.disabled = true;
+    apiSend('/admin/api/meet/rooms/' + id + '/cancel' + (vsyu ? '?series=1' : ''),
+      'POST', {}, function (r) {
+        var snyato = (r && r.canceled) || 1;
+        var kogo = r && r.told ? ', сказал ' + r.told + ' ' +
+          plural(r.told, 'человеку', 'людям', 'людям') : '';
+        showToast(snyato > 1 ? 'Снял ' + snyato + ' ' +
+          plural(snyato, 'встречу', 'встречи', 'встреч') + kogo
+          : 'Встреча отменена' + kogo);
+        state.meetRooms = null; loadMeetRooms(); renderView();
+      }, function () {
+        if (btn) btn.disabled = false;
+        showToast('Не получилось отменить');
+      });
+  }
+
+  function askMeetCancel(btn, id) {
+    if (document.querySelector('.al-ov.mxc-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over mxc-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head"><div><div class="al-eyebrow">EastSide Meeting</div>' +
+          '<div class="al-title">Отменить встречу</div></div>' +
+          '<button class="al-x" id="mxc-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">Эта встреча повторяется каждую неделю. ' +
+          'Снять только ее или всю серию вперед? Прошедшие встречи останутся как есть, ' +
+          'вместе с записями.</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="mxc-no">Не отменять</button>' +
+          '<button class="bp ghost sm" id="mxc-one">Только эту</button>' +
+          '<button class="bp sm" id="mxc-all">Всю серию</button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('mxc-x').addEventListener('click', close);
+    el('mxc-no').addEventListener('click', close);
+    el('mxc-one').addEventListener('click', function () { close(); mxCancel(btn, id, false); });
+    el('mxc-all').addEventListener('click', function () { close(); mxCancel(btn, id, true); });
+  }
+
   function renderMeetxSoon(view) {
     var list = mxSoonList();
     var d = state.meetRooms;
@@ -29751,13 +29826,14 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxcancel]'), function (b) {
       b.addEventListener('click', function () {
-        var id = b.getAttribute('data-mxcancel');
-        b.disabled = true;
-        apiSend('/admin/api/meet/rooms/' + id + '/cancel', 'POST', {}, function (r) {
-          showToast(r && r.told ? 'Встреча отменена, сказал ' + r.told + ' ' +
-            plural(r.told, 'человеку', 'людям', 'людям') : 'Встреча отменена');
-          state.meetRooms = null; loadMeetRooms(); renderView();
-        }, function () { b.disabled = false; showToast('Не получилось отменить'); });
+        var id = +b.getAttribute('data-mxcancel');
+        var room = mxSoonList().filter(function (x) { return x.id === id; })[0];
+        // У встречи из серии два разных решения: перенесли один вторник или
+        // серия кончилась совсем. Молча снять все — потерять одиннадцать встреч
+        // чужого календаря, молча снять одну — оставить человека с серией,
+        // которую он считал отмененной.
+        if (room && room.series) { askMeetCancel(b, id); return; }
+        mxCancel(b, id, false);
       });
     });
     /* Завершение выгоняет из разговора всех, поэтому подтверждается вторым
