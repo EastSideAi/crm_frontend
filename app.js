@@ -3152,13 +3152,21 @@
       /* Быстрый переход: главная раздела и четыре процесса трубы — главная цепочка
          компании, в ней самые большие процессы (Вера 26.10.2026). */
       var prc = state._prc && state._prc !== 'none' ? state._prc : null;
+      /* «Внутренние» — обеспечивающие процессы и управление, кухня школы рядом
+         с путем клиента (Вера 27.10.2026). */
       var curP = prc && state.prcNode ? prcPid(state.prcNode) : null;
-      tb.innerHTML = '<nav class="tabs"><a class="tab' + (state.prcNode ? '' : ' on') + '" data-prc-tab="">Все процессы</a>' +
+      var curG = curP ? prc.processes.filter(function (p) { return p.id === curP; })[0].group : null;
+      var inner = state.prcNode ? PRC_INNER.indexOf(curG) !== -1 : !!state.prcInner;
+      tb.innerHTML = '<nav class="tabs"><a class="tab' + (state.prcNode || inner ? '' : ' on') + '" data-prc-tab="">Все процессы</a>' +
         (prc ? prc.processes.filter(function (p) { return p.group === 'core'; }).map(function (p) {
           return '<a class="tab' + (curP === p.id ? ' on' : '') + '" data-prc-tab="' + esc(p.root) + '" title="' + esc(prcShort(p.nodes[p.root].title)) + '">' + esc(PRC_TAB[p.id] || prcShort(p.nodes[p.root].title)) + '</a>';
-        }).join('') : '') + '</nav>';
+        }).join('') : '') +
+        '<a class="tab' + (inner ? ' on' : '') + '" data-prc-tab="" data-prc-inner="1">Внутренние</a></nav>';
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
-        t.addEventListener('click', function () { prcOpen(t.getAttribute('data-prc-tab') || null); });
+        t.addEventListener('click', function () {
+          state.prcInner = !!t.getAttribute('data-prc-inner');
+          prcOpen(t.getAttribute('data-prc-tab') || null);
+        });
       });
     } else {
       var meta = navMeta(state.page);
@@ -36520,7 +36528,8 @@
     { id: 'manage', label: 'Управление' },
   ];
   /* Короткие имена процессов трубы для вкладок вверху: полные не влезают в один ряд. */
-  var PRC_TAB = { nulevoy: 'Нулевой этап', vvod: 'Ввод', soprovozhdenie: 'Сопровождение', teplyj: 'Теплый прием' };
+  var PRC_TAB = { nulevoy: 'Нулевой этап', vvod: 'Онбординг', soprovozhdenie: 'Сопровождение', teplyj: 'Теплый прием' };
+  var PRC_INNER = ['support', 'manage'];
   var PRC_EXEC = {
     system: { t: 'машина', c: 'sys' },
     agent: { t: 'бот', c: 'ag' },
@@ -36740,6 +36749,7 @@
       b.addEventListener('click', function (e) {
         e.stopPropagation();
         var st = b.getAttribute('data-step');
+        if (!b.getAttribute('data-open')) state.prcInner = false;   // крошка «Процессы» ведет на всю карту
         prcOpen(b.getAttribute('data-open') || null, st == null || st === '' ? null : +st);
       });
     });
@@ -36781,7 +36791,7 @@
           : (prcLight(h.nid).level || 1) > 1 || prcLight(h.nid).variant_of ? 'подпроцесс в «' + esc(prcRootTitle(h.nid)) + '»' : 'процесс') + '</small></button></li>';
       }).join('') + '</ul>' : '<div class="empty">Ничего не нашлось. Попробуйте другое слово: «счет», «табель», «виза».</div>') + '</div>';
     } else {
-      body = PRC_GROUPS.map(function (g) {
+      body = PRC_GROUPS.filter(function (g) { return !state.prcInner || PRC_INNER.indexOf(g.id) !== -1; }).map(function (g) {
         var ps = d.processes.filter(function (p) { return p.group === g.id; });
         if (!ps.length) return '';
         return '<section class="prc-grp"><div class="po-lbl">' + esc(g.label) + '</div>' +
@@ -36802,15 +36812,16 @@
       }).join('');
     }
 
-    var orph = (d.orphans || []).length && q.length < 2 ? '<section class="prc-grp"><div class="po-lbl">Не привязано к процессам</div>' +
+    var orph = (d.orphans || []).length && q.length < 2 && !state.prcInner ? '<section class="prc-grp"><div class="po-lbl">Не привязано к процессам</div>' +
       '<div class="card prc-orph"><p>' + esc(d.orphans_note || '') + '</p><ul>' + d.orphans.map(function (x) {
         return '<li><b>' + esc(x.title) + '</b><span>' + esc(x.who) + ' · ' + esc(x.what) + '</span></li>';
       }).join('') + '</ul></div></section>' : '';
     view.innerHTML = '<div class="prc-wrap">' +
-      '<div class="prc-top"><div><h2 class="org-h1">Процессы компании</h2>' +
+      '<div class="prc-top"><div><h2 class="org-h1">' + (state.prcInner && q.length < 2 ? 'Внутренние процессы' : 'Процессы компании') + '</h2>' +
+        (state.prcInner && q.length < 2 ? '<div class="org-sub">Обеспечивающие процессы и управление: то, на чем держится школа и чего клиент не видит.</div></div>' :
         '<div class="org-sub">' + d.processes.length + ' ' + plural(d.processes.length, 'процесс', 'процесса', 'процессов') + ', ' +
           (all.length - d.processes.length) + ' ' + plural(all.length - d.processes.length, 'подпроцесс', 'подпроцесса', 'подпроцессов') + ', ' +
-          stepsAll + ' ' + plural(stepsAll, 'шаг', 'шага', 'шагов') + '. Нажмите на процесс, чтобы провалиться внутрь, на шаг, чтобы открыть инструкцию.</div></div>' +
+          stepsAll + ' ' + plural(stepsAll, 'шаг', 'шага', 'шагов') + '. Нажмите на процесс, чтобы провалиться внутрь, на шаг, чтобы открыть инструкцию.</div></div>') +
         '<span class="sev n-wait">как есть · черновик</span></div>' +
       prcToolbar(who) + prcPersonPanel(who) + body + orph + '</div>';
     prcWire(view);
