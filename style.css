@@ -3905,6 +3905,29 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-who .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
 /* Кого показывать в сетке. Чипы стоят рядом с выбором человека: это один вопрос
    «чье расписание смотрим», только с разных сторон. */
+/* Свой часовой пояс. Строка стоит там, где человек отмечает часы: все расписание
+   считается по Москве, а тьюторы продаж сидят в Китае (+5), и до 27.10.2026 на
+   экране об этом не было сказано ни слова. */
+.sc-tz { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 9px 12px; margin: 10px 0 2px; border-radius: 10px; background: var(--fill);
+  font-size: 12.5px; color: var(--ink-2); }
+.sc-tz svg { color: var(--ink-3); flex: none; }
+.sc-tz.on { background: var(--blue-tint); color: var(--navy); }
+.sc-tz.on svg { color: var(--blue); }
+.sc-tz em { font-style: normal; color: var(--ink-3); font-size: 12px; }
+.sc-tzsel .al-sel { font-size: 12.5px; padding: 5px 26px 5px 10px; }
+/* Два времени в одной подписи: свое крупно, московское мелким под ним. */
+.sc-h.two, .zd-h.two, .sc-my-h.two { line-height: 1.25; }
+.sc-h.two b, .zd-h.two b, .sc-my-h.two b { display: block; font-size: 12.5px;
+  font-weight: 700; color: var(--ink-2); }
+.sc-my-h.two b { font-size: 13px; }
+.sc-h.two i, .zd-h.two i, .sc-my-h.two i { display: block; font-style: normal;
+  font-size: 10.5px; color: var(--ink-3); }
+.sc-h.two .sc-nx, .zd-h.two .sc-nx, .sc-my-h.two .sc-nx { display: inline; margin-left: 3px;
+  font-size: 10px; color: var(--blue); font-weight: 700; }
+.sc-grid.two .sc-row { grid-template-columns: 64px repeat(7, minmax(0, 1fr)); }
+.zd-h.two { flex-basis: 62px; }
+.sc-my-h.two { flex-basis: 58px; }
 .sc-roles { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .sc-roles .qchip { font-size: 12px; padding: 6px 11px; }
 .sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
@@ -3972,6 +3995,11 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-how p { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-3); }
 /* Связанный календарь — состояние, а не действие: кнопка остается тихой, но
    галочкой цвета говорит, что связь стоит. */
+/* Не связан — единственная заливка в ряду серых кнопок: это и есть то, что на
+   этом экране надо сделать один раз. Связан — тихая кнопка с галочкой. */
+.sc-gcalbtn.call { background: var(--blue); color: #fff; border: 0; }
+.sc-gcalbtn.call svg { color: #fff; }
+.sc-gcalbtn.call:hover { background: var(--blue-d); }
 .sc-gcalbtn.on { color: var(--green-ink); }
 .sc-gcalbtn.on svg { color: var(--green); }
 .sg-steps { margin: 0 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
@@ -9367,6 +9395,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   height: 60px; border-radius: 50%; background: var(--green-soft); color: var(--green-ink);
   margin-bottom: 18px; }
 .gd-fin .gd-lead { margin-top: 12px; }
+/* Вторая строка финала — приписка про Академию. Тише основной, иначе две
+   реплики одного кегля читаются как спор друг с другом. */
+.gd-fin .gd-lead-sm { font-size: 14px; color: var(--ink-3); }
 .gd-fin-a { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
 /* .al-cancel родом из модалок и не рассчитан на иконку — иначе значок и подпись
    встают в две строки. */
@@ -10050,6 +10081,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-pin { min-width: 22px; height: 22px; flex: none; padding: 0 5px; border-radius: 7px;
   background: var(--ac-navy); color: #fff; display: grid; place-items: center;
   font-weight: 700; font-size: 11px; margin-top: 1px; }
+
+/* Кнопка-переход из урока в живой раздел системы (sc.goto) */
+.academy .ac-goto { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 2px; }
+.academy .ac-goto-btn { display: inline-flex; align-items: center; gap: 7px; }
 
 /* Видеоурок: запись живой встречи. Темная плашка-кнопка — единственный якорь
    экрана, под ней код доступа и указатель тем: по нему человек возвращается в
