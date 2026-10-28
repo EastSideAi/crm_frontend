@@ -4027,6 +4027,28 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-cell.pick:hover { background: var(--blue-tint); }
 .sc-cell.pick:empty::after { content: '+'; color: var(--ink-3); font-size: 13px; line-height: 22px; text-align: center; opacity: 0; transition: opacity .12s var(--ease); }
 .sc-cell.pick:hover:empty::after { opacity: 1; }
+/* Выбранный, но еще не поставленный час. Зеленый тут не годится: клетка и так
+   полна зеленых чипов свободных часов, и набранное в них теряется. Синий — это
+   «я выбрал», а не состояние расписания. */
+.sc-cell.sel, .sc-cell.sel:hover { background: var(--blue-tint); box-shadow: inset 0 0 0 1.5px var(--blue); }
+.sc-cell.sel:empty::after { content: '+'; color: var(--blue); opacity: 1; }
+.sc-add.sel { border-style: solid; border-color: var(--blue); background: var(--blue-tint); color: var(--blue); }
+
+/* Панель набора часов. Липнет к низу окна, пока человек размечает неделю: иначе
+   после выбора надо искать кнопку, прокрутив сетку. */
+.sc-bar { position: sticky; bottom: 0; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin: 12px -2px -2px; padding: 10px 12px; border-radius: 12px; background: var(--card);
+  border: 1px solid var(--line-2); opacity: .6; transition: opacity .15s var(--ease); }
+.sc-bar.on { opacity: 1; border-color: var(--line-2); background: var(--fill); }
+.sc-bar__n { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sc-bar__n b { color: var(--ink); font-weight: 700; }
+.sc-bar__rep { margin: 0; }
+.sc-bar__acts { margin-left: auto; display: flex; gap: 8px; }
+@media (max-width: 760px) {
+  .sc-bar { gap: 8px; padding: 9px 10px; }
+  .sc-bar__acts { margin-left: 0; width: 100%; }
+  .sc-bar__acts .bp { flex: 1; }
+}
 
 .sc-chip { display: block; max-width: 100%; padding: 3px 7px; border-radius: 7px; font-size: 11.5px; line-height: 1.35; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sc-chip.free { background: var(--green-soft); color: var(--green-ink); }

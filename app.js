@@ -117,6 +117,7 @@
     mxTab: 'soon',      // EastSide Meeting: ближайшие встречи или записи
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
     schedWeek: {}, schedOff: 0, schedDayOff: 0, schedView: 'week', schedWho: '', schedEdit: false,
+    schedPick: {}, schedRep: 1,
     // Расписание открывается на своем: человеку нужно «куда мне идти», а не «кто где
     // свободен» (Павел 26.10.2026). Сетка команды — вторым переключателем.
     schedScope: 'my', schedHow: false, schedHide: {},
@@ -2406,9 +2407,11 @@
     // дашбордом намеренно: тот показывает, что происходит сейчас, этот —
     // дотянем ли до цели. Cap свой: цели компании ставит руководитель.
     // «Управление» — РНП руководителей и отделов (Виталий 19.10.2026): неделя,
-    // гипотезы целями задачника, решения встреч и проверка прошлой недели. Открыт
-    // всем с задачами: отдел ведет свою неделю здесь же, переключателем отдела.
-    { id: 'manage', label: 'Управление', icon: 'helm', cap: 'tasks' },
+    // гипотезы целями задачника, решения встреч и проверка прошлой недели. Это
+    // инструмент руководителя, а не рядового исполнителя, поэтому cap 'tasks_all'
+    // (видит задачи всей команды) — менеджеру и линейным ролям он не нужен и не
+    // виден (Павел 28.10.2026: убрать из меню менеджера продаж).
+    { id: 'manage', label: 'Управление', icon: 'helm', cap: 'tasks_all' },
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
@@ -2429,7 +2432,10 @@
     { id: 'leads', label: 'Контакты', icon: 'leads', cap: 'clients' },
     // «Карта» — клиенты по этапам пути. Рядом с «Людьми» намеренно: те же
     // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
-    { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
+    // Обзорная доска уровня руководителя (дублирует «Контакты» другим видом),
+    // поэтому cap 'tasks_all': линейному менеджеру не нужна, у него есть
+    // «Контакты» (Павел 28.10.2026: убрать из меню менеджера продаж).
+    { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'tasks_all' },
     /* «Кейсы» — истории выпускников, которые собрал бот. Стоят здесь, а не рядом с
        маркетингом (Вера 13.10.2026: «подними раздел повыше, к разделам люди и
        лиды»): за кейсом стоит конкретный человек, и ищут его там же, где людей. */
@@ -8782,9 +8788,12 @@
         if (rest.length > 2) out.push(schedChip('free', 'свободны ' + rest.length, 'Свободны: ' + rest.map(function (s) { return s.person; }).join(', ')));
         else rest.forEach(function (s) { out.push(schedChip('free', schedShort(s.person), s.person + ' · свободен')); });
         var pick = state.schedEdit && d.me;
-        return '<span class="sc-cell' + (pick ? ' pick' : '') + (day === todayKey ? ' today' : '') + '"' +
+        var sel = pick && state.schedPick[day + '|' + h];
+        return '<span class="sc-cell' + (pick ? ' pick' : '') + (sel ? ' sel' : '') +
+          (day === todayKey ? ' today' : '') + '"' +
           (pick ? ' data-sc-cell="' + day + '|' + h + '" role="button" tabindex="0"' +
-            ' title="' + (own.length ? 'Убрать свой свободный час' : 'Отметить этот час свободным') + '"' : '') + '>' +
+            (own.length ? ' data-sc-own="1"' : '') +
+            ' title="' + (own.length ? 'Убрать свой свободный час' : 'Выбрать этот час') + '"' : '') + '>' +
           out.join('') + '</span>';
       }).join('');
       rows.push('<div class="sc-row">' +
@@ -8831,7 +8840,8 @@
       });
       if (cells.length) seen++;
       var pick = state.schedEdit && d.me
-        ? '<button type="button" class="sc-add" data-sc-cell="' + key + '|' + h + '" title="Отметить этот час свободным">' + ic('plus', 12) + '</button>'
+        ? '<button type="button" class="sc-add' + (state.schedPick[key + '|' + h] ? ' sel' : '') +
+          '" data-sc-cell="' + key + '|' + h + '" title="Выбрать этот час">' + ic('plus', 12) + '</button>'
         : '';
       rows.push('<div class="zd-row' + (h === nowH ? ' now' : '') + '">' +
         '<span class="zd-h' + (tz ? ' two' : '') + '">' + schedHourTxt(h, tz) + '</span>' +
@@ -9176,13 +9186,80 @@
       ? (dayView ? schedDayList(d, day, today) : schedWeekGrid(d, lo, today))
       : schedMyList(d, lo, today);
     var hint = state.schedEdit
-      ? '<div class="zw-hint">Клик по клетке отмечает час свободным, клик по своему зеленому часу — убирает. Час с записанным клиентом убрать нельзя: сначала отмените запись в карточке.</div>'
+      ? '<div class="zw-hint">Выбирайте часы кликом или протяните мышью сразу по нескольким — и нажмите «Поставить». Клик по своему зеленому часу убирает его. Час с записанным клиентом убрать нельзя: сначала отмените запись в карточке.</div>'
       : (grid
         ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
         : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
     view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
-      (grid ? flt : '') + claim + schedTzRow(d) + body + hint + '</div>';
+      (grid ? flt : '') + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
     schedWire(view, d);
+  }
+
+  /* Панель под сеткой: сколько часов набрано и куда их поставить.
+
+     Раньше каждый клик по клетке сразу уходил на сервер, и чтобы выставить месяц
+     приема, человек делал под сотню кликов и столько же запросов — поэтому команда
+     и ходила ставить часы на старую страницу расписания, где клетки выделяются
+     пачкой (Павел 28.10.2026: «мне нужно чтобы это делали через наш»). Теперь клик
+     копит выбор, а отправка одна. */
+  function schedPickCount() {
+    var n = 0, k;
+    for (k in state.schedPick) if (state.schedPick[k]) n++;
+    return n;
+  }
+
+  function schedPickBar(d) {
+    if (!state.schedEdit || !d || !d.me) return '';
+    var n = schedPickCount();
+    var rep = [1, 2, 3, 4].map(function (w) {
+      return '<option value="' + w + '"' + (state.schedRep === w ? ' selected' : '') + '>' +
+        (w === 1 ? 'только эту неделю' : 'и следующие ' + (w - 1) + ' ' +
+          (w === 2 ? 'неделю' : 'недели')) + '</option>';
+    }).join('');
+    return '<div class="sc-bar' + (n ? ' on' : '') + '">' +
+      '<span class="sc-bar__n">Выбрано часов: <b>' + n + '</b></span>' +
+      '<label class="al-selwrap sc-bar__rep"><select class="al-sel" id="sc-rep">' + rep + '</select></label>' +
+      '<span class="sc-bar__acts">' +
+        '<button type="button" class="bp ghost sm" id="sc-clr"' + (n ? '' : ' disabled') + '>Сбросить</button>' +
+        '<button type="button" class="bp sm" id="sc-put"' + (n ? '' : ' disabled') + '>Поставить</button>' +
+      '</span></div>';
+  }
+
+  /* Повтор на следующие недели — это те же часы со сдвигом на семь дней. Сервер
+     берет за раз до двухсот часов, поэтому длинный список уезжает частями. */
+  function schedPickHours() {
+    var out = [], k, w;
+    for (k in state.schedPick) {
+      if (!state.schedPick[k]) continue;
+      var p = k.split('|');
+      for (w = 0; w < (state.schedRep || 1); w++) {
+        var dt = new Date(p[0] + 'T00:00:00');
+        dt.setDate(dt.getDate() + w * 7);
+        out.push({ date: zoomYmd(dt), hour: +p[1] });
+      }
+    }
+    return out;
+  }
+
+  function schedPut(d) {
+    var hours = schedPickHours();
+    if (!hours.length || !d || !d.me) return;
+    var parts = [], i;
+    for (i = 0; i < hours.length; i += 150) parts.push(hours.slice(i, i + 150));
+    var left = parts.length, bad = 0;
+    parts.forEach(function (part) {
+      apiSend('/admin/api/sched/slots', 'POST',
+        { person: d.me.person, role: d.me.role, hours: part },
+        function () { if (!--left) done(); },
+        function (code, e) { bad++; if (!--left) done(e); });
+    });
+    function done(e) {
+      state.schedPick = {};
+      if (bad) showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+        'Часть часов не встала, посмотрите сетку');
+      else showToast('Готово: часов поставлено ' + hours.length);
+      schedReload();
+    }
   }
 
   /* Клетка часа и чип планерки — это кнопки, просто нарисованные не кнопками. Значит
@@ -9255,23 +9332,95 @@
     if (el('sc-meet')) el('sc-meet').addEventListener('click', function () { openSchedMeet(d); });
     if (!d || !d.enabled) return;
 
-    // Клик по клетке — свой свободный час. Если он уже стоит, второй клик его снимает:
-    // отдельная кнопка «убрать» в сетке недели не помещается.
-    Array.prototype.forEach.call(view.querySelectorAll('[data-sc-cell]'), function (c) {
-      schedKeyClick(c);
-      c.addEventListener('click', function () {
+    // Клик по клетке копит выбор, протяжка мышью берет сразу прямоугольник дней и
+    // часов. Свой уже стоящий час клик снимает сразу: он на сервере, и копить тут
+    // нечего.
+    var cells = Array.prototype.slice.call(view.querySelectorAll('[data-sc-cell]'));
+    var drag = null;
+
+    function paint() {
+      cells.forEach(function (c) {
+        var on = !!state.schedPick[c.getAttribute('data-sc-cell')];
+        c.classList.toggle('sel', on);
+      });
+      var bar = view.querySelector('.sc-bar');
+      if (!bar) return;
+      var n = schedPickCount();
+      bar.classList.toggle('on', !!n);
+      var b = bar.querySelector('.sc-bar__n b');
+      if (b) b.textContent = n;
+      Array.prototype.forEach.call(bar.querySelectorAll('button'), function (x) { x.disabled = !n; });
+    }
+
+    function mine(key) {
+      var p = key.split('|');
+      return (d.slots || []).filter(function (s) {
+        return s.date === p[0] && s.hour === +p[1] && schedMine(d, s);
+      })[0];
+    }
+
+    // Прямоугольник между двумя клетками: все дни между их датами и все часы
+    // между их часами. Так выделяют время в календарях, и так же это делала
+    // старая страница расписания.
+    function box(from, to) {
+      var a = from.split('|'), b = to.split('|');
+      var d1 = a[0] < b[0] ? a[0] : b[0], d2 = a[0] < b[0] ? b[0] : a[0];
+      var h1 = Math.min(+a[1], +b[1]), h2 = Math.max(+a[1], +b[1]);
+      return cells.filter(function (c) {
         var p = (c.getAttribute('data-sc-cell') || '').split('|');
-        if (!d.me || p.length < 2) return;
-        var mine = (d.slots || []).filter(function (s) {
-          return s.date === p[0] && s.hour === +p[1] && schedMine(d, s);
-        })[0];
-        if (mine && mine.booked) return showToast('На этот час записан клиент — снимите запись в карточке');
-        if (mine) return schedDrop(mine);
-        apiSend('/admin/api/sched/slots', 'POST',
-          { person: d.me.person, role: d.me.role, hours: [{ date: p[0], hour: +p[1] }] },
-          function () { schedReload(); }, schedErr);
+        return p[0] >= d1 && p[0] <= d2 && +p[1] >= h1 && +p[1] <= h2;
+      }).map(function (c) { return c.getAttribute('data-sc-cell'); });
+    }
+
+    function stretch(to) {
+      var k;
+      state.schedPick = {};
+      for (k in drag.base) if (drag.base[k]) state.schedPick[k] = true;
+      box(drag.from, to).forEach(function (key) {
+        if (mine(key)) return;             // свой час не трогаем протяжкой
+        if (drag.add) state.schedPick[key] = true;
+        else delete state.schedPick[key];
+      });
+      paint();
+    }
+
+    cells.forEach(function (c) {
+      var key = c.getAttribute('data-sc-cell') || '';
+      schedKeyClick(c);
+      c.addEventListener('mousedown', function (e) {
+        if (e.button !== 0 || !d.me || mine(key)) return;
+        e.preventDefault();
+        var base = {}, k;
+        for (k in state.schedPick) if (state.schedPick[k]) base[k] = true;
+        drag = { from: key, add: !state.schedPick[key], base: base, moved: false };
+        stretch(key);
+      });
+      c.addEventListener('mouseenter', function () {
+        if (!drag) return;
+        drag.moved = true;
+        stretch(key);
+      });
+      c.addEventListener('click', function () {
+        if (!d.me || key.split('|').length < 2) return;
+        var m = mine(key);
+        if (m && m.booked) return showToast('На этот час записан клиент — снимите запись в карточке');
+        if (m) return schedDrop(m);
+        if (drag && drag.moved) return;    // это был конец протяжки, не отдельный клик
+        if (drag) return;                  // мышь уже все поставила на mousedown
+        state.schedPick[key] = !state.schedPick[key];
+        if (!state.schedPick[key]) delete state.schedPick[key];
+        paint();
       });
     });
+    document.addEventListener('mouseup', function () { drag = null; });
+
+    if (el('sc-rep')) el('sc-rep').addEventListener('change', function () {
+      state.schedRep = +el('sc-rep').value || 1;
+    });
+    if (el('sc-clr')) el('sc-clr').addEventListener('click', function () {
+      state.schedPick = {}; paint();
+    });
+    if (el('sc-put')) el('sc-put').addEventListener('click', function () { schedPut(d); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sc-drop]'), function (c) {
       schedKeyClick(c);
       c.addEventListener('click', function () {
