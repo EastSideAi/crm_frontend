@@ -25269,11 +25269,19 @@
 
   var FPH_MONTHS = ['', 'янв', 'фев', 'мар', 'апр', 'май', 'июн',
                     'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  var FPH_MONTHS_FULL = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
   function fphPeriod(row) {
     // Подпись периода у строки: месяц года, если распознали, иначе как в ведомости.
     if (row.mon && row.yr) return FPH_MONTHS[row.mon] + ' ' + row.yr;
     if (row.yr) return String(row.yr);
     return row.period_label || '';
+  }
+  function fphMonthLabel(row) {
+    // Заголовок месяца внутри года: «Октябрь 2026», иначе как в ведомости.
+    if (row.mon && row.yr) return FPH_MONTHS_FULL[row.mon] + ' ' + row.yr;
+    if (row.mon) return FPH_MONTHS_FULL[row.mon];
+    return row.period_label || (row.yr ? String(row.yr) : 'Без месяца');
   }
 
   // Блок «История выплат»: годы сверткой, свежий год открыт, остальные свёрнуты —
@@ -25296,28 +25304,49 @@
         var newest = (H.by_year[0] || {}).yr;
         FIN.histOpen[String(newest)] = true;   // свежий год раскрыт
       }
-      // Строки сгруппированы по годам (бэкенд отдал их уже по убыванию).
+      // Строки по годам, внутри года — по месяцам (бэкенд отдал уже yr desc, mon desc).
+      // Месяц вынесен в заголовок со своей суммой: сразу видно, когда и сколько
+      // выплатили (Роман 28.10.2026). Строка кликается — открывается правка.
       var byYear = {};
       H.rows.forEach(function (r) {
         var key = r.yr === null || r.yr === undefined ? '—' : String(r.yr);
         (byYear[key] = byYear[key] || []).push(r);
       });
+      var fphRow = function (r) {
+        var rate = r.rate_text ? '<i class="fph-rate">' + esc(r.rate_text) + '</i>' : '';
+        var who = esc(r.partner || '—');
+        var forwhom = r.client ? ' <span class="fph-for">за ' + esc(r.client) + '</span>' : '';
+        var sub = r.gross_rub ? '<i>с ' + finRub(r.gross_rub) + '</i>' : '';
+        return '<div class="trow fph-row" data-hedit="' + r.id + '">' +
+          '<span class="fo-what"><b>' + who + '</b>' + forwhom + sub + '</span>' +
+          '<span class="fph-mid">' + rate + '</span>' +
+          '<span class="num fo-sum">' + finRub(r.amount_rub) + '</span>' +
+          '<button class="fph-del" data-hdel="' + r.id + '" title="Убрать строку">' +
+            ic('x', 11) + '</button>' +
+        '</div>';
+      };
       inner = (H.by_year || []).map(function (y) {
         var key = y.yr === null || y.yr === undefined ? '—' : String(y.yr);
         var open = !!FIN.histOpen[key];
-        var rows = (byYear[key] || []).map(function (r) {
-          var rate = r.rate_text ? '<i class="fph-rate">' + esc(r.rate_text) + '</i>' : '';
-          var who = esc(r.partner || '—');
-          var forwhom = r.client ? ' <span class="fph-for">за ' + esc(r.client) + '</span>' : '';
-          return '<div class="trow fph-row">' +
-            '<span class="fo-what"><b>' + who + '</b>' + forwhom +
-              '<i>' + esc(fphPeriod(r)) + (r.gross_rub ? ' · с ' + finRub(r.gross_rub) : '') +
-              '</i></span>' +
-            '<span class="fph-mid">' + rate + '</span>' +
-            '<span class="num fo-sum">' + finRub(r.amount_rub) + '</span>' +
-            '<button class="fph-del" data-hdel="' + r.id + '" title="Убрать строку">' +
-              ic('x', 11) + '</button>' +
-          '</div>';
+        // Режем год на месяцы, сохраняя порядок (строки уже mon desc).
+        var months = [], curMk = null, cur = null;
+        (byYear[key] || []).forEach(function (r) {
+          var mk = (r.mon === null || r.mon === undefined) ? '—' : String(r.mon);
+          if (mk !== curMk) {
+            curMk = mk;
+            cur = { label: fphMonthLabel(r), rows: [], total: 0 };
+            months.push(cur);
+          }
+          cur.rows.push(r);
+          cur.total += Number(r.amount_rub) || 0;
+        });
+        var body = months.map(function (m) {
+          var mhead = '<div class="fph-mh">' +
+            '<span class="fph-ml">' + esc(m.label) + '</span>' +
+            '<span class="fph-mc">' + m.rows.length + ' ' +
+              plural(m.rows.length, 'выплата', 'выплаты', 'выплат') + '</span>' +
+            '<span class="num fph-ms">' + finRub(m.total) + '</span></div>';
+          return '<div class="fph-month">' + mhead + m.rows.map(fphRow).join('') + '</div>';
         }).join('');
         return '<div class="fph-year">' +
           '<button class="fph-yh' + (open ? ' open' : '') + '" data-hyear="' + esc(key) + '">' +
@@ -25326,7 +25355,7 @@
             '<span class="fph-yc">' + y.count + ' ' +
               plural(y.count, 'выплата', 'выплаты', 'выплат') + '</span>' +
             '<span class="num fph-ys">' + finRub(y.total) + '</span></button>' +
-          (open ? '<div class="fph-rows">' + rows + '</div>' : '') +
+          (open ? '<div class="fph-rows">' + body + '</div>' : '') +
         '</div>';
       }).join('');
       var foot = '<div class="fin-note calm fph-total">' + ic('coins', 15) +
@@ -25517,8 +25546,21 @@
     var ha = view.querySelector('.fph-add');
     if (ha) ha.addEventListener('click', function () { finHistoryForm(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-hdel]'), function (b) {
-      b.addEventListener('click', function () {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();   // не открывать правку, когда жмут крестик
         finHistoryDelete(b.getAttribute('data-hdel'));
+      });
+    });
+    // Клик по строке — правка: находим строку по id в загруженной истории.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hedit]'), function (b) {
+      b.addEventListener('click', function (e) {
+        if (e.target.closest('.fph-del')) return;
+        var id = b.getAttribute('data-hedit');
+        var H = FIN.phistory;
+        var row = H && H.rows && H.rows.filter(function (r) {
+          return String(r.id) === id;
+        })[0];
+        if (row) finHistoryForm(row);
       });
     });
 
@@ -25657,19 +25699,24 @@
     ['5', 'май'], ['6', 'июнь'], ['7', 'июль'], ['8', 'август'],
     ['9', 'сентябрь'], ['10', 'октябрь'], ['11', 'ноябрь'], ['12', 'декабрь']];
 
-  function finHistoryForm() {
-    openSheet('Строка истории',
+  function finHistoryForm(row) {
+    // row задан — правим существующую строку (PUT), иначе добавляем новую (POST).
+    row = row || {};
+    var isEdit = row.id !== undefined && row.id !== null;
+    openSheet(isEdit ? 'Правка строки истории' : 'Строка истории',
       'Выплата, которую уже провели раньше (мимо CRM или из старой ведомости). ' +
       'Это справочная запись: в фонд маркетинга она не попадает.',
-      [['partner', 'line', 'Партнёр', ''],
-       ['client', 'line', 'За какого клиента', ''],
-       ['yr', 'number', 'Год', String(new Date().getFullYear())],
-       ['mon', 'pick', 'Месяц', FPH_MONTH_PICK, ''],
-       ['gross_rub', 'number', 'Сумма продажи (с чего считали), ₽', ''],
-       ['rate_text', 'line', 'Ставка (как в ведомости: 5%, фикс 10000)', ''],
-       ['amount_rub', 'number', 'Вознаграждение партнёру, ₽', ''],
-       ['paid_on', 'line', 'Дата выплаты (ГГГГ-ММ-ДД)', ''],
-       ['note', 'text', 'Примечание', '']],
+      [['partner', 'line', 'Партнёр', row.partner || ''],
+       ['client', 'line', 'За какого клиента', row.client || ''],
+       ['yr', 'number', 'Год', row.yr != null ? String(row.yr) : String(new Date().getFullYear())],
+       ['mon', 'pick', 'Месяц', FPH_MONTH_PICK, row.mon != null ? String(row.mon) : ''],
+       ['gross_rub', 'number', 'Сумма продажи (с чего считали), ₽',
+        row.gross_rub != null ? String(row.gross_rub) : ''],
+       ['rate_text', 'line', 'Ставка (как в ведомости: 5%, фикс 10000)', row.rate_text || ''],
+       ['amount_rub', 'number', 'Вознаграждение партнёру, ₽',
+        row.amount_rub != null ? String(row.amount_rub) : ''],
+       ['paid_on', 'line', 'Дата выплаты (ГГГГ-ММ-ДД)', row.paid_on || ''],
+       ['note', 'text', 'Примечание', row.note || '']],
       function (v, close) {
         var partner = String(v.partner || '').trim();
         if (!partner) return 'Впишите партнёра';
@@ -25685,11 +25732,12 @@
           paid_on: String(v.paid_on || '').trim() || null,
           note: String(v.note || '').trim(),
         };
-        czSend('/admin/api/partners/payouts/history', 'POST', body).then(function () {
+        var url = '/admin/api/partners/payouts/history' + (isEdit ? '/' + row.id : '');
+        czSend(url, isEdit ? 'PUT' : 'POST', body).then(function () {
           close(); FIN.phistory = undefined; FIN.phistoryBusy = false;
-          renderAll(); showToast('Строка добавлена в историю');
+          renderAll(); showToast(isEdit ? 'Строка обновлена' : 'Строка добавлена в историю');
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
-      }, false, 'Партнёрские выплаты', 'Добавить');
+      }, false, 'Партнёрские выплаты', isEdit ? 'Сохранить' : 'Добавить');
   }
 
   function finHistoryDelete(hid) {

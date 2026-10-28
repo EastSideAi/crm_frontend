@@ -7953,8 +7953,22 @@ button.fsp-via { cursor: pointer; }
 .fph-yc { color: var(--ink-3); font-size: 13px; }
 .fph-ys { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .fph-rows { padding: 2px 0 6px; }
-/* Строка истории: партнёр+клиент слева, ставка в середине, сумма справа, снять. */
-.fph-row { grid-template-columns: 1.9fr 90px 130px 30px; align-items: center; }
+/* Месяц внутри года — заметный разделитель со своей суммой (Роман 28.10.2026:
+   месяц должно быть видно сразу). Тёмная полоска-шапка с подложкой. */
+.fph-month + .fph-month { margin-top: 6px; }
+.fph-mh { display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+  margin: 4px 8px 4px; background: var(--fill); border-radius: 8px;
+  border-left: 3px solid var(--blue); }
+.fph-ml { font-weight: 700; font-size: 13.5px; letter-spacing: -.01em;
+  color: var(--ink); }
+.fph-mc { color: var(--ink-3); font-size: 12px; }
+.fph-ms { margin-left: auto; color: var(--ink); font-weight: 700; font-size: 13px;
+  font-variant-numeric: tabular-nums; }
+/* Строка истории: партнёр+клиент слева, ставка в середине, сумма справа, снять.
+   Вся строка кликабельна — открывает правку (крестик гасит всплытие). */
+.fph-row { grid-template-columns: 1.9fr 90px 130px 30px; align-items: center;
+  cursor: pointer; }
+.fph-row:hover { background: var(--fill); }
 .fph-row .fo-what i { color: var(--ink-3); }
 .fph-for { color: var(--ink-2); font-weight: 600; }
 .fph-rate { font-style: normal; color: var(--ink-3); font-size: 12px;
