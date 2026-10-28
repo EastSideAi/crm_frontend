@@ -25220,6 +25220,22 @@
     });
   }
 
+  // История выплат — справочная летопись из старой ведомости (2022-2026). Деньги по
+  // ней не двигаются: в фонд маркетинга и ПНЛ не пишет, это картина оборота по партнёру
+  // за прошлые, уже закрытые периоды. Грузим отдельно от реестра: нужна не всегда.
+  function finLoadHistory() {
+    if (FIN.phistoryBusy) return;
+    FIN.phistoryBusy = true;
+    api('/admin/api/partners/payouts/history').then(function (r) {
+      FIN.phistory = r;
+    }).catch(function () {
+      FIN.phistory = 'none';
+    }).then(function () {
+      FIN.phistoryBusy = false;
+      if (curSpace() === 'fin' && state.page === 'finpartners') renderAll();
+    });
+  }
+
   function finPartnerDefRate(P) {
     var def = null;
     (P.rates || []).forEach(function (r) { if (!r.product_id) def = r; });
@@ -25232,6 +25248,76 @@
     if (def.percent !== null && def.percent !== undefined)
       return finNum(def.percent, def.percent % 1 ? 1 : 0) + '% от оплат';
     return 'не задана';
+  }
+
+  var FPH_MONTHS = ['', 'янв', 'фев', 'мар', 'апр', 'май', 'июн',
+                    'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  function fphPeriod(row) {
+    // Подпись периода у строки: месяц года, если распознали, иначе как в ведомости.
+    if (row.mon && row.yr) return FPH_MONTHS[row.mon] + ' ' + row.yr;
+    if (row.yr) return String(row.yr);
+    return row.period_label || '';
+  }
+
+  // Блок «История выплат»: годы сверткой, свежий год открыт, остальные свёрнуты —
+  // строк под две сотни, разом вываливать их на экран незачем.
+  function finHistorySection() {
+    var H = FIN.phistory;
+    if (H === undefined) { finLoadHistory(); }
+    var head = '<div class="list-tools fph-head">' +
+      '<div><div class="t fe-t">История выплат</div>' +
+        '<div class="s fe-s">перенос из ведомости · в фонд маркетинга не идёт</div></div>' +
+      '<button class="qchip add fph-add">' + ic('plus', 12) + 'запись</button></div>';
+    var inner;
+    if (H === undefined) {
+      inner = '<div class="empty">Загружаю историю…</div>';
+    } else if (H === 'none' || !H.rows || !H.rows.length) {
+      inner = '<div class="empty">Истории пока нет. Перенесём из ведомости или добавьте строку.</div>';
+    } else {
+      if (!FIN.histOpen) {
+        FIN.histOpen = {};
+        var newest = (H.by_year[0] || {}).yr;
+        FIN.histOpen[String(newest)] = true;   // свежий год раскрыт
+      }
+      // Строки сгруппированы по годам (бэкенд отдал их уже по убыванию).
+      var byYear = {};
+      H.rows.forEach(function (r) {
+        var key = r.yr === null || r.yr === undefined ? '—' : String(r.yr);
+        (byYear[key] = byYear[key] || []).push(r);
+      });
+      inner = (H.by_year || []).map(function (y) {
+        var key = y.yr === null || y.yr === undefined ? '—' : String(y.yr);
+        var open = !!FIN.histOpen[key];
+        var rows = (byYear[key] || []).map(function (r) {
+          var rate = r.rate_text ? '<i class="fph-rate">' + esc(r.rate_text) + '</i>' : '';
+          var who = esc(r.partner || '—');
+          var forwhom = r.client ? ' <span class="fph-for">за ' + esc(r.client) + '</span>' : '';
+          return '<div class="trow fph-row">' +
+            '<span class="fo-what"><b>' + who + '</b>' + forwhom +
+              '<i>' + esc(fphPeriod(r)) + (r.gross_rub ? ' · с ' + finRub(r.gross_rub) : '') +
+              '</i></span>' +
+            '<span class="fph-mid">' + rate + '</span>' +
+            '<span class="num fo-sum">' + finRub(r.amount_rub) + '</span>' +
+            '<button class="fph-del" data-hdel="' + r.id + '" title="Убрать строку">' +
+              ic('x', 11) + '</button>' +
+          '</div>';
+        }).join('');
+        return '<div class="fph-year">' +
+          '<button class="fph-yh' + (open ? ' open' : '') + '" data-hyear="' + esc(key) + '">' +
+            '<span class="fph-caret' + (open ? ' on' : '') + '">' + ic('go', 11) + '</span>' +
+            '<span class="fph-yl">' + esc(key) + '</span>' +
+            '<span class="fph-yc">' + y.count + ' ' +
+              plural(y.count, 'выплата', 'выплаты', 'выплат') + '</span>' +
+            '<span class="num fph-ys">' + finRub(y.total) + '</span></button>' +
+          (open ? '<div class="fph-rows">' + rows + '</div>' : '') +
+        '</div>';
+      }).join('');
+      var foot = '<div class="fin-note calm fph-total">' + ic('coins', 15) +
+        '<span>Всего в истории: <b>' + finRub(H.total) + '</b> за ' +
+        H.count + ' ' + plural(H.count, 'выплату', 'выплаты', 'выплат') + '</span></div>';
+      inner = inner + foot;
+    }
+    return '<div class="card listcard fph-card">' + head + inner + '</div>';
   }
 
   function renderFinPartners(view) {
@@ -25381,7 +25467,24 @@
     // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
     // Завести партнёра здесь нельзя: это делается отдельно (кабинет партнёра), в финансах
     // только выплата. Поэтому экран показывает начисления и выплаты, а не заведение.
-    view.innerHTML = statBar(tiles) + rateBar + body;
+    view.innerHTML = statBar(tiles) + rateBar + body + finHistorySection();
+
+    // История: свернуть/развернуть год, добавить строку, убрать строку.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hyear]'), function (b) {
+      b.addEventListener('click', function () {
+        var y = b.getAttribute('data-hyear');
+        FIN.histOpen = FIN.histOpen || {};
+        FIN.histOpen[y] = !FIN.histOpen[y];
+        renderAll();
+      });
+    });
+    var ha = view.querySelector('.fph-add');
+    if (ha) ha.addEventListener('click', function () { finHistoryForm(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hdel]'), function (b) {
+      b.addEventListener('click', function () {
+        finHistoryDelete(b.getAttribute('data-hdel'));
+      });
+    });
 
     var rb = el('fpt-rate');
     if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
@@ -25511,6 +25614,58 @@
             close(); finForget(true); renderAll(); showToast('Выплата отменена');
           }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
       }, false, 'Партнёрские выплаты', 'Отменить выплату');
+  }
+
+  var FPH_MONTH_PICK = [['', '— месяц —'],
+    ['1', 'январь'], ['2', 'февраль'], ['3', 'март'], ['4', 'апрель'],
+    ['5', 'май'], ['6', 'июнь'], ['7', 'июль'], ['8', 'август'],
+    ['9', 'сентябрь'], ['10', 'октябрь'], ['11', 'ноябрь'], ['12', 'декабрь']];
+
+  function finHistoryForm() {
+    openSheet('Строка истории',
+      'Выплата, которую уже провели раньше (мимо CRM или из старой ведомости). ' +
+      'Это справочная запись: в фонд маркетинга она не попадает.',
+      [['partner', 'line', 'Партнёр', ''],
+       ['client', 'line', 'За какого клиента', ''],
+       ['yr', 'number', 'Год', String(new Date().getFullYear())],
+       ['mon', 'pick', 'Месяц', FPH_MONTH_PICK, ''],
+       ['gross_rub', 'number', 'Сумма продажи (с чего считали), ₽', ''],
+       ['rate_text', 'line', 'Ставка (как в ведомости: 5%, фикс 10000)', ''],
+       ['amount_rub', 'number', 'Вознаграждение партнёру, ₽', ''],
+       ['paid_on', 'line', 'Дата выплаты (ГГГГ-ММ-ДД)', ''],
+       ['note', 'text', 'Примечание', '']],
+      function (v, close) {
+        var partner = String(v.partner || '').trim();
+        if (!partner) return 'Впишите партнёра';
+        var amount = Number(v.amount_rub);
+        if (!(amount > 0)) return 'Впишите вознаграждение';
+        var body = {
+          partner: partner, client: String(v.client || '').trim(),
+          yr: v.yr ? Number(v.yr) : null,
+          mon: v.mon ? Number(v.mon) : null,
+          gross_rub: v.gross_rub ? Number(v.gross_rub) : null,
+          rate_text: String(v.rate_text || '').trim(),
+          amount_rub: amount,
+          paid_on: String(v.paid_on || '').trim() || null,
+          note: String(v.note || '').trim(),
+        };
+        czSend('/admin/api/partners/payouts/history', 'POST', body).then(function () {
+          close(); FIN.phistory = undefined; FIN.phistoryBusy = false;
+          renderAll(); showToast('Строка добавлена в историю');
+        }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
+      }, false, 'Партнёрские выплаты', 'Добавить');
+  }
+
+  function finHistoryDelete(hid) {
+    finConfirm('Убрать строку истории',
+      'Строка пропадёт из истории. Деньги это не трогает — запись справочная.',
+      'Убрать', function () {
+        czSend('/admin/api/partners/payouts/history/' + hid, 'DELETE')
+          .then(function () {
+            FIN.phistory = undefined; FIN.phistoryBusy = false;
+            renderAll(); showToast('Строка убрана');
+          }).catch(function (e) { showToast(finLineErr(e)); });
+      });
   }
 
   function finPayoutForm(line, opts) {

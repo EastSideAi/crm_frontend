@@ -7932,6 +7932,45 @@ button.fsp-via { cursor: pointer; }
   .fpt-foot .fpt-right { margin-left: 0; }
 }
 
+/* ── История партнёрских выплат (летопись из ведомости) ───────────────────────
+   Справочный блок под реестром: годы сверткой, внутри строки. Деньги по нему не
+   двигаются, поэтому тон тише основного — это память, а не действие. */
+.fph-card { margin-top: 22px; }
+.fph-head .fe-s { color: var(--ink-3); }
+.fph-add { margin-left: auto; }
+.fph-year + .fph-year { margin-top: 2px; }
+/* Шапка года — вся строка кликабельна (свернуть/развернуть). */
+.fph-yh { display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 11px 16px; background: none; border: 0; cursor: pointer;
+  text-align: left; color: var(--ink); border-radius: 10px; }
+.fph-yh:hover { background: var(--fill); }
+.fph-caret { display: inline-flex; color: var(--ink-3);
+  transition: transform .15s ease; }
+.fph-caret.on { transform: rotate(90deg); }
+.fph-yl { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 42px; }
+.fph-yc { color: var(--ink-3); font-size: 13px; }
+.fph-ys { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fph-rows { padding: 2px 0 6px; }
+/* Строка истории: партнёр+клиент слева, ставка в середине, сумма справа, снять. */
+.fph-row { grid-template-columns: 1.9fr 90px 130px 30px; align-items: center; }
+.fph-row .fo-what i { color: var(--ink-3); }
+.fph-for { color: var(--ink-2); font-weight: 600; }
+.fph-rate { font-style: normal; color: var(--ink-3); font-size: 12px;
+  font-variant-numeric: tabular-nums; }
+.fph-mid { text-align: right; }
+.fph-del { background: none; border: 0; cursor: pointer; color: var(--ink-3);
+  display: inline-flex; justify-content: center; padding: 4px; border-radius: 6px; }
+.fph-del:hover { color: var(--red); background: var(--red-soft); }
+.fph-total { margin-top: 8px; }
+@media (max-width: 760px) {
+  .trow.fph-row { grid-template-columns: 1fr auto !important; height: auto;
+    padding: 10px 16px; gap: 2px 10px; }
+  .fph-row .fo-what { grid-column: 1; grid-row: 1; }
+  .fph-row .fph-mid { grid-column: 1; grid-row: 2; text-align: left; }
+  .fph-row .fo-sum { grid-column: 2; grid-row: 1; text-align: right; }
+  .fph-row .fph-del { grid-column: 2; grid-row: 2; justify-self: end; }
+}
+
 /* ── Проверка выплат преподам (наработал против выплачено) ────────────────────
    Повод — Ховисон (задача 6879): заработок прошлого периода не перенёсся в выплату.
    Своя сетка: имя + три суммы, даты у строки нет. */
