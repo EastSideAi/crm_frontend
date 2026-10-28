@@ -10000,6 +10000,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   background: var(--ac-navy); color: #fff; display: grid; place-items: center;
   font-weight: 700; font-size: 11px; margin-top: 1px; }
 
+/* Кнопка-переход из урока в живой раздел системы (sc.goto) */
+.academy .ac-goto { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 2px; }
+.academy .ac-goto-btn { display: inline-flex; align-items: center; gap: 7px; }
+
 /* Видеоурок: запись живой встречи. Темная плашка-кнопка — единственный якорь
    экрана, под ней код доступа и указатель тем: по нему человек возвращается в
    нужную минуту, а не пересматривает два часа. */

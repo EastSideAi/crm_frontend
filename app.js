@@ -4473,7 +4473,10 @@
   // кабинеты платформы в jpg (там фотографии, png весил бы полтора мегабайта).
   var AC_SHOTS_READY = { 'portal-path': 'png', 'roadmap': 'png', 'card-full': 'png',
     'card-apply': 'png', 'card-tasks': 'png', 'notes': 'png',
-    'cabinet-parent': 'jpg', 'cabinet-student': 'jpg' };
+    'cabinet-parent': 'jpg', 'cabinet-student': 'jpg',
+    // Работа в системе для отдела продаж: реальные экраны, данные демонстрационные.
+    'sales-dash': 'png', 'sales-shift-open': 'png', 'sales-kontakty': 'png',
+    'sales-card': 'png', 'sales-dialogi': 'png', 'sales-schedule': 'png', 'sales-consult': 'png' };
 
   /* Озвучка экрана. Голос читает слайд целиком — заголовок, текст, пункты,
      предупреждение и реплику преподавателя (Павел 15.09.2026: «хочется чтобы он
@@ -4986,7 +4989,20 @@
     // На вопросе реплика преподавателя ждет ответа: она объясняет, почему верно
     // именно это, и до ответа была бы подсказкой. Ее добавляет acBindQ.
     if (sc.type === 'q') return acQHTML(sc);
-    return eye + h + body + extra + acSay(sc);
+    return eye + h + body + extra + acGoto(sc) + acSay(sc);
+  }
+
+  /* Кнопка-переход из урока прямо в нужный раздел системы («реальная
+     переадресация», Павел 28.10.2026). sc.goto = { page, label } или массив таких.
+     Нажатие уводит из Академии в живой экран — учишься и сразу делаешь. */
+  function acGoto(sc) {
+    if (!sc.goto) return '';
+    var list = Array.isArray(sc.goto) ? sc.goto : [sc.goto];
+    var btns = list.map(function (g) {
+      return '<button type="button" class="bp ac-goto-btn" data-ac-goto="' + esc(g.page) + '">' +
+        esc(g.label || 'Открыть экран') + ' ' + ic('go', 14) + '</button>';
+    }).join('');
+    return '<div class="ac-goto">' + btns + '</div>';
   }
 
   /* Снимок экрана с подписями. Файла еще нет — рисуем схему: подписи те же,
@@ -5684,6 +5700,10 @@
     if (sc.type === 'calc') acBindCalc();
     if (sc.type === 'scalc') acBindSal();
     acZoomBind(scr);
+    // Кнопки-переходы в живые разделы системы (sc.goto)
+    Array.prototype.forEach.call(scr.querySelectorAll('[data-ac-goto]'), function (b) {
+      b.addEventListener('click', function () { setPage(b.getAttribute('data-ac-goto')); });
+    });
     acVoiceMount(acC().id + '-' + A.li + '-' + A.si);
     acBuildRoute();
   }
