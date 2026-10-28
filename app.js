@@ -25693,6 +25693,11 @@
           .filter(Boolean).join(' · ');
       var st = c.paid
         ? '<span class="fst doc">' + ic('check', 11) + 'выплачено</span>' +
+          // Клиент вернул деньги уже после выплаты (оферта п.8.5): снимок заморожен,
+          // но переплату показываем — её удерживают из ближайшей выплаты.
+          (c.refunded_after_pay
+            ? '<span class="fst bad fpt-claw">возврат · удержать ' + finRub(c.clawback) + '</span>'
+            : '') +
           '<button class="qchip fpt-cancel" data-cancel="' + esc(c.payout_id) +
             '" data-pname="' + esc(c.name || 'клиент') + '">отменить</button>'
         : (c.payable
@@ -25746,6 +25751,20 @@
         ? '<div class="fin-note fpt-warn">' + ic('alert', 15) +
             '<span>' + warns.map(esc).join(' ') + '</span></div>'
         : '';
+      // Удержание по возвратам после выплаты (оферта п.8.5). Минусом в ведомость это
+      // не пишется (там расход не бывает отрицательным), поэтому говорим прямо: сколько
+      // удержать и сколько по факту перечислить. net_due < 0 — удерживать не из чего,
+      // партнёр возвращает (п.8.6).
+      var holdBox = '';
+      if ((p.hold || 0) > 0) {
+        var net = p.net_due || 0;
+        var tail = net >= 0
+          ? 'По факту перечисли ' + finRub(net) + '.'
+          : 'Новых начислений на это не хватает — партнёр должен вернуть ' + finRub(-net) + '.';
+        holdBox = '<div class="fin-note fpt-warn">' + ic('alert', 15) +
+          '<span>Клиент вернул деньги уже после выплаты: удержать ' + finRub(p.hold) +
+          '. ' + esc(tail) + '</span></div>';
+      }
       // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
       // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
       var foot;
@@ -25778,6 +25797,7 @@
         '</div>' +
         p.clients.map(clientRow).join('') +
         warnBox +
+        holdBox +
         foot +
       '</div>';
     }).join('');
