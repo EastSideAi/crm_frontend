@@ -2653,6 +2653,12 @@
        Текст лежит в базе (routers/kb.py) и правится прямо тут — в отличие от
        продуктового портала, который живет файлом и меняется выкаткой. */
     { id: 'finkb', label: 'База знаний', icon: 'doc', cap: 'finmodel', space: 'fin' },
+    /* Те же регламенты, но кнопкой в Финансах — рядом с финансовой базой, где
+       финансисты и работают (Роман 28.10.2026). Открывают ту же базу reglament
+       (renderFinKb), свой id нужен только чтобы клик не уводил из Финансов в общее
+       меню. Видят её тут финансисты (cap finmodel); остальная команда читает те же
+       регламенты через пункт «Регламенты» в основном меню (cap dash). */
+    { id: 'finreglament', label: 'Регламенты', icon: 'doc', cap: 'finmodel', space: 'fin' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team|team_view' },
     /* База знаний команды «Регламенты»: как мы работаем, инструкции по отделам.
        Движок тот же, что у финансовой базы (routers/kb.py, раздел reglament),
@@ -2699,7 +2705,7 @@
             'finedit', 'finpartners', 'finref', 'finfund'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
     { label: 'Отчеты', ids: ['finpnl', 'finmetrics', 'finops'] },
-    { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb'] },
+    { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb', 'finreglament'] },
   ];
   /* Пункты пространства в порядке групп. Возвращает плоский список с меткой группы на
      ПЕРВОМ пункте каждой группы — рисует их renderSide, логика порядка живет здесь. */
@@ -3144,7 +3150,7 @@
     } else if (state.page === 'finprograms' || state.page === 'finpartners' ||
                state.page === 'fintax' || state.page === 'finbanks' ||
                state.page === 'finpaycheck' || state.page === 'finkb' ||
-               state.page === 'finsup') {
+               state.page === 'finreglament' || state.page === 'finsup') {
       /* Эти экраны живут вне ведомости: программа, партнер и справочники идут сквозь
          периоды, налог собирает год, сверка — весь заработок против всех выплат. Здесь
          в полосе стоял чип с названием раздела — дубль заголовка под ним. Полоса сверху
@@ -3465,7 +3471,7 @@
         'Скорость ответа, каналы, конверсии и расход AI — живые данные из бота. Расход AI — оценка.' +
         '</span></div></div>';
     }
-    if (state.page === 'reglament') {
+    if (state.page === 'reglament' || state.page === 'finreglament') {
       html = '<div><h2>Регламенты</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' +
         'Как мы работаем: инструкции по отделам. Отсюда их читают и команда, и агенты, ' +
@@ -3857,7 +3863,7 @@
     var view = el('view');
     if (!view) return;
     /* Режим чтения правила живет только на экранах базы знаний (финансы и регламенты). */
-    if (state.page !== 'finkb' && state.page !== 'reglament') document.body.classList.remove('fkb-reading');
+    if (state.page !== 'finkb' && state.page !== 'reglament' && state.page !== 'finreglament') document.body.classList.remove('fkb-reading');
     if (noSections()) {
       view.innerHTML = '<div class="card"><div class="empty">Разделов для вашей учетки пока нет. ' +
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
@@ -3954,7 +3960,7 @@
     else if (state.page === 'finpaycheck') renderFinPayCheck(view);
     else if (state.page === 'finsup') renderFinSuppliers(view);
     else if (state.page === 'finkb') renderFinKb(view);
-    else if (state.page === 'reglament') renderFinKb(view);
+    else if (state.page === 'reglament' || state.page === 'finreglament') renderFinKb(view);
     else if (state.page === 'finboss') renderFinBoss(view);
     else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplandept') renderFinPlanDept(view);
@@ -27462,8 +27468,8 @@
      (страница finkb, раздел finance) и управленческие регламенты (страница
      reglament, раздел reglament). Раздел и право на правку выводим из открытой
      страницы, чтобы состояние не разъезжалось с тем, что на экране. */
-  function kbSection() { return state.page === 'reglament' ? 'reglament' : 'finance'; }
-  function kbEditCap() { return state.page === 'reglament' ? 'team' : 'finmodel_edit'; }
+  function kbSection() { return (state.page === 'reglament' || state.page === 'finreglament') ? 'reglament' : 'finance'; }
+  function kbEditCap() { return (state.page === 'reglament' || state.page === 'finreglament') ? 'team' : 'finmodel_edit'; }
   /* Регламенты группируются в оглавлении ПО ОТДЕЛАМ — отдел берём из префикса слага
      (upravlenie-… → «Управление»). Это та же механика, что у финансовой базы с
      process-/spravka-, только пачки другие. Слаг автор задаёт сам; не попал в список —
