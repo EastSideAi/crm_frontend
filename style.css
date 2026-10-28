@@ -7943,7 +7943,7 @@ button.fsp-via { cursor: pointer; }
 .fph-year + .fph-year { margin-top: 2px; }
 /* Шапка года — вся строка кликабельна (свернуть/развернуть). */
 .fph-yh { display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 11px 16px; background: none; border: 0; cursor: pointer;
+  padding: 11px 40px 11px 16px; background: none; border: 0; cursor: pointer;
   text-align: left; color: var(--ink); border-radius: 10px; }
 .fph-yh:hover { background: var(--fill); }
 .fph-caret { display: inline-flex; color: var(--ink-3);
@@ -7954,37 +7954,44 @@ button.fsp-via { cursor: pointer; }
 .fph-ys { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .fph-rows { padding: 2px 0 6px; }
 /* Месяц внутри года — заметный разделитель со своей суммой (Роман 28.10.2026:
-   месяц должно быть видно сразу). Тёмная полоска-шапка с подложкой. */
+   месяц должно быть видно сразу). Полоска-шапка с подложкой и синим акцентом.
+   Правый отступ 40px — чтобы сумма месяца встала в один столбец с суммами строк
+   и года (Роман 28.10.2026: цифры ровнее, съехало). */
 .fph-month + .fph-month { margin-top: 6px; }
-.fph-mh { display: flex; align-items: center; gap: 10px; padding: 8px 16px;
-  margin: 4px 8px 4px; background: var(--fill); border-radius: 8px;
+.fph-mh { display: flex; align-items: center; gap: 10px; padding: 8px 40px 8px 16px;
+  margin: 4px 0; background: var(--fill); border-radius: 8px;
   border-left: 3px solid var(--blue); }
 .fph-ml { font-weight: 700; font-size: 13.5px; letter-spacing: -.01em;
   color: var(--ink); }
 .fph-mc { color: var(--ink-3); font-size: 12px; }
 .fph-ms { margin-left: auto; color: var(--ink); font-weight: 700; font-size: 13px;
   font-variant-numeric: tabular-nums; }
-/* Строка истории: партнёр+клиент слева, ставка в середине, сумма справа, снять.
-   Вся строка кликабельна — открывает правку (крестик гасит всплытие). */
-.fph-row { grid-template-columns: 1.9fr 90px 130px 30px; align-items: center;
+/* Строка истории: партнёр+клиент слева, ставка, сумма — в один правый столбец
+   с суммами месяца и года (все кончаются на 40px от края). Крестик вынесен в
+   правый жёлоб абсолютом — в сетку не входит, сумму не двигает. align-items:start
+   кладёт ставку и сумму на строку имени, а не по центру трёхстрочной ячейки,
+   поэтому цифры не пляшут (Роман 28.10.2026). Строка кликается — правка. */
+.fph-row { grid-template-columns: minmax(0, 1fr) 80px 120px; align-items: start;
+  height: auto; min-height: 50px; padding: 11px 40px 11px 16px; position: relative;
   cursor: pointer; }
 .fph-row:hover { background: var(--fill); }
 .fph-row .fo-what i { color: var(--ink-3); }
 .fph-for { color: var(--ink-2); font-weight: 600; }
 .fph-rate { font-style: normal; color: var(--ink-3); font-size: 12px;
-  font-variant-numeric: tabular-nums; }
+  font-variant-numeric: tabular-nums; line-height: 20px; }
 .fph-mid { text-align: right; }
-.fph-del { background: none; border: 0; cursor: pointer; color: var(--ink-3);
-  display: inline-flex; justify-content: center; padding: 4px; border-radius: 6px; }
+.fph-row .fo-sum { line-height: 20px; }
+.fph-del { position: absolute; right: 10px; top: 9px; background: none; border: 0;
+  cursor: pointer; color: var(--ink-3); display: inline-flex;
+  justify-content: center; padding: 4px; border-radius: 6px; }
 .fph-del:hover { color: var(--red); background: var(--red-soft); }
 .fph-total { margin-top: 8px; }
 @media (max-width: 760px) {
-  .trow.fph-row { grid-template-columns: 1fr auto !important; height: auto;
-    padding: 10px 16px; gap: 2px 10px; }
+  .trow.fph-row { grid-template-columns: minmax(0, 1fr) auto !important; height: auto;
+    padding: 10px 38px 10px 16px; gap: 2px 10px; }
   .fph-row .fo-what { grid-column: 1; grid-row: 1; }
   .fph-row .fph-mid { grid-column: 1; grid-row: 2; text-align: left; }
   .fph-row .fo-sum { grid-column: 2; grid-row: 1; text-align: right; }
-  .fph-row .fph-del { grid-column: 2; grid-row: 2; justify-self: end; }
 }
 
 /* ── Проверка выплат преподам (наработал против выплачено) ────────────────────
