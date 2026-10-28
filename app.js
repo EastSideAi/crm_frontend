@@ -2315,10 +2315,10 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'ads', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'kpi', 'cabinet_invite'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'ads', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'reward', 'cabinet_invite'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact', 'kpi', 'org'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact', 'reward', 'org'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'portal', 'contractors', 'academy', 'planfact'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'portal', 'academy', 'pay_create'] },
@@ -2341,7 +2341,7 @@
     // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
     // не видит маркетинг, а «Руководитель» — это заодно выплаты команды и документы
     // учеников. Ведомости нет вовсе: там ввод процентов и выплат людям.
-    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'marketing', 'portal', 'planfact', 'kpi', 'finmodel_marketing', 'org'] },
+    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'marketing', 'portal', 'planfact', 'reward', 'finmodel_marketing', 'org'] },
     // Решение владельца от 2026-09-02: продюсер ведёт маркетинг и продажи запуска —
     // контроль, отчётность, планирование и переписки с клиентами. Набор прав сейчас
     // такой же, как у руководителя маркетинга: владелец просил роль без права менять
@@ -2366,7 +2366,7 @@
     // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
     // (ведет всю финансовую работу); ведомостью управляет, поэтому есть и правка
     // (finmodel_edit): экраны ввода Доходы и листы работают только с ней.
-    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'pay_create', 'contractors', 'finmodel', 'finmodel_edit', 'kpi'] },
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'pay_create', 'contractors', 'finmodel', 'finmodel_edit', 'reward'] },
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
     accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance', 'pay_create', 'cz_pay'] },
@@ -2413,11 +2413,6 @@
     // виден (Павел 28.10.2026: убрать из меню менеджера продаж).
     { id: 'manage', label: 'Управление', icon: 'helm', cap: 'tasks_all' },
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
-    /* «КПИ» — лист показателей человека и сумма вознаграждения по нему
-       (Роман 28.10.2026). Рядом с «План-фактом»: тот про цели компании, этот
-       про то, что сделал конкретный человек. Cap свой — на `finmodel_marketing`
-       раздел показал бы каждому маркетологу суммы коллег. */
-    { id: 'kpi', label: 'КПИ', icon: 'target', cap: 'kpi' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
        Отдельным пунктом под «Задачами» и открыт всем, у кого есть задачи
@@ -2575,6 +2570,13 @@
        раздела (группа «Сводка» в FIN_GROUPS). Данные тянутся из план выручки / план
        отделов / P&L / оплат — экран их только показывает, ничего не хранит. */
     { id: 'finboss', label: 'Сводка руководителя', icon: 'chart', cap: 'finmodel', space: 'fin' },
+    /* «Вознаграждение» — расчетный лист исполнителя: что он сделал за месяц и
+       сколько по его же листу причитается (Роман 28.10.2026). Живет в Финансах,
+       а не в контуре клиентов: это деньги команды, рядом с расчетными листами
+       и выплатами. Слова «КПИ» в названии нет намеренно — это трудовое понятие,
+       а у нас исполнители по договору услуг. Cap свой: на `finmodel_marketing`
+       раздел показал бы одному исполнителю сумму другого. */
+    { id: 'reward', label: 'Вознаграждение', icon: 'target', cap: 'reward', space: 'fin' },
     { id: 'finopex', label: 'Операционные расходы', icon: 'wallet', space: 'fin',
       cap: 'finmodel|finmodel_ops', hideCap: 'finmodel' },
     { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
@@ -2702,7 +2704,7 @@
     { label: 'Сводка', ids: ['finboss'] },
     { label: 'Ведомость периода',
       ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect',
-            'finedit', 'finpartners', 'finref', 'finfund'] },
+            'finedit', 'reward', 'finpartners', 'finref', 'finfund'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
     { label: 'Отчеты', ids: ['finpnl', 'finmetrics', 'finops'] },
     { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb', 'finreglament'] },
@@ -3644,7 +3646,7 @@
       // период. Именно от него зависит, тянуть период дальше или платить.
       var per = finPeriod();
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
-      var titles = { finboss: 'Сводка руководителя',
+      var titles = { finboss: 'Сводка руководителя', reward: 'Вознаграждение',
                      finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
                      finops: 'Карта операций', finref: 'Сервисы и долги',
                      finfund: 'Фонды', finincome: 'Доходы',
@@ -3664,6 +3666,11 @@
       else if (state.page === 'finboss') {
         ph = 'План и факт за месяц в одном месте: выручка, расходы по отделам и прибыль. ' +
           'Цифры тянутся из планов и ведомости сами — здесь их только смотрят, заносят на своих экранах.';
+      }
+      else if (state.page === 'reward') {
+        ph = 'Что человек сделал за месяц по своему листу и сколько по нему причитается. ' +
+          'Показатели считаются из живых данных; строка, которую посчитать нечем, стоит ' +
+          'вопросом с причиной и в сумму не идет.';
       }
       else if (state.page === 'finref') {
         ph = 'Что списывается само и что мы должны. Сервис с наступившим сроком ' +
@@ -3914,7 +3921,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'planfact') renderPlanFact(view);
-    else if (state.page === 'kpi') renderKpi(view);
+    else if (state.page === 'reward') renderReward(view);
     else if (state.page === 'manage') renderManage(view);
     else if (state.page === 'stories') renderStories(view);
     else if (state.page === 'efirbot') renderEfirBot(view);
@@ -36001,46 +36008,50 @@
   }
 
 
-  /* ── КПИ — что человек сделал за месяц и сколько по его листу причитается ────
+  /* ── ВОЗНАГРАЖДЕНИЕ — что человек сделал за месяц и сколько ему причитается ──
      Роман 28.10.2026 дословно: «на конец месяца смотришь, что сделал человек,
      система проверяет все выполнено, если выполнено ставит сколько надо
-     выплатить». До этого листы КПИ жили картинками в чате: руководитель в конце
-     месяца руками сверял сделанное, сам считал ступени и сам выводил сумму.
+     выплатить». До этого расчетные листы жили картинками в чате: руководитель в
+     конце месяца руками сверял сделанное, сам считал ступени и сам выводил сумму.
+
+     Слова «КПИ» на экране нет намеренно (Роман 28.10.2026: «не называй кпи, это
+     трудовое понятие»): у нас исполнители по договору услуг, и лексика везде
+     одна — вознаграждение, объем услуг, к выплате.
 
      Главный прием экрана — разные слова для «не сделал» и «не знаем». Строка,
      которую нам нечем посчитать, стоит вопросом с причиной и в сумму не идет:
      ноль на месте нашей дырки в сборе данных читается как обвинение человека.
-     Все состояния и суммы считает сервер (routers/kpi.py), здесь раскладка. */
-  var KPI_ST = { done: ['kpi-ok', 'выполнено'], miss: ['kpi-miss', 'не добрал'],
-                 wait: ['kpi-wait', 'нужна цифра'], blocked: ['kpi-blocked', 'не считаем'] };
+     Все состояния и суммы считает сервер (routers/reward.py), здесь раскладка. */
+  var RW_ST = { done: ['rw-ok', 'выполнено'], miss: ['rw-miss', 'не добрал'],
+                 wait: ['rw-wait', 'нужна цифра'], blocked: ['rw-blocked', 'не считаем'] };
 
-  function kpiMonth() {
-    if (!state.kpiMonth) {
+  function rwMonth() {
+    if (!state.rwMonth) {
       var d = new Date();
-      state.kpiMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+      state.rwMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
     }
-    return state.kpiMonth;
+    return state.rwMonth;
   }
 
-  function fetchKpi() {
-    var m = kpiMonth();
-    api('/admin/api/kpi?period=' + m).then(function (r) {
-      if (kpiMonth() !== m) return;    // пока ходили, переключили месяц
-      state._kpi = r || 'none';
-      if (state.page === 'kpi') renderView();
+  function fetchRw() {
+    var m = rwMonth();
+    api('/admin/api/reward?period=' + m).then(function (r) {
+      if (rwMonth() !== m) return;    // пока ходили, переключили месяц
+      state._rw = r || 'none';
+      if (state.page === 'reward') renderView();
     }).catch(function (e) {
       if (e.message === '403') return;
-      if (kpiMonth() !== m) return;
-      state._kpi = 'none';
-      if (state.page === 'kpi') renderView();
+      if (rwMonth() !== m) return;
+      state._rw = 'none';
+      if (state.page === 'reward') renderView();
     });
   }
 
   /* Условие строки словами ее листа, а не названием поля. Человек узнает свой
      лист по формулировке «8—10 роликов», а не по «payout: steps». */
-  function kpiCond(r) {
+  function rwCond(r) {
     // У строки-вопроса условий еще нет: «план 100, вес 0%» на ней — мусор, а не
-    // информация. Вместо условия она показывает причину, см. kpiRow.
+    // информация. Вместо условия она показывает причину, см. rwRow.
     if (r.blocked) return '';
     if (r.payout === 'share') {
       return 'план ' + fmtMoney(r.plan) + ', вес ' + fmtMoney(r.weight_pct) + '%';
@@ -36055,74 +36066,74 @@
     }).join(', ');
   }
 
-  function kpiRow(r, closed) {
-    var st = KPI_ST[r.state] || KPI_ST.wait;
+  function rwRow(r, closed) {
+    var st = RW_ST[r.state] || RW_ST.wait;
     var fact;
     if (r.state === 'blocked') {
       // Причина живет в колонке условий: там строка идет слева и читается как
       // предложение, а в узкой колонке факта она ломалась на три куска по краю.
-      fact = '<span class="kpi-dash">—</span>';
+      fact = '<span class="rw-dash">—</span>';
     } else if (r.fact == null) {
       // Ждем цифру человека. Пока месяц живой — вводим тут же: отдельная форма
       // ради одного числа означала бы, что ее не заполнят.
-      fact = closed ? '<span class="kpi-why">цифры не было</span>'
+      fact = closed ? '<span class="rw-why">цифры не было</span>'
         : (r.fact_kind === 'rating'
-            ? '<span class="kpi-rate">' + [0, 50, 100].map(function (v) {
-                return '<button class="qchip" data-kpirate="' + r.id + ':' + v + '">' + v + '</button>';
+            ? '<span class="rw-rate">' + [0, 50, 100].map(function (v) {
+                return '<button class="qchip" data-rwrate="' + r.id + ':' + v + '">' + v + '</button>';
               }).join('') + '</span>'
-            : '<button class="pf-set none" data-kpifact="' + r.id + '">внести</button>');
+            : '<button class="pf-set none" data-rwfact="' + r.id + '">внести</button>');
     } else if (r.fact_kind === 'auto') {
       fact = '<span class="num">' + fmtMoney(r.fact) + '</span>';
     } else {
-      fact = '<button class="pf-set" data-kpifact="' + r.id + '"' + (closed ? ' disabled' : '') +
+      fact = '<button class="pf-set" data-rwfact="' + r.id + '"' + (closed ? ' disabled' : '') +
         '>' + fmtMoney(r.fact) + '</button>';
     }
 
-    return '<div class="kpi-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
-      '<div class="kpi-nm">' + esc(r.label) +
+    return '<div class="rw-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
+      '<div class="rw-nm">' + esc(r.label) +
         (r.hint ? '<small>' + esc(r.hint) + '</small>' : '') + '</div>' +
-      '<div class="kpi-cond">' + (r.state === 'blocked'
-        ? '<span class="kpi-why">' + esc(r.blocked) + '</span>'
-        : esc(kpiCond(r))) + '</div>' +
-      '<div class="kpi-fact">' + fact + '</div>' +
-      '<div class="kpi-sum num">' + (r.rub ? fmtMoney(r.rub) + ' ₽' : '—') + '</div>' +
-      '<div class="kpi-st"><span class="sev ' + st[0] + '">' + st[1] + '</span></div>' +
+      '<div class="rw-cond">' + (r.state === 'blocked'
+        ? '<span class="rw-why">' + esc(r.blocked) + '</span>'
+        : esc(rwCond(r))) + '</div>' +
+      '<div class="rw-fact">' + fact + '</div>' +
+      '<div class="rw-sum num">' + (r.rub ? fmtMoney(r.rub) + ' ₽' : '—') + '</div>' +
+      '<div class="rw-st"><span class="sev ' + st[0] + '">' + st[1] + '</span></div>' +
     '</div>';
   }
 
-  function kpiSheet(s) {
+  function rwSheet(s) {
     var rows = s.rows || [];
     var q = s.questions || 0;
-    var head = '<div class="sec-head kpi-head">' +
+    var head = '<div class="sec-head rw-head">' +
       '<div><div class="t">' + esc(s.name) +
-        (s.title ? ' <span class="kpi-role">' + esc(s.title) + '</span>' : '') + '</div>' +
+        (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</div>' +
         '<div class="s">' + (s.closed
           ? 'месяц закрыт' + (s.closed_by ? ', ' + esc(s.closed_by) : '')
           : (q ? q + ' ' + plural(q, 'строка ждет ответа', 'строки ждут ответа', 'строк ждут ответа')
                : 'все строки посчитаны')) + '</div></div>' +
-      '<div class="kpi-total"><b>' + fmtMoney(s.total_rub) + ' ₽</b><small>' +
+      '<div class="rw-total"><b>' + fmtMoney(s.total_rub) + ' ₽</b><small>' +
         (s.closed ? 'выплачено по этому расчету' : 'к выплате') + '</small></div>' +
       (s.closed
-        ? '<button class="bp ghost" data-kpiopen="' + s.sheet_id + '">Открыть месяц</button>'
-        : '<button class="bp" data-kpiclose="' + s.sheet_id + '">Закрыть месяц</button>') +
+        ? '<button class="bp ghost" data-rwopen="' + s.sheet_id + '">Открыть месяц</button>'
+        : '<button class="bp" data-rwclose="' + s.sheet_id + '">Закрыть месяц</button>') +
     '</div>';
 
-    return '<div class="card sp12' + (s.closed ? ' kpi-shut' : '') + '">' + head +
+    return '<div class="card sp12' + (s.closed ? ' rw-shut' : '') + '">' + head +
       (rows.length
-        ? '<div class="kpi-rows">' + rows.map(function (r) {
-            return kpiRow(r, s.closed);
+        ? '<div class="rw-rows">' + rows.map(function (r) {
+            return rwRow(r, s.closed);
           }).join('') + '</div>'
         : '<div class="empty">В листе нет ни одной строки — его еще не заполнили.</div>') +
     '</div>';
   }
 
-  function renderKpi(view) {
-    if (!state._kpi) { view.innerHTML = dashSkeleton(); fetchKpi(); return; }
-    if (state._kpi === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить КПИ — проверь сеть или доступ.</div></div>';
+  function renderReward(view) {
+    if (!state._rw) { view.innerHTML = dashSkeleton(); fetchRw(); return; }
+    if (state._rw === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить расчет — проверь сеть или доступ.</div></div>';
       return;
     }
-    var d = state._kpi;
+    var d = state._rw;
     var sheets = d.sheets || [];
     var now = new Date();
     var isNow = d.period === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
@@ -36131,10 +36142,10 @@
 
     var head = '<div class="card pf-head">' +
       '<div class="brd-nav">' +
-        '<button class="icobtn sm brd-arrow prev" data-kpimon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+        '<button class="icobtn sm brd-arrow prev" data-rwmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
         '<span class="brd-label">' + esc(pfMonthTitle(d.period)) + '</span>' +
-        '<button class="icobtn sm brd-arrow" data-kpimon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
-        (isNow ? '' : '<button class="qchip" data-kpimon="now">Сейчас</button>') +
+        '<button class="icobtn sm brd-arrow" data-rwmon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+        (isNow ? '' : '<button class="qchip" data-rwmon="now">Сейчас</button>') +
       '</div>' +
       '<div class="pf-verdict">' +
         '<div class="pf-vt">' + fmtMoney(sum) + ' ₽ по ' + sheets.length + ' ' +
@@ -36148,54 +36159,54 @@
 
     view.innerHTML = '<div class="dash">' + head +
       (sheets.length
-        ? sheets.map(kpiSheet).join('')
-        : '<div class="card"><div class="empty">Ни одного листа КПИ пока нет. ' +
+        ? sheets.map(rwSheet).join('')
+        : '<div class="card"><div class="empty">Ни одного расчетного листа пока нет. ' +
           'Лист заводится по согласованным с человеком условиям — ступени, план и суммы ' +
           'берутся из его же расчетного листа.</div></div>') +
     '</div>';
 
-    kpiBind(view);
+    rwBind(view);
   }
 
-  function kpiFactSave(rowId, value) {
-    api('/admin/api/kpi/fact', {
+  function rwFactSave(rowId, value) {
+    api('/admin/api/reward/fact', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ row_id: rowId, period: kpiMonth(), value: value }),
+      body: JSON.stringify({ row_id: rowId, period: rwMonth(), value: value }),
     }).then(function () {
-      state._kpi = null;
+      state._rw = null;
       renderView();
     }).catch(function (e) {
       showToast(e.message === '422' ? 'Такую цифру система не приняла' : 'Не сохранилось — проверь сеть');
     });
   }
 
-  function kpiBind(view) {
-    Array.prototype.forEach.call(view.querySelectorAll('[data-kpimon]'), function (b) {
+  function rwBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwmon]'), function (b) {
       b.addEventListener('click', function () {
-        var v = b.getAttribute('data-kpimon');
-        if (v === 'now') { state.kpiMonth = ''; state._kpi = null; renderView(); return; }
-        var p = kpiMonth().split('-');
+        var v = b.getAttribute('data-rwmon');
+        if (v === 'now') { state.rwMonth = ''; state._rw = null; renderView(); return; }
+        var p = rwMonth().split('-');
         var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + parseInt(v, 10), 1);
-        state.kpiMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
-        state._kpi = null;
+        state.rwMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+        state._rw = null;
         renderView();
       });
     });
 
     /* Оценка ставится одним нажатием: 0, 50 или 100. Промежуточных значений нет
        намеренно — это не точность, а повод торговаться. */
-    Array.prototype.forEach.call(view.querySelectorAll('[data-kpirate]'), function (b) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwrate]'), function (b) {
       b.addEventListener('click', function () {
-        var p = b.getAttribute('data-kpirate').split(':');
-        kpiFactSave(parseInt(p[0], 10), parseInt(p[1], 10));
+        var p = b.getAttribute('data-rwrate').split(':');
+        rwFactSave(parseInt(p[0], 10), parseInt(p[1], 10));
       });
     });
 
     /* Ручная цифра правится на месте, тем же приемом, что план в «План-факте». */
-    Array.prototype.forEach.call(view.querySelectorAll('[data-kpifact]'), function (b) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwfact]'), function (b) {
       if (b.disabled) return;
       b.addEventListener('click', function () {
-        var rowId = parseInt(b.getAttribute('data-kpifact'), 10);
+        var rowId = parseInt(b.getAttribute('data-rwfact'), 10);
         var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
         var inp = document.createElement('input');
         inp.className = 'ed-input pf-in num';
@@ -36210,13 +36221,13 @@
           if (done) return;
           done = true;
           var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
-          if (isNaN(n)) { state._kpi = null; renderView(); return; }
-          if (String(n) === String(was)) { state._kpi = null; renderView(); return; }
-          kpiFactSave(rowId, n);
+          if (isNaN(n)) { state._rw = null; renderView(); return; }
+          if (String(n) === String(was)) { state._rw = null; renderView(); return; }
+          rwFactSave(rowId, n);
         };
         inp.addEventListener('keydown', function (e) {
           if (e.key === 'Enter') { e.preventDefault(); save(); }
-          if (e.key === 'Escape') { done = true; state._kpi = null; renderView(); }
+          if (e.key === 'Escape') { done = true; state._rw = null; renderView(); }
         });
         inp.addEventListener('blur', save);
       });
@@ -36224,24 +36235,24 @@
 
     /* Закрытие месяца спрашивает подтверждение: после него расчет становится
        снимком, по которому платят, и сам он больше не пересчитывается. */
-    Array.prototype.forEach.call(view.querySelectorAll('[data-kpiclose]'), function (b) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwclose]'), function (b) {
       b.addEventListener('click', function () {
-        var id = parseInt(b.getAttribute('data-kpiclose'), 10);
-        var sheet = (state._kpi.sheets || []).filter(function (s) { return s.sheet_id === id; })[0];
+        var id = parseInt(b.getAttribute('data-rwclose'), 10);
+        var sheet = (state._rw.sheets || []).filter(function (s) { return s.sheet_id === id; })[0];
         var warn = sheet && sheet.questions
           ? '\n\nВ листе ' + sheet.questions + ' ' +
             plural(sheet.questions, 'открытая строка', 'открытые строки', 'открытых строк') +
             ' — они зачтутся как не сделанные.'
           : '';
-        if (!confirm('Закрыть ' + pfMonthTitle(kpiMonth()) + ' по этому листу?' +
+        if (!confirm('Закрыть ' + pfMonthTitle(rwMonth()) + ' по этому листу?' +
                      '\nСумма зафиксируется, и дальше расчет не меняется.' + warn)) return;
         b.disabled = true;
-        api('/admin/api/kpi/close', {
+        api('/admin/api/reward/close', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sheet_id: id, period: kpiMonth() }),
+          body: JSON.stringify({ sheet_id: id, period: rwMonth() }),
         }).then(function (r) {
           showToast('Месяц закрыт: ' + fmtMoney(r.total_rub) + ' ₽');
-          state._kpi = null;
+          state._rw = null;
           renderView();
         }).catch(function () {
           b.disabled = false;
@@ -36250,15 +36261,15 @@
       });
     });
 
-    Array.prototype.forEach.call(view.querySelectorAll('[data-kpiopen]'), function (b) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwopen]'), function (b) {
       b.addEventListener('click', function () {
         if (!confirm('Снять закрытие? Расчет снова станет живым и может измениться.')) return;
-        api('/admin/api/kpi/open', {
+        api('/admin/api/reward/open', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sheet_id: parseInt(b.getAttribute('data-kpiopen'), 10),
-                                 period: kpiMonth() }),
+          body: JSON.stringify({ sheet_id: parseInt(b.getAttribute('data-rwopen'), 10),
+                                 period: rwMonth() }),
         }).then(function () {
-          state._kpi = null;
+          state._rw = null;
           renderView();
         }).catch(function () { showToast('Не получилось — проверь сеть'); });
       });
