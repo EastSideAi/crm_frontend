@@ -28521,7 +28521,7 @@
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
       '<div class="grid">' +
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
-        'кого закрываем и на сколько — записанные консультации собираются сами', salesAuto) + '</div>' +
+        'кого закрываем и на сколько — консультации собираются сами, без суммы считаем по прайсу', salesAuto) + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
         'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
     '</div>' +
@@ -28633,8 +28633,13 @@
     var isSaleCard = (kind === 'продажа');
     var autoBody = (autoRows || []).map(function (x) {
       var over = x.due_on && todayIso && x.due_on < todayIso;
+      // «по прайсу» — сумму на консультации не поставили, и план взял цену тарифа из
+      // каталога (by_price от сервера). Амбером, потому что это наша прикидка и ждёт
+      // чека от продавца; вписанная им сумма сильнее, и чип тогда обычный.
       var chip = isSaleCard
-        ? '<span class="sev mini cz-wait">из консультации</span>'
+        ? (x.by_price
+            ? '<span class="sev mini cz-new" title="Суммы на консультации нет — взяли цену тарифа по прайсу. Впишите ожидаемый чек в карточке клиента">по прайсу</span>'
+            : '<span class="sev mini cz-wait">из консультации</span>')
         : (over ? '<span class="sev mini cz-bad">просрочен</span>'
                 : '<span class="sev mini cz-wait">рассрочка</span>');
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
