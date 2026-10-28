@@ -33752,9 +33752,17 @@
        вовсе. Строка появляется, только когда такие счета есть: нули в подписи мешают
        читать две другие дороги. */
     var cr = pay.crm || { invoiced: 0, invoiced_rub: 0, paid: 0, paid_rub: 0, wait: 0, wait_rub: 0 };
+    /* Четвёртая дорога — договор, занесённый прямо в ведомость, без счёта. Так
+       проходит большинство крупных продаж, и до 28.10.2026 их тут не было: по
+       сентябрьскому интенсиву экран показывал 16 020 ₽ при договоре на 140 000 ₽.
+       Счёта у такой оплаты нет, поэтому она двигает только «Оплачено». */
+    var ld = pay.ledger || { paid: 0, paid_rub: 0 };
     var billed = (pay.invoiced_rub || 0) + (pr.invoiced_rub || 0) + (cr.invoiced_rub || 0);
-    var got = (pay.paid_rub || 0) + (pr.paid_rub || 0) + (cr.paid_rub || 0);
-    var wait = Math.max(0, billed - got);
+    /* «Ждут оплаты» считаем только по счетам: договор без счёта тут не участвует,
+       иначе строка ушла бы в минус и показала долг там, где деньги уже пришли. */
+    var paidOnBills = (pay.paid_rub || 0) + (pr.paid_rub || 0) + (cr.paid_rub || 0);
+    var got = paidOnBills + (ld.paid_rub || 0);
+    var wait = Math.max(0, billed - paidOnBills);
     var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid) + (cr.wait || 0);
     var money = function (n) { return fmtMoney(n) + ' ₽'; };
     var tail = function (rub) { return cr.invoiced ? ' · сопровождение ' + money(rub || 0) : ''; };
@@ -33765,8 +33773,12 @@
         money(billed)) +
       flatRow('Оплачено',
         'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0) +
-        tail(cr.paid_rub),
+        tail(cr.paid_rub) +
+        (ld.paid ? ' · договоры ' + money(ld.paid_rub || 0) : ''),
         money(got)) +
+      (ld.paid ? flatRow('Договоры из ведомости',
+        ld.paid + ' ' + plural(ld.paid, 'оплата', 'оплаты', 'оплат') +
+        ' без счёта, человек записался до оплаты', money(ld.paid_rub || 0)) : '') +
       flatRow('Ждут оплаты',
         waitN ? waitN + ' ' + plural(waitN, 'счёт', 'счёта', 'счетов') + ' без оплаты' : 'непогашенных счетов нет',
         money(wait));
