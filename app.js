@@ -33813,7 +33813,7 @@
     return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
       '<div class="sec-head pad"><div><div class="t">Деньги на трафик</div>' +
       '<div class="s">расход заводится вручную на вкладке «Расход» · ' +
-      'выручка берётся по обеим дорогам: касса и счета CRM</div></div></div>' +
+      'выручка берётся по всем трём дорогам: касса, счета CRM и договоры из ведомости</div></div></div>' +
       '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
