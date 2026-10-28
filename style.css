@@ -7935,7 +7935,9 @@ button.fsp-via { cursor: pointer; }
 /* ── История партнёрских выплат (летопись из ведомости) ───────────────────────
    Справочный блок под реестром: годы сверткой, внутри строки. Деньги по нему не
    двигаются, поэтому тон тише основного — это память, а не действие. */
-.fph-card { margin-top: 22px; }
+/* Переключатель «Начисления / История» вверху экрана. */
+.fpt-tabs { margin: 2px 0 16px; width: max-content; }
+.fph-card { margin-top: 0; }
 .fph-head .fe-s { color: var(--ink-3); }
 .fph-add { margin-left: auto; }
 .fph-year + .fph-year { margin-top: 2px; }

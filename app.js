@@ -25484,7 +25484,26 @@
     // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
     // Завести партнёра здесь нельзя: это делается отдельно (кабинет партнёра), в финансах
     // только выплата. Поэтому экран показывает начисления и выплаты, а не заведение.
-    view.innerHTML = statBar(tiles) + rateBar + body + finHistorySection();
+    // Две вкладки, чтобы история уже выплаченного не путалась с тем, что ещё к
+    // выплате (Роман 28.10.2026): «Начисления» — кто к оплате сейчас, «История» —
+    // что выплатили раньше (перенос из ведомости).
+    var pview = FIN.pview === 'history' ? 'history' : 'due';
+    var histN = (FIN.phistory && FIN.phistory !== 'none') ? FIN.phistory.count : null;
+    var tabs = '<nav class="tabs fpt-tabs">' +
+      '<a class="tab' + (pview === 'due' ? ' on' : '') + '" data-pview="due">Начисления</a>' +
+      '<a class="tab' + (pview === 'history' ? ' on' : '') + '" data-pview="history">История' +
+        (histN ? '<span class="n num">' + histN + '</span>' : '') + '</a></nav>';
+    var content = pview === 'history'
+      ? finHistorySection()
+      : statBar(tiles) + rateBar + body;
+    view.innerHTML = tabs + content;
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pview]'), function (t) {
+      t.addEventListener('click', function () {
+        FIN.pview = t.getAttribute('data-pview');
+        renderAll();
+      });
+    });
 
     // История: свернуть/развернуть год, добавить строку, убрать строку.
     Array.prototype.forEach.call(view.querySelectorAll('[data-hyear]'), function (b) {
