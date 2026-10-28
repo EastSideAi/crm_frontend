@@ -1016,6 +1016,26 @@ a { color: inherit; text-decoration: none; }
 .cvc-p { font-size: 13px; color: var(--ink-3); text-align: right; white-space: nowrap; }
 .cvc-row.weak .cvc-p { color: var(--coral); font-weight: 600; }
 
+/* ── Сводка руководителя (finboss) ── */
+/* Карточки по высоте контента, а не растянуты под соседа: в плотной сводке
+   полупустая карточка читается как баг (design-review 26.10.2026). */
+.boss-grid { align-items: start; }
+.boss-pf { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.boss-pf-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.boss-pf-l { font-size: 13px; color: var(--ink-2); }
+.boss-pf-l.muted { color: var(--ink-3); }
+.boss-pf-v { font-size: 19px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.boss-pf-v.muted { font-size: 14px; font-weight: 600; color: var(--ink-3); }
+.boss-sub { margin: 18px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.boss-pnl { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.boss-pnl .boss-pf-l { font-size: 14px; }
+.boss-pnl .boss-pf-v { font-size: 15px; font-weight: 600; }
+.boss-pnl .boss-pf-row.strong { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.boss-pnl .boss-pf-row.strong .boss-pf-l { font-weight: 600; color: var(--ink); }
+.boss-pnl .boss-pf-row.strong .boss-pf-v { font-size: 19px; font-weight: 700; }
+.pl-fact.over { color: var(--red-ink); font-weight: 600; }
+
 /* ── Рабочее окно менеджера продаж: очередь «Сейчас», метка источника, навигация ── */
 .dq-band { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); padding: 14px 24px 6px; }
@@ -3791,12 +3811,6 @@ button.tr-crumb:hover { color: var(--blue); }
 /* Подпись кнопки в две строки («Мое\nвремя») — не перенос, а поломка: ряд
    действий становится разновысоким. Ширины хватает даже на 390px. */
 .zw-acts .bp { white-space: nowrap; flex: none; }
-/* «В гугл-календарь» — третье действие в шапке, поэтому тихое: акцент на экране
-   один, и он достается главному действию, а не вспомогательной ссылке. */
-.sc-gcal { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;
-  font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-.sc-gcal:hover { color: var(--blue); }
-.sc-gcal svg { opacity: .7; }
 .zw-range { border: 0; background: none; padding: 4px 6px; border-radius: 8px; }
 .zw-range:not(.now):hover { color: var(--blue); background: var(--blue-tint); }
 .zw-fltrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -3888,7 +3902,11 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-who { min-width: 220px; }
 /* Оба фильтра ряда — один кегль и одна высота. Правило было написано только под
    «Все люди», и «Все зумы» рядом с ним стоял на четыре пикселя выше. */
-.sc-who .al-sel, .sc-kind .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+.sc-who .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+/* Кого показывать в сетке. Чипы стоят рядом с выбором человека: это один вопрос
+   «чье расписание смотрим», только с разных сторон. */
+.sc-roles { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.sc-roles .qchip { font-size: 12px; padding: 6px 11px; }
 .sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .sc-legend .sc-chip { cursor: default; }
 /* На телефоне легенда стоила целой строки шапки, а расшифровывала то, что и так
@@ -3899,7 +3917,73 @@ button.tr-crumb:hover { color: var(--blue); }
 @media (max-width: 700px) {
   .sc-legend { margin-left: 0; width: 100%; gap: 6px; flex-wrap: wrap; }
   .sc-legend .sc-chip { font-size: 10.5px; padding: 2px 6px; }
+  /* Четыре действия в ряд на телефоне не помещаются, а переносить было нечему:
+     блок держал flex: none и последняя кнопка уходила за край карточки. */
+  .zw-acts { width: 100%; margin-left: 0; flex-wrap: wrap; }
+  .zw-acts .bp { flex: 1 1 auto; justify-content: center; }
 }
+
+/* ── Мое расписание: лента того, куда идти ─────────────────────────────────
+   Сетка команды отвечает «кто свободен в четверг в три», лента — «куда идти мне
+   и кто ко мне записан» (Павел 26.10.2026). Поэтому у нее другая плотность:
+   строка на встречу, час слева колонкой, день — заголовком группы. */
+.sc-my { margin-top: 4px; }
+.sc-my-day { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 2px;
+  font-size: 12px; font-weight: 700; color: var(--ink-3); text-transform: lowercase;
+  letter-spacing: .01em; }
+.sc-my-day:first-child { margin-top: 6px; }
+.sc-my-day.now { color: var(--blue); }
+.sc-my-day i { font-style: normal; font-weight: 600; color: var(--ink-3); opacity: .75; }
+.sc-my-day.now i { color: var(--blue); opacity: .85; }
+.sc-my-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px;
+  border-radius: 10px; border-top: 1px solid var(--line); }
+.sc-my-day + .sc-my-row { border-top: 0; }
+.sc-my-h { flex: 0 0 46px; font-size: 13px; font-weight: 700; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
+.sc-my-b { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.sc-my-b b { font-size: 14px; font-weight: 650; letter-spacing: -.01em; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-my-b i { font-style: normal; font-size: 12px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Род встречи различает узкая полоса слева, а не заливка строки: строк в ленте
+   немного, и каждая залитая плашка читалась бы как тревога. */
+.sc-my-row.busy { box-shadow: inset 2px 0 0 var(--blue); }
+.sc-my-row.plan { box-shadow: inset 2px 0 0 var(--navy); }
+.sc-my-row.room { box-shadow: inset 2px 0 0 var(--green); }
+.sc-my-row.live { background: var(--blue-tint); box-shadow: inset 2px 0 0 var(--blue); }
+.sc-my-row.live .sc-my-h { color: var(--blue); }
+.sc-my-go { flex: none; padding: 5px 12px; border-radius: 9px; font-size: 12.5px;
+  font-weight: 650; color: var(--blue); background: var(--blue-tint); text-decoration: none;
+  transition: .15s var(--ease); }
+.sc-my-go:hover { filter: brightness(.96); }
+.sc-my-none { display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 34px 20px 30px; text-align: center; }
+.sc-my-none svg { color: var(--ink-3); opacity: .6; margin-bottom: 2px; }
+.sc-my-none b { font-size: 14.5px; letter-spacing: -.01em; }
+.sc-my-none span { max-width: 460px; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+
+/* Инструкция живет на самом экране и раскрывается кнопкой: тем, кто уже умеет,
+   она не мешает, а новому человеку не нужно искать ее в чужом документе. */
+.sc-how { margin: 4px 0 12px; padding: 14px 16px 12px; border-radius: var(--r-lg);
+  background: var(--fill); }
+.sc-how ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; }
+.sc-how li { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.sc-how li b { color: var(--ink); font-weight: 650; }
+.sc-how p { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-3); }
+/* Связанный календарь — состояние, а не действие: кнопка остается тихой, но
+   галочкой цвета говорит, что связь стоит. */
+.sc-gcalbtn.on { color: var(--green-ink); }
+.sc-gcalbtn.on svg { color: var(--green); }
+.sg-steps { margin: 0 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
+.sg-steps li { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.sg-mail { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.sg-team { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.sg-team:hover { color: var(--blue); }
+.sg-team svg { opacity: .7; }
+.sg-mail code { font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: 11.5px;
+  padding: 4px 8px; border-radius: 7px; background: var(--card); border: 1px solid var(--line);
+  color: var(--ink); word-break: break-all; }
 
 .sc-grid { border-top: 1px solid var(--line); }
 .sc-row { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: stretch; border-bottom: 1px solid var(--line); }
@@ -3938,30 +4022,9 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-chip.room.live { box-shadow: inset 0 0 0 2px var(--blue); font-weight: 700; }
 a.sc-chip.room:hover { filter: brightness(.97); }
 a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
-/* Зум — единственный чип без своего цвета, и на клетке «сегодня» (тоже --fill) он
-   сливался с фоном, а в легенде читался просто словом, а не образцом. Тонкое
-   кольцо внутрь: заливка остается тихой, границу видно. */
-.sc-chip.zoom { background: var(--fill); color: var(--ink);
-  outline: 1px solid var(--line-2); outline-offset: -1px; }
-/* Зум в слоте: название открывает карточку встречи, иконка рядом копирует ссылку.
-   Кнопка копирования тихая и проявляется по наведению — в плотной сетке лишняя
-   иконка в каждой клетке читалась бы как шум (тот же прием, что у .dn-undo). */
-.sc-chip.zoom.has-link { display: flex; align-items: center; gap: 4px; padding-right: 3px; }
-.sc-zopen { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-zcopy { flex: none; width: 18px; height: 18px; display: grid; place-items: center;
-  border-radius: 5px; color: var(--ink-3); opacity: 0; transition: .15s; }
-.sc-chip.zoom:hover .sc-zcopy, .sc-zcopy:focus-visible { opacity: 1; }
-.sc-zcopy:hover { color: var(--blue); background: var(--blue-tint); }
-/* На телефоне наведения нет: кнопка видна всегда, только приглушенно. */
-@media (hover: none) { .sc-zcopy { opacity: .5; } }
 /* Название планерки в узкой колонке недели важнее одной ровной строки: «Планерка
    продаж» и «Планерка продукта» обрезаются в одно и то же «Планерка прод…». */
 .sc-grid .sc-chip.meet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-/* У зума ровно та же беда, и она дороже: человек пришел в клетку за ссылкой и
-   должен видеть, чью ссылку берет. «Китайский (Гр…» и «Китайский (Ко…» — не видит. */
-.sc-grid .sc-chip.zoom .sc-zopen { white-space: normal; text-overflow: clip;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sc-chip.act { cursor: pointer; }
 .sc-chip.act:hover { background: var(--line-2); }
 .sc-chip.off { cursor: pointer; }
@@ -4018,7 +4081,7 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
   /* Два фильтра делят одну строку поровну. Порознь они вставали лесенкой: «Все
      люди» во всю ширину, «Все зумы» вполовину — и ряд читался как две разные
      вещи, хотя это один набор. */
-  .sc-who, .sc-kind { min-width: 0; flex: 1 1 140px; }
+  .sc-who { min-width: 0; flex: 1 1 140px; }
   .sc-legend { margin-left: 0; width: 100%; }
   .sc-claimsel { margin-left: 0; width: 100%; }
   .zd-c .sc-chip { white-space: normal; }
@@ -7597,7 +7660,132 @@ a.fin-rcp.off:hover { text-decoration: underline; }
    счету). В общие 150px они налезают друг на друга, поэтому колонка шире и умеет
    перенос: пометки важнее, чем лишние 110px под название контрагента. */
 .trow.fsp-row { grid-template-columns: 92px 1.5fr 150px 260px; }
+/* Выплата человеку несет в подстрочнике реквизиты — их обрезать нельзя: по ним и
+   делают платежку (Роман 23.10.2026). Перенос только у таких строк: у остальных
+   расходов подстрочник это описание, и вторая строка там лишняя высота. Высота
+   строки при этом обязана расти: у .trow она жесткие 58px, и перенесенный счет
+   налезал на имя следующего получателя. */
+/* Предупреждение перед выплатой партнеру: текст на две строки, поэтому значок встает
+   по верхнему краю, а не по центру высоты всей плашки. */
+.fin-note.fpt-warn { align-items: flex-start; line-height: 1.45; }
+/* Кто внес реквизиты партнера и когда — тихой подписью рядом со способом перевода:
+   свежая чужая правка перед выплатой это то, на что стоит посмотреть глазами. */
+.fpt-who { font-style: normal; color: var(--ink-3); }
+.fsp-row.has-pay { height: auto; min-height: 58px; padding-top: 11px; padding-bottom: 11px; }
+.fsp-row.has-pay .fo-what i { white-space: normal; }
 .fsp-row .fo-st { flex-wrap: wrap; row-gap: 5px; }
+
+/* ── Реестр к выводу ──────────────────────────────────────────────────────────
+   Список выплат периода для сверки перед подписью. Та же строка ведомости и те же
+   рецепты (fo-what / fo-sum / fst), чтобы экран читался как часть финансов, а не
+   чужой. Своя сетка: галочка — получатель — счёт — статус — сумма; даты в строке нет
+   (реестр отвечает на «кому и сколько», а не «когда»). Вся строка кликабельна —
+   тап отмечает её сверенной. */
+.trow.rgst-row { grid-template-columns: 26px minmax(0,1.8fr) 170px 104px 150px;
+  cursor: pointer; }
+.rgst-dest { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rgst-st { display: flex; justify-content: flex-start; align-items: center; }
+.rgst-sum { text-align: right; }
+.rgst-head .list-tools { justify-content: space-between; }
+/* Галочка сверки: пустой кружок, пока строка не отмечена, зелёная заливка — когда
+   отмечена. Сам значок всегда в разметке, видимость даёт цвет и фон. */
+.rgst-chk { display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 999px; border: 1.5px solid var(--line-2);
+  color: transparent; transition: .12s; }
+.trow.rgst-row:hover .rgst-chk { border-color: var(--ink-3); }
+.trow.rgst-row:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.trow.rgst-row.done .rgst-chk { background: var(--green); border-color: var(--green);
+  color: #fff; }
+/* Сверенная строка гаснет, но сумма остаётся читаемой — её-то и сверяли. */
+.trow.rgst-row.done .rgst-who b, .trow.rgst-row.done .rgst-dest { color: var(--ink-3); }
+.trow.rgst-row.done .rgst-sum { color: var(--ink-2); }
+.trow.rgst-row.done .rgst-st { opacity: .5; }
+/* Счётчик сверки в шапке: амбер, пока не всё, зелёный — когда всё сверено. */
+.rgst-prog { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+  color: var(--amber-ink); font-weight: 600; margin-left: auto; }
+.rgst-prog svg { color: var(--amber); }
+.rgst-prog b { font-variant-numeric: tabular-nums; }
+.rgst-prog.all { color: var(--green-ink); }
+.rgst-prog.all svg { color: var(--green); }
+.rgst-reset { border: 0; background: none; padding: 0; cursor: pointer; font: inherit;
+  color: var(--ink-2); text-decoration: underline;
+  text-decoration-color: rgba(17,21,31,.22); text-underline-offset: 2px; }
+.rgst-reset:hover { color: var(--blue); text-decoration-color: var(--blue); }
+/* Заголовок секции (С расчётного счёта / Фонды) — тихий разделитель над группой
+   карточек, не акцент: вес и цвет, без линий и заливки. */
+.rgst-sec { font: 700 11px 'Manrope', sans-serif; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-3); margin: 22px 2px 10px; }
+.rgst-sec:first-child { margin-top: 4px; }
+/* Фонд без расходов в периоде — тихая строка вместо списка. */
+.rgst-fund-empty { padding: 13px 24px; font-size: 12.5px; color: var(--ink-3); }
+/* Заслон — единственный акцентный блок экрана, ответ на «хватает ли остатка на весь
+   список»: спокойный зелёный, когда да, красный, когда нет (счёт уйдёт в минус).
+   Рецепт тот же, что у информатора расходов и полосы готовности выплат. */
+.rgst-guard { display: flex; gap: 12px; align-items: flex-start; padding: 15px 18px; }
+.rgst-guard .ic { flex: none; display: inline-flex; margin-top: 1px; }
+.rgst-guard .t { font: 700 14px 'Manrope', sans-serif; letter-spacing: -.01em;
+  margin-bottom: 3px; }
+.rgst-guard .s { font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.rgst-guard.calm .ic { color: var(--green); }
+.rgst-guard.calm .t { color: var(--green-ink); }
+.rgst-guard.over { background: var(--red-soft); border-color: rgba(229,72,77,.22); }
+.rgst-guard.over .ic { color: var(--red); }
+.rgst-guard.over .t { color: var(--red-ink); }
+.rgst-guard.over .s { color: var(--red-ink); }
+@media (max-width: 760px) {
+  /* На телефоне строка — карточка под сверку: слева галочка, в центре получатель и
+     счёт, справа крупная сумма и статус. Сумма — самое важное при сверке с банком,
+     поэтому ей больший кегль. Селекторы scoped под .rgst-row и с большей
+     специфичностью: имя/сумма/счёт/статус несут общие классы ведомости
+     (fo-what/fo-sum/fo-st) со своими мобильными правилами, иначе те перебивают. */
+  .trow.rgst-row { grid-template-columns: 24px minmax(0,1fr) auto !important;
+    gap: 2px 12px; height: auto; padding: 13px 16px; align-items: start; }
+  .trow.rgst-row .rgst-chk { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+  .trow.rgst-row .rgst-who { grid-column: 2; grid-row: 1; }
+  .trow.rgst-row .rgst-sum { grid-column: 3; grid-row: 1; text-align: right;
+    font-size: 16px; align-self: start; white-space: nowrap; }
+  .trow.rgst-row .rgst-dest { grid-column: 2; grid-row: 2; white-space: normal; }
+  .trow.rgst-row .rgst-st { grid-column: 3; grid-row: 2; justify-content: flex-end; }
+  .rgst-head .list-tools { gap: 8px; }
+  .rgst-prog { margin-left: 0; }
+}
+
+/* Реквизиты в подстрочнике — кнопка, а не текст: по клику открывается карточка со
+   всем снимком выплаты (Роман 23.10.2026). Рисуем как ссылку подстрочника, тем же
+   рецептом, что номер счета рядом: вторая акцентная кнопка в строке расхода спорила
+   бы с «документом» и «попросить счет» справа. */
+/* display: inline, а не inline-flex: реквизиты длинные, и в узкой строке они должны
+   переноситься по словам вместе с остальным подстрочником. */
+.rq-open { font: inherit; color: var(--ink-2); background: none; border: 0; padding: 0;
+  cursor: pointer; display: inline; text-decoration: underline;
+  text-decoration-color: rgba(17,21,31,.22); text-underline-offset: 2px;
+  text-align: left; }
+.rq-open:hover { color: var(--blue); text-decoration-color: var(--blue); }
+.rq-open:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px;
+  border-radius: 4px; }
+
+/* Карточка реквизитов: поле в строку, значение моноширинным — счет и БИК читают по
+   цифрам, и пропорциональный шрифт тут мешает сверить их с банком. */
+.rq-lines { display: flex; flex-direction: column; gap: 2px; }
+.rq-l { display: grid; grid-template-columns: 132px 1fr 28px; align-items: center;
+  gap: 10px; padding: 8px 4px 8px 10px; border-radius: 10px; }
+.rq-l:hover { background: var(--fill); }
+.rq-k { font-size: 12.5px; color: var(--ink-2); }
+.rq-v { font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums;
+  word-break: break-word; }
+.rq-c { width: 26px; height: 26px; display: grid; place-items: center; flex: none;
+  border: 0; border-radius: 8px; background: none; color: var(--ink-3);
+  cursor: pointer; opacity: .4; transition: opacity .12s var(--ease); }
+/* Значок виден всегда, пусть и приглушенно: спрятанный до наведения, он не говорит
+   человеку, что поле вообще копируется по одному. */
+.rq-l:hover .rq-c, .rq-c:focus-visible { opacity: 1; }
+.rq-c:hover { background: var(--blue-tint); color: var(--blue); }
+@media (max-width: 560px) {
+  .rq-l { grid-template-columns: 1fr 28px; row-gap: 2px; }
+  .rq-k { grid-column: 1 / -1; }
+  .rq-c { opacity: 1; }
+}
 
 /* Поле файла в форме ведомости: плашка по мере .al-in, внутри спрятан input.
    Браузерная кнопка «Choose File» приходит с английской подписью и чужой
@@ -11161,14 +11349,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    флекса не сжимается короче своего текста, и название вылезало за границу дня. */
 .mm-ev.plan { display: block; background: var(--navy-soft); color: var(--navy);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mm-ev.zoom { background: var(--fill); color: var(--ink-2); }
-.mm-open { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mm-copy { flex: none; width: 17px; height: 17px; display: grid; place-items: center;
-  border-radius: 5px; color: var(--ink-3); opacity: 0; transition: .15s; }
-.mm-ev:hover .mm-copy, .mm-copy:focus-visible { opacity: 1; }
-.mm-copy:hover { color: var(--blue); background: var(--blue-tint); }
-@media (hover: none) { .mm-copy { opacity: .5; } }
 .mm-more { align-self: flex-start; font-size: 11px; font-weight: 600; color: var(--ink-3); padding: 1px 3px; }
 .mm-more:hover { color: var(--blue); }
 /* Подпись под сеткой: тихая сноска, а не абзац текста. Без нее строка шла
@@ -12440,17 +12620,20 @@ body.office-full { overflow: hidden; }
 .mot-manual { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 14px 16px;
   display: flex; flex-direction: column; gap: 10px; }
 .mm-h { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
-.mm-grid { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
-.mm-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px;
+/* Форма ручного ввода. Имя класса развели с сеткой месяца в расписании: обе
+   назывались mm-grid, и та, что ниже по файлу, перебивала чужую раскладку —
+   календарь месяца разъезжался в ленту клеток (замечено 26.10.2026). */
+.mot-inputs { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.mot-inputs label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px;
   font-weight: 600; color: var(--ink-3); }
-.mm-grid input { width: 120px; padding: 7px 10px; border: 1px solid var(--line-2);
+.mot-inputs input { width: 120px; padding: 7px 10px; border: 1px solid var(--line-2);
   border-radius: 10px; font: inherit; font-size: 13px; color: var(--ink); background: var(--card);
   font-variant-numeric: tabular-nums; }
-.mm-grid input:focus { outline: 2px solid var(--blue-tint); border-color: var(--blue); }
+.mot-inputs input:focus { outline: 2px solid var(--blue-tint); border-color: var(--blue); }
 .mm-note { font-size: 11.5px; color: var(--ink-3); }
 
 .mot-rates-closed { margin-bottom: 12px; }
-.mot-rates .mm-grid { margin-top: 12px; }
+.mot-rates .mot-inputs { margin-top: 12px; }
 
 .mot-uns { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .mot-un { display: grid; grid-template-columns: minmax(0, 1.4fr) 110px minmax(0, 1fr) minmax(0, 1fr);
@@ -12488,8 +12671,8 @@ body.office-full { overflow: hidden; }
     font: 600 10px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
     color: var(--ink-3); margin-bottom: 2px; }
   .mot-detail { padding: 2px 12px 14px; }
-  .mm-grid input { width: 100%; }
-  .mm-grid label { flex: 1 1 130px; }
+  .mot-inputs input { width: 100%; }
+  .mot-inputs label { flex: 1 1 130px; }
   .mot-stat b { font-size: 20px; }
   .mot-line { grid-template-columns: 44px minmax(0, 1fr) 84px; }
   .mot-line .ml-r { display: none; }
@@ -13601,3 +13784,19 @@ video.cs-media { background: #000; }
   font-size: 12px; line-height: 1.45; color: var(--ink-3); }
 .efb-row { display: flex; justify-content: flex-end; margin-top: 10px; }
 @media (max-width: 600px) { .efb { padding: 14px; } .efb-msg, .efb-draft { max-width: 92%; } }
+
+/* ── Каналы привлечения (справочник на странице Платежи) ── */
+.fin-chman { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.fin-chadd { display: flex; gap: 8px; margin: 8px 0 12px; }
+.fin-chadd input { flex: 1; min-width: 0; }
+.fin-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.fin-chips .qchip { display: inline-flex; align-items: center; gap: 6px; }
+.fin-chips .qchip.off { opacity: .5; }
+.fch-x { display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: none; background: transparent;
+  color: var(--ink-3); cursor: pointer; border-radius: 5px; }
+.fch-x:hover { background: var(--line); color: var(--ink); }
+.pay-chansel { max-width: 180px; }
+
+/* Вкладки раздела «Процессы»: семь штук, на 1280 без переноса во вторую строку. */
+.prc-tabs .tab { padding-left: 13px; padding-right: 13px; }
