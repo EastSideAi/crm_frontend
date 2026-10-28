@@ -3682,9 +3682,10 @@
       // Партнёрские выплаты идут сквозь периоды: начисление считает партнёрская
       // программа, период тут не контекст — ветка до !per, иначе повисло бы «Загружаю».
       else if (state.page === 'finpartners') {
-        ph = 'Кому и сколько начислено по партнёрской программе и за каких клиентов. ' +
-          'Выплата по кнопке падает расходом в фонд маркетинга строкой на клиента — ' +
-          'видно, кому и за кого ушло. Ставку (процент или фикс за клиента) задаете тут же.';
+        ph = 'Кому и сколько начислено партнёрам и за каких клиентов. Платим 5% только ' +
+          'за грант, с каждой оплаты. Выплата по кнопке падает расходом в фонд ' +
+          'маркетинга строкой на клиента, видно кому и за кого ушло. Вкладка «История»: ' +
+          'что выплачивали раньше.';
       }
       // Налог считается за год из строк дохода, а не по ведомости — ветка до !per.
       else if (state.page === 'fintax') {
@@ -25266,6 +25267,21 @@
       return finNum(def.percent, def.percent % 1 ? 1 : 0) + '% от оплат';
     return 'не задана';
   }
+  // Ставка гранта: платим только за грант (продукт с заданной ставкой, сейчас
+  // full-china). За остальное партнёрские не начисляем (решение rev2, 28.10.2026).
+  function finPartnerGrantRate(P) {
+    var g = null;
+    (P.rates || []).forEach(function (r) {
+      if (r.product_id && ((r.percent != null && r.percent > 0)
+          || (r.fixed_rub != null && r.fixed_rub > 0))) g = r;
+    });
+    return g;
+  }
+  function finGrantLabel(g) {
+    if (!g) return 'не задана';
+    if (g.fixed_rub != null) return finRub(g.fixed_rub) + ' за клиента';
+    return finNum(g.percent, g.percent % 1 ? 1 : 0) + '% за грант';
+  }
 
   var FPH_MONTHS = ['', 'янв', 'фев', 'мар', 'апр', 'май', 'июн',
                     'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -25378,6 +25394,7 @@
     // Заведённый партнёр без клиентов — факт партнёрской программы, а не ведомости.
     var partners = allPartners.filter(function (p) { return (p.clients || []).length > 0; });
     var def = finPartnerDefRate(P);
+    var grant = finPartnerGrantRate(P);
 
     var totalDue = 0, clientsDue = 0;
     partners.forEach(function (p) {
@@ -25393,46 +25410,77 @@
       { label: 'Партнёров', value: String(waiting),
         sub: waiting ? 'ждут выплаты' : 'к оплате никого' },
       { label: 'Клиентов', value: String(clientsDue), sub: 'приведено, к оплате' },
-      { label: 'Ставка', value: finRateLabel(def), sub: 'вознаграждение партнёра' },
+      { label: 'Ставка', value: finGrantLabel(grant), sub: 'только за грант' },
     ];
 
-    // Полоса ставки: якорь-предупреждение, пока ставка не задана (без неё начисления
-    // не считаются вовсе), иначе тихая справка с кнопкой «изменить».
-    var rateBar = !P.rate_set
+    // Полоса ставки: платим только за грант. Якорь-предупреждение, пока ставка гранта
+    // не задана (без неё за грант не считаем), иначе тихая справка с правилом.
+    var rateBar = !grant
       ? '<div class="card listcard"><div class="fin-note fpt-foot">' + ic('alert', 15) +
-          '<span>Ставка вознаграждения не задана — начисления не считаются. ' +
-          'Задайте, сколько платим партнёру за клиента.</span>' +
+          '<span>Ставка гранта не задана — за грант начисления не считаются. ' +
+          'Задайте, сколько платим партнёру за грант.</span>' +
           '<button class="qchip add fpt-right" id="fpt-rate">' +
             ic('plus', 12) + 'Задать ставку</button></div></div>'
       : '<div class="card listcard"><div class="fin-note calm fpt-foot">' + ic('coins', 15) +
-          '<span>Ставка: <b>' + esc(finRateLabel(def)) + '</b>. ' +
-          'Начисляется с каждой оплаты приведённого клиента.</span>' +
+          '<span>Платим <b>' + esc(finGrantLabel(grant)) +
+          '</b> только за грант (поступление в вузы КНР), с каждой оплаты. За остальное — ' +
+          'языки, программы, консультации, документы — партнёрские не платим. ' +
+          'Оплату без метки продукта отметь грантом прямо в строке клиента.</span>' +
           '<button class="qchip fpt-right" id="fpt-rate">изменить</button></div></div>';
 
     var ruleLabel = { percent: 'процент от оплат', fixed: 'фикс за клиента' };
     var clientRow = function (c) {
-      var sub = [
-        c.rule ? ruleLabel[c.rule] : 'ставка не задана',
-        (c.rule === 'percent' && c.gross) ? 'с ' + finRub(c.gross) : '',
-      ].filter(Boolean).map(esc).join(' · ');
-      var st = c.paid
-        ? '<span class="fst doc">' + ic('check', 11) + 'выплачено</span>' +
-          '<button class="qchip fpt-cancel" data-cancel="' + esc(c.payout_id) +
-            '" data-pname="' + esc(c.name || 'клиент') + '">отменить</button>'
-        : (c.payable
-            ? '<span class="fst ok">к выплате</span>'
-            : '<span class="fst wait">' + (c.rule ? 'нет оплат' : 'ставка не задана') + '</span>');
       // Имя клиента — ссылка в его карточку (case_id бэкенд отдаёт только под cap
       // clients, тот же гейт, что у строки дохода). Без case_id — обычный текст.
       var nm = c.case_id
         ? '<b class="fin-lead" data-lead="' + esc(c.case_id) + '">' +
             esc(c.name || 'клиент без имени') + '</b>'
         : '<b>' + esc(c.name || 'клиент без имени') + '</b>';
-      return '<div class="trow fpt-crow' + (c.paid ? ' muted' : '') + '">' +
+
+      // Оплата без распознанного продукта: начислить нельзя, пока оператор не укажет,
+      // грант это или нет. Деньги по догадке не считаем (решение rev2). Подпись
+      // «это грант?» уходит в строку описания, чтобы кнопки стояли ровным столбцом.
+      if (c.needs_product) {
+        var subA = 'продукт не указан · это грант?' +
+          (c.gross ? ' оплат на ' + finRub(c.gross) : '');
+        return '<div class="trow fpt-crow fpt-ask">' +
+          '<span class="fo-what">' + nm + '<i>' + esc(subA) + '</i></span>' +
+          '<span class="fo-st fpt-choose">' +
+            '<button class="qchip ok fpt-pk" data-pk="grant" data-sid="' + esc(c.session_id) +
+              '">грант 5%</button>' +
+            '<button class="qchip fpt-pk" data-pk="other" data-sid="' + esc(c.session_id) +
+              '">не грант</button></span>' +
+          '<span class="num fo-sum fpt-dash">—</span>' +
+        '</div>';
+      }
+
+      var sub = c.product_kind === 'other'
+        ? 'не грант · партнёрские не платим'
+        : [c.rule ? ruleLabel[c.rule] : '',
+           (c.rule === 'percent' && c.gross) ? 'с ' + finRub(c.gross) : '',
+           c.suggested ? 'распознано: грант' : '']
+          .filter(Boolean).join(' · ');
+      var st = c.paid
+        ? '<span class="fst doc">' + ic('check', 11) + 'выплачено</span>' +
+          '<button class="qchip fpt-cancel" data-cancel="' + esc(c.payout_id) +
+            '" data-pname="' + esc(c.name || 'клиент') + '">отменить</button>'
+        : (c.payable
+            // Грант, распознанный по описанию, можно снять: вдруг это не грант.
+            ? '<span class="fst ok">к выплате</span>' +
+              (c.suggested
+                ? '<button class="qchip fpt-pk-min fpt-pk" data-pk="other" data-sid="' +
+                    esc(c.session_id) + '">не грант</button>'
+                : '')
+            : (c.product_kind === 'other'
+                ? '<button class="qchip fpt-pk-min fpt-pk" data-pk="grant" data-sid="' +
+                    esc(c.session_id) + '">отметить грантом</button>'
+                : '<span class="fst wait">нет оплат</span>'));
+      return '<div class="trow fpt-crow' +
+        ((c.paid || c.product_kind === 'other') ? ' muted' : '') + '">' +
         '<span class="fo-what">' + nm +
-          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
-        '<span class="num fo-sum">' + finRub(c.amount) + '</span>' +
+          (sub ? '<i>' + esc(sub) + '</i>' : '') + '</span>' +
         '<span class="fo-st">' + st + '</span>' +
+        '<span class="num fo-sum">' + finRub(c.amount) + '</span>' +
       '</div>';
     };
 
@@ -25565,7 +25613,13 @@
     });
 
     var rb = el('fpt-rate');
-    if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
+    if (rb) rb.addEventListener('click', function () { finPartnerRateForm(grant); });
+    // Тумблер «это грант?»: помечаем тип продукта клиента, начисление пересчитается.
+    Array.prototype.forEach.call(view.querySelectorAll('.fpt-pk'), function (b) {
+      b.addEventListener('click', function () {
+        finPartnerClientKind(b.getAttribute('data-sid'), b.getAttribute('data-pk'));
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
       b.addEventListener('click', function () {
         var p = partners.filter(function (x) { return String(x.id) === b.getAttribute('data-req'); })[0];
@@ -25636,26 +25690,39 @@
       }, false, 'Партнёрские выплаты', 'Сохранить');
   }
 
+  function finPartnerClientKind(sid, kind) {
+    // Пометка типа продукта клиента (грант/не грант) — задаёт ставку начисления.
+    if (!sid || !kind) return;
+    czSend('/admin/api/partners/clients/' + sid + '/product', 'POST', { kind: kind })
+      .then(function () {
+        FIN.partners = null; renderAll();
+        showToast(kind === 'grant' ? 'Грант — начислили 5%' : 'Отмечено: не грант');
+      }).catch(function (e) { showToast(finLineErr(e)); });
+  }
+
   function finPartnerRateForm(def) {
-    openSheet('Ставка вознаграждения',
-      'Сколько платим партнёру за приведённого клиента. По умолчанию 5% от оплаченной суммы.',
+    openSheet('Ставка за грант',
+      'Сколько платим партнёру за грант (поступление в вузы КНР). За остальные ' +
+      'продукты — языки, программы, консультации, документы — партнёрские не платим.',
       [['kind', 'pick', 'Как считаем',
         [['percent', 'Процент от оплат'], ['fixed', 'Фикс за клиента']]],
        ['value', 'number', 'Значение (% или ₽)',
-        def ? String(def.fixed_rub !== null && def.fixed_rub !== undefined
+        def ? String(def.fixed_rub != null
               ? def.fixed_rub : (def.percent != null ? def.percent : 5)) : '5']],
       function (v, close) {
         var value = Number(v.value);
         if (!(value >= 0)) return 'Впишите число';
         if (v.kind === 'percent' && value > 100) return 'Процент бывает от 0 до 100';
+        // Ставка привязана к грантовому продукту (full-china): платим только за него.
         var body = v.kind === 'percent'
-          ? { percent: value } : { fixed_rub: Math.round(value) };
+          ? { product_id: 'full-china', percent: value }
+          : { product_id: 'full-china', fixed_rub: Math.round(value) };
         czSend('/admin/api/partners/rate', 'PUT', body).then(function () {
           close(); FIN.partners = null; renderAll(); showToast('Ставка сохранена');
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
       }, false, 'Партнёрские выплаты', 'Сохранить');
     // Если ставка уже фикс — переставим выбор: openSheet по умолчанию встаёт на первый.
-    if (def && def.fixed_rub !== null && def.fixed_rub !== undefined) {
+    if (def && def.fixed_rub != null) {
       var sel = el('sh-kind'); if (sel) sel.value = 'fixed';
     }
   }

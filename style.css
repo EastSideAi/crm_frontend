@@ -7906,11 +7906,21 @@ button.fsp-via { cursor: pointer; }
 /* ── Партнёрские выплаты ──────────────────────────────────────────────────────
    Строка клиента: имя, начислено, статус. Своя сетка, а не fin-grid — у начисления
    нет даты, и колонка даты пустой тратила бы левый край. */
-.fpt-crow { grid-template-columns: 1.7fr 150px 210px; }
+/* Сумма — крайний правый столбец, под итогом «к выплате …» в шапке карточки:
+   тогда все цифры стоят одной правой линией (Роман 28.10.2026, «шапка съехала» —
+   итог шапки был правее сумм строк). Статус/кнопки — между именем и суммой.
+   align-items:start кладёт сумму и статус на строку имени, не по центру
+   двухстрочной ячейки. Высота строки — по содержимому. */
+.fpt-crow { grid-template-columns: minmax(0, 1fr) auto 150px; align-items: start;
+  height: auto; min-height: 56px; padding-top: 11px; padding-bottom: 11px; }
+.fpt-crow .fo-sum { line-height: 22px; }
+/* Итог в шапке карточки партнёра — на тот же правый отступ, что и суммы строк. */
+.fs-seller .list-tools { padding-right: 24px; }
 /* Выплаченную строку гасим в имени и сумме, но НЕ в статусе: там живёт кнопка
    «отменить» — действующий контрол, под общим opacity её контраст просел бы. */
 .fpt-crow.muted .fo-what, .fpt-crow.muted .fo-sum { opacity: .5; }
-.fpt-crow .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.fpt-crow .fo-st { display: flex; gap: 6px; justify-content: flex-end;
+  align-items: center; min-height: 22px; }
 .fpt-right { margin-left: auto; }
 .fpt-req { color: var(--ink-3); font-weight: 600; }
 /* Нижняя полоса карточки (реквизиты + кнопка выплаты) переносится, когда в строку не
@@ -7920,6 +7930,16 @@ button.fsp-via { cursor: pointer; }
    второе действие наравне с выплатой. */
 .fpt-cancel { font-size: 11px; padding: 2px 8px; color: var(--ink-3); }
 .fpt-cancel:hover { color: var(--red); background: var(--red-soft); }
+/* Строка без метки продукта: оператор выбирает грант/не грант. Прочерк вместо суммы,
+   пока не начислено; подсказка «это грант?» и две кнопки справа. */
+.fpt-dash { color: var(--ink-3); }
+.fpt-choose { flex-wrap: wrap; }
+.fpt-q { color: var(--ink-2); font-size: 12.5px; font-weight: 600; margin-right: 2px; }
+.fpt-pk { font-size: 12px; padding: 3px 10px; }
+.qchip.fpt-pk.ok { color: var(--green-ink); background: var(--green-soft); }
+.qchip.fpt-pk.ok:hover { background: var(--green-soft); filter: brightness(.97); }
+/* «Отметить грантом» у строки, помеченной «не грант» — тихая правка, не второе действие. */
+.fpt-pk-min { font-size: 11px; padding: 2px 8px; color: var(--ink-3); }
 @media (max-width: 760px) {
   .trow.fpt-crow { grid-template-columns: 1fr auto !important; height: auto;
     padding: 11px 16px; gap: 3px 12px; }
