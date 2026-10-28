@@ -151,7 +151,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'schedScope'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -173,6 +173,7 @@
         schedHide: state.schedHide || {},
         pathGran: state.pathGran || 'week',
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
+        rwDept: state.rwDept || '',
       }));
     } catch (e) {}
   }
@@ -3149,6 +3150,38 @@
           renderTopbar(); renderView();
         });
       });
+    } else if (state.page === 'reward') {
+      /* Отделы переключаются сверху (Роман 28.10.2026). Руководителю маркетинга
+         нужны свои люди, а не чужие строки под ними, и листов со временем будет
+         больше, чем экран. Вкладки строятся по отделам, которые пришли с листами:
+         своего списка отделов на фронте нет, иначе он разъехался бы с сервером.
+         Пока листы не приехали, полоса молчит — ряд вкладок, который сразу после
+         этого перерисуется, читается как подергивание. */
+      var rwD = state._rw && state._rw !== 'none' ? state._rw : null;
+      var rwDs = rwD ? (rwD.depts || []) : [];
+      if (!rwDs.length) tb.innerHTML = '';
+      else {
+        var rwCur = rwDeptCur(rwDs);
+        var rwN = function (key) {
+          return (rwD.sheets || []).filter(function (s) {
+            return key === '*' || (s.dept || '') === key;
+          }).length;
+        };
+        tb.innerHTML = '<nav class="tabs">' +
+          [['*', 'Все отделы']].concat(rwDs.map(function (g) { return [g.key, g.label]; }))
+            .map(function (o) {
+              return '<a class="tab' + (rwCur === o[0] ? ' on' : '') +
+                '" data-rwdept="' + esc(o[0]) + '">' + esc(o[1]) +
+                '<span class="n">' + rwN(o[0]) + '</span></a>';
+            }).join('') +
+        '</nav>';
+        Array.prototype.forEach.call(tb.querySelectorAll('[data-rwdept]'), function (t) {
+          t.addEventListener('click', function () {
+            state.rwDept = t.getAttribute('data-rwdept');
+            saveUi(); renderTopbar(); renderView();
+          });
+        });
+      }
     } else if (state.page === 'finprograms' || state.page === 'finpartners' ||
                state.page === 'fintax' || state.page === 'finbanks' ||
                state.page === 'finpaycheck' || state.page === 'finkb' ||
@@ -36033,12 +36066,23 @@
     return state.rwMonth;
   }
 
+  /* Выбранный отдел ('*' — все). Отдела может не быть в этом месяце: лист закрыли,
+     человек ушел, листы завели только маркетингу. Тогда экран показал бы пустоту
+     вместо людей, поэтому молча откатываемся на «все отделы». */
+  function rwDeptCur(depts) {
+    var cur = state.rwDept || '*';
+    if (cur === '*') return '*';
+    return (depts || []).filter(function (g) { return g.key === cur; }).length ? cur : '*';
+  }
+
   function fetchRw() {
     var m = rwMonth();
     api('/admin/api/reward?period=' + m).then(function (r) {
       if (rwMonth() !== m) return;    // пока ходили, переключили месяц
       state._rw = r || 'none';
-      if (state.page === 'reward') renderView();
+      // Вкладки отделов живут в полосе сверху и собираются из этого же ответа,
+      // поэтому ее надо перерисовать вместе с экраном, а не только экран.
+      if (state.page === 'reward') { renderTopbar(); renderView(); }
     }).catch(function (e) {
       if (e.message === '403') return;
       if (rwMonth() !== m) return;
@@ -36134,7 +36178,13 @@
       return;
     }
     var d = state._rw;
-    var sheets = d.sheets || [];
+    var all = d.sheets || [];
+    /* Отдел выбирается полосой сверху, и экран показывает только его листы: сумма
+       и число вопросов в шапке считаются по показанному, иначе руководитель отдела
+       видел бы свои листы под чужой суммой. */
+    var dept = rwDeptCur(d.depts);
+    var sheets = dept === '*' ? all
+      : all.filter(function (s) { return (s.dept || '') === dept; });
     var now = new Date();
     var isNow = d.period === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
     var sum = sheets.reduce(function (a, s) { return a + (s.total_rub || 0); }, 0);
@@ -36161,8 +36211,9 @@
        маркетологов в свой, других в свой»). Порядок и подписи отделов дает
        сервер — второй список на фронте однажды разъехался бы с ним. У каждой
        группы свой подытог: руководитель маркетинга смотрит свою сумму, а не
-       ищет ее в общей куче. */
-    var groups = (d.depts || []).map(function (g) {
+       ищет ее в общей куче. Выбран один отдел — заголовки групп уходят: отдел
+       уже назван горящей вкладкой сверху, вторая подпись о том же лишняя. */
+    var groups = dept !== '*' ? sheets.map(rwSheet).join('') : (d.depts || []).map(function (g) {
       var mine = sheets.filter(function (s) { return (s.dept || '') === g.key; });
       if (!mine.length) return '';
       var gsum = mine.reduce(function (a, s) { return a + (s.total_rub || 0); }, 0);
