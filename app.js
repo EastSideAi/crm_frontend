@@ -816,21 +816,27 @@
       if (e.message !== '403') cbs.forEach(function (f) { f(null); });
     });
   }
-  /* Кто может быть исполнителем задачи в плане клиента. Список короткий и меняется
-     редко — тянем один раз за сессию, иначе каждая карточка дергала бы сервер ради
-     одной выпадашки. Имя не fetchAssignees: так называется загрузчик блока «Ведет»
-     (он кладет людей в OWN_PEOPLE), и две одноименные функции в одном файле молча
-     ломали бы ту, что объявлена выше. */
+  /* Сколько живет список коллег. Раньше он тянулся один раз за сессию страницы, и
+     нового человека не видел тот, кто не закрывал вкладку: Элизу завели 19.10.2026,
+     а 28.10 ее все еще не было в выпадашке у Маши. Пять минут — компромисс: сервер
+     дергается редко, но новый коллега появляется сам, без ctrl+F5. */
+  var PEOPLE_TTL = 5 * 60 * 1000;
+  function peopleFresh(at) { return at && Date.now() - at < PEOPLE_TTL; }
+  /* Кто может быть исполнителем задачи в плане клиента. Имя не fetchAssignees: так
+     называется загрузчик блока «Ведет» (он кладет людей в OWN_PEOPLE), и две
+     одноименные функции в одном файле молча ломали бы ту, что объявлена выше. */
   function fetchPeople(cb) {
-    if (state.assignees) { if (cb) cb(state.assignees); return; }
+    if (state.assignees && peopleFresh(state._assigneesAt)) { if (cb) cb(state.assignees); return; }
     if (state._assigneesInflight) { state._assigneesInflight.push(cb); return; }
     state._assigneesInflight = [cb];
     api('/admin/api/leads/assignees').then(function (r) {
       state.assignees = (r && r.people) || [];
+      state._assigneesAt = Date.now();
       var cbs = state._assigneesInflight || []; state._assigneesInflight = null;
       cbs.forEach(function (f) { if (f) f(state.assignees); });
     }).catch(function () {
       state.assignees = [];
+      state._assigneesAt = Date.now();
       var cbs = state._assigneesInflight || []; state._assigneesInflight = null;
       cbs.forEach(function (f) { if (f) f([]); });
     });
@@ -6664,12 +6670,18 @@
      Заезд на ученика один, грузится по client_id (это session_id карточки). */
   var ARR = {};        // clientId -> заезд | null (нет) | undefined (не грузили)
   var ARR_BUSY = {};
-  // Кого можно назначить исполнителем заезда (активные тьюторы). Грузим один раз лениво.
-  var AR_TUTORS = null;
+  // Кого можно назначить исполнителем заезда (активные тьюторы). Грузим лениво и
+  // освежаем по тому же сроку, что остальные списки коллег (PEOPLE_TTL).
+  var AR_TUTORS = null, AR_TUTORS_AT = 0, AR_TUTORS_BUSY = false;
   function arTutorsLoad(cb) {
+    /* Замок обязателен: загрузка перерисовывает карточку, карточка снова
+       спрашивает список — без него протухший список крутил бы запросы кругом. */
+    if (AR_TUTORS_BUSY) return;
+    AR_TUTORS_BUSY = true;
     api('/admin/api/arrivals/tutors').then(function (r) {
-      AR_TUTORS = r.tutors || []; if (cb) cb();
-    }).catch(function () { AR_TUTORS = []; if (cb) cb(); });
+      AR_TUTORS_BUSY = false; AR_TUTORS = r.tutors || []; AR_TUTORS_AT = Date.now();
+      if (cb) cb();
+    }).catch(function () { AR_TUTORS_BUSY = false; AR_TUTORS = AR_TUTORS || []; if (cb) cb(); });
   }
 
   /* Единственное место, где ключ остается в адресе: это href, по которому браузер
@@ -6704,7 +6716,7 @@
 
     if (!a) {
       // Список исполнителей нужен для выпадающего меню — грузим лениво и перерисовываем.
-      if (AR_TUTORS == null) {
+      if (AR_TUTORS == null || !peopleFresh(AR_TUTORS_AT)) {
         arTutorsLoad(function () {
           if (state.drawerId === clientId && state.modalSection === 'arrival') renderModalContent();
         });
@@ -44330,8 +44342,10 @@
     warm(id);
     revalidateDetail(id);
     // список коллег нужен доске плана (исполнитель задачи) — тянем на
-    // открытии карточки, а не в каждой секции
-    if (!state.assignees) fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
+    // открытии карточки, а не в каждой секции; протухший освежаем (PEOPLE_TTL)
+    if (!state.assignees || !peopleFresh(state._assigneesAt)) {
+      fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
+    }
     if (!state.details[id]) fetchDetail(id, function (got) {
       if (state.drawerId !== id) return;
       if (got) renderDrawer(true);
@@ -45911,16 +45925,16 @@
      сколько человек уже ждет, и после 15 минут делает это амбером.
      Блок стоит выше воронки и квалификации: и то и другое — про «кто он», а это
      про «чей он и успели ли мы». */
-  var OWN_PEOPLE = null, OWN_BUSY = false;
+  var OWN_PEOPLE = null, OWN_BUSY = false, OWN_AT = 0;
 
   function fetchAssignees(cb) {
-    if (OWN_PEOPLE) { if (cb) cb(OWN_PEOPLE); return; }
+    if (OWN_PEOPLE && peopleFresh(OWN_AT)) { if (cb) cb(OWN_PEOPLE); return; }
     if (OWN_BUSY) return;
     OWN_BUSY = true;
     api('/admin/api/leads/assignees').then(function (r) {
-      OWN_BUSY = false; OWN_PEOPLE = r.people || [];
+      OWN_BUSY = false; OWN_PEOPLE = r.people || []; OWN_AT = Date.now();
       if (cb) cb(OWN_PEOPLE);
-    }).catch(function () { OWN_BUSY = false; });
+    }).catch(function () { OWN_BUSY = false; OWN_PEOPLE = OWN_PEOPLE || []; OWN_AT = Date.now(); });
   }
 
   /* Минуты в человеческое. Без секунд и без «0 мин»: точность здесь не нужна,
@@ -48667,9 +48681,9 @@
     // ── КТО ВЕДЕТ И ПЕРВОЕ КАСАНИЕ ──
     var ownHost = host.querySelector('.own');
     if (ownHost) {
-      // список коллег тянем один раз на сессию и перерисовываем секцию,
-      // иначе в селекте виден только уже назначенный человек
-      if (!OWN_PEOPLE) fetchAssignees(function () {
+      // список коллег тянем лениво и перерисовываем секцию, иначе в селекте
+      // виден только уже назначенный человек; протухший освежаем (PEOPLE_TTL)
+      if (!OWN_PEOPLE || !peopleFresh(OWN_AT)) fetchAssignees(function () {
         if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
       });
       var ownSel = ownHost.querySelector('select[data-owner]');
