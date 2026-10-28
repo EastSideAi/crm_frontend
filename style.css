@@ -12106,6 +12106,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    цветом. Амбер висит ровно там, где вопрос к НАМ: показатель, который мы не
    собираем. Синее — там, где ждем действия руководителя. Своих цветов не
    заводим, все из палитры. */
+/* Заголовок отдела: разделитель между группами листов, а не карточка. Поэтому
+   он живет на полотне, без фона и рамки — иначе два уровня карточек спорят
+   друг с другом, и строки людей читаются как вложенные в коробку. */
+.rw-dept { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; padding: 22px 4px 8px; }
+.rw-dept-t { font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-2); }
+.rw-dept-s { font-size: 12.5px; font-weight: 500; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
 .rw-head { display: flex; align-items: center; gap: 16px; padding: 18px 24px 16px;
   border-bottom: 1px solid var(--line); }
 .rw-head > div:first-child { min-width: 0; }

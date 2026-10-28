@@ -36157,9 +36157,26 @@
       '</div>' +
     '</div>';
 
+    /* Листы идут группами по отделам (Роман 28.10.2026: «раздели на отделы,
+       маркетологов в свой, других в свой»). Порядок и подписи отделов дает
+       сервер — второй список на фронте однажды разъехался бы с ним. У каждой
+       группы свой подытог: руководитель маркетинга смотрит свою сумму, а не
+       ищет ее в общей куче. */
+    var groups = (d.depts || []).map(function (g) {
+      var mine = sheets.filter(function (s) { return (s.dept || '') === g.key; });
+      if (!mine.length) return '';
+      var gsum = mine.reduce(function (a, s) { return a + (s.total_rub || 0); }, 0);
+      return '<div class="rw-dept">' +
+          '<div class="rw-dept-t">' + esc(g.label) + '</div>' +
+          '<div class="rw-dept-s">' + mine.length + ' ' +
+            plural(mine.length, 'человек', 'человека', 'человек') + ' · ' +
+            fmtMoney(gsum) + ' ₽</div>' +
+        '</div>' + mine.map(rwSheet).join('');
+    }).join('');
+
     view.innerHTML = '<div class="dash">' + head +
       (sheets.length
-        ? sheets.map(rwSheet).join('')
+        ? groups
         : '<div class="card"><div class="empty">Ни одного расчетного листа пока нет. ' +
           'Лист заводится по согласованным с человеком условиям — ступени, план и суммы ' +
           'берутся из его же расчетного листа.</div></div>') +
