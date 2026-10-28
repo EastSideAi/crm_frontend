@@ -2653,6 +2653,12 @@
        Текст лежит в базе (routers/kb.py) и правится прямо тут — в отличие от
        продуктового портала, который живет файлом и меняется выкаткой. */
     { id: 'finkb', label: 'База знаний', icon: 'doc', cap: 'finmodel', space: 'fin' },
+    /* Те же регламенты, но кнопкой в Финансах — рядом с финансовой базой, где
+       финансисты и работают (Роман 28.10.2026). Открывают ту же базу reglament
+       (renderFinKb), свой id нужен только чтобы клик не уводил из Финансов в общее
+       меню. Видят её тут финансисты (cap finmodel); остальная команда читает те же
+       регламенты через пункт «Регламенты» в основном меню (cap dash). */
+    { id: 'finreglament', label: 'Регламенты', icon: 'doc', cap: 'finmodel', space: 'fin' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team|team_view' },
     /* База знаний команды «Регламенты»: как мы работаем, инструкции по отделам.
        Движок тот же, что у финансовой базы (routers/kb.py, раздел reglament),
@@ -2699,7 +2705,7 @@
             'finedit', 'finpartners', 'finref', 'finfund'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
     { label: 'Отчеты', ids: ['finpnl', 'finmetrics', 'finops'] },
-    { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb'] },
+    { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb', 'finreglament'] },
   ];
   /* Пункты пространства в порядке групп. Возвращает плоский список с меткой группы на
      ПЕРВОМ пункте каждой группы — рисует их renderSide, логика порядка живет здесь. */
@@ -3144,7 +3150,7 @@
     } else if (state.page === 'finprograms' || state.page === 'finpartners' ||
                state.page === 'fintax' || state.page === 'finbanks' ||
                state.page === 'finpaycheck' || state.page === 'finkb' ||
-               state.page === 'finsup') {
+               state.page === 'finreglament' || state.page === 'finsup') {
       /* Эти экраны живут вне ведомости: программа, партнер и справочники идут сквозь
          периоды, налог собирает год, сверка — весь заработок против всех выплат. Здесь
          в полосе стоял чип с названием раздела — дубль заголовка под ним. Полоса сверху
@@ -3465,7 +3471,7 @@
         'Скорость ответа, каналы, конверсии и расход AI — живые данные из бота. Расход AI — оценка.' +
         '</span></div></div>';
     }
-    if (state.page === 'reglament') {
+    if (state.page === 'reglament' || state.page === 'finreglament') {
       html = '<div><h2>Регламенты</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' +
         'Как мы работаем: инструкции по отделам. Отсюда их читают и команда, и агенты, ' +
@@ -3857,7 +3863,7 @@
     var view = el('view');
     if (!view) return;
     /* Режим чтения правила живет только на экранах базы знаний (финансы и регламенты). */
-    if (state.page !== 'finkb' && state.page !== 'reglament') document.body.classList.remove('fkb-reading');
+    if (state.page !== 'finkb' && state.page !== 'reglament' && state.page !== 'finreglament') document.body.classList.remove('fkb-reading');
     if (noSections()) {
       view.innerHTML = '<div class="card"><div class="empty">Разделов для вашей учетки пока нет. ' +
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
@@ -3954,7 +3960,7 @@
     else if (state.page === 'finpaycheck') renderFinPayCheck(view);
     else if (state.page === 'finsup') renderFinSuppliers(view);
     else if (state.page === 'finkb') renderFinKb(view);
-    else if (state.page === 'reglament') renderFinKb(view);
+    else if (state.page === 'reglament' || state.page === 'finreglament') renderFinKb(view);
     else if (state.page === 'finboss') renderFinBoss(view);
     else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplandept') renderFinPlanDept(view);
@@ -27462,8 +27468,8 @@
      (страница finkb, раздел finance) и управленческие регламенты (страница
      reglament, раздел reglament). Раздел и право на правку выводим из открытой
      страницы, чтобы состояние не разъезжалось с тем, что на экране. */
-  function kbSection() { return state.page === 'reglament' ? 'reglament' : 'finance'; }
-  function kbEditCap() { return state.page === 'reglament' ? 'team' : 'finmodel_edit'; }
+  function kbSection() { return (state.page === 'reglament' || state.page === 'finreglament') ? 'reglament' : 'finance'; }
+  function kbEditCap() { return (state.page === 'reglament' || state.page === 'finreglament') ? 'team' : 'finmodel_edit'; }
   /* Регламенты группируются в оглавлении ПО ОТДЕЛАМ — отдел берём из префикса слага
      (upravlenie-… → «Управление»). Это та же механика, что у финансовой базы с
      process-/spravka-, только пачки другие. Слаг автор задаёт сам; не попал в список —
@@ -28515,7 +28521,7 @@
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
       '<div class="grid">' +
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
-        'кого закрываем и на сколько — записанные консультации собираются сами', salesAuto) + '</div>' +
+        'кого закрываем и на сколько — консультации собираются сами, без суммы считаем по прайсу', salesAuto) + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
         'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
     '</div>' +
@@ -28627,8 +28633,13 @@
     var isSaleCard = (kind === 'продажа');
     var autoBody = (autoRows || []).map(function (x) {
       var over = x.due_on && todayIso && x.due_on < todayIso;
+      // «по прайсу» — сумму на консультации не поставили, и план взял цену тарифа из
+      // каталога (by_price от сервера). Амбером, потому что это наша прикидка и ждёт
+      // чека от продавца; вписанная им сумма сильнее, и чип тогда обычный.
       var chip = isSaleCard
-        ? '<span class="sev mini cz-wait">из консультации</span>'
+        ? (x.by_price
+            ? '<span class="sev mini cz-new" title="Суммы на консультации нет — взяли цену тарифа по прайсу. Впишите ожидаемый чек в карточке клиента">по прайсу</span>'
+            : '<span class="sev mini cz-wait">из консультации</span>')
         : (over ? '<span class="sev mini cz-bad">просрочен</span>'
                 : '<span class="sev mini cz-wait">рассрочка</span>');
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
@@ -33752,9 +33763,17 @@
        вовсе. Строка появляется, только когда такие счета есть: нули в подписи мешают
        читать две другие дороги. */
     var cr = pay.crm || { invoiced: 0, invoiced_rub: 0, paid: 0, paid_rub: 0, wait: 0, wait_rub: 0 };
+    /* Четвёртая дорога — договор, занесённый прямо в ведомость, без счёта. Так
+       проходит большинство крупных продаж, и до 28.10.2026 их тут не было: по
+       сентябрьскому интенсиву экран показывал 16 020 ₽ при договоре на 140 000 ₽.
+       Счёта у такой оплаты нет, поэтому она двигает только «Оплачено». */
+    var ld = pay.ledger || { paid: 0, paid_rub: 0 };
     var billed = (pay.invoiced_rub || 0) + (pr.invoiced_rub || 0) + (cr.invoiced_rub || 0);
-    var got = (pay.paid_rub || 0) + (pr.paid_rub || 0) + (cr.paid_rub || 0);
-    var wait = Math.max(0, billed - got);
+    /* «Ждут оплаты» считаем только по счетам: договор без счёта тут не участвует,
+       иначе строка ушла бы в минус и показала долг там, где деньги уже пришли. */
+    var paidOnBills = (pay.paid_rub || 0) + (pr.paid_rub || 0) + (cr.paid_rub || 0);
+    var got = paidOnBills + (ld.paid_rub || 0);
+    var wait = Math.max(0, billed - paidOnBills);
     var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid) + (cr.wait || 0);
     var money = function (n) { return fmtMoney(n) + ' ₽'; };
     var tail = function (rub) { return cr.invoiced ? ' · сопровождение ' + money(rub || 0) : ''; };
@@ -33765,8 +33784,12 @@
         money(billed)) +
       flatRow('Оплачено',
         'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0) +
-        tail(cr.paid_rub),
+        tail(cr.paid_rub) +
+        (ld.paid ? ' · договоры ' + money(ld.paid_rub || 0) : ''),
         money(got)) +
+      (ld.paid ? flatRow('Договоры из ведомости',
+        ld.paid + ' ' + plural(ld.paid, 'оплата', 'оплаты', 'оплат') +
+        ' без счёта, человек записался до оплаты', money(ld.paid_rub || 0)) : '') +
       flatRow('Ждут оплаты',
         waitN ? waitN + ' ' + plural(waitN, 'счёт', 'счёта', 'счетов') + ' без оплаты' : 'непогашенных счетов нет',
         money(wait));
@@ -33801,7 +33824,7 @@
     return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
       '<div class="sec-head pad"><div><div class="t">Деньги на трафик</div>' +
       '<div class="s">расход заводится вручную на вкладке «Расход» · ' +
-      'выручка берётся по обеим дорогам: касса и счета CRM</div></div></div>' +
+      'выручка берётся по всем трём дорогам: касса, счета CRM и договоры из ведомости</div></div></div>' +
       '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
