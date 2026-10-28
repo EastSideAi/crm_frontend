@@ -8439,7 +8439,12 @@
         (m.client_name ? esc(m.client_name) : 'карточка ученика') + '</button>';
       cls = ' is-call';
     } else if (m.state === 'failed') {
-      right = '<span class="sev st-wait" title="' + esc(m.error || '') + '">' + esc(m.error || 'не разобралась') + '</span>';
+      /* Причина словами и кнопка рядом: раньше человек читал «не разобралась» и
+         не мог ничего сделать (Павел 28.10.2026). Текст встречи у нас есть, так
+         что повтор возможен — он же чинит старые записи, упавшие из-за того,
+         что задач в разговоре не нашлось. */
+      right = '<span class="sev st-wait" title="' + esc(m.error || '') + '">' + esc(m.error || 'не разобралась') + '</span>' +
+        '<button class="bp ghost sm mt-again" data-magain="' + esc(m.key) + '">' + ic('spark', 13) + 'Разобрать еще раз</button>';
     } else if (m.state === 'cancel') {
       right = '<span class="sev n-off">разбор снят</span>';
     } else {
@@ -10805,6 +10810,22 @@
           .catch(function (e) {
             b.classList.remove('loading');
             showToast((e && e.body && e.body.detail) || 'Запись не отдалась, попробуй еще раз');
+          });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-magain]'), function (b) {
+      b.addEventListener('click', function () {
+        if (b.classList.contains('loading')) return;
+        b.classList.add('loading');
+        api('/admin/api/meet/journal/' + encodeURIComponent(b.getAttribute('data-magain')) + '/again',
+            { method: 'POST' })
+          .then(function () {
+            showToast('Разбираю заново', 'минута работы, потом строка обновится');
+            state.meetLog = null; loadMeetLog();
+          })
+          .catch(function (e) {
+            b.classList.remove('loading');
+            showToast('Не вышло разобрать', (e && e.body && e.body.detail) || 'попробуй позже');
           });
       });
     });
