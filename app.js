@@ -105,6 +105,7 @@
     // EastSide Meeting: журнал встреч, фильтры и раскрытая карточка
     meetx: null, meetxDept: '', meetxScope: 'all', meetxOpen: null, meetxOffice: false,
     meetxCard: {}, meetxText: {},
+    mxChan: '', mxWantChan: '',   // канал офиса: где человек сидит и куда зовет ссылка
     _map: null, mapSeg: '', mapTariff: '', mapQ: '',
     _plat: {},          // кабинет клиента по карточкам: что семья делает на платформе
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
@@ -10629,7 +10630,20 @@
     var d = officeDock();
     if (!d) return;
     d.hidden = false;
-    if (d.getAttribute('data-on')) return;
+    var zovut = state.mxWantChan || '';
+    if (d.getAttribute('data-on')) {
+      // Рамка уже стоит: просим ее перейти в канал из ссылки, а не пересобираем
+      // ее заново — пересборка выбросила бы человека из разговора.
+      if (zovut) {
+        state.mxWantChan = '';
+        var f0 = d.querySelector('.mx-office-f');
+        if (f0 && f0.contentWindow) {
+          try { f0.contentWindow.postMessage({ es: 'office-go', c: zovut }, API); } catch (e) {}
+        }
+      }
+      return;
+    }
+    state.mxWantChan = '';
     d.setAttribute('data-on', '1');
     d.innerHTML = '<div class="mx-office-wait">Открываю офис…</div>';
     /* Пропуск «я из команды» отдаем рамке хвостом ссылки: хвост браузер на
@@ -10641,9 +10655,11 @@
       f.title = 'Офис команды';
       f.allow = 'camera; microphone; display-capture; autoplay; clipboard-write; fullscreen';
       f.setAttribute('allowfullscreen', '');
-      f.src = API + '/meet?embed=1&theme=light' + (r && r.pass
-        ? '#p=' + encodeURIComponent(r.pass) + '&n=' + encodeURIComponent(r.name || '')
-        : '');
+      f.src = API + '/meet?embed=1&theme=light'
+        + (zovut ? '&c=' + encodeURIComponent(zovut) : '')
+        + (r && r.pass
+          ? '#p=' + encodeURIComponent(r.pass) + '&n=' + encodeURIComponent(r.name || '')
+          : '');
       d.innerHTML = '';
       d.appendChild(f);
       d.appendChild(officeTools());
@@ -10691,6 +10707,19 @@
     box.appendChild(fs);
     return box;
   }
+
+  /* Офис говорит, в каком канале человек сидит. Нужно это ради адреса: кнопка
+     «Ссылка» в шапке копирует то, что открыто, и коллега по такой ссылке должен
+     попасть в сам разговор, а не в список каналов (Павел 28.10.2026). */
+  window.addEventListener('message', function (e) {
+    if (e.origin !== API) return;
+    var d = e.data || {};
+    if (d.es !== 'office-chan') return;
+    var slug = String(d.c || '').slice(0, 64);
+    if (slug === state.mxChan) return;
+    state.mxChan = slug;
+    syncPageHash();
+  });
 
   // Esc возвращает из полного экрана: это привычный выход, и искать кнопку в
   // углу в такой момент человек не станет.
@@ -51717,8 +51746,14 @@
       },
     },
     meetx: {
-      get: mxTab,
+      // Человек сидит в канале офиса — адрес ведет в этот канал, иначе в раздел.
+      get: function () { return state.mxChan ? 'kanal/' + state.mxChan : mxTab(); },
       set: function (s) {
+        if (s.indexOf('kanal/') === 0) {
+          var slug = s.slice(6);
+          if (!slug || slug === state.mxChan) return false;
+          state.mxWantChan = slug; state.mxTab = 'soon'; return true;
+        }
         if ((s !== 'soon' && s !== 'sched' && s !== 'rec') || s === mxTab()) return false;
         state.mxTab = s; return true;
       },
