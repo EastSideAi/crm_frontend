@@ -47031,10 +47031,12 @@
     });
   }
 
-  var DUP_KIND = { phone: 'телефон', email: 'почта', tg: 'телеграм', vk: 'вк' };
+  var DUP_KIND = { phone: 'телефон', email: 'почта', tg: 'телеграм', vk: 'вк',
+                   max: 'MAX', ig: 'инстаграм' };
   function dupMatch(m) {
     var v = m.value;
     if (m.kind === 'tg') v = v.indexOf('un:') === 0 ? '@' + v.slice(3) : 'id ' + v.slice(3);
+    if (m.kind === 'vk' || m.kind === 'max' || m.kind === 'ig') v = 'id ' + v.slice(3);
     if (m.kind === 'phone') v = '+' + v;
     return DUP_KIND[m.kind] + ' ' + v;
   }
