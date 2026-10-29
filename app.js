@@ -2551,11 +2551,9 @@
        подтвержден) и информатором проблем: где расход не закрыт документом и где
        на счете не хватает на плановое. Разрез, а не еще одна форма ввода. */
     { id: 'finspend', label: 'Расходы', icon: 'wallet', cap: 'finmodel', space: 'fin' },
-    /* Реестр к выводу: все выплаты периода одним списком для того, кто подписывает
-       платежи. Бухгалтер набирает платёжки в банке руками — экран даёт точку сверки
-       (получатель, сумма, счёт) и итог против остатка РС, чтобы поймать опечатку в
-       сумме и не увести счёт в минус (повод — переплата 23.10.2026, системный заслон). */
-    { id: 'finreestr', label: 'Реестр к выводу', icon: 'check', cap: 'finmodel', space: 'fin' },
+    /* «Реестр к выводу» (finreestr) убран из меню Финансов 27.10.2026 (владелец: не на
+       своём месте). Экран и логика сохранены (renderFinReestr), пункт меню не выводится —
+       вернём, когда определим правильное место. */
     /* Дашборд выплат подрядчикам: админ вносит выплату (получатель, реквизиты, чек/акт),
        и та же запись падает расходом фонда подрядчиков в ведомость — ручного переноса
        из дашборда в ведомость больше нет. Отдельного объекта «выплата» нет: выплата и
@@ -2655,7 +2653,18 @@
        Текст лежит в базе (routers/kb.py) и правится прямо тут — в отличие от
        продуктового портала, который живет файлом и меняется выкаткой. */
     { id: 'finkb', label: 'База знаний', icon: 'doc', cap: 'finmodel', space: 'fin' },
+    /* Те же регламенты, но кнопкой в Финансах — рядом с финансовой базой, где
+       финансисты и работают (Роман 28.10.2026). Открывают ту же базу reglament
+       (renderFinKb), свой id нужен только чтобы клик не уводил из Финансов в общее
+       меню. Видят её тут финансисты (cap finmodel); остальная команда читает те же
+       регламенты через пункт «Регламенты» в основном меню (cap dash). */
+    { id: 'finreglament', label: 'Регламенты', icon: 'doc', cap: 'finmodel', space: 'fin' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team|team_view' },
+    /* База знаний команды «Регламенты»: как мы работаем, инструкции по отделам.
+       Движок тот же, что у финансовой базы (routers/kb.py, раздел reglament),
+       экран — тот же двухпанельный renderFinKb. Читает вся команда (cap dash),
+       правят руководители (cap team на бэке). Рядом с «Командой» намеренно. */
+    { id: 'reglament', label: 'Регламенты', icon: 'doc', cap: 'dash' },
   ];
 
   /* ── Два рабочих пространства в одной CRM ─────────────────────────────────
@@ -2692,11 +2701,11 @@
     // Сводка руководителя — первым, одиночкой (заголовок у одиночной группы не рисуется).
     { label: 'Сводка', ids: ['finboss'] },
     { label: 'Ведомость периода',
-      ids: ['finsheet', 'finincome', 'finspend', 'finreestr', 'finopex', 'findirect',
-            'finedit', 'finpartners', 'finref'] },
+      ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect',
+            'finedit', 'finpartners', 'finref', 'finfund'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
-    { label: 'Отчеты', ids: ['finpnl', 'finfund', 'finmetrics', 'finops'] },
-    { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb'] },
+    { label: 'Отчеты', ids: ['finpnl', 'finmetrics', 'finops'] },
+    { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb', 'finreglament'] },
   ];
   /* Пункты пространства в порядке групп. Возвращает плоский список с меткой группы на
      ПЕРВОМ пункте каждой группы — рисует их renderSide, логика порядка живет здесь. */
@@ -3141,7 +3150,7 @@
     } else if (state.page === 'finprograms' || state.page === 'finpartners' ||
                state.page === 'fintax' || state.page === 'finbanks' ||
                state.page === 'finpaycheck' || state.page === 'finkb' ||
-               state.page === 'finsup') {
+               state.page === 'finreglament' || state.page === 'finsup') {
       /* Эти экраны живут вне ведомости: программа, партнер и справочники идут сквозь
          периоды, налог собирает год, сверка — весь заработок против всех выплат. Здесь
          в полосе стоял чип с названием раздела — дубль заголовка под ним. Полоса сверху
@@ -3462,6 +3471,13 @@
         'Скорость ответа, каналы, конверсии и расход AI — живые данные из бота. Расход AI — оценка.' +
         '</span></div></div>';
     }
+    if (state.page === 'reglament' || state.page === 'finreglament') {
+      html = '<div><h2>Регламенты</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' +
+        'Как мы работаем: инструкции по отделам. Отсюда их читают и команда, и агенты, ' +
+        'поэтому правка видна сразу всем.' +
+        '</span></div></div>';
+    }
     if (state.page === 'finance') {
       var f = state.finance;
       var phrase2;
@@ -3690,9 +3706,10 @@
       // Партнёрские выплаты идут сквозь периоды: начисление считает партнёрская
       // программа, период тут не контекст — ветка до !per, иначе повисло бы «Загружаю».
       else if (state.page === 'finpartners') {
-        ph = 'Кому и сколько начислено по партнёрской программе и за каких клиентов. ' +
-          'Выплата по кнопке падает расходом в фонд маркетинга строкой на клиента — ' +
-          'видно, кому и за кого ушло. Ставку (процент или фикс за клиента) задаете тут же.';
+        ph = 'Кому и сколько начислено партнёрам и за каких клиентов. Платим 5% только ' +
+          'за грант, с каждой оплаты. Выплата по кнопке падает расходом в фонд ' +
+          'маркетинга строкой на клиента, видно кому и за кого ушло. Вкладка «История»: ' +
+          'что выплачивали раньше.';
       }
       // Налог считается за год из строк дохода, а не по ведомости — ветка до !per.
       else if (state.page === 'fintax') {
@@ -3845,8 +3862,8 @@
   function renderViewBody() {
     var view = el('view');
     if (!view) return;
-    /* Режим чтения правила живет только на экране базы знаний (см. renderFinKb). */
-    if (state.page !== 'finkb') document.body.classList.remove('fkb-reading');
+    /* Режим чтения правила живет только на экранах базы знаний (финансы и регламенты). */
+    if (state.page !== 'finkb' && state.page !== 'reglament' && state.page !== 'finreglament') document.body.classList.remove('fkb-reading');
     if (noSections()) {
       view.innerHTML = '<div class="card"><div class="empty">Разделов для вашей учетки пока нет. ' +
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
@@ -3943,6 +3960,7 @@
     else if (state.page === 'finpaycheck') renderFinPayCheck(view);
     else if (state.page === 'finsup') renderFinSuppliers(view);
     else if (state.page === 'finkb') renderFinKb(view);
+    else if (state.page === 'reglament' || state.page === 'finreglament') renderFinKb(view);
     else if (state.page === 'finboss') renderFinBoss(view);
     else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplandept') renderFinPlanDept(view);
@@ -25606,6 +25624,22 @@
     });
   }
 
+  // История выплат — справочная летопись из старой ведомости (2022-2026). Деньги по
+  // ней не двигаются: в фонд маркетинга и ПНЛ не пишет, это картина оборота по партнёру
+  // за прошлые, уже закрытые периоды. Грузим отдельно от реестра: нужна не всегда.
+  function finLoadHistory() {
+    if (FIN.phistoryBusy) return;
+    FIN.phistoryBusy = true;
+    api('/admin/api/partners/payouts/history').then(function (r) {
+      FIN.phistory = r;
+    }).catch(function () {
+      FIN.phistory = 'none';
+    }).then(function () {
+      FIN.phistoryBusy = false;
+      if (curSpace() === 'fin' && state.page === 'finpartners') renderAll();
+    });
+  }
+
   function finPartnerDefRate(P) {
     var def = null;
     (P.rates || []).forEach(function (r) { if (!r.product_id) def = r; });
@@ -25618,6 +25652,120 @@
     if (def.percent !== null && def.percent !== undefined)
       return finNum(def.percent, def.percent % 1 ? 1 : 0) + '% от оплат';
     return 'не задана';
+  }
+  // Ставка гранта: платим только за грант (продукт с заданной ставкой, сейчас
+  // full-china). За остальное партнёрские не начисляем (решение rev2, 28.10.2026).
+  function finPartnerGrantRate(P) {
+    var g = null;
+    (P.rates || []).forEach(function (r) {
+      if (r.product_id && ((r.percent != null && r.percent > 0)
+          || (r.fixed_rub != null && r.fixed_rub > 0))) g = r;
+    });
+    return g;
+  }
+  function finGrantLabel(g) {
+    if (!g) return 'не задана';
+    if (g.fixed_rub != null) return finRub(g.fixed_rub) + ' за клиента';
+    return finNum(g.percent, g.percent % 1 ? 1 : 0) + '% за грант';
+  }
+
+  var FPH_MONTHS = ['', 'янв', 'фев', 'мар', 'апр', 'май', 'июн',
+                    'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  var FPH_MONTHS_FULL = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  function fphPeriod(row) {
+    // Подпись периода у строки: месяц года, если распознали, иначе как в ведомости.
+    if (row.mon && row.yr) return FPH_MONTHS[row.mon] + ' ' + row.yr;
+    if (row.yr) return String(row.yr);
+    return row.period_label || '';
+  }
+  function fphMonthLabel(row) {
+    // Заголовок месяца внутри года: «Октябрь 2026», иначе как в ведомости.
+    if (row.mon && row.yr) return FPH_MONTHS_FULL[row.mon] + ' ' + row.yr;
+    if (row.mon) return FPH_MONTHS_FULL[row.mon];
+    return row.period_label || (row.yr ? String(row.yr) : 'Без месяца');
+  }
+
+  // Блок «История выплат»: годы сверткой, свежий год открыт, остальные свёрнуты —
+  // строк под две сотни, разом вываливать их на экран незачем.
+  function finHistorySection() {
+    var H = FIN.phistory;
+    if (H === undefined) { finLoadHistory(); }
+    var head = '<div class="list-tools fph-head">' +
+      '<div><div class="t fe-t">История выплат</div>' +
+        '<div class="s fe-s">перенос из ведомости · в фонд маркетинга не идёт</div></div>' +
+      '<button class="qchip add fph-add">' + ic('plus', 12) + 'запись</button></div>';
+    var inner;
+    if (H === undefined) {
+      inner = '<div class="empty">Загружаю историю…</div>';
+    } else if (H === 'none' || !H.rows || !H.rows.length) {
+      inner = '<div class="empty">Истории пока нет. Перенесём из ведомости или добавьте строку.</div>';
+    } else {
+      if (!FIN.histOpen) {
+        FIN.histOpen = {};
+        var newest = (H.by_year[0] || {}).yr;
+        FIN.histOpen[String(newest)] = true;   // свежий год раскрыт
+      }
+      // Строки по годам, внутри года — по месяцам (бэкенд отдал уже yr desc, mon desc).
+      // Месяц вынесен в заголовок со своей суммой: сразу видно, когда и сколько
+      // выплатили (Роман 28.10.2026). Строка кликается — открывается правка.
+      var byYear = {};
+      H.rows.forEach(function (r) {
+        var key = r.yr === null || r.yr === undefined ? '—' : String(r.yr);
+        (byYear[key] = byYear[key] || []).push(r);
+      });
+      var fphRow = function (r) {
+        var rate = r.rate_text ? '<i class="fph-rate">' + esc(r.rate_text) + '</i>' : '';
+        var who = esc(r.partner || '—');
+        var forwhom = r.client ? ' <span class="fph-for">за ' + esc(r.client) + '</span>' : '';
+        var sub = r.gross_rub ? '<i>с ' + finRub(r.gross_rub) + '</i>' : '';
+        return '<div class="trow fph-row" data-hedit="' + r.id + '">' +
+          '<span class="fo-what"><b>' + who + '</b>' + forwhom + sub + '</span>' +
+          '<span class="fph-mid">' + rate + '</span>' +
+          '<span class="num fo-sum">' + finRub(r.amount_rub) + '</span>' +
+          '<button class="fph-del" data-hdel="' + r.id + '" title="Убрать строку">' +
+            ic('x', 11) + '</button>' +
+        '</div>';
+      };
+      inner = (H.by_year || []).map(function (y) {
+        var key = y.yr === null || y.yr === undefined ? '—' : String(y.yr);
+        var open = !!FIN.histOpen[key];
+        // Режем год на месяцы, сохраняя порядок (строки уже mon desc).
+        var months = [], curMk = null, cur = null;
+        (byYear[key] || []).forEach(function (r) {
+          var mk = (r.mon === null || r.mon === undefined) ? '—' : String(r.mon);
+          if (mk !== curMk) {
+            curMk = mk;
+            cur = { label: fphMonthLabel(r), rows: [], total: 0 };
+            months.push(cur);
+          }
+          cur.rows.push(r);
+          cur.total += Number(r.amount_rub) || 0;
+        });
+        var body = months.map(function (m) {
+          var mhead = '<div class="fph-mh">' +
+            '<span class="fph-ml">' + esc(m.label) + '</span>' +
+            '<span class="fph-mc">' + m.rows.length + ' ' +
+              plural(m.rows.length, 'выплата', 'выплаты', 'выплат') + '</span>' +
+            '<span class="num fph-ms">' + finRub(m.total) + '</span></div>';
+          return '<div class="fph-month">' + mhead + m.rows.map(fphRow).join('') + '</div>';
+        }).join('');
+        return '<div class="fph-year">' +
+          '<button class="fph-yh' + (open ? ' open' : '') + '" data-hyear="' + esc(key) + '">' +
+            '<span class="fph-caret' + (open ? ' on' : '') + '">' + ic('go', 11) + '</span>' +
+            '<span class="fph-yl">' + esc(key) + '</span>' +
+            '<span class="fph-yc">' + y.count + ' ' +
+              plural(y.count, 'выплата', 'выплаты', 'выплат') + '</span>' +
+            '<span class="num fph-ys">' + finRub(y.total) + '</span></button>' +
+          (open ? '<div class="fph-rows">' + body + '</div>' : '') +
+        '</div>';
+      }).join('');
+      var foot = '<div class="fin-note calm fph-total">' + ic('coins', 15) +
+        '<span>Всего в истории: <b>' + finRub(H.total) + '</b> за ' +
+        H.count + ' ' + plural(H.count, 'выплату', 'выплаты', 'выплат') + '</span></div>';
+      inner = inner + foot;
+    }
+    return '<div class="card listcard fph-card">' + head + inner + '</div>';
   }
 
   function renderFinPartners(view) {
@@ -25632,6 +25780,7 @@
     // Заведённый партнёр без клиентов — факт партнёрской программы, а не ведомости.
     var partners = allPartners.filter(function (p) { return (p.clients || []).length > 0; });
     var def = finPartnerDefRate(P);
+    var grant = finPartnerGrantRate(P);
 
     var totalDue = 0, clientsDue = 0;
     partners.forEach(function (p) {
@@ -25647,46 +25796,82 @@
       { label: 'Партнёров', value: String(waiting),
         sub: waiting ? 'ждут выплаты' : 'к оплате никого' },
       { label: 'Клиентов', value: String(clientsDue), sub: 'приведено, к оплате' },
-      { label: 'Ставка', value: finRateLabel(def), sub: 'вознаграждение партнёра' },
+      { label: 'Ставка', value: finGrantLabel(grant), sub: 'только за грант' },
     ];
 
-    // Полоса ставки: якорь-предупреждение, пока ставка не задана (без неё начисления
-    // не считаются вовсе), иначе тихая справка с кнопкой «изменить».
-    var rateBar = !P.rate_set
+    // Полоса ставки: платим только за грант. Якорь-предупреждение, пока ставка гранта
+    // не задана (без неё за грант не считаем), иначе тихая справка с правилом.
+    var rateBar = !grant
       ? '<div class="card listcard"><div class="fin-note fpt-foot">' + ic('alert', 15) +
-          '<span>Ставка вознаграждения не задана — начисления не считаются. ' +
-          'Задайте, сколько платим партнёру за клиента.</span>' +
+          '<span>Ставка гранта не задана — за грант начисления не считаются. ' +
+          'Задайте, сколько платим партнёру за грант.</span>' +
           '<button class="qchip add fpt-right" id="fpt-rate">' +
             ic('plus', 12) + 'Задать ставку</button></div></div>'
       : '<div class="card listcard"><div class="fin-note calm fpt-foot">' + ic('coins', 15) +
-          '<span>Ставка: <b>' + esc(finRateLabel(def)) + '</b>. ' +
-          'Начисляется с каждой оплаты приведённого клиента.</span>' +
+          '<span>Платим <b>' + esc(finGrantLabel(grant)) +
+          '</b> только за грант (поступление в вузы КНР), с каждой оплаты. За остальное — ' +
+          'языки, программы, консультации, документы — партнёрские не платим. ' +
+          'Оплату без метки продукта отметь грантом прямо в строке клиента.</span>' +
           '<button class="qchip fpt-right" id="fpt-rate">изменить</button></div></div>';
 
     var ruleLabel = { percent: 'процент от оплат', fixed: 'фикс за клиента' };
     var clientRow = function (c) {
-      var sub = [
-        c.rule ? ruleLabel[c.rule] : 'ставка не задана',
-        (c.rule === 'percent' && c.gross) ? 'с ' + finRub(c.gross) : '',
-      ].filter(Boolean).map(esc).join(' · ');
-      var st = c.paid
-        ? '<span class="fst doc">' + ic('check', 11) + 'выплачено</span>' +
-          '<button class="qchip fpt-cancel" data-cancel="' + esc(c.payout_id) +
-            '" data-pname="' + esc(c.name || 'клиент') + '">отменить</button>'
-        : (c.payable
-            ? '<span class="fst ok">к выплате</span>'
-            : '<span class="fst wait">' + (c.rule ? 'нет оплат' : 'ставка не задана') + '</span>');
       // Имя клиента — ссылка в его карточку (case_id бэкенд отдаёт только под cap
       // clients, тот же гейт, что у строки дохода). Без case_id — обычный текст.
       var nm = c.case_id
         ? '<b class="fin-lead" data-lead="' + esc(c.case_id) + '">' +
             esc(c.name || 'клиент без имени') + '</b>'
         : '<b>' + esc(c.name || 'клиент без имени') + '</b>';
-      return '<div class="trow fpt-crow' + (c.paid ? ' muted' : '') + '">' +
+
+      // Оплата без распознанного продукта: начислить нельзя, пока оператор не укажет,
+      // грант это или нет. Деньги по догадке не считаем (решение rev2). Подпись
+      // «это грант?» уходит в строку описания, чтобы кнопки стояли ровным столбцом.
+      if (c.needs_product) {
+        var subA = 'продукт не указан · это грант?' +
+          (c.gross ? ' оплат на ' + finRub(c.gross) : '');
+        return '<div class="trow fpt-crow fpt-ask">' +
+          '<span class="fo-what">' + nm + '<i>' + esc(subA) + '</i></span>' +
+          '<span class="fo-st fpt-choose">' +
+            '<button class="qchip ok fpt-pk" data-pk="grant" data-sid="' + esc(c.session_id) +
+              '">грант 5%</button>' +
+            '<button class="qchip fpt-pk" data-pk="other" data-sid="' + esc(c.session_id) +
+              '">не грант</button></span>' +
+          '<span class="num fo-sum fpt-dash">—</span>' +
+        '</div>';
+      }
+
+      var sub = c.product_kind === 'other'
+        ? 'не грант · партнёрские не платим'
+        : [c.rule ? ruleLabel[c.rule] : '',
+           (c.rule === 'percent' && c.gross) ? 'с ' + finRub(c.gross) : '',
+           c.suggested ? 'распознано: грант' : '']
+          .filter(Boolean).join(' · ');
+      var st = c.paid
+        ? '<span class="fst doc">' + ic('check', 11) + 'выплачено</span>' +
+          // Клиент вернул деньги уже после выплаты (оферта п.8.5): снимок заморожен,
+          // но переплату показываем — её удерживают из ближайшей выплаты.
+          (c.refunded_after_pay
+            ? '<span class="fst bad fpt-claw">возврат · удержать ' + finRub(c.clawback) + '</span>'
+            : '') +
+          '<button class="qchip fpt-cancel" data-cancel="' + esc(c.payout_id) +
+            '" data-pname="' + esc(c.name || 'клиент') + '">отменить</button>'
+        : (c.payable
+            // Грант, распознанный по описанию, можно снять: вдруг это не грант.
+            ? '<span class="fst ok">к выплате</span>' +
+              (c.suggested
+                ? '<button class="qchip fpt-pk-min fpt-pk" data-pk="other" data-sid="' +
+                    esc(c.session_id) + '">не грант</button>'
+                : '')
+            : (c.product_kind === 'other'
+                ? '<button class="qchip fpt-pk-min fpt-pk" data-pk="grant" data-sid="' +
+                    esc(c.session_id) + '">отметить грантом</button>'
+                : '<span class="fst wait">нет оплат</span>'));
+      return '<div class="trow fpt-crow' +
+        ((c.paid || c.product_kind === 'other') ? ' muted' : '') + '">' +
         '<span class="fo-what">' + nm +
-          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
-        '<span class="num fo-sum">' + finRub(c.amount) + '</span>' +
+          (sub ? '<i>' + esc(sub) + '</i>' : '') + '</span>' +
         '<span class="fo-st">' + st + '</span>' +
+        '<span class="num fo-sum">' + finRub(c.amount) + '</span>' +
       '</div>';
     };
 
@@ -25721,6 +25906,20 @@
         ? '<div class="fin-note fpt-warn">' + ic('alert', 15) +
             '<span>' + warns.map(esc).join(' ') + '</span></div>'
         : '';
+      // Удержание по возвратам после выплаты (оферта п.8.5). Минусом в ведомость это
+      // не пишется (там расход не бывает отрицательным), поэтому говорим прямо: сколько
+      // удержать и сколько по факту перечислить. net_due < 0 — удерживать не из чего,
+      // партнёр возвращает (п.8.6).
+      var holdBox = '';
+      if ((p.hold || 0) > 0) {
+        var net = p.net_due || 0;
+        var tail = net >= 0
+          ? 'По факту перечисли ' + finRub(net) + '.'
+          : 'Новых начислений на это не хватает — партнёр должен вернуть ' + finRub(-net) + '.';
+        holdBox = '<div class="fin-note fpt-warn">' + ic('alert', 15) +
+          '<span>Клиент вернул деньги уже после выплаты: удержать ' + finRub(p.hold) +
+          '. ' + esc(tail) + '</span></div>';
+      }
       // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
       // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
       var foot;
@@ -25753,6 +25952,7 @@
         '</div>' +
         p.clients.map(clientRow).join('') +
         warnBox +
+        holdBox +
         foot +
       '</div>';
     }).join('');
@@ -25767,10 +25967,65 @@
     // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
     // Завести партнёра здесь нельзя: это делается отдельно (кабинет партнёра), в финансах
     // только выплата. Поэтому экран показывает начисления и выплаты, а не заведение.
-    view.innerHTML = statBar(tiles) + rateBar + body;
+    // Две вкладки, чтобы история уже выплаченного не путалась с тем, что ещё к
+    // выплате (Роман 28.10.2026): «Начисления» — кто к оплате сейчас, «История» —
+    // что выплатили раньше (перенос из ведомости).
+    var pview = FIN.pview === 'history' ? 'history' : 'due';
+    var histN = (FIN.phistory && FIN.phistory !== 'none') ? FIN.phistory.count : null;
+    var tabs = '<nav class="tabs fpt-tabs">' +
+      '<a class="tab' + (pview === 'due' ? ' on' : '') + '" data-pview="due">Начисления</a>' +
+      '<a class="tab' + (pview === 'history' ? ' on' : '') + '" data-pview="history">История' +
+        (histN ? '<span class="n num">' + histN + '</span>' : '') + '</a></nav>';
+    var content = pview === 'history'
+      ? finHistorySection()
+      : statBar(tiles) + rateBar + body;
+    view.innerHTML = tabs + content;
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pview]'), function (t) {
+      t.addEventListener('click', function () {
+        FIN.pview = t.getAttribute('data-pview');
+        renderAll();
+      });
+    });
+
+    // История: свернуть/развернуть год, добавить строку, убрать строку.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hyear]'), function (b) {
+      b.addEventListener('click', function () {
+        var y = b.getAttribute('data-hyear');
+        FIN.histOpen = FIN.histOpen || {};
+        FIN.histOpen[y] = !FIN.histOpen[y];
+        renderAll();
+      });
+    });
+    var ha = view.querySelector('.fph-add');
+    if (ha) ha.addEventListener('click', function () { finHistoryForm(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hdel]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();   // не открывать правку, когда жмут крестик
+        finHistoryDelete(b.getAttribute('data-hdel'));
+      });
+    });
+    // Клик по строке — правка: находим строку по id в загруженной истории.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hedit]'), function (b) {
+      b.addEventListener('click', function (e) {
+        if (e.target.closest('.fph-del')) return;
+        var id = b.getAttribute('data-hedit');
+        var H = FIN.phistory;
+        var row = H && H.rows && H.rows.filter(function (r) {
+          return String(r.id) === id;
+        })[0];
+        if (row) finHistoryForm(row);
+      });
+    });
 
     var rb = el('fpt-rate');
-    if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
+    if (rb) rb.addEventListener('click', function () { finPartnerRateForm(grant); });
+    // Тумблер «это грант?»: помечаем тип продукта клиента, начисление пересчитается.
+    Array.prototype.forEach.call(view.querySelectorAll('.fpt-pk'), function (b) {
+      b.addEventListener('click', function () {
+        finPartnerClientKind(b.getAttribute('data-sid'), b.getAttribute('data-pk'));
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
       b.addEventListener('click', function () {
         var p = partners.filter(function (x) { return String(x.id) === b.getAttribute('data-req'); })[0];
@@ -25841,26 +26096,39 @@
       }, false, 'Партнёрские выплаты', 'Сохранить');
   }
 
+  function finPartnerClientKind(sid, kind) {
+    // Пометка типа продукта клиента (грант/не грант) — задаёт ставку начисления.
+    if (!sid || !kind) return;
+    czSend('/admin/api/partners/clients/' + sid + '/product', 'POST', { kind: kind })
+      .then(function () {
+        FIN.partners = null; renderAll();
+        showToast(kind === 'grant' ? 'Грант — начислили 5%' : 'Отмечено: не грант');
+      }).catch(function (e) { showToast(finLineErr(e)); });
+  }
+
   function finPartnerRateForm(def) {
-    openSheet('Ставка вознаграждения',
-      'Сколько платим партнёру за приведённого клиента. По умолчанию 5% от оплаченной суммы.',
+    openSheet('Ставка за грант',
+      'Сколько платим партнёру за грант (поступление в вузы КНР). За остальные ' +
+      'продукты — языки, программы, консультации, документы — партнёрские не платим.',
       [['kind', 'pick', 'Как считаем',
         [['percent', 'Процент от оплат'], ['fixed', 'Фикс за клиента']]],
        ['value', 'number', 'Значение (% или ₽)',
-        def ? String(def.fixed_rub !== null && def.fixed_rub !== undefined
+        def ? String(def.fixed_rub != null
               ? def.fixed_rub : (def.percent != null ? def.percent : 5)) : '5']],
       function (v, close) {
         var value = Number(v.value);
         if (!(value >= 0)) return 'Впишите число';
         if (v.kind === 'percent' && value > 100) return 'Процент бывает от 0 до 100';
+        // Ставка привязана к грантовому продукту (full-china): платим только за него.
         var body = v.kind === 'percent'
-          ? { percent: value } : { fixed_rub: Math.round(value) };
+          ? { product_id: 'full-china', percent: value }
+          : { product_id: 'full-china', fixed_rub: Math.round(value) };
         czSend('/admin/api/partners/rate', 'PUT', body).then(function () {
           close(); FIN.partners = null; renderAll(); showToast('Ставка сохранена');
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
       }, false, 'Партнёрские выплаты', 'Сохранить');
     // Если ставка уже фикс — переставим выбор: openSheet по умолчанию встаёт на первый.
-    if (def && def.fixed_rub !== null && def.fixed_rub !== undefined) {
+    if (def && def.fixed_rub != null) {
       var sel = el('sh-kind'); if (sel) sel.value = 'fixed';
     }
   }
@@ -25897,6 +26165,64 @@
             close(); finForget(true); renderAll(); showToast('Выплата отменена');
           }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
       }, false, 'Партнёрские выплаты', 'Отменить выплату');
+  }
+
+  var FPH_MONTH_PICK = [['', '— месяц —'],
+    ['1', 'январь'], ['2', 'февраль'], ['3', 'март'], ['4', 'апрель'],
+    ['5', 'май'], ['6', 'июнь'], ['7', 'июль'], ['8', 'август'],
+    ['9', 'сентябрь'], ['10', 'октябрь'], ['11', 'ноябрь'], ['12', 'декабрь']];
+
+  function finHistoryForm(row) {
+    // row задан — правим существующую строку (PUT), иначе добавляем новую (POST).
+    row = row || {};
+    var isEdit = row.id !== undefined && row.id !== null;
+    openSheet(isEdit ? 'Правка строки истории' : 'Строка истории',
+      'Выплата, которую уже провели раньше (мимо CRM или из старой ведомости). ' +
+      'Это справочная запись: в фонд маркетинга она не попадает.',
+      [['partner', 'line', 'Партнёр', row.partner || ''],
+       ['client', 'line', 'За какого клиента', row.client || ''],
+       ['yr', 'number', 'Год', row.yr != null ? String(row.yr) : String(new Date().getFullYear())],
+       ['mon', 'pick', 'Месяц', FPH_MONTH_PICK, row.mon != null ? String(row.mon) : ''],
+       ['gross_rub', 'number', 'Сумма продажи (с чего считали), ₽',
+        row.gross_rub != null ? String(row.gross_rub) : ''],
+       ['rate_text', 'line', 'Ставка (как в ведомости: 5%, фикс 10000)', row.rate_text || ''],
+       ['amount_rub', 'number', 'Вознаграждение партнёру, ₽',
+        row.amount_rub != null ? String(row.amount_rub) : ''],
+       ['paid_on', 'line', 'Дата выплаты (ГГГГ-ММ-ДД)', row.paid_on || ''],
+       ['note', 'text', 'Примечание', row.note || '']],
+      function (v, close) {
+        var partner = String(v.partner || '').trim();
+        if (!partner) return 'Впишите партнёра';
+        var amount = Number(v.amount_rub);
+        if (!(amount > 0)) return 'Впишите вознаграждение';
+        var body = {
+          partner: partner, client: String(v.client || '').trim(),
+          yr: v.yr ? Number(v.yr) : null,
+          mon: v.mon ? Number(v.mon) : null,
+          gross_rub: v.gross_rub ? Number(v.gross_rub) : null,
+          rate_text: String(v.rate_text || '').trim(),
+          amount_rub: amount,
+          paid_on: String(v.paid_on || '').trim() || null,
+          note: String(v.note || '').trim(),
+        };
+        var url = '/admin/api/partners/payouts/history' + (isEdit ? '/' + row.id : '');
+        czSend(url, isEdit ? 'PUT' : 'POST', body).then(function () {
+          close(); FIN.phistory = undefined; FIN.phistoryBusy = false;
+          renderAll(); showToast(isEdit ? 'Строка обновлена' : 'Строка добавлена в историю');
+        }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
+      }, false, 'Партнёрские выплаты', isEdit ? 'Сохранить' : 'Добавить');
+  }
+
+  function finHistoryDelete(hid) {
+    finConfirm('Убрать строку истории',
+      'Строка пропадёт из истории. Деньги это не трогает — запись справочная.',
+      'Убрать', function () {
+        czSend('/admin/api/partners/payouts/history/' + hid, 'DELETE')
+          .then(function () {
+            FIN.phistory = undefined; FIN.phistoryBusy = false;
+            renderAll(); showToast('Строка убрана');
+          }).catch(function (e) { showToast(finLineErr(e)); });
+      });
   }
 
   function finPayoutForm(line, opts) {
@@ -27138,9 +27464,32 @@
 
   function kbReset() { KB = { items: null, cur: null, q: '', err: false, edit: null, hist: null, busy: false, pane: 'list' }; }
 
+  /* Один и тот же экран базы знаний обслуживает два раздела: правила ведомости
+     (страница finkb, раздел finance) и управленческие регламенты (страница
+     reglament, раздел reglament). Раздел и право на правку выводим из открытой
+     страницы, чтобы состояние не разъезжалось с тем, что на экране. */
+  function kbSection() { return (state.page === 'reglament' || state.page === 'finreglament') ? 'reglament' : 'finance'; }
+  function kbEditCap() { return (state.page === 'reglament' || state.page === 'finreglament') ? 'team' : 'finmodel_edit'; }
+  /* Регламенты группируются в оглавлении ПО ОТДЕЛАМ — отдел берём из префикса слага
+     (upravlenie-… → «Управление»). Это та же механика, что у финансовой базы с
+     process-/spravka-, только пачки другие. Слаг автор задаёт сам; не попал в список —
+     регламент ляжет в «Прочее». */
+  var KB_DEPTS = [
+    ['upravlenie', 'Управление'], ['prodazhi', 'Продажи'], ['marketing', 'Маркетинг'],
+    ['administrirovanie', 'Администрирование'], ['produkt', 'Продукт'],
+    ['servis', 'Сервис и поддержка'], ['hr', 'Команда и найм'],
+  ];
+  function kbDept(slug) {
+    for (var i = 0; i < KB_DEPTS.length; i++) {
+      var p = KB_DEPTS[i][0];
+      if (slug === p || slug.indexOf(p + '-') === 0) return KB_DEPTS[i][1];
+    }
+    return 'Прочее';
+  }
+
   function kbLoad() {
     var q = KB.q;
-    api('/admin/api/kb?section=finance' + (q ? '&q=' + encodeURIComponent(q) : ''))
+    api('/admin/api/kb?section=' + kbSection() + (q ? '&q=' + encodeURIComponent(q) : ''))
       .then(function (r) {
         KB.items = r.items || [];
         KB.err = false;
@@ -27158,7 +27507,7 @@
      первая глава на входе, чтобы на широком экране правая половина не пустовала. */
   function kbOpen(slug, quiet) {
     KB.edit = null; KB.hist = null;
-    api('/admin/api/kb/article/' + encodeURIComponent(slug) + '?section=finance')
+    api('/admin/api/kb/article/' + encodeURIComponent(slug) + '?section=' + kbSection())
       .then(function (r) {
         KB.cur = r.article;
         if (!quiet) { KB.pane = 'doc'; kbTop(); }
@@ -27235,7 +27584,7 @@
         .then(function () { kbOpen(KB.cur ? KB.cur.slug : ''); done(); }).catch(fail);
     } else {
       api('/admin/api/kb', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ section: 'finance', title: title, summary: summary, body: body }) })
+        body: JSON.stringify({ section: kbSection(), title: title, summary: summary, body: body }) })
         .then(function (r) { KB.cur = null; kbOpen(r.article.slug); done(); }).catch(fail);
     }
   }
@@ -27273,8 +27622,16 @@
        а во время чтения он уже не нужен — прячем его на время статьи (стиль
        .kb-reading), на широком экране он остается всегда. */
     document.body.classList.toggle('fkb-reading', KB.pane === 'doc');
+    /* Переключились между финансовой базой и регламентами — состояние прошлого
+       раздела сбрасываем, иначе откроются чужие статьи и оглавление. */
+    if (KB.section !== kbSection()) {
+      KB.section = kbSection();
+      KB.items = null; KB.cur = null; KB.edit = null; KB.hist = null;
+      KB.q = ''; KB.pane = 'list';
+    }
     if (KB.items === null) { view.innerHTML = kbSkeleton(); kbLoad(); return; }
-    var canEdit = can('finmodel_edit');
+    var isReg = kbSection() === 'reglament';
+    var canEdit = can(kbEditCap());
 
     /* Оглавление делится на две пачки: процессы (их проходят по шагам) и справки
        (в них подсматривают по ходу). Группа видна по слагу, а не по отдельному
@@ -27282,6 +27639,7 @@
        каждому, кто пишет правило. Слаг у новых правил ставит сам автор, и если
        он не попал в эти две пачки — правило просто ляжет в «Главы». */
     var kbGroup = function (slug) {
+      if (isReg) return kbDept(slug);
       if (/^process-/.test(slug)) return 'Процессы';
       if (/^spravka-/.test(slug)) return 'Справочник';
       return 'Главы';
@@ -27302,7 +27660,8 @@
          спрятана, и «сервер не ответил» читалось бы как «правил нет». */
       nav = '<div class="fkb-nav-empty">' +
         (KB.err ? 'База знаний не отвечает. Обновите страницу.'
-                : (KB.q ? 'По запросу ничего нет' : 'Правил пока нет')) + '</div>';
+                : (KB.q ? 'По запросу ничего нет'
+                        : (isReg ? 'Регламентов пока нет' : 'Правил пока нет'))) + '</div>';
     }
 
     var right;
@@ -27325,7 +27684,7 @@
     } else if (!KB.cur) {
       right = '<div class="fkb-doc"><div class="empty">' +
         (KB.err ? 'База знаний не отвечает. Обновите страницу.'
-                : 'Выберите правило в оглавлении') +
+                : (isReg ? 'Выберите регламент в оглавлении' : 'Выберите правило в оглавлении')) +
         '</div></div>';
     } else {
       var a = KB.cur;
@@ -27361,9 +27720,11 @@
       '<div class="fkb-wrap' + (KB.pane === 'doc' ? ' on-doc' : ' on-list') + '">' +
         '<div class="fkb-nav">' +
           '<div class="fkb-search">' +
-            '<input id="kb-q" class="al-in" placeholder="Найти правило" value="' + esc(KB.q) + '">' +
+            '<input id="kb-q" class="al-in" placeholder="' +
+              (isReg ? 'Найти регламент' : 'Найти правило') + '" value="' + esc(KB.q) + '">' +
           '</div>' +
-          (canEdit ? '<button class="qchip fkb-add" id="kb-new">+ правило</button>' : '') +
+          (canEdit ? '<button class="qchip fkb-add" id="kb-new">+ ' +
+            (isReg ? 'регламент' : 'правило') + '</button>' : '') +
           nav +
         '</div>' +
         '<div class="fkb-main">' +
@@ -27371,7 +27732,8 @@
              одним касанием она стирала бы набранный черновик. Выход из правки —
              «Сохранить» или «Отмена». */
           (KB.edit ? '' :
-            '<button class="bp sm ghost fkb-back" id="kb-back">' + ic('go', 13) + 'Все главы</button>') +
+            '<button class="bp sm ghost fkb-back" id="kb-back">' + ic('go', 13) +
+              (isReg ? 'Все регламенты' : 'Все главы') + '</button>') +
           right +
         '</div>' +
       '</div>';
@@ -27886,6 +28248,18 @@
         '<span class="sv-hint"><span class="sv-hint-t">' + esc(hint) + '</span>' +
           (canFix && open
             ? '<span class="sv-paid">' +
+              // Строка проставлена по сроку — сумму надо подтвердить глазами. Раньше
+              // пометка снималась только правкой поля факта, и строку с верной
+              // плановой суммой (её менять незачем) подтвердить было нечем — ведомость
+              // из-за этого не закрывалась (Роман 27.10.2026). Явная кнопка снимает
+              // пометку, не трогая сумму.
+              (x.auto
+                ? '<button class="qchip mini go fsv-ok" data-svok="' + x.id +
+                  '" data-svokval="' +
+                  (x.fact !== null ? x.fact : x.planned).toFixed(2) +
+                  '" title="Сумма верна — снять пометку «проставлено по сроку»">' +
+                  'сумма верна</button>'
+                : '') +
               finPaidCell(x.id, x.fact === null ? 'план' : 'факт', true) +
               // Сервис больше не нужен — убираем его из плана прямо здесь (Роман
               // 19.10.2026). У списавшегося кнопки нет: деньги уже ушли, и строка — факт.
@@ -28042,6 +28416,17 @@
       // «Убрать» у плановой строки сервиса отключает сам сервис, а не стирает строку:
       // план ведомости собирается из активных сервисов заново (generate_services), и удаленная
       // строка вернулась бы на следующей правке любого сервиса. История при этом цела.
+      // «Сумма верна» у строки, проставленной по сроку: подтверждаем текущую сумму как
+      // факт, сервер снимает пометку auto. Без этого строку с верной плановой суммой
+      // нечем было подтвердить, и ведомость не закрывалась (Роман 27.10.2026).
+      Array.prototype.forEach.call(view.querySelectorAll('[data-svok]'), function (b) {
+        b.addEventListener('click', function () {
+          finDo('/admin/api/fin/service/row', 'POST', {
+            operation_id: b.getAttribute('data-svok'),
+            fact: b.getAttribute('data-svokval'),
+          }, 'Сумма подтверждена');
+        });
+      });
       Array.prototype.forEach.call(view.querySelectorAll('[data-svdrop]'), function (b) {
         b.addEventListener('click', function () {
           var id = b.getAttribute('data-svdrop'), svc = null;
@@ -28136,7 +28521,7 @@
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
       '<div class="grid">' +
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
-        'кого закрываем и на сколько — записанные консультации собираются сами', salesAuto) + '</div>' +
+        'кого закрываем и на сколько — консультации собираются сами, без суммы считаем по прайсу', salesAuto) + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
         'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
     '</div>' +
@@ -28248,8 +28633,13 @@
     var isSaleCard = (kind === 'продажа');
     var autoBody = (autoRows || []).map(function (x) {
       var over = x.due_on && todayIso && x.due_on < todayIso;
+      // «по прайсу» — сумму на консультации не поставили, и план взял цену тарифа из
+      // каталога (by_price от сервера). Амбером, потому что это наша прикидка и ждёт
+      // чека от продавца; вписанная им сумма сильнее, и чип тогда обычный.
       var chip = isSaleCard
-        ? '<span class="sev mini cz-wait">из консультации</span>'
+        ? (x.by_price
+            ? '<span class="sev mini cz-new" title="Суммы на консультации нет — взяли цену тарифа по прайсу. Впишите ожидаемый чек в карточке клиента">по прайсу</span>'
+            : '<span class="sev mini cz-wait">из консультации</span>')
         : (over ? '<span class="sev mini cz-bad">просрочен</span>'
                 : '<span class="sev mini cz-wait">рассрочка</span>');
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
@@ -33373,9 +33763,17 @@
        вовсе. Строка появляется, только когда такие счета есть: нули в подписи мешают
        читать две другие дороги. */
     var cr = pay.crm || { invoiced: 0, invoiced_rub: 0, paid: 0, paid_rub: 0, wait: 0, wait_rub: 0 };
+    /* Четвёртая дорога — договор, занесённый прямо в ведомость, без счёта. Так
+       проходит большинство крупных продаж, и до 28.10.2026 их тут не было: по
+       сентябрьскому интенсиву экран показывал 16 020 ₽ при договоре на 140 000 ₽.
+       Счёта у такой оплаты нет, поэтому она двигает только «Оплачено». */
+    var ld = pay.ledger || { paid: 0, paid_rub: 0 };
     var billed = (pay.invoiced_rub || 0) + (pr.invoiced_rub || 0) + (cr.invoiced_rub || 0);
-    var got = (pay.paid_rub || 0) + (pr.paid_rub || 0) + (cr.paid_rub || 0);
-    var wait = Math.max(0, billed - got);
+    /* «Ждут оплаты» считаем только по счетам: договор без счёта тут не участвует,
+       иначе строка ушла бы в минус и показала долг там, где деньги уже пришли. */
+    var paidOnBills = (pay.paid_rub || 0) + (pr.paid_rub || 0) + (cr.paid_rub || 0);
+    var got = paidOnBills + (ld.paid_rub || 0);
+    var wait = Math.max(0, billed - paidOnBills);
     var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid) + (cr.wait || 0);
     var money = function (n) { return fmtMoney(n) + ' ₽'; };
     var tail = function (rub) { return cr.invoiced ? ' · сопровождение ' + money(rub || 0) : ''; };
@@ -33386,8 +33784,12 @@
         money(billed)) +
       flatRow('Оплачено',
         'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0) +
-        tail(cr.paid_rub),
+        tail(cr.paid_rub) +
+        (ld.paid ? ' · договоры ' + money(ld.paid_rub || 0) : ''),
         money(got)) +
+      (ld.paid ? flatRow('Договоры из ведомости',
+        ld.paid + ' ' + plural(ld.paid, 'оплата', 'оплаты', 'оплат') +
+        ' без счёта, человек записался до оплаты', money(ld.paid_rub || 0)) : '') +
       flatRow('Ждут оплаты',
         waitN ? waitN + ' ' + plural(waitN, 'счёт', 'счёта', 'счетов') + ' без оплаты' : 'непогашенных счетов нет',
         money(wait));
@@ -33422,7 +33824,7 @@
     return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
       '<div class="sec-head pad"><div><div class="t">Деньги на трафик</div>' +
       '<div class="s">расход заводится вручную на вкладке «Расход» · ' +
-      'выручка берётся по обеим дорогам: касса и счета CRM</div></div></div>' +
+      'выручка берётся по всем трём дорогам: касса, счета CRM и договоры из ведомости</div></div></div>' +
       '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
