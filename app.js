@@ -28686,9 +28686,17 @@
             : '<span class="sev mini cz-wait">из консультации</span>')
         : (over ? '<span class="sev mini cz-bad">просрочен</span>'
                 : '<span class="sev mini cz-wait">рассрочка</span>');
+      // «без карточки» — консультация стоит за записью встречи, а не за клиентом: зум
+      // идёт под общим аккаунтом школы, и гостя по подписи не опознать. Строка всё равно
+      // в плане (Роман 29.10.2026: «привяжем когда клиентами станут»), но вести ей
+      // некуда — клика у неё нет, и это видно подписью, а не мёртвой ссылкой.
+      if (x.no_card) {
+        chip += ' <span class="sev mini cz-wait" title="Консультация из записи зума: карточки у этого человека пока нет. Привяжите запись к клиенту в «EastSide Meeting» — строка переедет в его карточку">без карточки</span>';
+      }
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
         .filter(Boolean).map(esc).join(' · ');
-      return '<div class="fl-row fl-2 rp-row click" data-lead="' + esc(x.case_id) + '">' +
+      return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' +
+        (x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '') + '>' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || (isSaleCard ? 'ожидаемая продажа' : 'рассрочка')) +
           '</span></div>' +
