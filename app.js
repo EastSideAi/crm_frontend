@@ -4517,7 +4517,9 @@
     'cabinet-parent': 'jpg', 'cabinet-student': 'jpg',
     // Работа в системе для отдела продаж: реальные экраны, данные демонстрационные.
     'sales-dash': 'png', 'sales-shift-open': 'png', 'sales-kontakty': 'png',
-    'sales-card': 'png', 'sales-dialogi': 'png', 'sales-schedule': 'png', 'sales-consult': 'png' };
+    'sales-card': 'png', 'sales-dialogi': 'png', 'sales-schedule': 'png', 'sales-consult': 'png',
+    // Бот выбора часов (/slots): не экран CRM, а чат в Telegram — точный вид бота.
+    'sales-slots-days': 'png', 'sales-slots-hours': 'png' };
 
   /* Озвучка экрана. Голос читает слайд целиком — заголовок, текст, пункты,
      предупреждение и реплику преподавателя (Павел 15.09.2026: «хочется чтобы он
