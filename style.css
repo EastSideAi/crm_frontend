@@ -12095,6 +12095,77 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pf-ai { padding: 4px 18px 20px; }
 }
 
+/* ════ ВОЗНАГРАЖДЕНИЕ (раздел reward) ════
+   Расчетный лист человека за месяц: что он сделал, что из этого закрыто и
+   сколько причитается. Якорь карточки — сумма справа в шапке: экран открывают ради нее.
+   Строки под ней плотные и тихие, это обоснование суммы, а не самостоятельное
+   чтение.
+
+   Цвет состояний разведен по смыслу, а не по градусу тревоги. «Не добрал» —
+   серое: это факт месяца, а не авария, и красным мы бы обвиняли человека
+   цветом. Амбер висит ровно там, где вопрос к НАМ: показатель, который мы не
+   собираем. Синее — там, где ждем действия руководителя. Своих цветов не
+   заводим, все из палитры. */
+/* Заголовок отдела: разделитель между группами листов, а не карточка. Поэтому
+   он живет на полотне, без фона и рамки — иначе два уровня карточек спорят
+   друг с другом, и строки людей читаются как вложенные в коробку. */
+.rw-dept { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; padding: 22px 4px 8px; }
+.rw-dept-t { font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-2); }
+.rw-dept-s { font-size: 12.5px; font-weight: 500; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+.rw-head { display: flex; align-items: center; gap: 16px; padding: 18px 24px 16px;
+  border-bottom: 1px solid var(--line); }
+.rw-head > div:first-child { min-width: 0; }
+.rw-role { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.rw-total { margin-left: auto; text-align: right; white-space: nowrap; }
+.rw-total b { display: block; font-size: 20px; font-weight: 700; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; }
+.rw-total small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; }
+/* Закрытый месяц тише живого: по нему уже заплатили, трогать нечего. */
+.rw-shut .rw-total b { color: var(--ink-2); }
+
+.rw-row { display: grid; grid-template-columns: 210px minmax(130px, 1fr) 116px 104px 116px;
+  gap: 16px; align-items: center; padding: 0 24px; min-height: 60px;
+  border-bottom: 1px solid var(--line); }
+.rw-row:last-child { border-bottom: none; }
+.rw-row.dim .rw-nm { color: var(--ink-2); }
+.rw-nm { font-size: 14px; font-weight: 600; color: var(--ink); }
+.rw-nm small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; }
+.rw-cond { font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+.rw-fact { font-size: 16px; font-weight: 700; text-align: right;
+  font-variant-numeric: tabular-nums; }
+.rw-sum { font-size: 15px; font-weight: 700; text-align: right; white-space: nowrap; }
+.rw-st { text-align: right; }
+/* Причина, по которой строки нет в расчете. Это наш долг по сбору данных, и он
+   должен читаться, а не прятаться серым в край строки. */
+.rw-why { font-size: 12px; font-weight: 500; color: var(--amber-ink); line-height: 1.45; }
+.rw-dash { color: var(--ink-3); font-weight: 500; }
+.rw-rate { display: inline-flex; gap: 6px; justify-content: flex-end; }
+.sev.kpi-ok      { color: var(--green-ink); background: var(--green-soft); }
+.sev.kpi-miss    { color: var(--ink-3);     background: var(--fill); }
+.sev.kpi-wait    { color: var(--blue);      background: var(--blue-tint); }
+.sev.kpi-blocked { color: var(--amber-ink); background: var(--amber-soft); }
+
+/* Телефон: пять колонок в 390px режут название в «Рег…», поэтому строка
+   становится карточкой — имя во всю ширину, под ним условие, справа факт и сумма. */
+@media (max-width: 860px) {
+  .rw-head { flex-wrap: wrap; }
+  .rw-total { margin-left: 0; text-align: left; }
+  .rw-head > .bp { width: 100%; }
+  .rw-row { grid-template-columns: 1fr auto; gap: 8px 12px; padding: 16px 18px;
+    align-items: start; }
+  .rw-nm { grid-column: 1 / -1; }
+  .rw-cond { grid-column: 1 / -1; }
+  .rw-fact { grid-column: 1; text-align: left; }
+  .rw-sum { grid-column: 2; }
+  .rw-st { grid-column: 1 / -1; text-align: left; }
+  .rw-rate { justify-content: flex-start; }
+}
+
 /* ── Раздел «Сопровождение» (points): ученики, точки, выплаты ──────────────────
    Якорь экрана — чек-лист текущей точки: он отвечает на «что делать дальше».
    Деньги и полоса точек стоят тише: суммы человек уже знает, ему нужен шаг.
