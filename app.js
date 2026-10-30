@@ -33036,12 +33036,119 @@
      запуска, и без неё «видели 110» рядом с «регистраций 34» читается как потеря
      людей, которых мы просто не считали. Источник называем прямо — это НЕ наш счёт,
      Метрика считает посетителей по-своему и с нашими цифрами сходится примерно. */
+  /* ── Порядок плашек запуска ────────────────────────────────────────────────
+     Порядок выбирает человек, перетаскиванием, и он запоминается в этом браузере
+     (Ольга, 31.10.2026: «можешь сделать плашки подвижными»). Почему в браузере, а не
+     в профиле: порядок — это привычка глаза на своём рабочем месте, а не настройка
+     команды, и ради неё не стоит ходить на сервер при каждой отрисовке.
+
+     По умолчанию первой идёт «Страницу видели»: воронка начинается с неё, а не с
+     регистраций (её же просьба). Плитки без ключа переставить нельзя — они встают
+     туда, где стояли.
+
+     Сохранённый порядок НЕ выбрасывает новые плитки: ключ, которого в списке нет,
+     добавляется в конец. Иначе после любой новой плашки человек видел бы экран без
+     неё и считал, что она не доехала. */
+  var LAUNCH_TILES_KEY = 'mk-launch-tiles';
+  var LAUNCH_TILES_DEFAULT = ['seen', 'reg', 'invoice', 'paid', 'channels', 'efir'];
+
+  function launchTilesSaved() {
+    try {
+      var v = JSON.parse(localStorage.getItem(LAUNCH_TILES_KEY) || 'null');
+      return Array.isArray(v) ? v.filter(function (k) { return typeof k === 'string'; }) : null;
+    } catch (e) { return null; }
+  }
+
+  function launchTilesSave(order) {
+    try { localStorage.setItem(LAUNCH_TILES_KEY, JSON.stringify(order)); } catch (e) {}
+  }
+
+  function launchTiles(items) {
+    var order = launchTilesSaved() || LAUNCH_TILES_DEFAULT;
+    var byKey = {};
+    items.forEach(function (t) { if (t && t.key) byKey[t.key] = t; });
+    var out = [];
+    order.forEach(function (k) { if (byKey[k]) { out.push(byKey[k]); byKey[k] = null; } });
+    items.forEach(function (t) { if (t && (!t.key || byKey[t.key])) out.push(t); });
+    return out.map(function (t) { return t.key ? Object.assign({ drag: true }, t) : t; });
+  }
+
+  /* Плашки запуска переставляются мышью. Порядок сохраняем СРАЗУ по отпусканию:
+     человек проверяет перестановку перезагрузкой, и «сохраню потом» читается как
+     «не сработало». */
+  function launchTilesWire(view) {
+    var bar = view.querySelector('.statbar');
+    if (!bar) return;
+    var dragged = null;
+    Array.prototype.forEach.call(bar.querySelectorAll('[data-tile]'), function (n) {
+      n.addEventListener('dragstart', function (e) {
+        dragged = n;
+        n.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', n.getAttribute('data-tile')); } catch (err) {}
+      });
+      n.addEventListener('dragend', function () {
+        n.classList.remove('dragging');
+        Array.prototype.forEach.call(bar.querySelectorAll('.drop-to'), function (x) { x.classList.remove('drop-to'); });
+        dragged = null;
+      });
+      n.addEventListener('dragover', function (e) {
+        if (!dragged || dragged === n) return;
+        e.preventDefault();
+        n.classList.add('drop-to');
+      });
+      n.addEventListener('dragleave', function () { n.classList.remove('drop-to'); });
+      n.addEventListener('drop', function (e) {
+        e.preventDefault();
+        n.classList.remove('drop-to');
+        if (!dragged || dragged === n) return;
+        /* Куда вставлять: если тащим вправо — после цели, если влево — перед ней.
+           Без этого плитка всегда вставала перед целью, и «поменять две местами»
+           требовало двух движений. */
+        var all = Array.prototype.slice.call(bar.querySelectorAll('[data-tile]'));
+        var from = all.indexOf(dragged), to = all.indexOf(n);
+        bar.insertBefore(dragged, from < to ? n.nextSibling : n);
+        launchTilesSave(Array.prototype.map.call(
+          bar.querySelectorAll('[data-tile]'),
+          function (x) { return x.getAttribute('data-tile'); }));
+      });
+    });
+  }
+
+  /* Плашка эфира. Пока эфир впереди — обратный счёт, во время и после — СКОЛЬКО
+     ЧЕЛОВЕК его видело (Ольга, 31.10.2026: «вместо эфир прошел надо общее количество
+     уникальных человек на эфире и рядом смотрели запись количество человек»).
+     «Прошёл» на этом месте не отвечал ни на один рабочий вопрос.
+
+     Считаем людей: узнанных и тех, кто смотрел без регистрации, — сумма честна,
+     потому что это разные люди, а не один в двух строках. Запись идёт подписью:
+     это второе действие того же человека, и в одну цифру с живым эфиром их сложить
+     нельзя. */
+  function launchEfirTile(cur, daysVal, days) {
+    var v = cur && cur.viewers, r = cur && cur.recording;
+    var live = v ? (v.known.viewers || 0) + (v.anon.viewers || 0) : null;
+    var rec = r ? (r.known.viewers || 0) + (r.anon.viewers || 0) : 0;
+    var proshel = cur.stage && !/^\d+$/.test(String(cur.stage.title))
+      && String(cur.stage.title).toLowerCase().indexOf('до эфира') < 0;
+    if (live == null || !proshel) {
+      return cur.stage
+        ? { key: 'efir', label: 'Эфир', value: cur.stage.title, sub: cur.stage.sub,
+            word: !/^\d+$/.test(String(cur.stage.title)) }
+        : { key: 'efir', label: 'До эфира', value: daysVal,
+            sub: days > 0 ? plural(days, 'день', 'дня', 'дней')
+                          : cur.event_date.split('-').reverse().join('.') };
+    }
+    return { key: 'efir', label: 'Были на эфире', value: live,
+             sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
+                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : '') };
+  }
+
   function launchSeenTile(cur, reg) {
     var p = cur.pages;
     if (!p || !p.users) return [];
     var pct = reg.total && p.users ? Math.round(reg.total * 100 / p.users) : null;
     var since = p.since ? ('с ' + fmtDay(p.since)) : 'по Метрике';
     return [{
+      key: 'seen',
       label: 'Страницу видели',
       /* go — только маркер для обработчика ниже: плитка открывает разбор, а не
          уводит на другой экран. */
@@ -33886,12 +33993,22 @@
     var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid) + (cr.wait || 0);
     var money = function (n) { return fmtMoney(n) + ' ₽'; };
     var tail = function (rub) { return cr.invoiced ? ' · сопровождение ' + money(rub || 0) : ''; };
+    /* Сколько ЧЕЛОВЕК за этими деньгами (Ольга, 31.10.2026). Сумма без людей не
+       отвечает на рабочий вопрос: 100 000 рублей от одного и от десяти — это разные
+       запуски, а по строке они одинаковые. */
+    var lyudi = function (n) {
+      return n + ' ' + plural(n, 'человек', 'человека', 'человек') + ' · ';
+    };
+    var billedN = (pay.invoiced || 0) + (pr.invoiced || 0) + (cr.invoiced || 0);
+    var gotN = (pay.paid || 0) + (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
     var rows =
       flatRow('Выставлено счетов',
+        lyudi(billedN) +
         'участие ' + money(pay.invoiced_rub || 0) + ' · продукты ' + money(pr.invoiced_rub || 0) +
         tail(cr.invoiced_rub),
         money(billed)) +
       flatRow('Оплачено',
+        lyudi(gotN) +
         'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0) +
         tail(cr.paid_rub) +
         (ld.paid ? ' · договоры ' + money(ld.paid_rub || 0) : ''),
@@ -35085,28 +35202,33 @@
 
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      statBar([
+      statBar(launchTiles([
         /* Период выбран — плитка обязана показывать ТО ЖЕ, что первая плашка пути.
            Раньше плитка всегда считала весь запуск, а плашка слушалась периода: на
            экране рядом стояли 31 и 26, и это читалось как сломанный счётчик (нашла
            Ольга 22.09). Число за период берём у самой плашки — она и есть источник,
            а «всего за запуск» уходит в подпись, чтобы обе цифры были названы. */
-        { label: 'Регистрации', value: (regInPeriod == null ? reg.total : regInPeriod),
+        { key: 'reg', label: 'Регистрации', value: (regInPeriod == null ? reg.total : regInPeriod),
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total },
         /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
            это не сопровождение. Плитка держит участие, продукты живут ступенями. */
-        { label: 'Счет на участие', value: pay.invoiced,
-          sub: '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
-        { label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
-          sub: prod.paid_rub
-            ? 'участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
-            : pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
+        /* В плитке счетов и оплат — ЛЮДИ, а не только деньги (Ольга, 31.10.2026):
+           «5» без слова «человек» читалось как пять рублей или пять попыток. */
+        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced,
+          sub: plural(pay.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей · ' +
+            pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
+        { key: 'paid', label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
+          sub: (pay.paid + ' из ' + (pay.invoiced || 0) + ' ' +
+                plural(pay.invoiced || 0, 'человека', 'человек', 'человек')) +
+            (prod.paid_rub
+              ? ' · участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
+              : '') },
         /* Каналов три. Плитка показывает людей во всех, а подпись — откуда они;
            без неё «29» читается как телеграм, и цифра спорит с блоком ниже.
            Без in_channel (старый бэкенд) остаётся прежний телеграмный счёт. */
-        { label: 'В закрытых каналах', value: chTotal,
+        { key: 'channels', label: 'В закрытых каналах', value: chTotal,
           sub: inCh
             ? ['tg', 'vk', 'max'].map(function (k) {
                 var v = inCh[k];
@@ -35120,11 +35242,8 @@
            вечера и час начала, а команда сидит в разных поясах — по часам браузера
            у двоих вышло бы разное «идет». Старый расчёт по дням оставлен запасным:
            ответ без stage приедет с непромоученного бэкенда. */
-        (cur.stage
-          ? { label: 'Эфир', value: cur.stage.title, sub: cur.stage.sub,
-              word: !/^\d+$/.test(String(cur.stage.title)) }
-          : { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') }),
-      ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
+        launchEfirTile(cur, daysVal, days),
+      ].concat(launchSeenTile(cur, reg))), cur.pages ? 'six' : 'five') +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
@@ -35183,6 +35302,7 @@
           '</div></div>' +
       '</div></div>';
 
+    launchTilesWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-launch]'), function (t) {
       t.addEventListener('click', function () {
         state._mkLaunchIdx = parseInt(t.getAttribute('data-launch'), 10) || 0;
@@ -40896,7 +41016,11 @@
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
-      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') + '"' +
+      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') +
+        (s.drag ? ' movable' : '') + '"' +
+        /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
+           порядок, draggable — чтобы браузер вообще начал её тащить. */
+        (s.drag && s.key ? ' draggable="true" data-tile="' + s.key + '"' : '') +
         (s.go ? ' data-go="' + s.go + '"' : '') +
         /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
            вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
