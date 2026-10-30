@@ -115,7 +115,10 @@ a { color: inherit; text-decoration: none; }
 .main { flex: 1; min-width: 0; background: var(--main); display: flex; flex-direction: column;
   overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-xl); }
 .main::-webkit-scrollbar { width: 0; }
-.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center;
+/* flex: none — шапка живет в колонке .main со скроллом, и без него сжималась до
+   min-height, когда страница длинная: две строки вкладок не помещались и верхняя
+   уезжала за край при прокрутке (Ольга, 27.10.2026, Маркетинг → Реклама). */
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; flex: none;
   justify-content: space-between; gap: 16px; padding: 14px 28px; background: var(--app);
   border-bottom: 1px solid var(--line); border-radius: var(--r-xl) var(--r-xl) 0 0; min-height: 67px; }
 .tabs { display: flex; gap: 4px; background: var(--fill); border-radius: var(--r-pill); padding: 4px; }
@@ -392,6 +395,14 @@ a { color: inherit; text-decoration: none; }
    Метрика недоступна или счётчик не задан — плиток снова пять. */
 .statbar.six { grid-template-columns: repeat(6, 1fr); }
 .statbar.six .stat { padding: 16px 14px; }
+/* Плитка, которую можно перетащить (экран запусков). Курсор-хваталка — весь
+   сигнал: рамка или значок здесь превратили бы спокойную полосу цифр в панель
+   управления. Пока тащим — плитка бледнеет, цель подсвечивается грань слева. */
+.stat.movable { cursor: grab; }
+.stat.movable:active { cursor: grabbing; }
+.stat.movable.dragging { opacity: .45; }
+.stat.movable.drop-to { box-shadow: inset 2px 0 0 var(--blue); }
+
 /* Одна главная цифра на полосу. Четыре равновесных числа читаются по кругу: глазу
    не за что зацепиться, и экран каждый раз приходится перечитывать целиком. Ведущая
    плитка шире и крупнее, соседние тише — иерархия весом, а не рамкой. */
