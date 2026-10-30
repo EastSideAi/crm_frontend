@@ -23557,7 +23557,7 @@
         : '';
       // «Подобрать услуги» — у строки, связанной с карточкой самозанятого: собрать из суммы
       // задания по услугам его роли (не «разбить»: слово про дробление фикса лишнее).
-      var brkBtn = (canBreak && it.contractor_id)
+      var brkBtn = (canBreak && (it.contractor_id || it.smz_id))
         ? '<button class="fin-brk" data-fbrk="' + it.id +
           '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
         : '';
@@ -23664,7 +23664,7 @@
         for (var i = 0; i < items.length; i++) {
           if (items[i].id === id) {
             var it = items[i];
-            return finBreakdownOpen(it.contractor_id, it.counterparty || it.item || '',
+            return finBreakdownOpen(it.contractor_id || it.smz_id, it.counterparty || it.item || '',
               finMonthOf(it.date));
           }
         }
@@ -24055,6 +24055,10 @@
     }
     if (FIN.direct === 'none') return finErrView(view);
     var D = FIN.direct, blocks = D.blocks || [], canFix = can('finmodel_edit');
+    // «Подобрать услуги» и в прямых расходах: сюда попадают выплаты людям (управление,
+    // продукт), которых проводят по ФИО. Право — как у листов: видеть ведомость и
+    // подрядчиков, отдельно от права править строку.
+    var canBreak = can('finmodel') && can('contractors');
     var nRows = blocks.reduce(function (s, b) { return s + b.items.length; }, 0);
 
     var bar = statBar([
@@ -24074,6 +24078,12 @@
         // Откуда строка — пометка к описанию, а не действие: в колонке действий
         // она стояла третьей и выдавливала сумму на метку «оплачен».
         var src = finDirectBadge(it.origin, it.role);
+        // Кнопка подбора услуг: у строки, связанной с карточкой самозанятого напрямую
+        // или найденной по ФИО. Глушит всплытие, чтобы не открыть правку строки.
+        var brkBtn = (canBreak && (it.contractor_id || it.smz_id))
+          ? '<button class="fin-brk" data-fbrk="' + it.id +
+            '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
+          : '';
         return '<div class="trow fin-grid fe-grid' + (editable ? ' click' : '') +
           (it.status === 'факт' ? ' paid' : '') + '"' +
           (editable ? ' data-dline="' + it.id + '"' : '') + '>' +
@@ -24082,6 +24092,7 @@
             (sub || src ? '<i>' + src + (sub && src ? ' · ' : '') + sub + '</i>' : '') + '</span>' +
           '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
           '<span class="fo-st">' +
+            brkBtn +
             finPaidCell(it.id, it.status, canFix) +
             (editable ? '<button class="fd-del" data-ddel="' + it.id +
               '" title="Удалить строку" aria-label="Удалить">' + ic('x', 12) + '</button>'
@@ -24103,6 +24114,20 @@
     view.innerHTML = bar + cards;
 
     finPaidBind(view);
+    // «Подобрать услуги» у строки прямого расхода: доступно и тем, кто ведомость
+    // только смотрит (finmodel+contractors), поэтому вне ветки canFix. Всплытие
+    // глушим, чтобы клик не открыл правку строки.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-brk[data-fbrk]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var hit = finDirectFind(n.getAttribute('data-fbrk'));
+        if (hit) {
+          var it = hit.it;
+          finBreakdownOpen(it.contractor_id || it.smz_id,
+            it.counterparty || it.item || '', finMonthOf(it.date));
+        }
+      });
+    });
     if (canFix) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-dadd]'), function (btn) {
         btn.addEventListener('click', function () {
@@ -25326,6 +25351,14 @@
     var docChip = it.doc
       ? '<span class="fst doc">' + ic('check', 11) + esc(it.doc.name || 'документ') + '</span>'
       : (it.status === 'факт' ? '<span class="fst wait">нет документа</span>' : '');
+    // «Подобрать услуги» и здесь, на выплатах подрядчикам: самозанятым акт/чек
+    // собираются из суммы так же, как в фонд-листах. Только на дашборде ведомости
+    // (clickable), в истории — просмотр. Строка связана с карточкой напрямую или по ФИО.
+    var brkBtn = (clickable && can('finmodel') && can('contractors') &&
+                  (it.contractor_id || it.smz_id))
+      ? '<button class="fin-brk" data-fbrk="' + it.id +
+        '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
+      : '';
     return '<div class="trow fin-grid fe-grid"' +
       (clickable ? ' data-payout="' + it.id + '"' : '') + '>' +
       '<span class="num fo-date">' + finDate(it.date) + '</span>' +
@@ -25334,7 +25367,7 @@
       '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
       '<span class="fo-st">' +
         '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
-          esc(it.status) + '</span>' + docChip +
+          esc(it.status) + '</span>' + docChip + brkBtn +
       '</span>' +
     '</div>';
   }
@@ -25464,6 +25497,21 @@
         });
       });
     }
+    // «Подобрать услуги» у строки выплаты: глушим всплытие, чтобы не открылась правка
+    // выплаты. Сумма и услуги по должности — те же, что в фонд-листах.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-brk[data-fbrk]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = n.getAttribute('data-fbrk');
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].id === id) {
+            var it = items[i];
+            return finBreakdownOpen(it.contractor_id || it.smz_id,
+              it.counterparty || it.item || '', finMonthOf(it.date));
+          }
+        }
+      });
+    });
     pageAnim(view);
   }
 
@@ -28564,7 +28612,7 @@
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
       '<div class="grid">' +
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
-        'кого закрываем и на сколько — консультации собираются сами, без суммы считаем по прайсу', salesAuto) + '</div>' +
+        'кого закрываем и на сколько — консультации собираются сами, без суммы берём половину тарифа по прайсу', salesAuto) + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
         'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
     '</div>' +
@@ -28676,18 +28724,36 @@
     var isSaleCard = (kind === 'продажа');
     var autoBody = (autoRows || []).map(function (x) {
       var over = x.due_on && todayIso && x.due_on < todayIso;
-      // «по прайсу» — сумму на консультации не поставили, и план взял цену тарифа из
-      // каталога (by_price от сервера). Амбером, потому что это наша прикидка и ждёт
-      // чека от продавца; вписанная им сумма сильнее, и чип тогда обычный.
+      // «по прайсу» — сумму на консультации не поставили, и план взял ПОЛОВИНУ цены
+      // тарифа из каталога (by_price от сервера): семьи платят двумя частями 50/50, и в
+      // периоде консультации мы ждём первый платёж. Амбером, потому что это наша прикидка
+      // и ждёт чека от продавца; вписанная им сумма сильнее, и чип тогда обычный.
       var chip = isSaleCard
         ? (x.by_price
-            ? '<span class="sev mini cz-new" title="Суммы на консультации нет — взяли цену тарифа по прайсу. Впишите ожидаемый чек в карточке клиента">по прайсу</span>'
+            ? '<span class="sev mini cz-new" title="Суммы на консультации нет — взяли половину цены тарифа по прайсу, это первый платёж из двух. Впишите ожидаемый чек в карточке клиента">по прайсу</span>'
             : '<span class="sev mini cz-wait">из консультации</span>')
         : (over ? '<span class="sev mini cz-bad">просрочен</span>'
                 : '<span class="sev mini cz-wait">рассрочка</span>');
+      // «без карточки» — консультация стоит за записью встречи, а не за клиентом: зум
+      // идёт под общим аккаунтом школы, и гостя по подписи не опознать. Строка всё равно
+      // в плане (Роман 29.10.2026: «привяжем когда клиентами станут»), но вести ей
+      // некуда — клика у неё нет, и это видно подписью, а не мёртвой ссылкой.
+      if (x.no_card) {
+        chip += ' <span class="sev mini cz-wait" title="Консультация из записи зума: карточки у этого человека пока нет. Привяжите запись к клиенту в «EastSide Meeting» — строка переедет в его карточку">без карточки</span>';
+      }
+      // «деньги пришли» — в ведомости по этому клиенту уже есть приход периода, но со
+      // графиком он не сведён: суммы разошлись (заплатили частью или больше). Приход,
+      // совпавший со взносом по сумме, закрывает его сам и в дебиторке не остаётся,
+      // поэтому чип значит «проверь, прежде чем просить деньги» (30.10.2026).
+      if (!isSaleCard && x.paid_in > 0) {
+        chip += ' <span class="sev mini cz-new" title="По этому клиенту в ведомости есть приход ' +
+          esc(finRub(x.paid_in)) + ' за период, а со графиком он не сведён: суммы не совпали. ' +
+          'Проверьте платежи клиента, прежде чем просить деньги">деньги пришли</span>';
+      }
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
         .filter(Boolean).map(esc).join(' · ');
-      return '<div class="fl-row fl-2 rp-row click" data-lead="' + esc(x.case_id) + '">' +
+      return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' +
+        (x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '') + '>' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || (isSaleCard ? 'ожидаемая продажа' : 'рассрочка')) +
           '</span></div>' +
