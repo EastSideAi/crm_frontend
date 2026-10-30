@@ -38098,20 +38098,6 @@
     return out;
   }
   /* Сколько узлов и шагов под узлом, включая все вложенные уровни. */
-  function prcSize(nid) {
-    var n = prcLight(nid), nodes = 0, steps = 0, ag = 0, pains = 0, seen = {};
-    (function walk(x) {
-      if (!x || seen[x.id]) return;
-      seen[x.id] = 1; nodes++; pains += x.n_pains || 0;
-      x.steps.forEach(function (s) {
-        steps++;
-        if (s.can_agent === 'yes' || s.can_agent === 'supervised' || s.exec === 'agent' || s.exec === 'agent_supervised') ag++;
-        if (s.sub) walk(prcLight(s.sub));
-        (s.variants || []).forEach(function (v) { walk(prcLight(v)); });
-      });
-    })(n);
-    return { nodes: nodes, steps: steps, ag: ag, pains: pains };
-  }
   function prcMineIn(nid, who) {
     var n = 0, seen = {};
     (function walk(x) {
@@ -38145,18 +38131,6 @@
     return { from: names(from), to: names(to) };
   }
 
-  /* Кто исполняет шаг. Человек — норма карты, поэтому в строке шага его не пишем:
-     чип стоит только у машины и агента. «Можно отдать агенту» — подсказка на будущее,
-     она живет в раскрытом шаге, а не в строке. */
-  function prcExec(s) {
-    if (!s.exec || s.exec === 'human') return '';
-    var e = PRC_EXEC[s.exec];
-    return e ? '<span class="prc-x ' + e.c + '">' + e.t + '</span>' : '';
-  }
-  function prcCan(s) {
-    if (s.exec && s.exec !== 'human') return '';
-    return s.can_agent === 'yes' ? 'можно отдать боту' : s.can_agent === 'supervised' ? 'можно отдать боту под контролем человека' : '';
-  }
 
   function prcOpen(nid, step) {
     state.prcNode = nid || null;
@@ -38261,8 +38235,6 @@
 
   function renderProcessHome(view) {
     var d = state._prc, who = state.prcWho || '', q = (state.prcQ || '').trim().toLowerCase();
-    var all = Object.keys(d._by), stepsAll = 0;
-    all.forEach(function (k) { stepsAll += d._by[k].node.steps.length; });
 
     var body;
     if (q.length >= 2) {
@@ -38278,66 +38250,50 @@
         if (!ps.length) return '';
         return '<section class="prc-grp"><div class="po-lbl">' + esc(g.label) + '</div>' +
           '<div class="prc-tiles' + (g.chain ? ' chain' : '') + '">' + ps.map(function (p) {
-            var root = p.nodes[p.root], z = prcSize(p.root), mine = who ? prcMineIn(p.root, who) : 0;
+            var root = p.nodes[p.root], mine = who ? prcMineIn(p.root, who) : 0;
             return '<button type="button" class="prc-tile' + (who && !mine ? ' dim' : '') + '" data-open="' + esc(p.root) + '">' +
               '<span class="prc-tn">' + esc(p.n) + '</span>' +
               '<b>' + esc(prcShort(root.title)) + '</b>' +
               (prcSpan(root.title) ? '<span class="prc-span">' + esc(prcSpan(root.title)) + '</span>' : '') +
               '<small>' + esc(root.goal || '') + '</small>' +
-              '<span class="prc-stat">' + (z.nodes > 1 ? '<span>' + (z.nodes - 1) + ' ' + plural(z.nodes - 1, 'подпроцесс', 'подпроцесса', 'подпроцессов') + '</span>' : '') +
-                '<span>' + z.steps + ' ' + plural(z.steps, 'шаг', 'шага', 'шагов') + '</span>' +
-                (z.pains ? '<span class="pain">' + z.pains + ' ' + plural(z.pains, 'проблема', 'проблемы', 'проблем') + '</span>' : '') + '</span>' +
               (who ? '<i class="prc-cnt' + (mine ? '' : ' zero') + '">' + mine + '</i>' : '') +
-              (root.status === 'draft' ? '<span class="sev n-wait prc-draft">черновик</span>' : '') +
             '</button>';
           }).join('') + '</div></section>';
       }).join('');
     }
 
-    var orph = (d.orphans || []).length && q.length < 2 && !state.prcInner ? '<section class="prc-grp"><div class="po-lbl">Не привязано к процессам</div>' +
-      '<div class="card prc-orph"><p>' + esc(d.orphans_note || '') + '</p><ul>' + d.orphans.map(function (x) {
-        return '<li><b>' + esc(x.title) + '</b><span>' + esc(x.who) + ' · ' + esc(x.what) + '</span></li>';
-      }).join('') + '</ul></div></section>' : '';
     view.innerHTML = '<div class="prc-wrap">' +
       '<div class="prc-top"><div><h2 class="org-h1">' + (state.prcInner && q.length < 2 ? 'Внутренние процессы' : 'Процессы компании') + '</h2>' +
         (state.prcInner && q.length < 2 ? '<div class="org-sub">Обеспечивающие процессы и управление: то, на чем держится школа и чего клиент не видит.</div></div>' :
-        '<div class="org-sub">' + d.processes.length + ' ' + plural(d.processes.length, 'процесс', 'процесса', 'процессов') + ', ' +
-          (all.length - d.processes.length) + ' ' + plural(all.length - d.processes.length, 'подпроцесс', 'подпроцесса', 'подпроцессов') + ', ' +
-          stepsAll + ' ' + plural(stepsAll, 'шаг', 'шага', 'шагов') + '. Нажмите на процесс, чтобы провалиться внутрь, на шаг, чтобы открыть инструкцию.</div></div>') +
-        '<span class="sev n-wait">как есть · черновик</span></div>' +
-      prcToolbar(who) + prcPersonPanel(who) + body + orph + '</div>';
+        '<div class="org-sub">Что за чем идет в школе. Нажмите на процесс, чтобы увидеть его шаги.</div></div>') +
+      '</div>' + prcToolbar(who) + prcPersonPanel(who) + body + '</div>';
     prcWire(view);
   }
 
-  function prcSrc(x) { return String(x || '').replace(/\/data\/workspace\/(Verundina\/protsessy\/)?/g, ''); }
-  /* Раскрытый шаг — инструкция. Порядок по тому, как ее читают: сначала куда
-     провалиться, потом «как делать» по пунктам, потом что на входе и что на выходе
-     рядом, и только потом мелким — где, проверка, сбой, срок. */
+  /* Раскрытый шаг: что получается, куда провалиться и куда работа уходит дальше.
+     Инструкция (как делать, вход, где, проверка, сбой, срок) нужна исполнителю и
+     боту, а не тому, кто смотрит карту, поэтому она свернута одной строкой
+     (Вера 30.10.2026: «оставить только наглядную, чтобы было понятно, что за чем идет»). */
   function prcDetail(s, full) {
     if (!full) return '<div class="prc-det"><div class="sk-list"><div class="shim"></div><div class="shim"></div></div></div>';
     var sub = s.sub ? prcLight(s.sub) : null;
     var dive = sub ? '<button type="button" class="bp prc-dive" data-open="' + esc(s.sub) + '">' +
       'Открыть ' + sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри' + ic('go', 14) + '</button>' : '';
     var go = s.goto && prcLight(s.goto) ? '<div class="prc-handoff"><span class="po-lbl">Дальше работа уходит в</span>' + prcGoto(s.goto) + '</div>' : '';
+    var out = full.output ? '<div class="prc-dout"><span class="po-lbl">Что получается</span><p>' + esc(full.output) + '</p></div>' : '';
     var how = (full.how || []).length ? '<div class="prc-dhow"><span class="po-lbl">Как делать</span><ol class="prc-how">' +
       full.how.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol></div>' : '';
-    var io = (full.input || full.output) ? '<div class="prc-io">' +
-      (full.input ? '<div><span class="po-lbl">На входе</span><p>' + esc(full.input) + '</p></div>' : '') +
-      (full.output ? '<div><span class="po-lbl">На выходе</span><p>' + esc(full.output) + '</p></div>' : '') + '</div>' : '';
     var row = function (k, v) { return v ? '<dt>' + k + '</dt><dd>' + v + '</dd>' : ''; };
-    var can = prcCan(s);
-    var small = row('Где', esc(full.where || '')) + row('Проверка', esc(full.check || '')) +
+    var small = row('На входе', esc(full.input || '')) + row('Где', esc(full.where || '')) + row('Проверка', esc(full.check || '')) +
       row('Если не так', /^\s*(—|-|нет\.?)?\s*$/i.test(full.fail || '') ? '' : esc(full.fail)) +
-      row('Срок', esc(full.sla || '')) + row('Бот', can ? esc(can) : '');
+      row('Срок', esc(full.sla || ''));
+    var instr = (how || small) ? '<details class="prc-instr"><summary>' + ic('go', 12) + 'Инструкция</summary>' +
+      how + (small ? '<dl class="prc-dl">' + small + '</dl>' : '') + '</details>' : '';
     var vars = (s.variants || []).length ? '<div class="prc-handoff"><span class="po-lbl">Варианты шага</span><div class="prc-vars">' +
       s.variants.map(function (v) { var t = prcLight(v); return t ? '<button type="button" class="prc-goto" data-open="' + esc(v) + '">' + ic('go', 12) + esc(prcShort(t.title)) + '</button>' : ''; }).join('') +
       '</div></div>' : '';
-    return '<div class="prc-det">' + (dive ? '<div class="prc-acts">' + dive + '</div>' : '') +
-      how + io +
-      (small ? '<dl class="prc-dl">' + small + '</dl>' : '') +
-      (full.pain ? '<div class="prc-pain"><b>Проблема.</b> ' + esc(full.pain) + '</div>' : '') +
-      vars + go +
-      (full.src ? '<div class="prc-src">Источник: ' + esc(prcSrc(full.src)) + '</div>' : '') +
+    return '<div class="prc-det">' + out + (dive ? '<div class="prc-acts">' + dive + '</div>' : '') +
+      vars + go + instr +
     '</div>';
   }
 
@@ -38359,8 +38315,6 @@
     });
     return out;
   }
-  function prcPlain(ids) { return ids.map(function (x) { return prcPerson(x).name; }).join(', '); }
-  function prcNames(ids) { return ids.map(function (x) { return esc(prcPerson(x).name); }).join(', '); }
   /* У шага один ответственный (Рыбаков; Вера 26.10.2026: «одна роль, один исполнитель»),
      он и стоит в углу прямоугольника схемы. Если в шаге работают другие, это подпроцесс
      со своими ответственными внутри, на шаге их не показываем. */
@@ -38375,12 +38329,9 @@
      кто делает. Все остальное (подпроцесс, передача дальше, проблема) — короткими
      пометками в той же строке, без плашек: плашки на каждом шаге и делали карту
      нечитаемой (Вера 26.10.2026: «как будто не структурированный вообще»). */
-  function prcStepRow(s, i, prev, who, full, open, fl) {
+  function prcStepRow(s, i, who, full, open) {
     var mine = who && prcAll(s).indexOf(who) !== -1;
-    var hand = fl && fl.hand;
     var sub = s.sub ? prcLight(s.sub) : null, subN = sub ? sub.steps.length : 0;
-    var handLine = hand ? '<li class="prc-hand' + (fl.back.length ? ' back' : '') + '" role="separator" aria-label="' + esc((fl.back.length ? 'возврат' : 'передача') + ': от ' + prcPlain(fl.from) + ' к ' + prcPlain(fl.to)) + '">' +
-      '<span>' + (fl.back.length ? 'возврат к ' + prcNames(fl.to) : 'передача: ' + prcNames(fl.from) + ' ' + ic('go', 10) + ' ' + prcNames(fl.to)) + '</span></li>' : '';
     var pp = function (x) {
       var p = prcPerson(x);
       return '<span class="prc-p' + (x === who ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</span>';
@@ -38390,47 +38341,39 @@
     if (sub) marks.push('<span class="prc-subn">' + ic('flow', 12) + subN + ' ' + plural(subN, 'шаг', 'шага', 'шагов') + ' внутри</span>');
     if ((s.variants || []).length) marks.push('<span class="prc-subn">' + s.variants.length + ' ' + plural(s.variants.length, 'вариант', 'варианта', 'вариантов') + '</span>');
     if (s.goto && prcLight(s.goto)) marks.push('<span class="prc-gon">дальше в «' + esc(prcRootTitle(s.goto)) + '»</span>');
-    if (s.pain) marks.push('<span class="prc-painmk">есть проблема</span>');
-    return handLine + '<li class="prc-step' + (open ? ' open' : '') + (who ? (mine ? ' mine' : ' dim') : '') + (sub ? ' has-sub' : '') + '" data-i="' + i + '">' +
+    return '<li class="prc-step' + (open ? ' open' : '') + (who ? (mine ? ' mine' : ' dim') : '') + (sub ? ' has-sub' : '') + '" data-i="' + i + '">' +
       '<button type="button" class="prc-row" aria-expanded="' + (open ? 'true' : 'false') + '">' +
         '<span class="prc-n">' + (i + 1) + '</span>' +
         '<span class="prc-what"><b>' + esc(s.title) + '</b>' +
-          '<span class="prc-meta-l"><span class="prc-ppl">' + people + '</span>' + prcExec(s) + '</span>' +
+          '<span class="prc-meta-l"><span class="prc-ppl">' + people + '</span></span>' +
           (marks.length ? '<span class="prc-marks">' + marks.join('') + '</span>' : '') + '</span>' +
         '<span class="prc-chev">' + ic('go', 14) + '</span>' +
       '</button>' +
       (open ? prcDetail(s, full) : '') + '</li>';
   }
 
-  /* Дорожки: строка на человека, колонка на шаг. Видно то, чего не видно списком,
-     — сколько раз работа меняет руки и у кого копится. */
+  /* Дорожки: строка на ответственного, колонка на шаг. Видно, как работа идет от
+     человека к человеку и у кого копится. Участников внутри шагов здесь нет: они
+     видны в подпроцессе (Вера 30.10.2026). */
   function prcLanes(n, who) {
     var ppl = [];
-    n.steps.forEach(function (s) { prcAll(s).forEach(function (x) { if (ppl.indexOf(x) === -1) ppl.push(x); }); });
-    var cols = n.steps.length, flow = prcFlow(n.steps);
+    n.steps.forEach(function (s) { var w = s.who[0]; if (w && ppl.indexOf(w) === -1) ppl.push(w); });
+    var cols = n.steps.length;
     var head = '<div class="prc-lh"></div>' + n.steps.map(function (s, i) {
-      var f = flow[i];
-      return '<div class="prc-lc' + (f.hand ? ' hand' : '') + (f.back.length ? ' back' : '') + '">' + (i + 1) +
-        (f.back.length ? ' <em>возврат</em>' : f.hand ? ' <em>передача</em>' : '') + '</div>';
+      return '<div class="prc-lc">' + (i + 1) + '</div>';
     }).join('');
     var rows = ppl.map(function (pid) {
       var p = prcPerson(pid);
       return '<div class="prc-lp' + (who === pid ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</div>' +
         n.steps.map(function (s, i) {
-          if (prcAll(s).indexOf(pid) === -1) return '<div class="prc-lx"></div>';
-          /* карточка у ответственного, у участников отметка участия — иначе три
-             одинаковые плашки читаются как три работы */
-          var lead = s.who[0];
-          if (lead !== pid) return '<div class="prc-lx"><button type="button" class="prc-lm" data-lane="' + i + '" title="' + esc(s.title) + '">' +
-            'участвует в шаге ' + (i + 1) + '</button></div>';
+          if (s.who[0] !== pid) return '<div class="prc-lx"></div>';
           var e = PRC_EXEC[s.exec] || PRC_EXEC.human;
           return '<div class="prc-lx"><button type="button" class="prc-lb ' + e.c + '" data-lane="' + i + '" title="' + esc(s.title) + '">' +
             '<i>' + (i + 1) + '</i><span>' + esc(s.title) + '</span></button></div>';
         }).join('');
     }).join('');
     return '<div class="prc-lanes-w"><div class="prc-lanes" style="--cols:' + cols + '">' + head + rows + '</div></div>' +
-      '<div class="prc-legend"><span class="prc-more">шаги идут дальше, листайте вбок</span><span class="prc-x hu">человек</span><span class="prc-x ag">агент</span><span class="prc-x sys">машина</span>' +
-        '<span class="prc-lg-h">«передача» над шагом: работа переходит к другим людям, «возврат»: к тому, кто ее уже отдавал</span></div>';
+      '<div class="prc-legend"><span class="prc-more">шаги идут дальше, листайте вбок</span></div>';
   }
 
   /* Концы рядов схемы: число колонок задает CSS (--cols по ширине), а какой блок
@@ -38465,15 +38408,10 @@
 
     var owner = n.owner ? prcPerson(n.owner).name : '';
     var ag = n.agent && (state._prc._agents || {})[n.agent];
-    var z = prcSize(nid);
     var fact = function (k, v, sub) { return '<div class="prc-fact"><span class="po-lbl">' + k + '</span><b>' + v + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
     var facts = '<div class="prc-facts">' +
       (owner ? fact('Ведет', esc(owner)) : '') +
-      fact('Бот', ag ? esc(ag.name) : (n.agent ? esc(n.agent) : 'нет, все делают люди'),
-        (ag ? 'куратор ' + esc(prcPerson(ag.curator).name) : '') +
-        (z.ag ? (ag ? ' · ' : '') + 'может взять ' + z.ag + ' из ' + z.steps + ' ' + plural(z.steps, 'шага', 'шагов', 'шагов') : '')) +
-      /* число шагов совпадает со схемой под ним; вложенные называем отдельно */
-      fact('Шагов', n.steps.length + '', z.steps > n.steps.length ? 'и еще ' + (z.steps - n.steps.length) + ' внутри них' : '') + '</div>';
+      (ag ? fact('Бот', esc(ag.name)) : '') + '</div>';
     /* Схема процесса как на рисунках Рыбакова (рис. 1 и 12 книги): слева событие,
        с которого все начинается, дальше пронумерованные шаги стрелками рядами, справа
        результат. Это картинка процесса целиком, ее читают первой; подробности — в
@@ -38485,60 +38423,35 @@
         var sub = s.sub ? prcLight(s.sub) : null;
         return '<li><button type="button" class="prc-sc-box' + (sub ? ' sub' : '') + (state.prcStep === i ? ' on' : '') + '" data-sc="' + i + '" title="' + esc(s.title) + '">' +
           '<span class="prc-sc-top"><i>' + (i + 1) + '</i>' + prcCorner(s) + '</span><span>' + esc(s.title) + '</span>' +
-          ((sub || s.pain) ? '<small>' + (sub ? sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри' : '') +
-            (s.pain ? '<em>проблема</em>' : '') + '</small>' : '') + '</button></li>';
+          (sub ? '<small>' + sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри</small>' : '') + '</button></li>';
       }).join('') +
       (n.done ? '<li class="prc-sc-end done" title="' + esc(n.done) + '"><span class="po-lbl">' + ic('check', 12) + 'Результат</span><p>' + esc(n.done) + '</p></li>' : '') +
-      '</ol>' +
-      ((n.input || n.output) ? '<div class="prc-io prc-io-top">' +
-        (n.input ? '<div><span class="po-lbl">Что нужно на входе</span><p>' + esc(n.input) + '</p></div>' : '') +
-        (n.output ? '<div><span class="po-lbl">Что получаем на выходе</span><p>' + esc(n.output) + '</p></div>' : '') + '</div>' : '');
+      '</ol>';
     /* На телефоне схемы нет — линия шагов сама и есть цепочка, поэтому начало и
        результат встают на ее концы. */
     var endA = n.trigger ? '<li class="prc-lend start"><span class="po-lbl">Начало</span><p>' + esc(n.trigger) + '</p></li>' : '';
     var endB = n.done ? '<li class="prc-lend done"><span class="po-lbl">' + ic('check', 12) + 'Результат</span><p>' + esc(n.done) + '</p></li>' : '';
-    var lvl = light.variant_of && !light.parent ? 'Вариант шага · один из способов'
-      : (n.level || 1) === 1 ? 'Процесс' : 'Подпроцесс · уровень ' + n.level;
+    var lvl = light.variant_of && !light.parent ? 'Вариант шага' : '';
 
-    var flow = prcFlow(n.steps);
-    var nHand = flow.filter(function (x) { return x.hand; }).length;
-    var nBack = flow.filter(function (x) { return x.back.length; }).length;
     var steps = n.steps.map(function (s, i) {
       var fs = full ? full.steps[i] : null;
-      return prcStepRow(s, i, n.steps[i - 1], who, fs, state.prcStep === i, flow[i]);
+      return prcStepRow(s, i, who, fs, state.prcStep === i);
     }).join('');
 
-    /* Подвал свернут разделами со счетчиком: развернутый целиком, он был длиннее
-       самих шагов, и до конца процесса никто не долистывал. Открытые разделы
-       помнит state.prcFold, чтобы клик по шагу не захлопывал прочитанное. */
+    /* Подвал: откуда в процесс приходит работа, это часть того, что за чем идет.
+       Проблемы, вопросы, цифры и источники живут в файлах карты для разбора и
+       агентов, на экран их не выносим (Вера 30.10.2026). */
     var fold = state.prcFold || (state.prcFold = {});
-    var sec = function (key, title, items, fn, cls) {
-      if (!items || !items.length) return '';
-      return '<details class="prc-fb' + (cls ? ' ' + cls : '') + '" data-fold="' + key + '"' + (fold[key] ? ' open' : '') + '>' +
-        '<summary><span>' + title + '</span><i>' + items.length + '</i>' + ic('go', 12) + '</summary><ul>' + items.map(fn).join('') + '</ul></details>';
-    };
     var inc = prcIncoming(nid);
-    var more = [
-      ['Срок', n.sla],
-    ].filter(function (x) { return x[1]; });
-    var foot = sec('inc', 'Сюда приходит работа из', inc, function (x) {
+    var foot = inc.length ? '<details class="prc-fb prc-inc" data-fold="inc"' + (fold.inc ? ' open' : '') + '>' +
+      '<summary><span>Сюда приходит работа из</span><i>' + inc.length + '</i>' + ic('go', 12) + '</summary><ul>' + inc.map(function (x) {
         return '<li><button type="button" class="prc-goto" data-open="' + esc(x.nid) + '" data-step="' + x.i + '">' + ic('go', 12) +
           esc(prcRootTitle(x.nid)) + ': ' + esc(x.title) + '</button></li>';
-      }, 'prc-inc') +
-      sec('io', 'Срок и передачи', more.concat([['Передачи', nHand + ' из рук в руки, ' + nBack + ' ' + plural(nBack, 'возврат', 'возврата', 'возвратов')]]), function (x) {
-        return '<li class="prc-kv"><span class="po-lbl">' + x[0] + '</span>' + esc(x[1]) + '</li>';
-      }, 'prc-plain') +
-      (full ? (
-      sec('pains', 'Проблемы', full.pains, function (x) { return '<li>' + esc(x.text) + (x.src ? '<small>' + esc(prcSrc(x.src)) + '</small>' : '') + '</li>'; }, 'prc-warn') +
-      sec('q', 'Вопросы на проверку', full.questions, function (x) { return '<li>' + esc(x.text) + (x.who ? '<small>спросить: ' + esc(prcPerson(x.who).name) + '</small>' : '') + '</li>'; }) +
-      sec('note', 'Заметки', full.note ? [full.note] : [], function (x) { return '<li>' + esc(x) + '</li>'; }) +
-      sec('m', 'Цифры', full.metrics, function (x) { return '<li>' + esc(x) + '</li>'; }) +
-      sec('src', 'На что опирается', full.sources, function (x) { return '<li><small>' + esc(prcSrc(x)) + '</small></li>'; })
-    ) : '');
+      }).join('') + '</ul></details>' : '';
 
     view.innerHTML = '<div class="prc-wrap">' + crumb + prcToolbar(who) + prcPersonPanel(who) +
       '<div class="card prc-card">' +
-        '<div class="prc-head"><div class="prc-tn">' + lvl + '</div>' +
+        '<div class="prc-head">' + (lvl ? '<div class="prc-tn">' + lvl + '</div>' : '') +
           '<h3>' + esc(prcShort(n.title)) + (n.status === 'draft' ? ' <span class="sev n-wait">черновик, так пока не работает</span>' : '') + '</h3>' +
           (prcSpan(n.title) ? '<p class="prc-span">' + esc(prcSpan(n.title)) + '</p>' : '') +
           (n.goal ? '<p class="prc-goal">' + esc(n.goal) + '</p>' : '') +
