@@ -23557,7 +23557,7 @@
         : '';
       // «Подобрать услуги» — у строки, связанной с карточкой самозанятого: собрать из суммы
       // задания по услугам его роли (не «разбить»: слово про дробление фикса лишнее).
-      var brkBtn = (canBreak && it.contractor_id)
+      var brkBtn = (canBreak && (it.contractor_id || it.smz_id))
         ? '<button class="fin-brk" data-fbrk="' + it.id +
           '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
         : '';
@@ -23664,7 +23664,7 @@
         for (var i = 0; i < items.length; i++) {
           if (items[i].id === id) {
             var it = items[i];
-            return finBreakdownOpen(it.contractor_id, it.counterparty || it.item || '',
+            return finBreakdownOpen(it.contractor_id || it.smz_id, it.counterparty || it.item || '',
               finMonthOf(it.date));
           }
         }
@@ -25326,6 +25326,14 @@
     var docChip = it.doc
       ? '<span class="fst doc">' + ic('check', 11) + esc(it.doc.name || 'документ') + '</span>'
       : (it.status === 'факт' ? '<span class="fst wait">нет документа</span>' : '');
+    // «Подобрать услуги» и здесь, на выплатах подрядчикам: самозанятым акт/чек
+    // собираются из суммы так же, как в фонд-листах. Только на дашборде ведомости
+    // (clickable), в истории — просмотр. Строка связана с карточкой напрямую или по ФИО.
+    var brkBtn = (clickable && can('finmodel') && can('contractors') &&
+                  (it.contractor_id || it.smz_id))
+      ? '<button class="fin-brk" data-fbrk="' + it.id +
+        '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
+      : '';
     return '<div class="trow fin-grid fe-grid"' +
       (clickable ? ' data-payout="' + it.id + '"' : '') + '>' +
       '<span class="num fo-date">' + finDate(it.date) + '</span>' +
@@ -25334,7 +25342,7 @@
       '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
       '<span class="fo-st">' +
         '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
-          esc(it.status) + '</span>' + docChip +
+          esc(it.status) + '</span>' + docChip + brkBtn +
       '</span>' +
     '</div>';
   }
@@ -25464,6 +25472,21 @@
         });
       });
     }
+    // «Подобрать услуги» у строки выплаты: глушим всплытие, чтобы не открылась правка
+    // выплаты. Сумма и услуги по должности — те же, что в фонд-листах.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-brk[data-fbrk]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = n.getAttribute('data-fbrk');
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].id === id) {
+            var it = items[i];
+            return finBreakdownOpen(it.contractor_id || it.smz_id,
+              it.counterparty || it.item || '', finMonthOf(it.date));
+          }
+        }
+      });
+    });
     pageAnim(view);
   }
 
