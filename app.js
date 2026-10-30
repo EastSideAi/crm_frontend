@@ -24055,6 +24055,10 @@
     }
     if (FIN.direct === 'none') return finErrView(view);
     var D = FIN.direct, blocks = D.blocks || [], canFix = can('finmodel_edit');
+    // «Подобрать услуги» и в прямых расходах: сюда попадают выплаты людям (управление,
+    // продукт), которых проводят по ФИО. Право — как у листов: видеть ведомость и
+    // подрядчиков, отдельно от права править строку.
+    var canBreak = can('finmodel') && can('contractors');
     var nRows = blocks.reduce(function (s, b) { return s + b.items.length; }, 0);
 
     var bar = statBar([
@@ -24074,6 +24078,12 @@
         // Откуда строка — пометка к описанию, а не действие: в колонке действий
         // она стояла третьей и выдавливала сумму на метку «оплачен».
         var src = finDirectBadge(it.origin, it.role);
+        // Кнопка подбора услуг: у строки, связанной с карточкой самозанятого напрямую
+        // или найденной по ФИО. Глушит всплытие, чтобы не открыть правку строки.
+        var brkBtn = (canBreak && (it.contractor_id || it.smz_id))
+          ? '<button class="fin-brk" data-fbrk="' + it.id +
+            '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
+          : '';
         return '<div class="trow fin-grid fe-grid' + (editable ? ' click' : '') +
           (it.status === 'факт' ? ' paid' : '') + '"' +
           (editable ? ' data-dline="' + it.id + '"' : '') + '>' +
@@ -24082,6 +24092,7 @@
             (sub || src ? '<i>' + src + (sub && src ? ' · ' : '') + sub + '</i>' : '') + '</span>' +
           '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
           '<span class="fo-st">' +
+            brkBtn +
             finPaidCell(it.id, it.status, canFix) +
             (editable ? '<button class="fd-del" data-ddel="' + it.id +
               '" title="Удалить строку" aria-label="Удалить">' + ic('x', 12) + '</button>'
@@ -24103,6 +24114,20 @@
     view.innerHTML = bar + cards;
 
     finPaidBind(view);
+    // «Подобрать услуги» у строки прямого расхода: доступно и тем, кто ведомость
+    // только смотрит (finmodel+contractors), поэтому вне ветки canFix. Всплытие
+    // глушим, чтобы клик не открыл правку строки.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-brk[data-fbrk]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var hit = finDirectFind(n.getAttribute('data-fbrk'));
+        if (hit) {
+          var it = hit.it;
+          finBreakdownOpen(it.contractor_id || it.smz_id,
+            it.counterparty || it.item || '', finMonthOf(it.date));
+        }
+      });
+    });
     if (canFix) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-dadd]'), function (btn) {
         btn.addEventListener('click', function () {
