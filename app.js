@@ -33062,7 +33062,8 @@
      добавляется в конец. Иначе после любой новой плашки человек видел бы экран без
      неё и считал, что она не доехала. */
   var LAUNCH_TILES_KEY = 'mk-launch-tiles';
-  var LAUNCH_TILES_DEFAULT = ['seen', 'reg', 'invoice', 'paid', 'channels', 'efir'];
+  var LAUNCH_TILES_DEFAULT = ['seen', 'reg', 'invoice', 'paid', 'channels', 'efir',
+                            'diag', 'cons', 'support'];
 
   function launchTilesSaved() {
     try {
@@ -33160,7 +33161,69 @@
      «0%» читается как «ничего не вышло», а правда в том, что считать не от чего. */
   function launchPct(n, base, what) {
     if (!base || n == null) return '';
-    return Math.round(n * 100 / base) + '% ' + what;
+    var v = n * 100 / base;
+    /* Доля меньше половины процента округляется в ноль, и «0% от регистраций» рядом
+       с живой двойкой читается как «никого не было». Пишем словами. */
+    return (v > 0 && v < 1 ? 'меньше 1%' : Math.round(v) + '%') + ' ' + what;
+  }
+
+  /* Диагностика в кабинете и запись на консультацию (владелец, 31.10.2026). Две
+     плитки, у каждой главная цифра — пройденный шаг, а начатый уходит в подпись:
+     «зашли в анкету» без «получили разбор» ничего не стоит, но показывает, где люди
+     осыпаются. Нет блока (старый бэкенд) — нет и плиток. */
+  function launchDiagTiles(cur, base, dc, zal, hvost, pay) {
+    dc = dc || cur.diagcons;
+    pay = pay || cur.payment;
+    if (!dc) return [];
+    /* У этих двух шагов доля от регистраций мало что объясняет: диагностику и
+       консультацию продают НА ЭФИРЕ, и честный знаменатель — зал. Поэтому владелец
+       31.10.2026 попросил обе базы сразу, а у консультации ещё и долю от прошедших
+       диагностику: это соседние шаги одной продажи. */
+    if (zal == null) {
+      var v = cur.viewers;
+      zal = v ? (v.known.viewers || 0) + (v.anon.viewers || 0) : 0;
+    }
+    hvost = hvost || '';
+    var zalTxt = 'от бывших на ' + (hvost ? 'повторе' : 'эфире');
+    var regTxt = 'от регистраций' + (hvost ? ' ' + hvost : '');
+    return [
+      { key: 'diag', label: 'Прошли диагностику', value: dc.done,
+        sub: 'зашли в анкету ' + dc.entered + ' · анкета и разбор в кабинете',
+        pct: [launchPct(dc.done, zal, zalTxt), launchPct(dc.done, base, regTxt)] },
+      { key: 'cons', label: 'Записались на консультацию', value: dc.booked,
+        sub: 'выбрали дату и время ' + dc.slotted,
+        pct: [launchPct(dc.booked, zal, zalTxt),
+              launchPct(dc.booked, dc.done, 'от прошедших диагностику'),
+              launchPct(dc.booked, base, regTxt)] },
+    ].concat(launchSupportTile(pay, dc, base, hvost));
+  }
+
+  /* Последняя плитка ряда — чем всё кончилось: оплаченное сопровождение. Участие за
+     690 ₽ сюда НЕ идёт, это продажа поступления (владелец, 31.10.2026: «оплатили
+     сопровождение, сумма и количество человек»). Деньги собираем по трём дорогам:
+     касса офферов, счета CRM и договоры из ведомости. */
+  function launchSupportTile(pay, dc, base, hvost) {
+    if (!pay || !pay.product) return [];
+    var pr = pay.product, cr = pay.crm || {}, ld = pay.ledger || {};
+    var rub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
+    var n = (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
+    return [{
+      /* Заголовок короткий, да ещё с мягким переносом внутри слова: колонка в самой
+         плотной полосе уже «Сопровождения», и без переноса слово обрезалось на
+         полуслове. Действие («оплатили») уходит в подпись. */
+      key: 'support', label: 'Сопро\u00ADвождение',
+      value: fmtMoney(rub) + ' \u20bd',
+      sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
+      pct: [launchPct(n, dc.booked, 'от записавшихся на консультацию'),
+            launchPct(n, base, 'от регистраций' + (hvost ? ' ' + hvost : ''))],
+    }];
+  }
+
+  /* Сетка полосы под число плиток. Больше шести в строку на обычном ноутбуке не
+     помещается — дальше ломаем на две строки той же ширины, чтобы колонки верхнего
+     и нижнего ряда остались друг под другом. */
+  function launchBarCls(n) {
+    return ({ 3: 'three', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine' })[n] || '';
   }
 
   /* Нижний ряд плашек — «в том числе повтор». Повтор это не отдельное
@@ -33205,7 +33268,7 @@
       { key: 'efir', label: 'Были на повторе', value: zal,
         sub: (vw.known || 0) + ' с карточкой · ' + (vw.anon || 0) + ' без регистрации',
         pct: launchPct(zal, base, 'от регистраций на повтор') },
-    ];
+    ].concat(launchDiagTiles(cur, base, p.diagcons, zal, 'на повтор', p.payment));
     if (p.pages && p.pages.users) {
       /* «Страницу повтора видели» в колонку этой ширины не влезает и обрезается,
          поэтому действие уехало в подпись, а в заголовке осталась сама страница. */
@@ -33218,7 +33281,7 @@
       return Object.assign({}, t, { drag: false });
     });
     return '<div class="lt-rh gap">В том числе повтор' + (dni ? ' · ' + dni : '') + '</div>' +
-      statBar(ordered, (p.pages && p.pages.users) ? 'six' : 'five');
+      statBar(ordered, launchBarCls(ordered.length));
   }
 
   function launchSeenTile(cur, reg) {
@@ -35282,10 +35345,9 @@
       return '<a class="tab' + (i === (state._mkLaunchIdx || 0) ? ' on' : '') + '" data-launch="' + i + '">' + esc(l.title) + '</a>';
     }).join('');
 
-    view.innerHTML = '<div class="dash">' +
-      (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      (cur.povtor ? '<div class="lt-rh">Всего по запуску</div>' : '') +
-      statBar(launchTiles([
+    /* Плитки верхнего ряда держим массивом: от их числа зависит сетка полосы,
+       а появляются они не все и не всегда. */
+    var topTiles = launchTiles([
         /* Период выбран — плитка обязана показывать ТО ЖЕ, что первая плашка пути.
            Раньше плитка всегда считала весь запуск, а плашка слушалась периода: на
            экране рядом стояли 31 и 26, и это читалось как сломанный счётчик (нашла
@@ -35332,7 +35394,12 @@
            у двоих вышло бы разное «идет». Старый расчёт по дням оставлен запасным:
            ответ без stage приедет с непромоученного бэкенда. */
         launchEfirTile(cur, daysVal, days, regShown),
-      ].concat(launchSeenTile(cur, reg))), cur.pages ? 'six' : 'five') +
+    ].concat(launchSeenTile(cur, reg)).concat(launchDiagTiles(cur, regShown)));
+
+    view.innerHTML = '<div class="dash">' +
+      (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
+      (cur.povtor ? '<div class="lt-rh">Всего по запуску</div>' : '') +
+      statBar(topTiles, launchBarCls(topTiles.length)) +
       launchPovtorRow(cur) +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
@@ -41126,7 +41193,13 @@
         /* Доля плитки от предыдущего шага воронки (экран запусков). Отдельной
            строкой под подписью, а не внутри неё: это ответ на другой вопрос —
            не «что это за число», а «много это или мало». */
-        (s.pct ? '<div class="spct num">' + s.pct + '</div>' : '') +
+        /* Доля бывает не одна: у диагностики и записи на консультацию знаменателей
+           несколько — зал, регистрации, предыдущий шаг. Каждая своей строкой. */
+        (s.pct
+          ? (Array.isArray(s.pct) ? s.pct : [s.pct]).filter(Boolean).map(function (x) {
+              return '<div class="spct num">' + x + '</div>';
+            }).join('')
+          : '') +
       '</button>';
     }).join('') + '</div>';
   }
