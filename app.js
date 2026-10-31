@@ -151,7 +151,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'schedScope'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -173,6 +173,7 @@
         schedHide: state.schedHide || {},
         pathGran: state.pathGran || 'week',
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
+        rwDept: state.rwDept || '',
       }));
     } catch (e) {}
   }
@@ -2315,10 +2316,10 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'ads', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'ads', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'reward', 'cabinet_invite'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact', 'org'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact', 'reward', 'org'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'portal', 'contractors', 'academy', 'planfact'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'portal', 'academy', 'pay_create'] },
@@ -2341,7 +2342,7 @@
     // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
     // не видит маркетинг, а «Руководитель» — это заодно выплаты команды и документы
     // учеников. Ведомости нет вовсе: там ввод процентов и выплат людям.
-    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'marketing', 'portal', 'planfact', 'finmodel_marketing', 'org'] },
+    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'pay_create', 'analytics', 'marketing', 'portal', 'planfact', 'reward', 'finmodel_marketing', 'org'] },
     // Решение владельца от 2026-09-02: продюсер ведёт маркетинг и продажи запуска —
     // контроль, отчётность, планирование и переписки с клиентами. Набор прав сейчас
     // такой же, как у руководителя маркетинга: владелец просил роль без права менять
@@ -2366,7 +2367,7 @@
     // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
     // (ведет всю финансовую работу); ведомостью управляет, поэтому есть и правка
     // (finmodel_edit): экраны ввода Доходы и листы работают только с ней.
-    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'pay_create', 'contractors', 'finmodel', 'finmodel_edit'] },
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'pay_create', 'contractors', 'finmodel', 'finmodel_edit', 'reward'] },
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
     accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance', 'pay_create', 'cz_pay'] },
@@ -2570,6 +2571,13 @@
        раздела (группа «Сводка» в FIN_GROUPS). Данные тянутся из план выручки / план
        отделов / P&L / оплат — экран их только показывает, ничего не хранит. */
     { id: 'finboss', label: 'Сводка руководителя', icon: 'chart', cap: 'finmodel', space: 'fin' },
+    /* «Вознаграждение» — расчетный лист исполнителя: что он сделал за месяц и
+       сколько по его же листу причитается (Роман 28.10.2026). Живет в Финансах,
+       а не в контуре клиентов: это деньги команды, рядом с расчетными листами
+       и выплатами. Слова «КПИ» в названии нет намеренно — это трудовое понятие,
+       а у нас исполнители по договору услуг. Cap свой: на `finmodel_marketing`
+       раздел показал бы одному исполнителю сумму другого. */
+    { id: 'reward', label: 'Вознаграждение', icon: 'target', cap: 'reward', space: 'fin' },
     { id: 'finopex', label: 'Операционные расходы', icon: 'wallet', space: 'fin',
       cap: 'finmodel|finmodel_ops', hideCap: 'finmodel' },
     { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
@@ -2653,18 +2661,13 @@
        Текст лежит в базе (routers/kb.py) и правится прямо тут — в отличие от
        продуктового портала, который живет файлом и меняется выкаткой. */
     { id: 'finkb', label: 'База знаний', icon: 'doc', cap: 'finmodel', space: 'fin' },
-    /* Те же регламенты, но кнопкой в Финансах — рядом с финансовой базой, где
-       финансисты и работают (Роман 28.10.2026). Открывают ту же базу reglament
-       (renderFinKb), свой id нужен только чтобы клик не уводил из Финансов в общее
-       меню. Видят её тут финансисты (cap finmodel); остальная команда читает те же
-       регламенты через пункт «Регламенты» в основном меню (cap dash). */
+    /* Регламенты — кнопкой в Финансах, рядом с финансовой базой, где финансисты и
+       работают (Роман 28.10.2026, он же попросил убрать дубль из основного меню).
+       Экран тот же двухпанельный renderFinKb, раздел reglament в routers/kb.py;
+       читают по cap finmodel, правят руководители (cap team на бэке). Свой id
+       нужен только чтобы клик не уводил из Финансов в общее меню. */
     { id: 'finreglament', label: 'Регламенты', icon: 'doc', cap: 'finmodel', space: 'fin' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team|team_view' },
-    /* База знаний команды «Регламенты»: как мы работаем, инструкции по отделам.
-       Движок тот же, что у финансовой базы (routers/kb.py, раздел reglament),
-       экран — тот же двухпанельный renderFinKb. Читает вся команда (cap dash),
-       правят руководители (cap team на бэке). Рядом с «Командой» намеренно. */
-    { id: 'reglament', label: 'Регламенты', icon: 'doc', cap: 'dash' },
   ];
 
   /* ── Два рабочих пространства в одной CRM ─────────────────────────────────
@@ -2702,7 +2705,7 @@
     { label: 'Сводка', ids: ['finboss'] },
     { label: 'Ведомость периода',
       ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect',
-            'finedit', 'finpartners', 'finref', 'finfund'] },
+            'finedit', 'reward', 'finpartners', 'finref', 'finfund'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
     { label: 'Отчеты', ids: ['finpnl', 'finmetrics', 'finops'] },
     { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb', 'finreglament'] },
@@ -3147,6 +3150,38 @@
           renderTopbar(); renderView();
         });
       });
+    } else if (state.page === 'reward') {
+      /* Отделы переключаются сверху (Роман 28.10.2026). Руководителю маркетинга
+         нужны свои люди, а не чужие строки под ними, и листов со временем будет
+         больше, чем экран. Вкладки строятся по отделам, которые пришли с листами:
+         своего списка отделов на фронте нет, иначе он разъехался бы с сервером.
+         Пока листы не приехали, полоса молчит — ряд вкладок, который сразу после
+         этого перерисуется, читается как подергивание. */
+      var rwD = state._rw && state._rw !== 'none' ? state._rw : null;
+      var rwDs = rwD ? (rwD.depts || []) : [];
+      if (!rwDs.length) tb.innerHTML = '';
+      else {
+        var rwCur = rwDeptCur(rwDs);
+        var rwN = function (key) {
+          return (rwD.sheets || []).filter(function (s) {
+            return key === '*' || (s.dept || '') === key;
+          }).length;
+        };
+        tb.innerHTML = '<nav class="tabs">' +
+          [['*', 'Все отделы']].concat(rwDs.map(function (g) { return [g.key, g.label]; }))
+            .map(function (o) {
+              return '<a class="tab' + (rwCur === o[0] ? ' on' : '') +
+                '" data-rwdept="' + esc(o[0]) + '">' + esc(o[1]) +
+                '<span class="n">' + rwN(o[0]) + '</span></a>';
+            }).join('') +
+        '</nav>';
+        Array.prototype.forEach.call(tb.querySelectorAll('[data-rwdept]'), function (t) {
+          t.addEventListener('click', function () {
+            state.rwDept = t.getAttribute('data-rwdept');
+            saveUi(); renderTopbar(); renderView();
+          });
+        });
+      }
     } else if (state.page === 'finprograms' || state.page === 'finpartners' ||
                state.page === 'fintax' || state.page === 'finbanks' ||
                state.page === 'finpaycheck' || state.page === 'finkb' ||
@@ -3644,7 +3679,7 @@
       // период. Именно от него зависит, тянуть период дальше или платить.
       var per = finPeriod();
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
-      var titles = { finboss: 'Сводка руководителя',
+      var titles = { finboss: 'Сводка руководителя', reward: 'Вознаграждение',
                      finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
                      finops: 'Карта операций', finref: 'Сервисы и долги',
                      finfund: 'Фонды', finincome: 'Доходы',
@@ -3664,6 +3699,11 @@
       else if (state.page === 'finboss') {
         ph = 'План и факт за месяц в одном месте: выручка, расходы по отделам и прибыль. ' +
           'Цифры тянутся из планов и ведомости сами — здесь их только смотрят, заносят на своих экранах.';
+      }
+      else if (state.page === 'reward') {
+        ph = 'Что человек сделал за месяц по своему листу и сколько по нему причитается. ' +
+          'Показатели считаются из живых данных; строка, которую посчитать нечем, стоит ' +
+          'вопросом с причиной и в сумму не идет.';
       }
       else if (state.page === 'finref') {
         ph = 'Что списывается само и что мы должны. Сервис с наступившим сроком ' +
@@ -3914,6 +3954,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'planfact') renderPlanFact(view);
+    else if (state.page === 'reward') renderReward(view);
     else if (state.page === 'manage') renderManage(view);
     else if (state.page === 'stories') renderStories(view);
     else if (state.page === 'efirbot') renderEfirBot(view);
@@ -23516,7 +23557,7 @@
         : '';
       // «Подобрать услуги» — у строки, связанной с карточкой самозанятого: собрать из суммы
       // задания по услугам его роли (не «разбить»: слово про дробление фикса лишнее).
-      var brkBtn = (canBreak && it.contractor_id)
+      var brkBtn = (canBreak && (it.contractor_id || it.smz_id))
         ? '<button class="fin-brk" data-fbrk="' + it.id +
           '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
         : '';
@@ -23623,7 +23664,7 @@
         for (var i = 0; i < items.length; i++) {
           if (items[i].id === id) {
             var it = items[i];
-            return finBreakdownOpen(it.contractor_id, it.counterparty || it.item || '',
+            return finBreakdownOpen(it.contractor_id || it.smz_id, it.counterparty || it.item || '',
               finMonthOf(it.date));
           }
         }
@@ -24014,6 +24055,10 @@
     }
     if (FIN.direct === 'none') return finErrView(view);
     var D = FIN.direct, blocks = D.blocks || [], canFix = can('finmodel_edit');
+    // «Подобрать услуги» и в прямых расходах: сюда попадают выплаты людям (управление,
+    // продукт), которых проводят по ФИО. Право — как у листов: видеть ведомость и
+    // подрядчиков, отдельно от права править строку.
+    var canBreak = can('finmodel') && can('contractors');
     var nRows = blocks.reduce(function (s, b) { return s + b.items.length; }, 0);
 
     var bar = statBar([
@@ -24033,6 +24078,12 @@
         // Откуда строка — пометка к описанию, а не действие: в колонке действий
         // она стояла третьей и выдавливала сумму на метку «оплачен».
         var src = finDirectBadge(it.origin, it.role);
+        // Кнопка подбора услуг: у строки, связанной с карточкой самозанятого напрямую
+        // или найденной по ФИО. Глушит всплытие, чтобы не открыть правку строки.
+        var brkBtn = (canBreak && (it.contractor_id || it.smz_id))
+          ? '<button class="fin-brk" data-fbrk="' + it.id +
+            '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
+          : '';
         return '<div class="trow fin-grid fe-grid' + (editable ? ' click' : '') +
           (it.status === 'факт' ? ' paid' : '') + '"' +
           (editable ? ' data-dline="' + it.id + '"' : '') + '>' +
@@ -24041,6 +24092,7 @@
             (sub || src ? '<i>' + src + (sub && src ? ' · ' : '') + sub + '</i>' : '') + '</span>' +
           '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
           '<span class="fo-st">' +
+            brkBtn +
             finPaidCell(it.id, it.status, canFix) +
             (editable ? '<button class="fd-del" data-ddel="' + it.id +
               '" title="Удалить строку" aria-label="Удалить">' + ic('x', 12) + '</button>'
@@ -24062,6 +24114,20 @@
     view.innerHTML = bar + cards;
 
     finPaidBind(view);
+    // «Подобрать услуги» у строки прямого расхода: доступно и тем, кто ведомость
+    // только смотрит (finmodel+contractors), поэтому вне ветки canFix. Всплытие
+    // глушим, чтобы клик не открыл правку строки.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-brk[data-fbrk]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var hit = finDirectFind(n.getAttribute('data-fbrk'));
+        if (hit) {
+          var it = hit.it;
+          finBreakdownOpen(it.contractor_id || it.smz_id,
+            it.counterparty || it.item || '', finMonthOf(it.date));
+        }
+      });
+    });
     if (canFix) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-dadd]'), function (btn) {
         btn.addEventListener('click', function () {
@@ -25285,6 +25351,14 @@
     var docChip = it.doc
       ? '<span class="fst doc">' + ic('check', 11) + esc(it.doc.name || 'документ') + '</span>'
       : (it.status === 'факт' ? '<span class="fst wait">нет документа</span>' : '');
+    // «Подобрать услуги» и здесь, на выплатах подрядчикам: самозанятым акт/чек
+    // собираются из суммы так же, как в фонд-листах. Только на дашборде ведомости
+    // (clickable), в истории — просмотр. Строка связана с карточкой напрямую или по ФИО.
+    var brkBtn = (clickable && can('finmodel') && can('contractors') &&
+                  (it.contractor_id || it.smz_id))
+      ? '<button class="fin-brk" data-fbrk="' + it.id +
+        '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
+      : '';
     return '<div class="trow fin-grid fe-grid"' +
       (clickable ? ' data-payout="' + it.id + '"' : '') + '>' +
       '<span class="num fo-date">' + finDate(it.date) + '</span>' +
@@ -25293,7 +25367,7 @@
       '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
       '<span class="fo-st">' +
         '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
-          esc(it.status) + '</span>' + docChip +
+          esc(it.status) + '</span>' + docChip + brkBtn +
       '</span>' +
     '</div>';
   }
@@ -25423,6 +25497,21 @@
         });
       });
     }
+    // «Подобрать услуги» у строки выплаты: глушим всплытие, чтобы не открылась правка
+    // выплаты. Сумма и услуги по должности — те же, что в фонд-листах.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-brk[data-fbrk]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = n.getAttribute('data-fbrk');
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].id === id) {
+            var it = items[i];
+            return finBreakdownOpen(it.contractor_id || it.smz_id,
+              it.counterparty || it.item || '', finMonthOf(it.date));
+          }
+        }
+      });
+    });
     pageAnim(view);
   }
 
@@ -28523,7 +28612,7 @@
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
       '<div class="grid">' +
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
-        'кого закрываем и на сколько — консультации собираются сами, без суммы считаем по прайсу', salesAuto) + '</div>' +
+        'кого закрываем и на сколько — консультации собираются сами, без суммы берём половину тарифа по прайсу', salesAuto) + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
         'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
     '</div>' +
@@ -28635,18 +28724,36 @@
     var isSaleCard = (kind === 'продажа');
     var autoBody = (autoRows || []).map(function (x) {
       var over = x.due_on && todayIso && x.due_on < todayIso;
-      // «по прайсу» — сумму на консультации не поставили, и план взял цену тарифа из
-      // каталога (by_price от сервера). Амбером, потому что это наша прикидка и ждёт
-      // чека от продавца; вписанная им сумма сильнее, и чип тогда обычный.
+      // «по прайсу» — сумму на консультации не поставили, и план взял ПОЛОВИНУ цены
+      // тарифа из каталога (by_price от сервера): семьи платят двумя частями 50/50, и в
+      // периоде консультации мы ждём первый платёж. Амбером, потому что это наша прикидка
+      // и ждёт чека от продавца; вписанная им сумма сильнее, и чип тогда обычный.
       var chip = isSaleCard
         ? (x.by_price
-            ? '<span class="sev mini cz-new" title="Суммы на консультации нет — взяли цену тарифа по прайсу. Впишите ожидаемый чек в карточке клиента">по прайсу</span>'
+            ? '<span class="sev mini cz-new" title="Суммы на консультации нет — взяли половину цены тарифа по прайсу, это первый платёж из двух. Впишите ожидаемый чек в карточке клиента">по прайсу</span>'
             : '<span class="sev mini cz-wait">из консультации</span>')
         : (over ? '<span class="sev mini cz-bad">просрочен</span>'
                 : '<span class="sev mini cz-wait">рассрочка</span>');
+      // «без карточки» — консультация стоит за записью встречи, а не за клиентом: зум
+      // идёт под общим аккаунтом школы, и гостя по подписи не опознать. Строка всё равно
+      // в плане (Роман 29.10.2026: «привяжем когда клиентами станут»), но вести ей
+      // некуда — клика у неё нет, и это видно подписью, а не мёртвой ссылкой.
+      if (x.no_card) {
+        chip += ' <span class="sev mini cz-wait" title="Консультация из записи зума: карточки у этого человека пока нет. Привяжите запись к клиенту в «EastSide Meeting» — строка переедет в его карточку">без карточки</span>';
+      }
+      // «деньги пришли» — в ведомости по этому клиенту уже есть приход периода, но со
+      // графиком он не сведён: суммы разошлись (заплатили частью или больше). Приход,
+      // совпавший со взносом по сумме, закрывает его сам и в дебиторке не остаётся,
+      // поэтому чип значит «проверь, прежде чем просить деньги» (30.10.2026).
+      if (!isSaleCard && x.paid_in > 0) {
+        chip += ' <span class="sev mini cz-new" title="По этому клиенту в ведомости есть приход ' +
+          esc(finRub(x.paid_in)) + ' за период, а со графиком он не сведён: суммы не совпали. ' +
+          'Проверьте платежи клиента, прежде чем просить деньги">деньги пришли</span>';
+      }
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
         .filter(Boolean).map(esc).join(' · ');
-      return '<div class="fl-row fl-2 rp-row click" data-lead="' + esc(x.case_id) + '">' +
+      return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' +
+        (x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '') + '>' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || (isSaleCard ? 'ожидаемая продажа' : 'рассрочка')) +
           '</span></div>' +
@@ -32941,12 +33048,119 @@
      запуска, и без неё «видели 110» рядом с «регистраций 34» читается как потеря
      людей, которых мы просто не считали. Источник называем прямо — это НЕ наш счёт,
      Метрика считает посетителей по-своему и с нашими цифрами сходится примерно. */
+  /* ── Порядок плашек запуска ────────────────────────────────────────────────
+     Порядок выбирает человек, перетаскиванием, и он запоминается в этом браузере
+     (Ольга, 31.10.2026: «можешь сделать плашки подвижными»). Почему в браузере, а не
+     в профиле: порядок — это привычка глаза на своём рабочем месте, а не настройка
+     команды, и ради неё не стоит ходить на сервер при каждой отрисовке.
+
+     По умолчанию первой идёт «Страницу видели»: воронка начинается с неё, а не с
+     регистраций (её же просьба). Плитки без ключа переставить нельзя — они встают
+     туда, где стояли.
+
+     Сохранённый порядок НЕ выбрасывает новые плитки: ключ, которого в списке нет,
+     добавляется в конец. Иначе после любой новой плашки человек видел бы экран без
+     неё и считал, что она не доехала. */
+  var LAUNCH_TILES_KEY = 'mk-launch-tiles';
+  var LAUNCH_TILES_DEFAULT = ['seen', 'reg', 'invoice', 'paid', 'channels', 'efir'];
+
+  function launchTilesSaved() {
+    try {
+      var v = JSON.parse(localStorage.getItem(LAUNCH_TILES_KEY) || 'null');
+      return Array.isArray(v) ? v.filter(function (k) { return typeof k === 'string'; }) : null;
+    } catch (e) { return null; }
+  }
+
+  function launchTilesSave(order) {
+    try { localStorage.setItem(LAUNCH_TILES_KEY, JSON.stringify(order)); } catch (e) {}
+  }
+
+  function launchTiles(items) {
+    var order = launchTilesSaved() || LAUNCH_TILES_DEFAULT;
+    var byKey = {};
+    items.forEach(function (t) { if (t && t.key) byKey[t.key] = t; });
+    var out = [];
+    order.forEach(function (k) { if (byKey[k]) { out.push(byKey[k]); byKey[k] = null; } });
+    items.forEach(function (t) { if (t && (!t.key || byKey[t.key])) out.push(t); });
+    return out.map(function (t) { return t.key ? Object.assign({ drag: true }, t) : t; });
+  }
+
+  /* Плашки запуска переставляются мышью. Порядок сохраняем СРАЗУ по отпусканию:
+     человек проверяет перестановку перезагрузкой, и «сохраню потом» читается как
+     «не сработало». */
+  function launchTilesWire(view) {
+    var bar = view.querySelector('.statbar');
+    if (!bar) return;
+    var dragged = null;
+    Array.prototype.forEach.call(bar.querySelectorAll('[data-tile]'), function (n) {
+      n.addEventListener('dragstart', function (e) {
+        dragged = n;
+        n.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', n.getAttribute('data-tile')); } catch (err) {}
+      });
+      n.addEventListener('dragend', function () {
+        n.classList.remove('dragging');
+        Array.prototype.forEach.call(bar.querySelectorAll('.drop-to'), function (x) { x.classList.remove('drop-to'); });
+        dragged = null;
+      });
+      n.addEventListener('dragover', function (e) {
+        if (!dragged || dragged === n) return;
+        e.preventDefault();
+        n.classList.add('drop-to');
+      });
+      n.addEventListener('dragleave', function () { n.classList.remove('drop-to'); });
+      n.addEventListener('drop', function (e) {
+        e.preventDefault();
+        n.classList.remove('drop-to');
+        if (!dragged || dragged === n) return;
+        /* Куда вставлять: если тащим вправо — после цели, если влево — перед ней.
+           Без этого плитка всегда вставала перед целью, и «поменять две местами»
+           требовало двух движений. */
+        var all = Array.prototype.slice.call(bar.querySelectorAll('[data-tile]'));
+        var from = all.indexOf(dragged), to = all.indexOf(n);
+        bar.insertBefore(dragged, from < to ? n.nextSibling : n);
+        launchTilesSave(Array.prototype.map.call(
+          bar.querySelectorAll('[data-tile]'),
+          function (x) { return x.getAttribute('data-tile'); }));
+      });
+    });
+  }
+
+  /* Плашка эфира. Пока эфир впереди — обратный счёт, во время и после — СКОЛЬКО
+     ЧЕЛОВЕК его видело (Ольга, 31.10.2026: «вместо эфир прошел надо общее количество
+     уникальных человек на эфире и рядом смотрели запись количество человек»).
+     «Прошёл» на этом месте не отвечал ни на один рабочий вопрос.
+
+     Считаем людей: узнанных и тех, кто смотрел без регистрации, — сумма честна,
+     потому что это разные люди, а не один в двух строках. Запись идёт подписью:
+     это второе действие того же человека, и в одну цифру с живым эфиром их сложить
+     нельзя. */
+  function launchEfirTile(cur, daysVal, days) {
+    var v = cur && cur.viewers, r = cur && cur.recording;
+    var live = v ? (v.known.viewers || 0) + (v.anon.viewers || 0) : null;
+    var rec = r ? (r.known.viewers || 0) + (r.anon.viewers || 0) : 0;
+    var proshel = cur.stage && !/^\d+$/.test(String(cur.stage.title))
+      && String(cur.stage.title).toLowerCase().indexOf('до эфира') < 0;
+    if (live == null || !proshel) {
+      return cur.stage
+        ? { key: 'efir', label: 'Эфир', value: cur.stage.title, sub: cur.stage.sub,
+            word: !/^\d+$/.test(String(cur.stage.title)) }
+        : { key: 'efir', label: 'До эфира', value: daysVal,
+            sub: days > 0 ? plural(days, 'день', 'дня', 'дней')
+                          : cur.event_date.split('-').reverse().join('.') };
+    }
+    return { key: 'efir', label: 'Были на эфире', value: live,
+             sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
+                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : '') };
+  }
+
   function launchSeenTile(cur, reg) {
     var p = cur.pages;
     if (!p || !p.users) return [];
     var pct = reg.total && p.users ? Math.round(reg.total * 100 / p.users) : null;
     var since = p.since ? ('с ' + fmtDay(p.since)) : 'по Метрике';
     return [{
+      key: 'seen',
       label: 'Страницу видели',
       /* go — только маркер для обработчика ниже: плитка открывает разбор, а не
          уводит на другой экран. */
@@ -33791,12 +34005,22 @@
     var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid) + (cr.wait || 0);
     var money = function (n) { return fmtMoney(n) + ' ₽'; };
     var tail = function (rub) { return cr.invoiced ? ' · сопровождение ' + money(rub || 0) : ''; };
+    /* Сколько ЧЕЛОВЕК за этими деньгами (Ольга, 31.10.2026). Сумма без людей не
+       отвечает на рабочий вопрос: 100 000 рублей от одного и от десяти — это разные
+       запуски, а по строке они одинаковые. */
+    var lyudi = function (n) {
+      return n + ' ' + plural(n, 'человек', 'человека', 'человек') + ' · ';
+    };
+    var billedN = (pay.invoiced || 0) + (pr.invoiced || 0) + (cr.invoiced || 0);
+    var gotN = (pay.paid || 0) + (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
     var rows =
       flatRow('Выставлено счетов',
+        lyudi(billedN) +
         'участие ' + money(pay.invoiced_rub || 0) + ' · продукты ' + money(pr.invoiced_rub || 0) +
         tail(cr.invoiced_rub),
         money(billed)) +
       flatRow('Оплачено',
+        lyudi(gotN) +
         'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0) +
         tail(cr.paid_rub) +
         (ld.paid ? ' · договоры ' + money(ld.paid_rub || 0) : ''),
@@ -34990,28 +35214,33 @@
 
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      statBar([
+      statBar(launchTiles([
         /* Период выбран — плитка обязана показывать ТО ЖЕ, что первая плашка пути.
            Раньше плитка всегда считала весь запуск, а плашка слушалась периода: на
            экране рядом стояли 31 и 26, и это читалось как сломанный счётчик (нашла
            Ольга 22.09). Число за период берём у самой плашки — она и есть источник,
            а «всего за запуск» уходит в подпись, чтобы обе цифры были названы. */
-        { label: 'Регистрации', value: (regInPeriod == null ? reg.total : regInPeriod),
+        { key: 'reg', label: 'Регистрации', value: (regInPeriod == null ? reg.total : regInPeriod),
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total },
         /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
            это не сопровождение. Плитка держит участие, продукты живут ступенями. */
-        { label: 'Счет на участие', value: pay.invoiced,
-          sub: '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
-        { label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
-          sub: prod.paid_rub
-            ? 'участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
-            : pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
+        /* В плитке счетов и оплат — ЛЮДИ, а не только деньги (Ольга, 31.10.2026):
+           «5» без слова «человек» читалось как пять рублей или пять попыток. */
+        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced,
+          sub: plural(pay.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей · ' +
+            pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
+        { key: 'paid', label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
+          sub: (pay.paid + ' из ' + (pay.invoiced || 0) + ' ' +
+                plural(pay.invoiced || 0, 'человека', 'человек', 'человек')) +
+            (prod.paid_rub
+              ? ' · участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
+              : '') },
         /* Каналов три. Плитка показывает людей во всех, а подпись — откуда они;
            без неё «29» читается как телеграм, и цифра спорит с блоком ниже.
            Без in_channel (старый бэкенд) остаётся прежний телеграмный счёт. */
-        { label: 'В закрытых каналах', value: chTotal,
+        { key: 'channels', label: 'В закрытых каналах', value: chTotal,
           sub: inCh
             ? ['tg', 'vk', 'max'].map(function (k) {
                 var v = inCh[k];
@@ -35025,11 +35254,8 @@
            вечера и час начала, а команда сидит в разных поясах — по часам браузера
            у двоих вышло бы разное «идет». Старый расчёт по дням оставлен запасным:
            ответ без stage приедет с непромоученного бэкенда. */
-        (cur.stage
-          ? { label: 'Эфир', value: cur.stage.title, sub: cur.stage.sub,
-              word: !/^\d+$/.test(String(cur.stage.title)) }
-          : { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') }),
-      ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
+        launchEfirTile(cur, daysVal, days),
+      ].concat(launchSeenTile(cur, reg))), cur.pages ? 'six' : 'five') +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
@@ -35088,6 +35314,7 @@
           '</div></div>' +
       '</div></div>';
 
+    launchTilesWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-launch]'), function (t) {
       t.addEventListener('click', function () {
         state._mkLaunchIdx = parseInt(t.getAttribute('data-launch'), 10) || 0;
@@ -36012,6 +36239,327 @@
         });
     });
   }
+
+
+  /* ── ВОЗНАГРАЖДЕНИЕ — что человек сделал за месяц и сколько ему причитается ──
+     Роман 28.10.2026 дословно: «на конец месяца смотришь, что сделал человек,
+     система проверяет все выполнено, если выполнено ставит сколько надо
+     выплатить». До этого расчетные листы жили картинками в чате: руководитель в
+     конце месяца руками сверял сделанное, сам считал ступени и сам выводил сумму.
+
+     Слова «КПИ» на экране нет намеренно (Роман 28.10.2026: «не называй кпи, это
+     трудовое понятие»): у нас исполнители по договору услуг, и лексика везде
+     одна — вознаграждение, объем услуг, к выплате.
+
+     Главный прием экрана — разные слова для «не сделал» и «не знаем». Строка,
+     которую нам нечем посчитать, стоит вопросом с причиной и в сумму не идет:
+     ноль на месте нашей дырки в сборе данных читается как обвинение человека.
+     Все состояния и суммы считает сервер (routers/reward.py), здесь раскладка. */
+  var RW_ST = { done: ['rw-ok', 'выполнено'], miss: ['rw-miss', 'не добрал'],
+                 wait: ['rw-wait', 'нужна цифра'], blocked: ['rw-blocked', 'не считаем'] };
+
+  function rwMonth() {
+    if (!state.rwMonth) {
+      var d = new Date();
+      state.rwMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    }
+    return state.rwMonth;
+  }
+
+  /* Выбранный отдел ('*' — все). Отдела может не быть в этом месяце: лист закрыли,
+     человек ушел, листы завели только маркетингу. Тогда экран показал бы пустоту
+     вместо людей, поэтому молча откатываемся на «все отделы». */
+  function rwDeptCur(depts) {
+    var cur = state.rwDept || '*';
+    if (cur === '*') return '*';
+    return (depts || []).filter(function (g) { return g.key === cur; }).length ? cur : '*';
+  }
+
+  function fetchRw() {
+    var m = rwMonth();
+    api('/admin/api/reward?period=' + m).then(function (r) {
+      if (rwMonth() !== m) return;    // пока ходили, переключили месяц
+      state._rw = r || 'none';
+      // Вкладки отделов живут в полосе сверху и собираются из этого же ответа,
+      // поэтому ее надо перерисовать вместе с экраном, а не только экран.
+      if (state.page === 'reward') { renderTopbar(); renderView(); }
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if (rwMonth() !== m) return;
+      state._rw = 'none';
+      if (state.page === 'reward') renderView();
+    });
+  }
+
+  /* Условие строки словами ее листа, а не названием поля. Человек узнает свой
+     лист по формулировке «8—10 роликов», а не по «payout: steps». */
+  function rwCond(r) {
+    // У строки-вопроса условий еще нет: «план 100, вес 0%» на ней — мусор, а не
+    // информация. Вместо условия она показывает причину, см. rwRow.
+    if (r.blocked) return '';
+    if (r.payout === 'share') {
+      return 'план ' + fmtMoney(r.plan) + ', вес ' + fmtMoney(r.weight_pct) + '%';
+    }
+    if (r.payout === 'fixed') return 'норма ' + fmtMoney(r.plan);
+    var steps = r.steps || [];
+    if (!steps.length) return '';
+    return steps.map(function (s) {
+      var range = s.to != null ? fmtMoney(s.from) + '—' + fmtMoney(s.to)
+                               : 'от ' + fmtMoney(s.from);
+      return range + ' → ' + fmtMoney(s.rub) + ' ₽';
+    }).join(', ');
+  }
+
+  function rwRow(r, closed) {
+    var st = RW_ST[r.state] || RW_ST.wait;
+    var fact;
+    if (r.state === 'blocked') {
+      // Причина живет в колонке условий: там строка идет слева и читается как
+      // предложение, а в узкой колонке факта она ломалась на три куска по краю.
+      fact = '<span class="rw-dash">—</span>';
+    } else if (r.fact == null) {
+      // Ждем цифру человека. Пока месяц живой — вводим тут же: отдельная форма
+      // ради одного числа означала бы, что ее не заполнят.
+      fact = closed ? '<span class="rw-why">цифры не было</span>'
+        : (r.fact_kind === 'rating'
+            ? '<span class="rw-rate">' + [0, 50, 100].map(function (v) {
+                return '<button class="qchip" data-rwrate="' + r.id + ':' + v + '">' + v + '</button>';
+              }).join('') + '</span>'
+            : '<button class="pf-set none" data-rwfact="' + r.id + '">внести</button>');
+    } else if (r.fact_kind === 'auto') {
+      fact = '<span class="num">' + fmtMoney(r.fact) + '</span>';
+    } else {
+      fact = '<button class="pf-set" data-rwfact="' + r.id + '"' + (closed ? ' disabled' : '') +
+        '>' + fmtMoney(r.fact) + '</button>';
+    }
+
+    return '<div class="rw-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
+      '<div class="rw-nm">' + esc(r.label) +
+        (r.hint ? '<small>' + esc(r.hint) + '</small>' : '') + '</div>' +
+      '<div class="rw-cond">' + (r.state === 'blocked'
+        ? '<span class="rw-why">' + esc(r.blocked) + '</span>'
+        : esc(rwCond(r))) + '</div>' +
+      '<div class="rw-fact">' + fact + '</div>' +
+      '<div class="rw-sum num">' + (r.rub ? fmtMoney(r.rub) + ' ₽' : '—') + '</div>' +
+      '<div class="rw-st"><span class="sev ' + st[0] + '">' + st[1] + '</span></div>' +
+    '</div>';
+  }
+
+  function rwSheet(s) {
+    var rows = s.rows || [];
+    var q = s.questions || 0;
+    /* Фикс уходит двумя выплатами, и в конце месяца платят остаток (Роман 28.10.2026:
+       «25 000 это ее фикс, перед выплатой он делится на два и прибавляются метрики,
+       получается 15 500»). Поэтому крупно стоит остаток, а начисленное за месяц идет
+       строкой рядом: без нее 15 500 выглядит как вся ее выручка за месяц, а с одной
+       только суммой за месяц легко заплатить двенадцать с половиной второй раз. */
+    var paid = s.first_pay_rub || 0;
+    var money = paid
+      ? 'за месяц ' + fmtMoney(s.month_rub) + ' ₽, первой выплатой ушло ' + fmtMoney(paid) + ' ₽'
+      : '';
+    // Минуса в расчете нет: разницу показываем вопросом и решают ее люди.
+    if (s.overpaid_rub) {
+      money = 'по листу набралось на ' + fmtMoney(s.overpaid_rub) +
+        ' ₽ меньше, чем ушло первой выплатой';
+    }
+    var head = '<div class="sec-head rw-head">' +
+      '<div><div class="t">' + esc(s.name) +
+        (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</div>' +
+        '<div class="s">' + (s.closed
+          ? 'месяц закрыт' + (s.closed_by ? ', ' + esc(s.closed_by) : '')
+          : (q ? q + ' ' + plural(q, 'строка ждет ответа', 'строки ждут ответа', 'строк ждут ответа')
+               : 'все строки посчитаны')) + '</div>' +
+        (money ? '<div class="s' + (s.overpaid_rub ? ' rw-why' : '') + '">' + money + '</div>' : '') +
+        '</div>' +
+      '<div class="rw-total"><b>' + fmtMoney(s.total_rub) + ' ₽</b><small>' +
+        (s.closed ? 'выплачено по этому расчету' : 'к выплате') + '</small></div>' +
+      (s.closed
+        ? '<button class="bp ghost" data-rwopen="' + s.sheet_id + '">Открыть месяц</button>'
+        : '<button class="bp" data-rwclose="' + s.sheet_id + '">Закрыть месяц</button>') +
+    '</div>';
+
+    return '<div class="card sp12' + (s.closed ? ' rw-shut' : '') + '">' + head +
+      (rows.length
+        ? '<div class="rw-rows">' + rows.map(function (r) {
+            return rwRow(r, s.closed);
+          }).join('') + '</div>'
+        : '<div class="empty">В листе нет ни одной строки — его еще не заполнили.</div>') +
+    '</div>';
+  }
+
+  function renderReward(view) {
+    if (!state._rw) { view.innerHTML = dashSkeleton(); fetchRw(); return; }
+    if (state._rw === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить расчет — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._rw;
+    var all = d.sheets || [];
+    /* Отдел выбирается полосой сверху, и экран показывает только его листы: сумма
+       и число вопросов в шапке считаются по показанному, иначе руководитель отдела
+       видел бы свои листы под чужой суммой. */
+    var dept = rwDeptCur(d.depts);
+    var sheets = dept === '*' ? all
+      : all.filter(function (s) { return (s.dept || '') === dept; });
+    var now = new Date();
+    var isNow = d.period === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+    var sum = sheets.reduce(function (a, s) { return a + (s.total_rub || 0); }, 0);
+    var questions = sheets.reduce(function (a, s) { return a + (s.questions || 0); }, 0);
+
+    var head = '<div class="card pf-head">' +
+      '<div class="brd-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-rwmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(pfMonthTitle(d.period)) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-rwmon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+        (isNow ? '' : '<button class="qchip" data-rwmon="now">Сейчас</button>') +
+      '</div>' +
+      '<div class="pf-verdict">' +
+        '<div class="pf-vt">' + fmtMoney(sum) + ' ₽ по ' + sheets.length + ' ' +
+          plural(sheets.length, 'листу', 'листам', 'листам') + '</div>' +
+        '<div class="pf-vs">' + (questions
+          ? questions + ' ' + plural(questions, 'строка ждет', 'строки ждут', 'строк ждут') +
+            ' цифру или решение — пока они открыты, сумма не окончательная'
+          : 'все строки посчитаны, сумму можно закрывать') + '</div>' +
+      '</div>' +
+    '</div>';
+
+    /* Листы идут группами по отделам (Роман 28.10.2026: «раздели на отделы,
+       маркетологов в свой, других в свой»). Порядок и подписи отделов дает
+       сервер — второй список на фронте однажды разъехался бы с ним. У каждой
+       группы свой подытог: руководитель маркетинга смотрит свою сумму, а не
+       ищет ее в общей куче. Выбран один отдел — заголовки групп уходят: отдел
+       уже назван горящей вкладкой сверху, вторая подпись о том же лишняя. */
+    var groups = dept !== '*' ? sheets.map(rwSheet).join('') : (d.depts || []).map(function (g) {
+      var mine = sheets.filter(function (s) { return (s.dept || '') === g.key; });
+      if (!mine.length) return '';
+      var gsum = mine.reduce(function (a, s) { return a + (s.total_rub || 0); }, 0);
+      return '<div class="rw-dept">' +
+          '<div class="rw-dept-t">' + esc(g.label) + '</div>' +
+          '<div class="rw-dept-s">' + mine.length + ' ' +
+            plural(mine.length, 'человек', 'человека', 'человек') + ' · ' +
+            fmtMoney(gsum) + ' ₽</div>' +
+        '</div>' + mine.map(rwSheet).join('');
+    }).join('');
+
+    view.innerHTML = '<div class="dash">' + head +
+      (sheets.length
+        ? groups
+        : '<div class="card"><div class="empty">Ни одного расчетного листа пока нет. ' +
+          'Лист заводится по согласованным с человеком условиям — ступени, план и суммы ' +
+          'берутся из его же расчетного листа.</div></div>') +
+    '</div>';
+
+    rwBind(view);
+  }
+
+  function rwFactSave(rowId, value) {
+    api('/admin/api/reward/fact', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ row_id: rowId, period: rwMonth(), value: value }),
+    }).then(function () {
+      state._rw = null;
+      renderView();
+    }).catch(function (e) {
+      showToast(e.message === '422' ? 'Такую цифру система не приняла' : 'Не сохранилось — проверь сеть');
+    });
+  }
+
+  function rwBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwmon]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-rwmon');
+        if (v === 'now') { state.rwMonth = ''; state._rw = null; renderView(); return; }
+        var p = rwMonth().split('-');
+        var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + parseInt(v, 10), 1);
+        state.rwMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+        state._rw = null;
+        renderView();
+      });
+    });
+
+    /* Оценка ставится одним нажатием: 0, 50 или 100. Промежуточных значений нет
+       намеренно — это не точность, а повод торговаться. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwrate]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = b.getAttribute('data-rwrate').split(':');
+        rwFactSave(parseInt(p[0], 10), parseInt(p[1], 10));
+      });
+    });
+
+    /* Ручная цифра правится на месте, тем же приемом, что план в «План-факте». */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwfact]'), function (b) {
+      if (b.disabled) return;
+      b.addEventListener('click', function () {
+        var rowId = parseInt(b.getAttribute('data-rwfact'), 10);
+        var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
+        var inp = document.createElement('input');
+        inp.className = 'ed-input pf-in num';
+        inp.value = was;
+        inp.setAttribute('inputmode', 'numeric');
+        inp.setAttribute('placeholder', '0');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus();
+        inp.select();
+        var done = false;
+        var save = function () {
+          if (done) return;
+          done = true;
+          var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+          if (isNaN(n)) { state._rw = null; renderView(); return; }
+          if (String(n) === String(was)) { state._rw = null; renderView(); return; }
+          rwFactSave(rowId, n);
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { done = true; state._rw = null; renderView(); }
+        });
+        inp.addEventListener('blur', save);
+      });
+    });
+
+    /* Закрытие месяца спрашивает подтверждение: после него расчет становится
+       снимком, по которому платят, и сам он больше не пересчитывается. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwclose]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = parseInt(b.getAttribute('data-rwclose'), 10);
+        var sheet = (state._rw.sheets || []).filter(function (s) { return s.sheet_id === id; })[0];
+        var warn = sheet && sheet.questions
+          ? '\n\nВ листе ' + sheet.questions + ' ' +
+            plural(sheet.questions, 'открытая строка', 'открытые строки', 'открытых строк') +
+            ' — они зачтутся как не сделанные.'
+          : '';
+        if (!confirm('Закрыть ' + pfMonthTitle(rwMonth()) + ' по этому листу?' +
+                     '\nСумма зафиксируется, и дальше расчет не меняется.' + warn)) return;
+        b.disabled = true;
+        api('/admin/api/reward/close', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheet_id: id, period: rwMonth() }),
+        }).then(function (r) {
+          showToast('Месяц закрыт: ' + fmtMoney(r.total_rub) + ' ₽');
+          state._rw = null;
+          renderView();
+        }).catch(function () {
+          b.disabled = false;
+          showToast('Не закрылось — проверь сеть');
+        });
+      });
+    });
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwopen]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Снять закрытие? Расчет снова станет живым и может измениться.')) return;
+        api('/admin/api/reward/open', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheet_id: parseInt(b.getAttribute('data-rwopen'), 10),
+                                 period: rwMonth() }),
+        }).then(function () {
+          state._rw = null;
+          renderView();
+        }).catch(function () { showToast('Не получилось — проверь сеть'); });
+      });
+    });
+  }
+
 
 
   /* ── РАССЫЛКИ — кому писали, что ответила площадка, что человек сделал потом ──
@@ -37707,20 +38255,6 @@
     return out;
   }
   /* Сколько узлов и шагов под узлом, включая все вложенные уровни. */
-  function prcSize(nid) {
-    var n = prcLight(nid), nodes = 0, steps = 0, ag = 0, pains = 0, seen = {};
-    (function walk(x) {
-      if (!x || seen[x.id]) return;
-      seen[x.id] = 1; nodes++; pains += x.n_pains || 0;
-      x.steps.forEach(function (s) {
-        steps++;
-        if (s.can_agent === 'yes' || s.can_agent === 'supervised' || s.exec === 'agent' || s.exec === 'agent_supervised') ag++;
-        if (s.sub) walk(prcLight(s.sub));
-        (s.variants || []).forEach(function (v) { walk(prcLight(v)); });
-      });
-    })(n);
-    return { nodes: nodes, steps: steps, ag: ag, pains: pains };
-  }
   function prcMineIn(nid, who) {
     var n = 0, seen = {};
     (function walk(x) {
@@ -37754,18 +38288,6 @@
     return { from: names(from), to: names(to) };
   }
 
-  /* Кто исполняет шаг. Человек — норма карты, поэтому в строке шага его не пишем:
-     чип стоит только у машины и агента. «Можно отдать агенту» — подсказка на будущее,
-     она живет в раскрытом шаге, а не в строке. */
-  function prcExec(s) {
-    if (!s.exec || s.exec === 'human') return '';
-    var e = PRC_EXEC[s.exec];
-    return e ? '<span class="prc-x ' + e.c + '">' + e.t + '</span>' : '';
-  }
-  function prcCan(s) {
-    if (s.exec && s.exec !== 'human') return '';
-    return s.can_agent === 'yes' ? 'можно отдать боту' : s.can_agent === 'supervised' ? 'можно отдать боту под контролем человека' : '';
-  }
 
   function prcOpen(nid, step) {
     state.prcNode = nid || null;
@@ -37870,8 +38392,6 @@
 
   function renderProcessHome(view) {
     var d = state._prc, who = state.prcWho || '', q = (state.prcQ || '').trim().toLowerCase();
-    var all = Object.keys(d._by), stepsAll = 0;
-    all.forEach(function (k) { stepsAll += d._by[k].node.steps.length; });
 
     var body;
     if (q.length >= 2) {
@@ -37887,66 +38407,50 @@
         if (!ps.length) return '';
         return '<section class="prc-grp"><div class="po-lbl">' + esc(g.label) + '</div>' +
           '<div class="prc-tiles' + (g.chain ? ' chain' : '') + '">' + ps.map(function (p) {
-            var root = p.nodes[p.root], z = prcSize(p.root), mine = who ? prcMineIn(p.root, who) : 0;
+            var root = p.nodes[p.root], mine = who ? prcMineIn(p.root, who) : 0;
             return '<button type="button" class="prc-tile' + (who && !mine ? ' dim' : '') + '" data-open="' + esc(p.root) + '">' +
               '<span class="prc-tn">' + esc(p.n) + '</span>' +
               '<b>' + esc(prcShort(root.title)) + '</b>' +
               (prcSpan(root.title) ? '<span class="prc-span">' + esc(prcSpan(root.title)) + '</span>' : '') +
               '<small>' + esc(root.goal || '') + '</small>' +
-              '<span class="prc-stat">' + (z.nodes > 1 ? '<span>' + (z.nodes - 1) + ' ' + plural(z.nodes - 1, 'подпроцесс', 'подпроцесса', 'подпроцессов') + '</span>' : '') +
-                '<span>' + z.steps + ' ' + plural(z.steps, 'шаг', 'шага', 'шагов') + '</span>' +
-                (z.pains ? '<span class="pain">' + z.pains + ' ' + plural(z.pains, 'проблема', 'проблемы', 'проблем') + '</span>' : '') + '</span>' +
               (who ? '<i class="prc-cnt' + (mine ? '' : ' zero') + '">' + mine + '</i>' : '') +
-              (root.status === 'draft' ? '<span class="sev n-wait prc-draft">черновик</span>' : '') +
             '</button>';
           }).join('') + '</div></section>';
       }).join('');
     }
 
-    var orph = (d.orphans || []).length && q.length < 2 && !state.prcInner ? '<section class="prc-grp"><div class="po-lbl">Не привязано к процессам</div>' +
-      '<div class="card prc-orph"><p>' + esc(d.orphans_note || '') + '</p><ul>' + d.orphans.map(function (x) {
-        return '<li><b>' + esc(x.title) + '</b><span>' + esc(x.who) + ' · ' + esc(x.what) + '</span></li>';
-      }).join('') + '</ul></div></section>' : '';
     view.innerHTML = '<div class="prc-wrap">' +
       '<div class="prc-top"><div><h2 class="org-h1">' + (state.prcInner && q.length < 2 ? 'Внутренние процессы' : 'Процессы компании') + '</h2>' +
         (state.prcInner && q.length < 2 ? '<div class="org-sub">Обеспечивающие процессы и управление: то, на чем держится школа и чего клиент не видит.</div></div>' :
-        '<div class="org-sub">' + d.processes.length + ' ' + plural(d.processes.length, 'процесс', 'процесса', 'процессов') + ', ' +
-          (all.length - d.processes.length) + ' ' + plural(all.length - d.processes.length, 'подпроцесс', 'подпроцесса', 'подпроцессов') + ', ' +
-          stepsAll + ' ' + plural(stepsAll, 'шаг', 'шага', 'шагов') + '. Нажмите на процесс, чтобы провалиться внутрь, на шаг, чтобы открыть инструкцию.</div></div>') +
-        '<span class="sev n-wait">как есть · черновик</span></div>' +
-      prcToolbar(who) + prcPersonPanel(who) + body + orph + '</div>';
+        '<div class="org-sub">Что за чем идет в школе. Нажмите на процесс, чтобы увидеть его шаги.</div></div>') +
+      '</div>' + prcToolbar(who) + prcPersonPanel(who) + body + '</div>';
     prcWire(view);
   }
 
-  function prcSrc(x) { return String(x || '').replace(/\/data\/workspace\/(Verundina\/protsessy\/)?/g, ''); }
-  /* Раскрытый шаг — инструкция. Порядок по тому, как ее читают: сначала куда
-     провалиться, потом «как делать» по пунктам, потом что на входе и что на выходе
-     рядом, и только потом мелким — где, проверка, сбой, срок. */
+  /* Раскрытый шаг: что получается, куда провалиться и куда работа уходит дальше.
+     Инструкция (как делать, вход, где, проверка, сбой, срок) нужна исполнителю и
+     боту, а не тому, кто смотрит карту, поэтому она свернута одной строкой
+     (Вера 30.10.2026: «оставить только наглядную, чтобы было понятно, что за чем идет»). */
   function prcDetail(s, full) {
     if (!full) return '<div class="prc-det"><div class="sk-list"><div class="shim"></div><div class="shim"></div></div></div>';
     var sub = s.sub ? prcLight(s.sub) : null;
     var dive = sub ? '<button type="button" class="bp prc-dive" data-open="' + esc(s.sub) + '">' +
       'Открыть ' + sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри' + ic('go', 14) + '</button>' : '';
     var go = s.goto && prcLight(s.goto) ? '<div class="prc-handoff"><span class="po-lbl">Дальше работа уходит в</span>' + prcGoto(s.goto) + '</div>' : '';
+    var out = full.output ? '<div class="prc-dout"><span class="po-lbl">Что получается</span><p>' + esc(full.output) + '</p></div>' : '';
     var how = (full.how || []).length ? '<div class="prc-dhow"><span class="po-lbl">Как делать</span><ol class="prc-how">' +
       full.how.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol></div>' : '';
-    var io = (full.input || full.output) ? '<div class="prc-io">' +
-      (full.input ? '<div><span class="po-lbl">На входе</span><p>' + esc(full.input) + '</p></div>' : '') +
-      (full.output ? '<div><span class="po-lbl">На выходе</span><p>' + esc(full.output) + '</p></div>' : '') + '</div>' : '';
     var row = function (k, v) { return v ? '<dt>' + k + '</dt><dd>' + v + '</dd>' : ''; };
-    var can = prcCan(s);
-    var small = row('Где', esc(full.where || '')) + row('Проверка', esc(full.check || '')) +
+    var small = row('На входе', esc(full.input || '')) + row('Где', esc(full.where || '')) + row('Проверка', esc(full.check || '')) +
       row('Если не так', /^\s*(—|-|нет\.?)?\s*$/i.test(full.fail || '') ? '' : esc(full.fail)) +
-      row('Срок', esc(full.sla || '')) + row('Бот', can ? esc(can) : '');
+      row('Срок', esc(full.sla || ''));
+    var instr = (how || small) ? '<details class="prc-instr"><summary>' + ic('go', 12) + 'Инструкция</summary>' +
+      how + (small ? '<dl class="prc-dl">' + small + '</dl>' : '') + '</details>' : '';
     var vars = (s.variants || []).length ? '<div class="prc-handoff"><span class="po-lbl">Варианты шага</span><div class="prc-vars">' +
       s.variants.map(function (v) { var t = prcLight(v); return t ? '<button type="button" class="prc-goto" data-open="' + esc(v) + '">' + ic('go', 12) + esc(prcShort(t.title)) + '</button>' : ''; }).join('') +
       '</div></div>' : '';
-    return '<div class="prc-det">' + (dive ? '<div class="prc-acts">' + dive + '</div>' : '') +
-      how + io +
-      (small ? '<dl class="prc-dl">' + small + '</dl>' : '') +
-      (full.pain ? '<div class="prc-pain"><b>Проблема.</b> ' + esc(full.pain) + '</div>' : '') +
-      vars + go +
-      (full.src ? '<div class="prc-src">Источник: ' + esc(prcSrc(full.src)) + '</div>' : '') +
+    return '<div class="prc-det">' + out + (dive ? '<div class="prc-acts">' + dive + '</div>' : '') +
+      vars + go + instr +
     '</div>';
   }
 
@@ -37968,8 +38472,6 @@
     });
     return out;
   }
-  function prcPlain(ids) { return ids.map(function (x) { return prcPerson(x).name; }).join(', '); }
-  function prcNames(ids) { return ids.map(function (x) { return esc(prcPerson(x).name); }).join(', '); }
   /* У шага один ответственный (Рыбаков; Вера 26.10.2026: «одна роль, один исполнитель»),
      он и стоит в углу прямоугольника схемы. Если в шаге работают другие, это подпроцесс
      со своими ответственными внутри, на шаге их не показываем. */
@@ -37984,12 +38486,9 @@
      кто делает. Все остальное (подпроцесс, передача дальше, проблема) — короткими
      пометками в той же строке, без плашек: плашки на каждом шаге и делали карту
      нечитаемой (Вера 26.10.2026: «как будто не структурированный вообще»). */
-  function prcStepRow(s, i, prev, who, full, open, fl) {
+  function prcStepRow(s, i, who, full, open) {
     var mine = who && prcAll(s).indexOf(who) !== -1;
-    var hand = fl && fl.hand;
     var sub = s.sub ? prcLight(s.sub) : null, subN = sub ? sub.steps.length : 0;
-    var handLine = hand ? '<li class="prc-hand' + (fl.back.length ? ' back' : '') + '" role="separator" aria-label="' + esc((fl.back.length ? 'возврат' : 'передача') + ': от ' + prcPlain(fl.from) + ' к ' + prcPlain(fl.to)) + '">' +
-      '<span>' + (fl.back.length ? 'возврат к ' + prcNames(fl.to) : 'передача: ' + prcNames(fl.from) + ' ' + ic('go', 10) + ' ' + prcNames(fl.to)) + '</span></li>' : '';
     var pp = function (x) {
       var p = prcPerson(x);
       return '<span class="prc-p' + (x === who ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</span>';
@@ -37999,47 +38498,39 @@
     if (sub) marks.push('<span class="prc-subn">' + ic('flow', 12) + subN + ' ' + plural(subN, 'шаг', 'шага', 'шагов') + ' внутри</span>');
     if ((s.variants || []).length) marks.push('<span class="prc-subn">' + s.variants.length + ' ' + plural(s.variants.length, 'вариант', 'варианта', 'вариантов') + '</span>');
     if (s.goto && prcLight(s.goto)) marks.push('<span class="prc-gon">дальше в «' + esc(prcRootTitle(s.goto)) + '»</span>');
-    if (s.pain) marks.push('<span class="prc-painmk">есть проблема</span>');
-    return handLine + '<li class="prc-step' + (open ? ' open' : '') + (who ? (mine ? ' mine' : ' dim') : '') + (sub ? ' has-sub' : '') + '" data-i="' + i + '">' +
+    return '<li class="prc-step' + (open ? ' open' : '') + (who ? (mine ? ' mine' : ' dim') : '') + (sub ? ' has-sub' : '') + '" data-i="' + i + '">' +
       '<button type="button" class="prc-row" aria-expanded="' + (open ? 'true' : 'false') + '">' +
         '<span class="prc-n">' + (i + 1) + '</span>' +
         '<span class="prc-what"><b>' + esc(s.title) + '</b>' +
-          '<span class="prc-meta-l"><span class="prc-ppl">' + people + '</span>' + prcExec(s) + '</span>' +
+          '<span class="prc-meta-l"><span class="prc-ppl">' + people + '</span></span>' +
           (marks.length ? '<span class="prc-marks">' + marks.join('') + '</span>' : '') + '</span>' +
         '<span class="prc-chev">' + ic('go', 14) + '</span>' +
       '</button>' +
       (open ? prcDetail(s, full) : '') + '</li>';
   }
 
-  /* Дорожки: строка на человека, колонка на шаг. Видно то, чего не видно списком,
-     — сколько раз работа меняет руки и у кого копится. */
+  /* Дорожки: строка на ответственного, колонка на шаг. Видно, как работа идет от
+     человека к человеку и у кого копится. Участников внутри шагов здесь нет: они
+     видны в подпроцессе (Вера 30.10.2026). */
   function prcLanes(n, who) {
     var ppl = [];
-    n.steps.forEach(function (s) { prcAll(s).forEach(function (x) { if (ppl.indexOf(x) === -1) ppl.push(x); }); });
-    var cols = n.steps.length, flow = prcFlow(n.steps);
+    n.steps.forEach(function (s) { var w = s.who[0]; if (w && ppl.indexOf(w) === -1) ppl.push(w); });
+    var cols = n.steps.length;
     var head = '<div class="prc-lh"></div>' + n.steps.map(function (s, i) {
-      var f = flow[i];
-      return '<div class="prc-lc' + (f.hand ? ' hand' : '') + (f.back.length ? ' back' : '') + '">' + (i + 1) +
-        (f.back.length ? ' <em>возврат</em>' : f.hand ? ' <em>передача</em>' : '') + '</div>';
+      return '<div class="prc-lc">' + (i + 1) + '</div>';
     }).join('');
     var rows = ppl.map(function (pid) {
       var p = prcPerson(pid);
       return '<div class="prc-lp' + (who === pid ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</div>' +
         n.steps.map(function (s, i) {
-          if (prcAll(s).indexOf(pid) === -1) return '<div class="prc-lx"></div>';
-          /* карточка у ответственного, у участников отметка участия — иначе три
-             одинаковые плашки читаются как три работы */
-          var lead = s.who[0];
-          if (lead !== pid) return '<div class="prc-lx"><button type="button" class="prc-lm" data-lane="' + i + '" title="' + esc(s.title) + '">' +
-            'участвует в шаге ' + (i + 1) + '</button></div>';
+          if (s.who[0] !== pid) return '<div class="prc-lx"></div>';
           var e = PRC_EXEC[s.exec] || PRC_EXEC.human;
           return '<div class="prc-lx"><button type="button" class="prc-lb ' + e.c + '" data-lane="' + i + '" title="' + esc(s.title) + '">' +
             '<i>' + (i + 1) + '</i><span>' + esc(s.title) + '</span></button></div>';
         }).join('');
     }).join('');
     return '<div class="prc-lanes-w"><div class="prc-lanes" style="--cols:' + cols + '">' + head + rows + '</div></div>' +
-      '<div class="prc-legend"><span class="prc-more">шаги идут дальше, листайте вбок</span><span class="prc-x hu">человек</span><span class="prc-x ag">агент</span><span class="prc-x sys">машина</span>' +
-        '<span class="prc-lg-h">«передача» над шагом: работа переходит к другим людям, «возврат»: к тому, кто ее уже отдавал</span></div>';
+      '<div class="prc-legend"><span class="prc-more">шаги идут дальше, листайте вбок</span></div>';
   }
 
   /* Концы рядов схемы: число колонок задает CSS (--cols по ширине), а какой блок
@@ -38074,15 +38565,10 @@
 
     var owner = n.owner ? prcPerson(n.owner).name : '';
     var ag = n.agent && (state._prc._agents || {})[n.agent];
-    var z = prcSize(nid);
     var fact = function (k, v, sub) { return '<div class="prc-fact"><span class="po-lbl">' + k + '</span><b>' + v + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
     var facts = '<div class="prc-facts">' +
       (owner ? fact('Ведет', esc(owner)) : '') +
-      fact('Бот', ag ? esc(ag.name) : (n.agent ? esc(n.agent) : 'нет, все делают люди'),
-        (ag ? 'куратор ' + esc(prcPerson(ag.curator).name) : '') +
-        (z.ag ? (ag ? ' · ' : '') + 'может взять ' + z.ag + ' из ' + z.steps + ' ' + plural(z.steps, 'шага', 'шагов', 'шагов') : '')) +
-      /* число шагов совпадает со схемой под ним; вложенные называем отдельно */
-      fact('Шагов', n.steps.length + '', z.steps > n.steps.length ? 'и еще ' + (z.steps - n.steps.length) + ' внутри них' : '') + '</div>';
+      (ag ? fact('Бот', esc(ag.name)) : '') + '</div>';
     /* Схема процесса как на рисунках Рыбакова (рис. 1 и 12 книги): слева событие,
        с которого все начинается, дальше пронумерованные шаги стрелками рядами, справа
        результат. Это картинка процесса целиком, ее читают первой; подробности — в
@@ -38094,60 +38580,35 @@
         var sub = s.sub ? prcLight(s.sub) : null;
         return '<li><button type="button" class="prc-sc-box' + (sub ? ' sub' : '') + (state.prcStep === i ? ' on' : '') + '" data-sc="' + i + '" title="' + esc(s.title) + '">' +
           '<span class="prc-sc-top"><i>' + (i + 1) + '</i>' + prcCorner(s) + '</span><span>' + esc(s.title) + '</span>' +
-          ((sub || s.pain) ? '<small>' + (sub ? sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри' : '') +
-            (s.pain ? '<em>проблема</em>' : '') + '</small>' : '') + '</button></li>';
+          (sub ? '<small>' + sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри</small>' : '') + '</button></li>';
       }).join('') +
       (n.done ? '<li class="prc-sc-end done" title="' + esc(n.done) + '"><span class="po-lbl">' + ic('check', 12) + 'Результат</span><p>' + esc(n.done) + '</p></li>' : '') +
-      '</ol>' +
-      ((n.input || n.output) ? '<div class="prc-io prc-io-top">' +
-        (n.input ? '<div><span class="po-lbl">Что нужно на входе</span><p>' + esc(n.input) + '</p></div>' : '') +
-        (n.output ? '<div><span class="po-lbl">Что получаем на выходе</span><p>' + esc(n.output) + '</p></div>' : '') + '</div>' : '');
+      '</ol>';
     /* На телефоне схемы нет — линия шагов сама и есть цепочка, поэтому начало и
        результат встают на ее концы. */
     var endA = n.trigger ? '<li class="prc-lend start"><span class="po-lbl">Начало</span><p>' + esc(n.trigger) + '</p></li>' : '';
     var endB = n.done ? '<li class="prc-lend done"><span class="po-lbl">' + ic('check', 12) + 'Результат</span><p>' + esc(n.done) + '</p></li>' : '';
-    var lvl = light.variant_of && !light.parent ? 'Вариант шага · один из способов'
-      : (n.level || 1) === 1 ? 'Процесс' : 'Подпроцесс · уровень ' + n.level;
+    var lvl = light.variant_of && !light.parent ? 'Вариант шага' : '';
 
-    var flow = prcFlow(n.steps);
-    var nHand = flow.filter(function (x) { return x.hand; }).length;
-    var nBack = flow.filter(function (x) { return x.back.length; }).length;
     var steps = n.steps.map(function (s, i) {
       var fs = full ? full.steps[i] : null;
-      return prcStepRow(s, i, n.steps[i - 1], who, fs, state.prcStep === i, flow[i]);
+      return prcStepRow(s, i, who, fs, state.prcStep === i);
     }).join('');
 
-    /* Подвал свернут разделами со счетчиком: развернутый целиком, он был длиннее
-       самих шагов, и до конца процесса никто не долистывал. Открытые разделы
-       помнит state.prcFold, чтобы клик по шагу не захлопывал прочитанное. */
+    /* Подвал: откуда в процесс приходит работа, это часть того, что за чем идет.
+       Проблемы, вопросы, цифры и источники живут в файлах карты для разбора и
+       агентов, на экран их не выносим (Вера 30.10.2026). */
     var fold = state.prcFold || (state.prcFold = {});
-    var sec = function (key, title, items, fn, cls) {
-      if (!items || !items.length) return '';
-      return '<details class="prc-fb' + (cls ? ' ' + cls : '') + '" data-fold="' + key + '"' + (fold[key] ? ' open' : '') + '>' +
-        '<summary><span>' + title + '</span><i>' + items.length + '</i>' + ic('go', 12) + '</summary><ul>' + items.map(fn).join('') + '</ul></details>';
-    };
     var inc = prcIncoming(nid);
-    var more = [
-      ['Срок', n.sla],
-    ].filter(function (x) { return x[1]; });
-    var foot = sec('inc', 'Сюда приходит работа из', inc, function (x) {
+    var foot = inc.length ? '<details class="prc-fb prc-inc" data-fold="inc"' + (fold.inc ? ' open' : '') + '>' +
+      '<summary><span>Сюда приходит работа из</span><i>' + inc.length + '</i>' + ic('go', 12) + '</summary><ul>' + inc.map(function (x) {
         return '<li><button type="button" class="prc-goto" data-open="' + esc(x.nid) + '" data-step="' + x.i + '">' + ic('go', 12) +
           esc(prcRootTitle(x.nid)) + ': ' + esc(x.title) + '</button></li>';
-      }, 'prc-inc') +
-      sec('io', 'Срок и передачи', more.concat([['Передачи', nHand + ' из рук в руки, ' + nBack + ' ' + plural(nBack, 'возврат', 'возврата', 'возвратов')]]), function (x) {
-        return '<li class="prc-kv"><span class="po-lbl">' + x[0] + '</span>' + esc(x[1]) + '</li>';
-      }, 'prc-plain') +
-      (full ? (
-      sec('pains', 'Проблемы', full.pains, function (x) { return '<li>' + esc(x.text) + (x.src ? '<small>' + esc(prcSrc(x.src)) + '</small>' : '') + '</li>'; }, 'prc-warn') +
-      sec('q', 'Вопросы на проверку', full.questions, function (x) { return '<li>' + esc(x.text) + (x.who ? '<small>спросить: ' + esc(prcPerson(x.who).name) + '</small>' : '') + '</li>'; }) +
-      sec('note', 'Заметки', full.note ? [full.note] : [], function (x) { return '<li>' + esc(x) + '</li>'; }) +
-      sec('m', 'Цифры', full.metrics, function (x) { return '<li>' + esc(x) + '</li>'; }) +
-      sec('src', 'На что опирается', full.sources, function (x) { return '<li><small>' + esc(prcSrc(x)) + '</small></li>'; })
-    ) : '');
+      }).join('') + '</ul></details>' : '';
 
     view.innerHTML = '<div class="prc-wrap">' + crumb + prcToolbar(who) + prcPersonPanel(who) +
       '<div class="card prc-card">' +
-        '<div class="prc-head"><div class="prc-tn">' + lvl + '</div>' +
+        '<div class="prc-head">' + (lvl ? '<div class="prc-tn">' + lvl + '</div>' : '') +
           '<h3>' + esc(prcShort(n.title)) + (n.status === 'draft' ? ' <span class="sev n-wait">черновик, так пока не работает</span>' : '') + '</h3>' +
           (prcSpan(n.title) ? '<p class="prc-span">' + esc(prcSpan(n.title)) + '</p>' : '') +
           (n.goal ? '<p class="prc-goal">' + esc(n.goal) + '</p>' : '') +
@@ -40567,7 +41028,11 @@
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
-      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') + '"' +
+      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') +
+        (s.drag ? ' movable' : '') + '"' +
+        /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
+           порядок, draggable — чтобы браузер вообще начал её тащить. */
+        (s.drag && s.key ? ' draggable="true" data-tile="' + s.key + '"' : '') +
         (s.go ? ' data-go="' + s.go + '"' : '') +
         /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
            вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
@@ -46672,10 +47137,12 @@
     });
   }
 
-  var DUP_KIND = { phone: 'телефон', email: 'почта', tg: 'телеграм', vk: 'вк' };
+  var DUP_KIND = { phone: 'телефон', email: 'почта', tg: 'телеграм', vk: 'вк',
+                   max: 'MAX', ig: 'инстаграм' };
   function dupMatch(m) {
     var v = m.value;
     if (m.kind === 'tg') v = v.indexOf('un:') === 0 ? '@' + v.slice(3) : 'id ' + v.slice(3);
+    if (m.kind === 'vk' || m.kind === 'max' || m.kind === 'ig') v = 'id ' + v.slice(3);
     if (m.kind === 'phone') v = '+' + v;
     return DUP_KIND[m.kind] + ' ' + v;
   }

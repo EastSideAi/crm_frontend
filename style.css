@@ -115,7 +115,10 @@ a { color: inherit; text-decoration: none; }
 .main { flex: 1; min-width: 0; background: var(--main); display: flex; flex-direction: column;
   overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-xl); }
 .main::-webkit-scrollbar { width: 0; }
-.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center;
+/* flex: none — шапка живет в колонке .main со скроллом, и без него сжималась до
+   min-height, когда страница длинная: две строки вкладок не помещались и верхняя
+   уезжала за край при прокрутке (Ольга, 27.10.2026, Маркетинг → Реклама). */
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; flex: none;
   justify-content: space-between; gap: 16px; padding: 14px 28px; background: var(--app);
   border-bottom: 1px solid var(--line); border-radius: var(--r-xl) var(--r-xl) 0 0; min-height: 67px; }
 .tabs { display: flex; gap: 4px; background: var(--fill); border-radius: var(--r-pill); padding: 4px; }
@@ -392,6 +395,14 @@ a { color: inherit; text-decoration: none; }
    Метрика недоступна или счётчик не задан — плиток снова пять. */
 .statbar.six { grid-template-columns: repeat(6, 1fr); }
 .statbar.six .stat { padding: 16px 14px; }
+/* Плитка, которую можно перетащить (экран запусков). Курсор-хваталка — весь
+   сигнал: рамка или значок здесь превратили бы спокойную полосу цифр в панель
+   управления. Пока тащим — плитка бледнеет, цель подсвечивается грань слева. */
+.stat.movable { cursor: grab; }
+.stat.movable:active { cursor: grabbing; }
+.stat.movable.dragging { opacity: .45; }
+.stat.movable.drop-to { box-shadow: inset 2px 0 0 var(--blue); }
+
 /* Одна главная цифра на полосу. Четыре равновесных числа читаются по кругу: глазу
    не за что зацепиться, и экран каждый раз приходится перечитывать целиком. Ведущая
    плитка шире и крупнее, соседние тише — иерархия весом, а не рамкой. */
@@ -12095,6 +12106,77 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pf-ai { padding: 4px 18px 20px; }
 }
 
+/* ════ ВОЗНАГРАЖДЕНИЕ (раздел reward) ════
+   Расчетный лист человека за месяц: что он сделал, что из этого закрыто и
+   сколько причитается. Якорь карточки — сумма справа в шапке: экран открывают ради нее.
+   Строки под ней плотные и тихие, это обоснование суммы, а не самостоятельное
+   чтение.
+
+   Цвет состояний разведен по смыслу, а не по градусу тревоги. «Не добрал» —
+   серое: это факт месяца, а не авария, и красным мы бы обвиняли человека
+   цветом. Амбер висит ровно там, где вопрос к НАМ: показатель, который мы не
+   собираем. Синее — там, где ждем действия руководителя. Своих цветов не
+   заводим, все из палитры. */
+/* Заголовок отдела: разделитель между группами листов, а не карточка. Поэтому
+   он живет на полотне, без фона и рамки — иначе два уровня карточек спорят
+   друг с другом, и строки людей читаются как вложенные в коробку. */
+.rw-dept { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; padding: 22px 4px 8px; }
+.rw-dept-t { font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-2); }
+.rw-dept-s { font-size: 12.5px; font-weight: 500; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+.rw-head { display: flex; align-items: center; gap: 16px; padding: 18px 24px 16px;
+  border-bottom: 1px solid var(--line); }
+.rw-head > div:first-child { min-width: 0; }
+.rw-role { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.rw-total { margin-left: auto; text-align: right; white-space: nowrap; }
+.rw-total b { display: block; font-size: 20px; font-weight: 700; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; }
+.rw-total small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; }
+/* Закрытый месяц тише живого: по нему уже заплатили, трогать нечего. */
+.rw-shut .rw-total b { color: var(--ink-2); }
+
+.rw-row { display: grid; grid-template-columns: 210px minmax(130px, 1fr) 116px 104px 116px;
+  gap: 16px; align-items: center; padding: 0 24px; min-height: 60px;
+  border-bottom: 1px solid var(--line); }
+.rw-row:last-child { border-bottom: none; }
+.rw-row.dim .rw-nm { color: var(--ink-2); }
+.rw-nm { font-size: 14px; font-weight: 600; color: var(--ink); }
+.rw-nm small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; }
+.rw-cond { font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+.rw-fact { font-size: 16px; font-weight: 700; text-align: right;
+  font-variant-numeric: tabular-nums; }
+.rw-sum { font-size: 15px; font-weight: 700; text-align: right; white-space: nowrap; }
+.rw-st { text-align: right; }
+/* Причина, по которой строки нет в расчете. Это наш долг по сбору данных, и он
+   должен читаться, а не прятаться серым в край строки. */
+.rw-why { font-size: 12px; font-weight: 500; color: var(--amber-ink); line-height: 1.45; }
+.rw-dash { color: var(--ink-3); font-weight: 500; }
+.rw-rate { display: inline-flex; gap: 6px; justify-content: flex-end; }
+.sev.kpi-ok      { color: var(--green-ink); background: var(--green-soft); }
+.sev.kpi-miss    { color: var(--ink-3);     background: var(--fill); }
+.sev.kpi-wait    { color: var(--blue);      background: var(--blue-tint); }
+.sev.kpi-blocked { color: var(--amber-ink); background: var(--amber-soft); }
+
+/* Телефон: пять колонок в 390px режут название в «Рег…», поэтому строка
+   становится карточкой — имя во всю ширину, под ним условие, справа факт и сумма. */
+@media (max-width: 860px) {
+  .rw-head { flex-wrap: wrap; }
+  .rw-total { margin-left: 0; text-align: left; }
+  .rw-head > .bp { width: 100%; }
+  .rw-row { grid-template-columns: 1fr auto; gap: 8px 12px; padding: 16px 18px;
+    align-items: start; }
+  .rw-nm { grid-column: 1 / -1; }
+  .rw-cond { grid-column: 1 / -1; }
+  .rw-fact { grid-column: 1; text-align: left; }
+  .rw-sum { grid-column: 2; }
+  .rw-st { grid-column: 1 / -1; text-align: left; }
+  .rw-rate { justify-content: flex-start; }
+}
+
 /* ── Раздел «Сопровождение» (points): ученики, точки, выплаты ──────────────────
    Якорь экрана — чек-лист текущей точки: он отвечает на «что делать дальше».
    Деньги и полоса точек стоят тише: суммы человек уже знает, ему нужен шаг.
@@ -13037,9 +13119,6 @@ body.office-full { overflow: hidden; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .prc-tile.dim b, .prc-tile.dim small { color: var(--ink-3); }
 .prc-tn { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
-.prc-stat { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: auto; padding-top: 8px; font-size: 12px; color: var(--ink-3); }
-.prc-stat .pain { color: var(--amber-ink); }
-.prc-draft { position: absolute; right: 14px; bottom: 12px; }
 /* цепочка пути клиента: стрелка на стыке плиток — передача клиента следующему процессу */
 .prc-tiles.chain .prc-tile:not(:last-child)::after { content: ''; position: absolute; right: -8px; top: 26px; z-index: 1;
   width: 8px; height: 8px; border-top: 1.5px solid var(--wire); border-right: 1.5px solid var(--wire);
@@ -13125,8 +13204,6 @@ body.office-full { overflow: hidden; }
 .prc-sc-box small em { font-style: normal; color: var(--amber-ink); }
 .prc-sc-end { flex-direction: column; gap: 4px; width: 100%; padding: 10px 12px 11px; border-radius: 12px; min-height: 82px; }
 .prc-sc-end p { font-size: 12.5px; line-height: 1.45; color: var(--ink-2); overflow-wrap: break-word; hyphens: auto; }
-.prc-io-top { padding: 0 24px 20px; background: var(--main); }
-.prc-io-top > div { background: var(--card); border: 1px solid var(--line); }
 /* концы линии шагов — только на телефоне, где схемы нет */
 .prc-lend { display: none; }
 .prc-sc-end.start { background: var(--card); border: 1px dashed var(--wire); }
@@ -13162,28 +13239,12 @@ body.office-full { overflow: hidden; }
 .prc-p.sys { color: var(--ink-3); }
 .prc-marks { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; margin-top: 1px; }
 /* передача между шагами: тихая подпись на линии, а не полоса на всю ширину */
-.prc-hand { position: relative; padding: 1px 24px 1px 68px; font-size: 11.5px; color: var(--ink-3); }
-.prc-hand > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px; padding: 2px 9px; border-radius: var(--r-pill);
-  background: var(--main); }
-.prc-hand svg { color: var(--ink-3); }
-.prc-hand.back > span { background: var(--amber-soft); color: var(--amber-ink); font-weight: 600; }
-.prc-painmk { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--amber-ink); }
-.prc-painmk::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
 .prc-subn { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--blue); }
 .prc-gon { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--navy); }
 .prc-goto { display: inline-flex; align-items: center; gap: 4px; text-align: left; font-size: 13px; font-weight: 600; color: var(--blue); }
 .prc-goto:hover { color: var(--blue-d); text-decoration: underline; }
 .prc-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .prc-vars { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 4px; }
-.prc-orph { padding: 16px 20px 18px; }
-.prc-orph p { font-size: 13px; color: var(--ink-2); }
-.prc-orph ul { list-style: none; margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; }
-.prc-orph b { display: block; font-size: 13.5px; font-weight: 600; }
-.prc-orph span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
-.prc-x { font-size: 11.5px; font-weight: 600; line-height: 1.3; padding: 2px 8px; border-radius: var(--r-pill); white-space: nowrap; }
-.prc-x.hu { background: var(--fill); color: var(--ink-2); }
-.prc-x.ag { background: var(--blue-tint); color: var(--blue-d); }
-.prc-x.sys { background: var(--navy-soft); color: var(--navy); }
 .prc-chev { color: var(--ink-3); display: inline-flex; padding-top: 7px; transition: transform .15s var(--ease); }
 .prc-step.open .prc-chev { transform: rotate(90deg); }
 
@@ -13194,14 +13255,20 @@ body.office-full { overflow: hidden; }
 .prc-dhow .prc-how { margin-top: 8px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px;
   font-size: 14px; line-height: 1.55; }
 .prc-how li::marker { color: var(--ink-3); font-weight: 700; }
-.prc-io { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.prc-io > div { padding: 10px 12px 11px; border-radius: 11px; background: var(--fill); }
-.prc-io p { margin-top: 4px; font-size: 13px; line-height: 1.5; }
 .prc-dl { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 14px; font-size: 13px; line-height: 1.5; }
 .prc-dl dt { color: var(--ink-3); }
-.prc-pain { padding: 9px 12px; border-radius: 11px; font-size: 13px; line-height: 1.5; color: var(--amber-ink); background: var(--amber-soft); }
 .prc-handoff { display: flex; flex-direction: column; gap: 4px; }
-.prc-src { font-size: 11.5px; color: var(--ink-3); word-break: break-word; }
+.prc-dout p { margin-top: 4px; font-size: 14px; line-height: 1.5; }
+/* инструкция для исполнителя и бота: свернута, открывается по клику */
+.prc-instr { border-top: 1px solid var(--line); padding-top: 12px; }
+.prc-instr summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none;
+  font-size: 13px; font-weight: 600; color: var(--ink-2); border-radius: 6px; }
+.prc-instr summary::-webkit-details-marker { display: none; }
+.prc-instr summary svg { color: var(--ink-3); transition: transform .15s var(--ease); }
+.prc-instr[open] summary svg { transform: rotate(90deg); }
+.prc-instr summary:hover { color: var(--ink); }
+.prc-instr summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.prc-instr > .prc-dhow, .prc-instr > .prc-dl { margin-top: 12px; }
 .prc-dive { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; font-size: 13px; }
 
 .prc-lanes-w { position: relative; overflow-x: auto; border-top: 1px solid var(--line); }
@@ -13213,13 +13280,6 @@ body.office-full { overflow: hidden; }
 .prc-lanes { display: grid; grid-template-columns: 150px repeat(var(--cols), minmax(96px, 1fr)); min-width: min-content; }
 .prc-lh, .prc-lc { padding: 9px 10px; background: var(--card); border-bottom: 1px solid var(--line);
   font-size: 11px; font-weight: 700; color: var(--ink-3); }
-.prc-lc em { font-style: normal; font-weight: 600; text-transform: none; color: var(--navy); }
-.prc-lc.hand { border-top: 2px solid var(--navy-soft); }
-.prc-lc.back { border-top-color: var(--amber); }
-.prc-lc.back em { color: var(--amber-ink); }
-.prc-lm { width: 100%; height: 100%; text-align: left; padding: 6px 8px; border-radius: 9px; border: 1px dashed var(--line-2);
-  font-size: 11.5px; color: var(--ink-2); }
-.prc-lm:hover { color: var(--ink-2); border-color: var(--wire); }
 .prc-lp { position: sticky; left: 0; z-index: 1; padding: 10px 12px; background: var(--card); border-bottom: 1px solid var(--line);
   border-right: 1px solid var(--line); font-size: 12.5px; font-weight: 600; }
 .prc-lh { position: sticky; left: 0; z-index: 2; border-right: 1px solid var(--line); }
@@ -13247,13 +13307,11 @@ body.office-full { overflow: hidden; }
 .prc-fb summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 .prc-fb summary i { font-style: normal; font-size: 11.5px; font-weight: 700; min-width: 20px; padding: 1px 7px; border-radius: var(--r-pill);
   text-align: center; background: var(--fill); color: var(--ink-2); }
-.prc-fb.prc-warn summary i { background: var(--amber-soft); color: var(--amber-ink); }
 .prc-fb summary svg { margin-left: auto; color: var(--ink-3); transition: transform .15s var(--ease); }
 .prc-fb[open] summary svg { transform: rotate(90deg); }
 .prc-fb ul { padding: 0 24px 16px 42px; display: flex; flex-direction: column; gap: 8px; max-width: 940px; }
 .prc-fb li { line-height: 1.5; }
-.prc-inc ul, .prc-plain ul { list-style: none; padding-left: 24px; }
-.prc-kv .po-lbl { display: block; margin-bottom: 2px; }
+.prc-inc ul { list-style: none; padding-left: 24px; }
 .prc-fb small { display: block; font-size: 11.5px; color: var(--ink-3); word-break: break-word; }
 
 /* колонок схемы по ширине; концы рядов размечает prcSnake */
@@ -13282,7 +13340,6 @@ body.office-full { overflow: hidden; }
   .prc-fact .po-lbl { width: 64px; flex: none; }
   .prc-fact small { flex-basis: 100%; padding-left: 74px; }
   .prc-scheme { display: none; }
-  .prc-io-top { padding: 0 16px 16px; background: none; }
   .prc-lend { display: flex; flex-direction: column; gap: 3px; position: relative; margin: 4px 16px 8px 52px; padding: 9px 12px 10px;
     border-radius: 11px; font-size: 13px; line-height: 1.45; }
   .prc-lend::before { content: ''; position: absolute; left: -30px; top: 14px; width: 10px; height: 10px; border-radius: 50%;
@@ -13298,17 +13355,14 @@ body.office-full { overflow: hidden; }
   .prc-what { padding-top: 1px; }
   .prc-chev { padding-top: 4px; }
   .prc-det { margin: 2px 12px 12px 16px; padding: 14px 14px 16px; }
-  .prc-io { grid-template-columns: minmax(0, 1fr); }
   .prc-dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .prc-dl dd { margin-bottom: 8px; }
-  .prc-hand { padding: 1px 16px 1px 52px; }
   .prc-fb summary { padding: 13px 16px; }
   .prc-fb ul { padding: 0 16px 14px 34px; }
-  .prc-inc ul, .prc-plain ul { padding-left: 16px; }
+  .prc-inc ul { padding-left: 16px; }
   .prc-lanes { grid-template-columns: 104px repeat(var(--cols), 112px); }
   .prc-legend { padding: 10px 16px 14px; }
   .prc-foot { padding: 16px 16px 20px; }
-  .prc-orph ul { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
   .prc-tile, .prc-card, .prc-det { animation: none; }
