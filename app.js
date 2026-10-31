@@ -33123,7 +33123,7 @@
      потому что это разные люди, а не один в двух строках. Запись идёт подписью:
      это второе действие того же человека, и в одну цифру с живым эфиром их сложить
      нельзя. */
-  function launchEfirTile(cur, daysVal, days) {
+  function launchEfirTile(cur, daysVal, days, regShown) {
     var v = cur && cur.viewers, r = cur && cur.recording;
     var live = v ? (v.known.viewers || 0) + (v.anon.viewers || 0) : null;
     var rec = r ? (r.known.viewers || 0) + (r.anon.viewers || 0) : 0;
@@ -33139,7 +33139,74 @@
     }
     return { key: 'efir', label: 'Были на эфире', value: live,
              sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
-                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : '') };
+                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : ''),
+             pct: launchPct(live, regShown, 'от регистраций') };
+  }
+
+  /* Доля плитки от предыдущего шага воронки: сколько из видевших страницу
+     записалось, сколько из записавшихся заплатило. Базы нет — доли нет вовсе:
+     «0%» читается как «ничего не вышло», а правда в том, что считать не от чего. */
+  function launchPct(n, base, what) {
+    if (!base || n == null) return '';
+    return Math.round(n * 100 / base) + '% ' + what;
+  }
+
+  /* Нижний ряд плашек — «в том числе повтор». Повтор это не отдельное
+     мероприятие, а второй этап того же интенсива (владелец, 31.10.2026), поэтому
+     его люди стоят и в верхнем ряду; здесь видно, сколько из них пришло со
+     второго этапа. Колонки повторяют верхний ряд — тот же порядок плиток, та же
+     ширина, — чтобы плашку можно было читать вертикально парой.
+
+     Тащить мышью можно только верхний ряд: нижний встаёт за ним следом, иначе
+     пары разъехались бы и читать стало бы нечего. */
+  function launchPovtorRow(cur) {
+    var p = cur.povtor;
+    if (!p) return '';
+    var reg = p.registrations || {}, pay = p.payment || {}, inCh = p.in_channel || {};
+    var vw = p.viewers || {};
+    var zal = (vw.known || 0) + (vw.anon || 0);
+    var base = reg.total || 0;
+    var dni = (p.event_days || []).map(function (d) {
+      var x = String(d).split('-');
+      return x.length === 3 ? (+x[2]) + '.' + x[1] : d;
+    }).join(' и ');
+    var tiles = [
+      /* Заголовки те же, что в верхнем ряду: ряд уже подписан «в том числе
+         повтор», и второе «на повтор» в каждой плитке не влезает в колонку —
+         на ширине 1280 оно обрезалось на полуслове. Пары читаются по вертикали. */
+      { key: 'reg', label: 'Регистрации', value: base,
+        sub: 'бесплатно ' + (reg.free || 0) + ' · платно ' + (reg.vip || 0),
+        pct: launchPct(base, p.pages && p.pages.users, 'от тех, кто видел страницу') },
+      { key: 'invoice', label: 'Счет на участие', value: pay.invoiced || 0,
+        sub: plural(pay.invoiced || 0, 'человек', 'человека', 'человек') + ' · 690 рублей',
+        pct: launchPct(pay.invoiced, base, 'от регистраций на повтор') },
+      { key: 'paid', label: 'Оплачено', value: fmtMoney(pay.paid_rub || 0) + ' \u20bd',
+        sub: (pay.paid || 0) + ' из ' + (pay.invoiced || 0) + ' ' +
+          plural(pay.invoiced || 0, 'человека', 'человек', 'человек'),
+        pct: launchPct(pay.paid, base, 'от регистраций на повтор') },
+      { key: 'channels', label: 'В закрытых каналах', value: inCh.total || 0,
+        sub: ['tg', 'vk', 'max'].map(function (k) {
+          var v = inCh[k];
+          return v ? ({ tg: 'телеграм ', vk: 'ВК ', max: 'МАКС ' })[k] + v.live : '';
+        }).filter(Boolean).join(' · ') + (inCh.gone ? ' · вышло ' + inCh.gone : ''),
+        pct: launchPct(inCh.total, base, 'от регистраций на повтор') },
+      { key: 'efir', label: 'Были на повторе', value: zal,
+        sub: (vw.known || 0) + ' с карточкой · ' + (vw.anon || 0) + ' без регистрации',
+        pct: launchPct(zal, base, 'от регистраций на повтор') },
+    ];
+    if (p.pages && p.pages.users) {
+      /* «Страницу повтора видели» в колонку этой ширины не влезает и обрезается,
+         поэтому действие уехало в подпись, а в заголовке осталась сама страница. */
+      tiles.push({ key: 'seen', label: 'Страница повтора',
+        value: fmtMoney(p.pages.users),
+        sub: 'видели' + (p.pages.since ? ' с ' + fmtDay(p.pages.since) : '') +
+             ' · Яндекс Метрика' });
+    }
+    var ordered = launchTiles(tiles).map(function (t) {
+      return Object.assign({}, t, { drag: false });
+    });
+    return '<div class="lt-rh gap">В том числе повтор' + (dni ? ' · ' + dni : '') + '</div>' +
+      statBar(ordered, (p.pages && p.pages.users) ? 'six' : 'five');
   }
 
   function launchSeenTile(cur, reg) {
@@ -35112,6 +35179,9 @@
     var regStep = (cur.path || []).filter(function (s) { return s.key === 'reg'; })[0];
     var regInPeriod = (state._mkLaunchFrom || state._mkLaunchTo) && regStep
       ? regStep.people : null;
+    /* От чего считаем доли под плитками: от той цифры регистраций, которая СТОИТ
+       на экране. Иначе при выбранном периоде проценты объясняли бы чужое число. */
+    var regShown = regInPeriod == null ? reg.total : regInPeriod;
 
     /* лестница: полосы мерим от самой широкой настоящей ступени — кликов или
        регистраций. От одних регистраций 12 кликов рисовались бы той же полосой,
@@ -35202,29 +35272,35 @@
 
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
+      (cur.povtor ? '<div class="lt-rh">Всего по запуску</div>' : '') +
       statBar(launchTiles([
         /* Период выбран — плитка обязана показывать ТО ЖЕ, что первая плашка пути.
            Раньше плитка всегда считала весь запуск, а плашка слушалась периода: на
            экране рядом стояли 31 и 26, и это читалось как сломанный счётчик (нашла
            Ольга 22.09). Число за период берём у самой плашки — она и есть источник,
            а «всего за запуск» уходит в подпись, чтобы обе цифры были названы. */
-        { key: 'reg', label: 'Регистрации', value: (regInPeriod == null ? reg.total : regInPeriod),
+        { key: 'reg', label: 'Регистрации', value: regShown,
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
-            : 'за выбранный период · всего за запуск ' + reg.total },
+            : 'за выбранный период · всего за запуск ' + reg.total,
+          pct: launchPct(regShown, cur.pages && cur.pages.users, 'от тех, кто видел страницу') },
         /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
            это не сопровождение. Плитка держит участие, продукты живут ступенями. */
         /* В плитке счетов и оплат — ЛЮДИ, а не только деньги (Ольга, 31.10.2026):
            «5» без слова «человек» читалось как пять рублей или пять попыток. */
         { key: 'invoice', label: 'Счет на участие', value: pay.invoiced,
           sub: plural(pay.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей · ' +
-            pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
+            pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
+          pct: launchPct(pay.invoiced, regShown, 'от регистраций') },
         { key: 'paid', label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
           sub: (pay.paid + ' из ' + (pay.invoiced || 0) + ' ' +
                 plural(pay.invoiced || 0, 'человека', 'человек', 'человек')) +
             (prod.paid_rub
               ? ' · участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
-              : '') },
+              : ''),
+          /* Доля считается по ЛЮДЯМ, хотя на плитке рубли: «3 450 ₽ — это 1% от
+             рублей» ничего не значит, а «заплатил 1% записавшихся» значит. */
+          pct: launchPct(pay.paid, regShown, 'от регистраций') },
         /* Каналов три. Плитка показывает людей во всех, а подпись — откуда они;
            без неё «29» читается как телеграм, и цифра спорит с блоком ниже.
            Без in_channel (старый бэкенд) остаётся прежний телеграмный счёт. */
@@ -35237,13 +35313,15 @@
               /* Сколько ушло — вторая цифра, о которой просила Ольга: канал, из
                  которого уходят, и канал, в который не приходят, — разные беды. */
               (inCh.gone ? ' · вышло ' + inCh.gone : '')
-            : (tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет') },
+            : (tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет'),
+          pct: launchPct(chTotal, regShown, 'от регистраций') },
         /* Где мы относительно эфира, считает сервер (поле stage): у интенсива два
            вечера и час начала, а команда сидит в разных поясах — по часам браузера
            у двоих вышло бы разное «идет». Старый расчёт по дням оставлен запасным:
            ответ без stage приедет с непромоученного бэкенда. */
-        launchEfirTile(cur, daysVal, days),
+        launchEfirTile(cur, daysVal, days, regShown),
       ].concat(launchSeenTile(cur, reg))), cur.pages ? 'six' : 'five') +
+      launchPovtorRow(cur) +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
@@ -41033,6 +41111,10 @@
            Поэтому кегль выбирается по длине: считаем текст без разметки. */
         '<div class="sv num' + svFit(s) + '">' + s.value + '</div>' +
         '<div class="sd">' + foot + '</div>' +
+        /* Доля плитки от предыдущего шага воронки (экран запусков). Отдельной
+           строкой под подписью, а не внутри неё: это ответ на другой вопрос —
+           не «что это за число», а «много это или мало». */
+        (s.pct ? '<div class="spct num">' + s.pct + '</div>' : '') +
       '</button>';
     }).join('') + '</div>';
   }
