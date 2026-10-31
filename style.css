@@ -396,19 +396,41 @@ a { color: inherit; text-decoration: none; }
 .statbar.six { grid-template-columns: repeat(6, 1fr); }
 .statbar.six .stat { padding: 16px 14px; }
 /* Семь и восемь плиток — когда к полосе запуска добавились диагностика и запись на
-   консультацию. В строку они помещаются только на широком экране: дальше ломаем на
-   две строки той же сетки, тогда колонки верхнего и нижнего ряда остаются друг под
-   другом и пары читаются по вертикали. */
+   консультацию. Ряд остаётся ОДНИМ (владелец 31.10.2026: «чтобы все плашки входили
+   в 1 ряд, итого 2 ряда»), поэтому плитка ужимается: меньше кегль цифры, плотнее
+   поля, подписи мельче. Два ряда экрана — «всего по запуску» и «в том числе
+   повтор» — и колонки в них стоят друг под другом. */
 .statbar.seven { grid-template-columns: repeat(7, 1fr); }
 .statbar.eight { grid-template-columns: repeat(8, 1fr); }
-.statbar.seven .stat, .statbar.eight .stat { padding: 16px 12px; }
-@media (max-width: 1600px) {
-  .statbar.seven, .statbar.eight { grid-template-columns: repeat(4, 1fr); }
-  /* Разделитель рисуется у каждой плитки, кроме первой в строке: на второй строке
-     он иначе висел бы слева от крайней левой плитки. */
-  .statbar.seven .stat:nth-child(4n + 1)::before,
-  .statbar.eight .stat:nth-child(4n + 1)::before { content: none; }
-}
+.statbar.nine { grid-template-columns: repeat(9, 1fr); }
+.statbar.seven .stat, .statbar.eight .stat, .statbar.nine .stat { padding: 14px 9px; }
+.statbar.seven .stat .sl, .statbar.eight .stat .sl, .statbar.nine .stat .sl { font-size: 11px; gap: 6px; }
+.statbar.seven .stat .sv, .statbar.eight .stat .sv, .statbar.nine .stat .sv { font-size: 26px; margin-top: 10px; }
+.statbar.seven .stat .sv.tight, .statbar.eight .stat .sv.tight, .statbar.nine .stat .sv.tight { font-size: 22px; }
+.statbar.seven .stat .sv.word, .statbar.eight .stat .sv.word, .statbar.nine .stat .sv.word { font-size: 18px; }
+.statbar.seven .stat .sv.long, .statbar.eight .stat .sv.long, .statbar.nine .stat .sv.long { font-size: 16px; }
+/* Девять плиток — самая плотная полоса: суммы вроде «103 450 ₽» в колонку такой
+   ширины влезают только мельче. */
+.statbar.nine .stat .sv { font-size: 24px; }
+.statbar.nine .stat .sv.tight { font-size: 16px; }
+.statbar.nine .stat .sv.word { font-size: 15px; }
+.statbar.nine .stat .sv.long { font-size: 14px; }
+.statbar.seven .stat .sd .smut, .statbar.eight .stat .sd .smut, .statbar.nine .stat .sd .smut { font-size: 11px; }
+.statbar.seven .stat .spct, .statbar.eight .stat .spct, .statbar.nine .stat .spct { font-size: 10.5px; margin-top: 4px; }
+.statbar.seven .stat + .stat::before,
+.statbar.eight .stat + .stat::before,
+.statbar.nine .stat + .stat::before { top: 12px; bottom: 12px; }
+/* Кнопка центрирует содержимое по вертикали, и при плитках разной «начинки» цифры
+   вставали каждая на своей высоте. Прижимаем содержимое к верху. */
+.statbar.seven .stat, .statbar.eight .stat, .statbar.nine .stat {
+  display: flex; flex-direction: column; justify-content: flex-start; }
+/* В узкой колонке длинный заголовок («Записались на консультацию») не умещается в
+   строку. Даём ему две и держим одинаковую высоту у всех — тогда цифры стоят на
+   одной линии. */
+.statbar.seven .stat .sl, .statbar.eight .stat .sl, .statbar.nine .stat .sl {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  white-space: normal; line-height: 1.25; min-height: 2.5em; }
+
 /* Доля плитки от предыдущего шага воронки (экран запусков): сколько из видевших
    страницу записалось, сколько из записавшихся заплатило. Тихая строка под
    подписью — цифра сверху остаётся главной. */
