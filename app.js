@@ -29762,6 +29762,18 @@
           }).join('') + '</div>';
       }).join(''));
     }
+    /* Вопросы, которые разбор оставил человеку: в консультации с семьей задач
+       для команды обычно нет, зато есть «решить, какой тариф предложить». Раньше
+       они лежали только в черновике протокола, и встреча выглядела пустой
+       (Павел 31.10.2026). */
+    if ((c.for_decision || []).length) {
+      jumps.push(['dec', ic('note', 13) + 'На решение ' +
+        '<b class="num">' + c.for_decision.length + '</b>']);
+      parts.push('<div class="mx-h" id="mx-s-dec">Вопросы на решение</div>' +
+        c.for_decision.map(function (d) {
+          return '<div class="mx-step">' + esc(d) + '</div>';
+        }).join(''));
+    }
     if ((c.tasks || []).length) {
       jumps.push(['tasks', ic('task', 13) + 'Задачи со встречи ' +
         '<b class="num">' + c.tasks.length + '</b>']);
