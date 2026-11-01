@@ -5455,6 +5455,15 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .fin-months { gap: 5px; }
   /* инбокс на мобиле: одна панель за раз (список ИЛИ чат) */
   .tg { height: calc(100vh - 200px); min-height: 420px; }
+  /* Высота от экрана, а не от содержимого (Павел 01.11.2026: «имя пользователя
+     улетает вверх»). На телефоне .app растет по содержимому, и height: 100% у .tg
+     ни к чему не привязан: длинная переписка растягивала страницу, и вместе с ней
+     уезжали шапка с именем и поле ввода. Здесь .app снова занимает ровно экран,
+     и листается только лента сообщений. Нижний отступ .app оставлен под
+     плавающие вкладки. */
+  body.inbox-mode .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; min-height: 0; }
+  body.inbox-mode .main { flex: 1; min-height: 0; }
+  body.inbox-mode .tg { min-height: 0; }
   .tg-list { width: 100%; }
   .tg-chat { display: none; }
   .tg.show-chat .tg-list { display: none; }
