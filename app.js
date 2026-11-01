@@ -43737,9 +43737,19 @@
       if (q && ((c.name || '') + ' ' + (c.last_text || '')).toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
+    /* Выбранного диалога нет среди ЗАГРУЖЕННЫХ вовсе (а не просто отфильтрован) —
+       значит пришли по ссылке #dialog/<id> на переписку за пределом выдачи. Открыть
+       вместо нее первую в списке нельзя: 01.11.2026 так и вышло — по ссылке на одну
+       семью показали чужой диалог, и это заметил оператор, а не мы. Молчать тут
+       опаснее пустого экрана: менеджер пишет не тому человеку. */
+    var missingSel = state.inboxSel &&
+      !convos.some(function (c) { return String(c.id) === String(state.inboxSel); })
+      ? state.inboxSel : null;
+    if (missingSel) state.inboxSel = null;
     if (!state.inboxSel || !list.some(function (c) { return String(c.id) === String(state.inboxSel); })) {
       state.inboxSel = list[0] ? list[0].id : null;
     }
+    if (missingSel) state.inboxSel = null;
 
     var chips = '<button class="tg-fch' + (!state.inboxCh ? ' on' : '') + '" data-ch="">Все</button>' +
       CHAN_ORDER.map(function (k) {
@@ -43766,9 +43776,14 @@
     }
     var rows = list.length ? list.map(rowHtml).join('') : '<div class="tg-empty-list">Ничего не найдено</div>';
 
+    var missBanner = missingSel
+      ? '<div class="tg-empty-list" style="color:var(--ink)">Диалог не открылся: его нет среди загруженных. ' +
+        'Найдите человека в мессенджере напрямую и скажите нам — поднимем выдачу.</div>'
+      : '';
+
     view.innerHTML =
       '<div class="tg' + (state.inboxSel ? ' show-chat' : '') + '" id="tg">' +
-        '<aside class="tg-list">' + inboxSwitch() +
+        '<aside class="tg-list">' + inboxSwitch() + missBanner +
           '<div class="tg-search"><span class="searchwrap">' + ic('leads', 15) + '<input id="tg-q" class="search" type="search" placeholder="Поиск диалога" autocomplete="off"></span></div>' +
           '<div class="tg-fchips">' + chips + '</div>' +
           '<div class="tg-rows" id="tg-rows">' + rows + '</div>' +
