@@ -14136,6 +14136,220 @@
     if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
   }
 
+  /* Упоминание в тексте реплики. Подсвечиваем те же имена, по которым сервер
+     зовет людей (staff_tasks._mentions): собачка плюс имя из справочника.
+     Проходим по сырому тексту, как fndMark, иначе подстановка попала бы внутрь
+     уже экранированного символа. */
+  function tskAt(text) {
+    text = text || '';
+    var people = state.taskPeople || [];
+    if (text.indexOf('@') === -1 || !people.length) return esc(text);
+    var names = people.map(function (p) { return String(p.name || '').trim(); })
+      .filter(Boolean)
+      // Длинные вперед: иначе «@Мария Шустова» подсветится как «@Мария».
+      .sort(function (a, b) { return b.length - a.length; })
+      .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+    var re = new RegExp('@(' + names.join('|') + ')', 'gi');
+    var out = '', last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      out += esc(text.slice(last, m.index)) + '<b class="tsk-at">' + esc(m[0]) + '</b>';
+      last = m.index + m[0].length;
+    }
+    return out + esc(text.slice(last));
+  }
+
+  /* Кого позвали в наборе прямо сейчас. Правило ровно как на сервере
+     (staff_tasks._mentions): полное имя из справочника, а одно имя без фамилии
+     считается только когда оно в команде единственное. Нужно строке доставки
+     под полем: человек должен видеть, что упомянутый получит сообщение, до
+     того как нажмет отправку. */
+  function tskAtIds(text) {
+    text = text || '';
+    var people = state.taskPeople || [];
+    if (text.indexOf('@') === -1 || !people.length) return [];
+    var low = text.toLowerCase(), hit = [], byFirst = {};
+    people.forEach(function (p) {
+      var name = String(p.name || '').trim();
+      if (!name) return;
+      var first = name.split(/\s+/)[0].toLowerCase();
+      (byFirst[first] = byFirst[first] || []).push(p.id);
+      if (low.indexOf('@' + name.toLowerCase()) > -1) hit.push(p.id);
+    });
+    Object.keys(byFirst).forEach(function (first) {
+      var ids = byFirst[first];
+      if (ids.length === 1 && low.indexOf('@' + first) > -1 && hit.indexOf(ids[0]) === -1) hit.push(ids[0]);
+    });
+    return hit;
+  }
+
+  /* Подсказка по собачке в поле обсуждения. Вставляет имя целиком: сервер зовет
+     людей по именам из справочника, а логин (ssplatonov) в разговоре никто не
+     пишет. Возвращает рулевого, чтобы карточка отдала ему стрелки и Ввод. */
+  function tskAtPicker(say, box) {
+    var list = [], idx = 0, at = -1;
+    /* Подсказку ставим на место руками, как поповер выбора человека (.ss-pop):
+       в потоке карточки ее режет прокрутка колонки. На телефоне с открытой
+       клавиатурой экран остается высотой в 420px, колонка разговора сжимается
+       до полутора строк — и список имен не было видно вообще (02.11.2026).
+       position: fixed прокрутка уже не режет. */
+    var place = function () {
+      var r = say.parentNode.getBoundingClientRect();
+      var vh = window.innerHeight;
+      var room = r.top - 16;
+      box.style.left = Math.round(r.left) + 'px';
+      box.style.width = Math.round(r.width) + 'px';
+      // Над полем тесно — роняем список под поле: лучше перекрыть кнопки, чем
+      // показать две строки из шести.
+      if (room < 132 && vh - r.bottom > room) {
+        box.style.top = Math.round(r.bottom + 8) + 'px';
+        box.style.bottom = 'auto';
+        box.style.maxHeight = Math.round(Math.min(232, vh - r.bottom - 16)) + 'px';
+      } else {
+        box.style.top = 'auto';
+        box.style.bottom = Math.round(vh - r.top + 8) + 'px';
+        box.style.maxHeight = Math.round(Math.max(96, Math.min(232, room))) + 'px';
+      }
+    };
+    var hide = function () {
+      list = []; at = -1; box.hidden = true; box.innerHTML = '';
+      say.setAttribute('aria-expanded', 'false');
+      say.removeAttribute('aria-activedescendant');
+    };
+    var pick = function (p) {
+      if (!p) return;
+      var name = String(p.name || p.login || '').trim();
+      var cur = say.selectionStart, v = say.value;
+      // Пробел после имени нужен, чтобы можно было продолжать писать, но если
+      // вставляем в середину фразы и дальше уже пробел — второй не ставим.
+      var tail = v.slice(cur), gap = /^[ \u00A0]/.test(tail) ? '' : ' ';
+      say.value = v.slice(0, at) + '@' + name + gap + tail;
+      var pos = at + name.length + 1 + gap.length;
+      hide();
+      say.focus();
+      say.setSelectionRange(pos, pos);
+      // Поле растет под текст, и после вставки высота может измениться.
+      say.dispatchEvent(new Event('input'));
+    };
+    var draw = function () {
+      box.hidden = !list.length;
+      if (!list.length) { box.innerHTML = ''; return; }
+      box.innerHTML = '<div class="tsk-at-h">кого позвать</div>' + list.map(function (p, i) {
+        var role = (ROLES[p.role] || {}).label || '';
+        return '<button type="button" role="option" id="tk-at-o' + i + '" aria-selected="' +
+          (i === idx ? 'true' : 'false') + '" class="tsk-at-i' + (i === idx ? ' on' : '') +
+          '" data-i="' + i + '">' + esc(p.name || p.login) +
+          (role ? '<i>' + esc(role) + '</i>' : '') +
+          (p.linked ? '' : '<u title="не подключен к боту">без бота</u>') + '</button>';
+      }).join('');
+      say.setAttribute('aria-expanded', 'true');
+      say.setAttribute('aria-activedescendant', 'tk-at-o' + idx);
+      place();
+      Array.prototype.forEach.call(box.querySelectorAll('[data-i]'), function (b) {
+        var take = function (e) {
+          e.preventDefault();
+          // list уже пуст после первого выбора, поэтому второе событие
+          // (click вслед за mousedown) ничего не вставляет повторно.
+          pick(list[+b.getAttribute('data-i')]);
+        };
+        // mousedown, а не click: click приходит после blur, и к этому моменту
+        // курсор в поле уже потерян, а вставлять надо именно в него. Но click
+        // нужен тоже: именно его посылают VoiceOver и TalkBack, и без него
+        // незрячий человек не выберет имя вообще.
+        b.addEventListener('mousedown', take);
+        b.addEventListener('click', take);
+      });
+    };
+    var scan = function () {
+      var cur = say.selectionStart, before = say.value.slice(0, cur);
+      var m = /(?:^|\s)@([^\s@]{0,24}(?:[ \u00A0][^\s@]{0,24})?)$/.exec(before);
+      if (!m) { hide(); return; }
+      at = cur - m[1].length - 1;
+      var q = m[1].trim().toLowerCase();
+      loadTaskPeople(function (people) {
+        list = people.filter(function (p) {
+          var n = String(p.name || p.login || '').toLowerCase();
+          return !q || n.indexOf(q) === 0 || n.indexOf(' ' + q) > 0;
+        }).slice(0, 6);
+        idx = 0;
+        draw();
+      });
+    };
+    say.addEventListener('input', scan);
+    say.addEventListener('click', scan);
+    say.addEventListener('blur', function () { setTimeout(hide, 120); });
+    // Поле едет вместе с прокруткой колонки и при появлении клавиатуры —
+    // открытый список едет за ним.
+    var follow = function () {
+      // Карточку закрыли — снимаем слушателей сами: пикер живет ровно столько,
+      // сколько его разметка.
+      if (!box.parentNode || !document.body.contains(box)) {
+        window.removeEventListener('scroll', follow, true);
+        window.removeEventListener('resize', follow);
+        return;
+      }
+      if (list.length) place();
+    };
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    return {
+      open: function () { return !!list.length; },
+      key: function (e) {
+        if (!list.length) return false;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          idx = (idx + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length;
+          draw();
+          return true;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') { pick(list[idx]); return true; }
+        if (e.key === 'Escape') { hide(); return true; }
+        return false;
+      },
+    };
+  }
+
+  /* Кому уйдет реплика: все, кто в задаче, кроме меня, плюс те, кого позвали
+     собачкой в наборе. Сервер шлет ровно по этому правилу
+     (staff_tasks.comment_task + _mentions), поэтому список здесь собирается из
+     тех же полей — исполнитель, постановщик, соисполнители, наблюдатели.
+     Строка живая: упомянутый появляется в ней сразу после вставки имени, иначе
+     интерфейс обещал бы доставку не тому человеку. */
+  function tskSayWho(t, text) {
+    var me = state.userId, seen = {}, who = [];
+    var byId = {};
+    (state.taskPeople || []).forEach(function (p) { byId[p.id] = p; });
+    var add = function (uid, name, called) {
+      if (!uid || uid === me || seen[uid] || !name) return;
+      seen[uid] = 1;
+      who.push({ name: name, called: !!called,
+        // Про бота знаем только из справочника. Не приехал — не пугаем зря.
+        nobot: byId[uid] ? byId[uid].linked === false : false });
+    };
+    tskAtIds(text).forEach(function (uid) { add(uid, (byId[uid] || {}).name, true); });
+    add(t.assignee_id, t.assignee_name);
+    add(t.author_id, t.author_name);
+    (t.executors || []).concat(t.watchers || []).forEach(function (p) { add(p.id, p.name); });
+    return who;
+  }
+
+  function tskSayToFill(t, text) {
+    var box = el('tk-sayto');
+    if (!box) return;
+    var who = tskSayWho(t, text);
+    box.hidden = !who.length;
+    if (!who.length) { box.innerHTML = ''; return; }
+    // Позванные идут первыми и не прячутся за «и еще N»: их назвали руками,
+    // именно про них человек и хочет знать, дойдет ли.
+    var called = who.filter(function (p) { return p.called; });
+    var crew = who.filter(function (p) { return !p.called; });
+    var room = Math.max(1, 4 - called.length);
+    var shown = called.concat(crew.slice(0, room));
+    var rest = Math.max(0, crew.length - room);
+    box.innerHTML = ic('send', 11) + '<span>уйдет в телеграм: ' +
+      shown.map(function (p) {
+        return esc(officeName(p.name)) + (p.nobot ? ' <i>(без бота)</i>' : '');
+      }).join(', ') + (rest > 0 ? ' и еще ' + rest : '') + '</span>';
+  }
+
   /* Компаньон руководителя: раскладка цели на шаги по людям отдела.
      Сервер только предлагает (POST /tasks/:id/steps/suggest), заводит человек:
      каждый отмеченный шаг уходит обычной постановкой с parent_id, поэтому у
@@ -14414,7 +14628,7 @@
               '" aria-label="Удалить ' + whose + '">Удалить</button>' : '');
         return '<div class="tg-msg tsk-msg ' + side + '" data-ev="' + e.id + '">' +
           '<div class="tg-bub">' + quote +
-            '<span class="tsk-ev-t">' + esc(e.text || '') + '</span>' +
+            '<span class="tsk-ev-t">' + tskAt(e.text) + '</span>' +
             '<span class="tg-mt">' + esc(fmtTime(e.at)) + '</span></div>' +
           // Время уже стоит в пузыре — под ним только имя автора (у своих и его
           // не нужно) и пометка о правке.
@@ -14667,9 +14881,22 @@
               '<button type="button" id="tk-replx">не отвечать</button></div>' +
             // Поле растет под текст: в одну строку не видно, что уже написал
             // (Павел 09.10.2026). Ввод отправляет, Shift+Ввод переносит строку.
-            '<div class="tsk-say"><textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
-              'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t"></textarea>' +
+            '<div class="tsk-say">' +
+              // Подсказка по собачке: кого позвать в реплику. Висит над самим
+              // рядом ввода, а не над всем подвалом: иначе плашка «Ответ · …»
+              // встает между списком имен и кареткой.
+              '<div class="tsk-atbox" id="tk-atbox" role="listbox" aria-label="Кого позвать" hidden></div>' +
+              '<textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
+              'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t" ' +
+              // role="combobox" полю НЕ ставим: он перебил бы собственную роль
+              // многострочного поля, и скринридер перестал бы объявлять, что
+              // здесь пишут абзацами. Связь с подсказкой держат aria-controls и
+              // aria-activedescendant, их textarea принимает как есть.
+              'aria-haspopup="listbox" aria-controls="tk-atbox" aria-expanded="false"></textarea>' +
               '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
+            // Кому уйдет реплика, видно до отправки: человек пишет в задачу и не
+            // знает, прочитает ли ее кто-нибудь (Виталий через Павла, 02.11.2026).
+            '<div class="tsk-sayto" id="tk-sayto" hidden></div>' +
           '</div>' +
         '</aside>' +
         '</div>' +
@@ -15034,6 +15261,14 @@
       };
       say.addEventListener('input', grow);
       grow();
+      // Строка «уйдет в телеграм» пересобирается на каждый набор: вставили
+      // имя через собачку — человек тут же видит его в списке получателей.
+      var sayTo = function () { tskSayToFill(t, say.value); };
+      say.addEventListener('input', sayTo);
+      sayTo();
+      // Подсказка по собачке вешается до обработчика клавиш ниже: пока она
+      // открыта, Ввод выбирает человека, а не отправляет реплику.
+      var atPick = tskAtPicker(say, el('tk-atbox'));
 
       // Кому отвечаем. Держим id ветки, а не только подпись: после
       // перерисовки ленты DOM другой, а ветка та же.
@@ -15062,6 +15297,17 @@
         again.scrollTop = keepAt == null ? again.scrollHeight : keepAt;
       };
 
+      /* Подсветка упоминаний и подсказка берут имена из справочника команды.
+         Если его в этой сессии еще не тянули, лента перерисуется, когда он
+         приедет: иначе первое открытие карточки показывало бы «@Мария» серым
+         текстом, а второе — уже отметкой. */
+      if (!(state.taskPeople || []).length) {
+        loadTaskPeople(function (people) {
+          var th = thread();
+          if (people.length && th) redrawFeed(events, (scroller() || {}).scrollTop);
+        });
+      }
+
       var send = function () {
         var text = (say.value || '').trim();
         if (!text) { if (retMode) say.focus(); return; }
@@ -15077,6 +15323,8 @@
       };
       el('tk-send').addEventListener('click', send);
       say.addEventListener('keydown', function (e) {
+        // Пока открыта подсказка по собачке, стрелки и Ввод принадлежат ей.
+        if (atPick.key(e)) { e.preventDefault(); return; }
         // Shift+Ввод — перенос строки: реплика в задаче бывает и в два абзаца.
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
       });
