@@ -3606,6 +3606,39 @@ button.tr-crumb:hover { color: var(--blue); }
 /* Цитата в пузыре вместо лесенки отступов: в колонке 420px ветка отступом
    съедала бы половину строки, а так видно, на что отвечают, и по клику
    прыгаешь к оригиналу. */
+/* Упоминание в реплике. Не кнопка: это пометка «тебя позвали», нажимать не на
+   что, поэтому только вес и цвет акцента. В своем пузыре фон синий, там акцент
+   белым, иначе сливается. */
+.tsk-at { font-weight: 700; color: var(--blue); }
+.tsk-msg.out .tsk-at { color: #fff; }
+/* Подсказка «кого позвать». Стоит над самим полем ввода, а не в потоке
+   подвала: в потоке ее вытесняли кнопки и плашка «Ответ», а на телефоне с
+   открытой клавиатурой список не влезал вовсе (проверено 02.11.2026).
+   Перекрытые две строки ленты человека не смущают — он смотрит в имена.
+   Поверхность — тот же рецепт, что у выбора человека (.ss-pop) и у срока
+   задачи (.due-pop): три разных окошка под одно действие «выбери из списка»
+   читались бы как три разные механики. Тень тут по делу — она единственное,
+   что отрывает список от серой ленты под ним. Координаты ставит app.js
+   (tskAtPicker.place), как у .ss-pop: в потоке карточки список резала бы
+   прокрутка колонки, а на телефоне с клавиатурой срезала целиком. */
+.tsk-atbox { position: fixed; z-index: 100;
+  border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  box-shadow: 0 14px 40px -16px rgba(20,25,40,.28); animation: rmPop .16s ease;
+  background: var(--card); overflow-y: auto; max-height: 232px; }
+.tsk-at-h { padding: 7px 12px 5px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.tsk-at-i { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  padding: 8px 12px; font-size: 13.5px; color: var(--ink); background: none; }
+/* Роль различает тезок (у нас два Марка), поэтому ink-2 (4.9:1), а не ink-3:
+   на ink-3 единственный различающий признак был самым бледным в строке.
+   min-width: 0 — чтобы длинная пара «имя + роль» обрезалась, а не выдавливала
+   пометку «без бота», которую как раз надо видеть до отправки. */
+.tsk-at-i i { font-style: normal; font-size: 11.5px; color: var(--ink-2);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-at-i u { margin-left: auto; flex: none; text-decoration: none; font-size: 11px;
+  color: var(--amber-ink); }
+.tsk-at-i:hover, .tsk-at-i.on { background: var(--blue-tint); }
+.tsk-at-i:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 .tsk-quote { display: block; width: 100%; text-align: left; font-size: 11.5px; line-height: 1.4;
   color: var(--ink-2); background: rgba(17,21,31,.05); border-radius: 8px;
   padding: 5px 8px; margin-bottom: 5px; }
@@ -3673,6 +3706,13 @@ button.tr-crumb:hover { color: var(--blue); }
   .tsk-evb { min-height: 32px; }
   .tsk-evacts { gap: 0 18px; }
   .tsk-evdel { margin-left: 6px; }
+}
+
+/* Телефон: строка списка имен под палец, тем же рецептом, что у выбора
+   человека (.ss-i). На 36 пикселях рядом стоящие имена промахиваются. */
+@media (max-width: 480px) {
+  .tsk-at-i { padding: 12px; font-size: 14px; }
+  .tsk-at-i i { font-size: 12px; }
 }
 
 /* На узком экране выбора ширины нет: две колонки туда не помещаются, и кнопка
@@ -4360,6 +4400,12 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
   font-size: 11.5px; color: var(--ink-3); line-height: 1.3; }
 .tsk-sayto svg { flex: none; opacity: .7; }
 .tsk-sayto span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* У строки свой display, и без этого правила атрибут hidden проигрывает классу
+   (та же грабля, что у .tsk-repl). */
+.tsk-sayto[hidden] { display: none; }
+/* Кому сообщение не дойдет: он не нажимал «Старт» у бота. Амбер — ожидание и
+   внимание по палитре, красным тут пугать нечего. */
+.tsk-sayto i { font-style: normal; color: var(--amber-ink); }
 /* Кому отвечаем — плашка над полем. */
 .tsk-repl { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
   border-radius: 10px; background: var(--blue-tint); font-size: 12px; color: var(--navy); }
