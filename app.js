@@ -14125,6 +14125,26 @@
     if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
   }
 
+  /* Кому уйдет реплика: все, кто в задаче, кроме меня. Сервер шлет ровно по
+     этому правилу (staff_tasks.comment_task), поэтому список здесь собирается
+     из тех же полей — исполнитель, постановщик, соисполнители, наблюдатели. */
+  function tskSayTo(t) {
+    var me = state.userId, seen = {}, names = [];
+    var add = function (uid, name) {
+      if (!uid || uid === me || seen[uid] || !name) return;
+      seen[uid] = 1; names.push(name);
+    };
+    add(t.assignee_id, t.assignee_name);
+    add(t.author_id, t.author_name);
+    (t.executors || []).concat(t.watchers || []).forEach(function (p) { add(p.id, p.name); });
+    if (!names.length) return '';
+    var shown = names.slice(0, 3).map(officeName).join(', ');
+    var rest = names.length - 3;
+    return '<div class="tsk-sayto">' + ic('send', 11) +
+      '<span>уйдет в телеграм: ' + esc(shown) +
+      (rest > 0 ? ' и еще ' + rest : '') + '</span></div>';
+  }
+
   function openTask(id, focusEv) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
@@ -14530,6 +14550,9 @@
             '<div class="tsk-say"><textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
               'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t"></textarea>' +
               '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
+            // Кому уйдет реплика, видно до отправки: человек пишет в задачу и не
+            // знает, прочитает ли ее кто-нибудь (Виталий через Павла, 02.11.2026).
+            tskSayTo(t) +
           '</div>' +
         '</aside>' +
         '</div>' +
