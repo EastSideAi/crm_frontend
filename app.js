@@ -36186,10 +36186,13 @@
         var fp = function (v) { return money ? f(v) : mgNum(Math.round(v * 10) / 10); };
         var dl = c - p, cls = !dl || r[2] === 'spend' ? '' : dl > 0 ? 'up' : 'down';
         var pl = pv != null && pv > 0 ? (c >= pv ? 'ok' : c >= pv * .7 ? 'risk' : 'miss') : '';
+        // Виталий 02.11.2026: «меня интересует отношение к плановым показателям» — процент рядом с цифрой.
+        var pct = function (v) { return Math.round(c / v * 100) + '%'; };
         return '<div class="mg-tr"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
           (anyPlan ? '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
-            (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + '</small>' : '') : '') + '</span>' : '') +
-          '<span class="r num big ' + pl + '">' + f(c) + '</span>' +
+            (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + (fv > 0 ? ' · ' + pct(fv) : '') + '</small>' : '') : '') + '</span>' : '') +
+          '<span class="r num big ' + pl + '">' + f(c) +
+            (pl ? '<small class="mg-pc">' + pct(pv) + (o.full ? ' к дате' : ' плана') + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + f(p) + '</span>' +
           '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
       }).join('') + '</div>' +
@@ -36248,7 +36251,7 @@
       cur: [a, b], prv: [pa, pb], plan: mgPlan(a, b), full: going ? mgPlan(a, z) : null, pf: true,
       planLbl: going ? 'План к дате' : 'План',
       curLbl: mgSpan(a, b), prvLbl: mgSpan(pa, pb),
-      note: going ? 'План к дате — сколько месячного плана приходится на прошедшие дни. Цвет факта считается по нему, под ним мелко — цель на весь месяц.'
+      note: going ? 'План к дате — сколько месячного плана приходится на прошедшие дни. Процент под фактом считается от него, а процент рядом с целью месяца — от всего плана.'
         : 'План месяца из «План-факта».'
     });
   }
