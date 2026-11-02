@@ -48705,31 +48705,57 @@
     }).join('') + '</select>';
   }
 
+  /* Служебные записи кладет не человек, а сам продукт: запись речи с языкового
+     теста лежит в документах дела только потому, что своего хранилища у нее нет
+     (она привязана к попытке, бэкенд — doc_checklist.SERVICE_KINDS). В кабинете
+     семьи такие строки спрятаны, а в карточке торчали машинным именем
+     «det-speaking-17.webm» и техническим словом в выпадашке категорий: 02.11.2026
+     Мария приняла такую запись за видео-визитку, открыла ее прямой ссылкой и
+     увидела черный экран. Картинки там нет вовсе, это звук. */
+  var DOC_SERVICE_KINDS = { det_speaking: 'Устный ответ на языковом тесте' };
+  function docService(dc) {
+    var name = DOC_SERVICE_KINDS[String(dc.kind || '').trim().toLowerCase()];
+    if (!name) return '';
+    var n = /(\d+)/.exec(String(dc.name || ''));
+    return name + (n ? ', задание ' + n[1] : '');
+  }
+  /* Звук новой вкладкой не открываем: браузер рисует черный прямоугольник
+     видеоплеера, и живой файл выглядит сломанным. Слушаем прямо в строке. */
+  function docIsAudio(dc) { return String(dc.mime || '').indexOf('audio/') === 0; }
+
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
       /* Внешняя ссылка открывается как есть, файл в Storage — через openDoc. */
       var href = dc.link || '#';
       var by = docBy(dc);
+      var svc = docService(dc);
+      var audio = docIsAudio(dc);
       var meta = [dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
       var m = (by ? '<span class="doc-by' + (dc.uploaded_side === 'team' ? ' doc-by-own' : '') + '">' + esc(by) + '</span> · ' : '') + esc(meta);
-      return '<div class="doc-row" data-did="' + dc.id + '">' +
-        '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
-        '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div>' +
+      return '<div class="doc-row' + (svc ? ' doc-row--svc' : '') + '" data-did="' + dc.id + '">' +
+        '<span class="doc-ic">' + ic(svc ? 'mic' : dc.link ? 'ext' : 'doc', 17) + '</span>' +
+        '<div class="doc-b"><div class="doc-n">' + esc(svc || dc.name) + '</div>' +
           '<div class="doc-m">' +
-            // Категория правится прямо в строке: именно она закрывает пункт пакета в
-            // кабинете семьи, и поймать чужую ошибку проще там, где файл видно.
-            docKindSelect('doc-kind', '', dc.kind) +
-            // Статус правится там же, где видно файл: до этого поменять его из CRM
-            // было нельзя вовсе, и «нужна замена» стояло только у меня в базе.
-            docStSelect(dc.status) +
+            // У служебной записи ни категории, ни статуса нет: пакет документов она
+            // не закрывает, а статус читает семья, которой эта строка не видна.
+            (svc ? '<span class="doc-svc">запись тренажера, семья ее не видит</span>'
+              // Категория правится прямо в строке: именно она закрывает пункт пакета в
+              // кабинете семьи, и поймать чужую ошибку проще там, где файл видно.
+              : docKindSelect('doc-kind', '', dc.kind) +
+                // Статус правится там же, где видно файл: до этого поменять его из CRM
+                // было нельзя вовсе, и «нужна замена» стояло только у меня в базе.
+                docStSelect(dc.status)) +
             (m ? '<span class="doc-mt">' + m + '</span>' : '') +
           '</div>' +
           // Причина разворота — ровно тот текст, который семья читает в кабинете
           '<div class="doc-why"' + (dc.review_note ? '' : ' hidden') + '>' +
             esc(dc.review_note || '') + '</div>' +
+          (audio ? '<div class="doc-audio" hidden></div>' : '') +
         '</div>' +
         '<div class="doc-act">' +
+          (audio ? '<button class="icobtn" data-docplay="' + dc.id + '" title="Прослушать">' +
+            ic('play', 14) + '</button>' : '') +
           '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
             ' href="' + esc(dc.link ? safeHref(href) : href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
             ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
@@ -50398,6 +50424,27 @@
       a.addEventListener('click', function (e) {
         e.preventDefault();
         openDoc(a.getAttribute('data-docdl'));
+      });
+    });
+    /* Звук играет в самой строке: ссылка на Storage, открытая вкладкой, дает
+       черный экран видеоплеера, и файл читается как сломанный. Ссылку резолвим
+       тем же resolveDocLink, что и превью сдач, — подпись у нее не вечная,
+       поэтому плеер строим один раз на показ. */
+    Array.prototype.forEach.call(host.querySelectorAll('[data-docplay]'), function (b) {
+      b.addEventListener('click', function () {
+        var row = b.closest('.doc-row');
+        var box = row && row.querySelector('.doc-audio');
+        if (!box) return;
+        if (box.firstChild) { box.hidden = !box.hidden; row.classList.toggle('playing', !box.hidden); return; }
+        b.disabled = true;
+        resolveDocLink(b.getAttribute('data-docplay'), function (url) {
+          b.disabled = false;
+          if (!url) { showToast('Запись не открылась — проверь сеть'); return; }
+          var au = document.createElement('audio');
+          au.controls = true; au.preload = 'none'; au.src = url;
+          box.appendChild(au); box.hidden = false; row.classList.add('playing');
+          au.play().catch(function () {});
+        });
       });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-deldoc]'), function (b) {
