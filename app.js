@@ -38011,6 +38011,13 @@
     if (!a) return id;
     return a.name + ' · куратор ' + prcPerson(a.curator).name;
   }
+  /* Шаг, который сейчас делает человек, а потом заберет агент (Вера 02.11.2026: «помечая, что
+     вот этот блок мы отдаем агенту потом»). Агентов пока три, у остальных шагов ответственный
+     живой, поэтому пометка тихая и стоит рядом с ним, а не вместо него. */
+  function prcLater(s) {
+    var a = s.agent_later && (state._prc._agents || {})[s.agent_later];
+    return a ? 'потом ' + a.name.charAt(0).toLowerCase() + a.name.slice(1) : '';
+  }
   function prcPerson(id) {
     var p = state._prc._people[id];
     return p || { id: id, name: id, role: '' };
@@ -38296,6 +38303,7 @@
       return '<span class="prc-p' + (x === who ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</span>';
     };
     var people = s.who.map(pp).join('<i>, </i>');
+    var later = prcLater(s);
     var marks = [];
     if (sub) marks.push('<span class="prc-subn">' + ic('flow', 12) + subN + ' ' + plural(subN, 'шаг', 'шага', 'шагов') + ' внутри</span>');
     if ((s.variants || []).length) marks.push('<span class="prc-subn">' + s.variants.length + ' ' + plural(s.variants.length, 'вариант', 'варианта', 'вариантов') + '</span>');
@@ -38304,7 +38312,7 @@
       '<button type="button" class="prc-row" aria-expanded="' + (open ? 'true' : 'false') + '">' +
         '<span class="prc-n">' + (i + 1) + '</span>' +
         '<span class="prc-what"><b>' + esc(s.title) + '</b>' +
-          '<span class="prc-meta-l"><span class="prc-ppl">' + people + '</span></span>' +
+          '<span class="prc-meta-l"><span class="prc-ppl">' + people + '</span>' + (later ? '<span class="prc-later">' + esc(later) + '</span>' : '') + '</span>' +
           (marks.length ? '<span class="prc-marks">' + marks.join('') + '</span>' : '') + '</span>' +
         '<span class="prc-chev">' + ic('go', 14) + '</span>' +
       '</button>' +
@@ -38370,7 +38378,7 @@
     var fact = function (k, v, sub) { return '<div class="prc-fact"><span class="po-lbl">' + k + '</span><b>' + v + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
     var facts = '<div class="prc-facts">' +
       (owner ? fact('Ведет', esc(owner)) : '') +
-      (ag ? fact('Бот', esc(ag.name)) : '') + '</div>';
+      (ag ? fact('Агент', esc(ag.name.charAt(0).toUpperCase() + ag.name.slice(1)) + (ag.live ? '' : ' · пока нет')) : '') + '</div>';
     /* Схема процесса как на рисунках Рыбакова (рис. 1 и 12 книги): слева событие,
        с которого все начинается, дальше пронумерованные шаги стрелками рядами, справа
        результат. Это картинка процесса целиком, ее читают первой; подробности — в
@@ -38379,10 +38387,11 @@
     var scheme = '<ol class="prc-scheme" aria-label="Схема процесса">' +
       (n.trigger ? '<li class="prc-sc-end start" title="' + esc(n.trigger) + '"><span class="po-lbl">Начало</span><p>' + esc(n.trigger) + '</p></li>' : '') +
       n.steps.map(function (s, i) {
-        var sub = s.sub ? prcLight(s.sub) : null;
+        var sub = s.sub ? prcLight(s.sub) : null, later = prcLater(s);
         return '<li><button type="button" class="prc-sc-box' + (sub ? ' sub' : '') + (state.prcStep === i ? ' on' : '') + '" data-sc="' + i + '" title="' + esc(s.title) + '">' +
           '<span class="prc-sc-top"><i>' + (i + 1) + '</i>' + prcCorner(s) + '</span><span>' + esc(s.title) + '</span>' +
-          (sub ? '<small>' + sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри</small>' : '') + '</button></li>';
+          (sub || later ? '<small>' + (sub ? '<span>' + sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри</span>' : '') +
+            (later ? '<em>' + esc(later) + '</em>' : '') + '</small>' : '') + '</button></li>';
       }).join('') +
       (n.done ? '<li class="prc-sc-end done" title="' + esc(n.done) + '"><span class="po-lbl">' + ic('check', 12) + 'Результат</span><p>' + esc(n.done) + '</p></li>' : '') +
       '</ol>';

@@ -13190,7 +13190,7 @@ body.office-full { overflow: hidden; }
 .prc-sc-top b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
 .prc-sc-box > span:not(.prc-sc-top) { font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--ink); overflow-wrap: break-word; hyphens: auto; }
 .prc-sc-box small { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: auto; padding-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--blue); }
-.prc-sc-box small em { font-style: normal; color: var(--amber-ink); }
+.prc-sc-box small em { font-style: normal; font-weight: 500; color: var(--ink-3); }
 .prc-sc-end { flex-direction: column; gap: 4px; width: 100%; padding: 10px 12px 11px; border-radius: 12px; min-height: 82px; }
 .prc-sc-end p { font-size: 12.5px; line-height: 1.45; color: var(--ink-2); overflow-wrap: break-word; hyphens: auto; }
 /* концы линии шагов — только на телефоне, где схемы нет */
@@ -13226,6 +13226,7 @@ body.office-full { overflow: hidden; }
 .prc-ppl i { font-style: normal; }
 .prc-p.me { color: var(--navy); font-weight: 700; }
 .prc-p.sys { color: var(--ink-3); }
+.prc-later { font-size: 12px; color: var(--ink-3); }
 .prc-marks { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; margin-top: 1px; }
 /* передача между шагами: тихая подпись на линии, а не полоса на всю ширину */
 .prc-subn { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--blue); }
