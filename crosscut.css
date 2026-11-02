@@ -150,6 +150,32 @@
 .crosscut .drawer .people b {color:var(--ink); font-weight:600}
 
 
+/* список людей за цифрой. Живет только в CRM: там у строки есть id карточки, и
+   нажатие открывает человека. На открытой странице id нет вовсе, и вместо списка
+   остается пояснение выше. */
+.crosscut .drawer .plist {margin-top:14px}
+.crosscut .drawer .plist-h {display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:8px}
+.crosscut .drawer .plist-h span {font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3)}
+.crosscut .drawer .plist-h em {font-style:normal; font-size:12.5px; color:var(--ink-2)}
+.crosscut .drawer .pp {
+  display:grid; grid-template-columns:1fr auto; gap:2px 12px; align-items:baseline;
+  padding:9px 12px; border-radius:10px; background:var(--app); text-decoration:none; color:inherit;
+  margin-bottom:4px; transition:background .12s var(--ease);
+}
+.crosscut .drawer a.pp:hover {background:var(--blue-tint)}
+.crosscut .drawer a.pp:focus-visible {outline:2px solid var(--blue); outline-offset:2px}
+.crosscut .drawer .pp-n {font-size:14px; font-weight:600; letter-spacing:-.01em; min-width:0; overflow-wrap:anywhere}
+.crosscut .drawer .pp-v {font-size:13.5px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap}
+.crosscut .drawer .pp-m {grid-column:1; font-size:12.5px; color:var(--ink-2); overflow-wrap:anywhere}
+.crosscut .drawer .pp-d {grid-column:2; font-size:12.5px; color:var(--ink-3); font-variant-numeric:tabular-nums; white-space:nowrap}
+.crosscut .drawer .pp-more {
+  margin-top:8px; font-size:13px; font-weight:600; color:var(--blue); background:none;
+  border:0; padding:4px 0; cursor:pointer;
+}
+.crosscut .drawer .pp-more:hover {color:var(--blue-d)}
+.crosscut .drawer .pp-none {margin-top:14px; font-size:13.5px; color:var(--ink-2)}
+
+
 /* секции */
 .crosscut .sec {background:var(--card); border:1px solid var(--line); border-radius:var(--r-xl); padding:22px 24px; margin-bottom:28px}
 .crosscut .sec-head {display:flex; align-items:baseline; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:4px}
