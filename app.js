@@ -35986,10 +35986,18 @@
      Цифр тут своих нет: их считает сквозная Веры (CROSSCUT.week — тот же agg, что
      на экране «Маркетинг → Сквозная»), план берется из «План-факта». Гипотеза —
      цель задачника, поэтому двигают ее в «Задачах», а здесь только факт и вывод. */
+  /* «День» и «Месяц» (Виталий 02.11.2026): «каждый день сверяли план и факт
+     показатели за вчера, а так же месяц». Это та же лестница сквозной, только на
+     другом отрезке, поэтому вкладки открыты тем же, кому открыты цифры. */
   var MG_TABS = [
-    { id: 'rnp', label: 'РНП недели' },
+    { id: 'day', label: 'День', cap: 'marketing' },
+    { id: 'rnp', label: 'Неделя' },
+    { id: 'month', label: 'Месяц', cap: 'marketing' },
     { id: 'leads', label: 'Чистка лидов', cap: 'marketing' },
   ];
+  var MG_WD = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+  var MG_MONN = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август',
+                 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
   var MG_ST = { wait: 'поставлена', doing: 'в работе', review: 'на приемке', done: 'закрыта',
                 'return': 'возвращена', block: 'стоит', cancel: 'отменена' };
   var MG_MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
@@ -36028,6 +36036,26 @@
       .catch(function () { state._mg = { key: key, d: null }; })
       .then(function () { if (state._mgLoad === key) state._mgLoad = null; if (state.page === 'manage') renderView(); });
     // Цифры: срез сквозной общий с «Маркетингом», второй раз его не тянем.
+    mgCross();
+  }
+  /* План отрезка — доля месячного из «План-факта» по дням (сервер, /planfact/share).
+     undefined — еще грузится, {} — плана нет или нет доступа. */
+  function mgPlan(a, b) {
+    if (!can('planfact')) return {};
+    var key = a + '|' + b;
+    state._mgPlan = state._mgPlan || {};
+    var v = state._mgPlan[key];
+    if (v === 'wait') return undefined;
+    if (v) return v;
+    state._mgPlan[key] = 'wait';
+    api('/admin/api/planfact/share?from=' + a + '&to=' + b).then(function (r) {
+      state._mgPlan[key] = (r && r.plan) || {};
+    }).catch(function () { state._mgPlan[key] = {}; }).then(function () {
+      if (state.page === 'manage') renderView();
+    });
+    return undefined;
+  }
+  function mgCross() {
     if (can('marketing') && !state._mkCross && !state._mkCrossLoad) {
       state._mkCrossLoad = true;
       api('/admin/api/marketing/crosscut').then(function (r) {
@@ -36037,19 +36065,13 @@
         if (state.page === 'manage') renderView();
       });
     }
-    var wk = mgAdd(mgWeek(), -7);  // план той недели, чьи цифры на экране
-    if (can('planfact') && !(state._mgPlan && state._mgPlan[wk])) {
-      state._mgPlan = state._mgPlan || {};
-      state._mgPlan[wk] = 'wait';
-      api('/admin/api/planfact/week?week=' + wk).then(function (r) {
-        var by = {};
-        ((r && r.rows) || []).forEach(function (x) { by[x.key] = x.plan; });
-        state._mgPlan[wk] = by;
-      }).catch(function () { state._mgPlan[wk] = {}; }).then(function () {
-        if (state.page === 'manage') renderView();
-      });
-    }
   }
+  // День экрана: вчера по умолчанию, стрелки двигают по дню, дальше сегодня не уходим.
+  function mgDay() { return mgAdd(mgIso(new Date()), -1 + Math.min(state.mgDayShift || 0, 1)); }
+  function mgDayLabel(iso) { var d = mgDate(iso); return d.getDate() + ' ' + MG_MON[d.getMonth()] + ', ' + MG_WD[d.getDay()]; }
+  // Месяц экрана: первое число. Текущий считаем по сегодня, закрытый целиком.
+  function mgMonth() { var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + (state.mgMonShift || 0)); return mgIso(d); }
+  function mgMonEnd(first) { var d = mgDate(first); d.setMonth(d.getMonth() + 1); d.setDate(0); return mgIso(d); }
   function mgReload() { state._mg = null; state._mkCross = null; state._mgLeads = null; renderView(); }
 
   function renderManage(view) {
@@ -36064,14 +36086,14 @@
       (tabs.length > 1 ? '<div class="list-quick mg-tabs">' + tabs.map(function (x) {
         return '<button class="qchip' + (x.id === tab ? ' on' : '') + '" data-mgtab="' + x.id + '">' + esc(x.label) + '</button>';
       }).join('') + '</div>' : '') +
-      '<div class="brd-nav">' +
-        '<button class="icobtn sm brd-arrow prev" data-mgw="-1" title="Прошлая неделя">' + ic('go', 15) + '</button>' +
-        '<span class="brd-label">' + esc(mgWeekLabel(mgWeek())) + '</span>' +
-        '<button class="icobtn sm brd-arrow" data-mgw="1" title="Следующая неделя">' + ic('go', 15) + '</button>' +
-        (state.mgShift ? '<button class="qchip" data-mgw="now">Эта неделя</button>' : '') +
-      '</div>' + deptBar +
+      mgNav(tab) + deptBar +
     '</div>';
     if (tab === 'leads') { view.innerHTML = '<div class="dash mg">' + head + mgLeadsHtml() + '</div>'; mgBind(view); return; }
+    if (tab === 'day' || tab === 'month') {
+      mgCross();
+      view.innerHTML = '<div class="dash mg">' + head + (tab === 'day' ? mgDayHtml() : mgMonthHtml()) + '</div>';
+      mgBind(view); return;
+    }
 
     mgLoad();
     var m = state._mg && state._mg.key === mgKey() ? state._mg.d : undefined;
@@ -36090,6 +36112,87 @@
     mgBind(view);
   }
 
+  function mgNav(tab) {
+    var n = function (k, back, fwd, label, now, nowTxt) {
+      return '<div class="brd-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-' + k + '="-1" title="' + back + '">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(label) + '</span>' +
+        (fwd ? '<button class="icobtn sm brd-arrow" data-' + k + '="1" title="' + fwd + '">' + ic('go', 15) + '</button>' : '') +
+        (now ? '<button class="qchip" data-' + k + '="now">' + nowTxt + '</button>' : '') + '</div>';
+    };
+    if (tab === 'day') {
+      var sh = state.mgDayShift || 0;
+      return n('mgdw', 'Днем раньше', sh < 1 ? 'Днем позже' : '', mgDayLabel(mgDay()), sh !== 0, 'Вчера');
+    }
+    if (tab === 'month') {
+      var m = mgDate(mgMonth());
+      return n('mgmw', 'Прошлый месяц', 'Следующий месяц', MG_MONN[m.getMonth()] + ' ' + m.getFullYear(), !!state.mgMonShift, 'Этот месяц');
+    }
+    return n('mgw', 'Прошлая неделя', 'Следующая неделя', mgWeekLabel(mgWeek()), !!state.mgShift, 'Эта неделя');
+  }
+  function mgSpan(a, b) {
+    var x = mgDate(a), y = mgDate(b);
+    if (a === b) return x.getDate() + ' ' + MG_MON[x.getMonth()];
+    return x.getMonth() === y.getMonth() ? x.getDate() + '–' + y.getDate() + ' ' + MG_MON[y.getMonth()]
+      : x.getDate() + ' ' + MG_MON[x.getMonth()] + ' – ' + y.getDate() + ' ' + MG_MON[y.getMonth()];
+  }
+
+  /* Лестница сквозной на любом отрезке: неделя, день, месяц. Отрезок, отрезок для
+     сравнения и план. o.full — план всего месяца, когда месяц еще идет: красим факт
+     по плану «к этой дате», а цель месяца стоит под ним мелко. */
+  function mgLadder(o) {
+    var box = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
+      '<div><div class="t">' + esc(o.title) + '</div><div class="s">' + esc(o.sub) + '</div></div></div>';
+    if (!can('marketing')) {
+      return box + '<div class="mg-note">Цифры сквозной открыты тем, у кого есть доступ к маркетингу. ' +
+        'Гипотезы и решения ниже видны всем.</div></div>';
+    }
+    var cc = state._mkCross;
+    if (!cc || o.plan === undefined || o.full === undefined) {
+      return box + '<div class="sk-list mg-pad"><div class="shim"></div><div class="shim"></div></div></div>';
+    }
+    if (cc === 'none' || !window.CROSSCUT || !window.CROSSCUT.week) {
+      return box + '<div class="mg-note">Сквозная не посчиталась. Обнови страницу через минуту.</div></div>';
+    }
+    var cur = window.CROSSCUT.week(cc, o.cur[0], o.cur[1]), prv = window.CROSSCUT.week(cc, o.prv[0], o.prv[1]);
+    var plan = o.plan || {}, full = o.full || {};
+    var rows = [
+      ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
+      ['Регистрации на интенсив', 'любой интенсив, по дате регистрации', 'regs'],
+      ['Разбор на платформе', 'анкета и разбор шансов на сайте', 'diagPlat'],
+      ['Диагностика в боте', 'вошли в воронку теста', 'diagStart'],
+      ['Записались к диагносту', 'выбрали время разбора', 'signed'],
+      ['Разбор состоялся', 'встреча прошла', 'meeting'],
+      ['Счета', 'выставлено', 'invN'],
+      ['Оплатили', 'людей', 'payers', 'payments'],
+      ['Деньги', 'пришло на счет', 'revenue', 'revenue', true],
+      ['Расход на рекламу', 'внесен в CRM', 'spend', null, true]
+    ];
+    var anyPlan = rows.some(function (r) { return r[3] && plan[r[3]] != null; });
+    return box + '<div class="mg-tbl' + (anyPlan ? '' : ' noplan') + (o.pf ? ' pf' : '') + '">' +
+      '<div class="mg-tr th"><span>Ступень</span>' + (anyPlan ? '<span class="r c-pl">' + esc(o.planLbl || 'План') + '</span>' : '') +
+      '<span class="r">' + esc(o.curLbl) + '</span>' +
+      '<span class="r c-pv">' + esc(o.prvLbl) + '</span><span class="r c-dl"></span></div>' +
+      rows.map(function (r) {
+        var money = r[4], f = function (v) { return v == null ? '—' : money ? fmtMoney(Math.round(v)) + ' ₽' : mgNum(v); };
+        // Разница денег коротко, в тысячах: «−62 тыс.» читается быстрее, чем «−62 000 ₽».
+        var fd = function (v) { return money ? (Math.abs(v) >= 1000 ? Math.round(Math.abs(v) / 1000) + ' тыс.' : Math.round(Math.abs(v)) + ' ₽') : Math.abs(v); };
+        var c = cur[r[2]], p = prv[r[2]], pv = r[3] ? plan[r[3]] : null, fv = r[3] ? full[r[3]] : null;
+        // План дня бывает дробным (две оплаты на месяц — 0,1 в день): деньги округляем, людей нет.
+        var fp = function (v) { return money ? f(v) : mgNum(Math.round(v * 10) / 10); };
+        var dl = c - p, cls = !dl || r[2] === 'spend' ? '' : dl > 0 ? 'up' : 'down';
+        var pl = pv != null && pv > 0 ? (c >= pv ? 'ok' : c >= pv * .7 ? 'risk' : 'miss') : '';
+        return '<div class="mg-tr"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
+          (anyPlan ? '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
+            (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + '</small>' : '') : '') + '</span>' : '') +
+          '<span class="r num big ' + pl + '">' + f(c) + '</span>' +
+          '<span class="r num mute c-pv">' + f(p) + '</span>' +
+          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
+      }).join('') + '</div>' +
+      (anyPlan ? '<div class="mg-note">' + esc(o.note) + '</div>' : '') +
+    '</div>';
+  }
+
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
      маркетинга и продаж (это их воронка) стоят цифры всей компании с прямой
      подписью об этом, а остальным отделам блок не показываем. */
@@ -36100,53 +36203,50 @@
        открытую. Поэтому неделя экрана — та, на которую планируем, а цифры — за ту,
        что перед ней, и рядом еще одна раньше. */
     var wk = m.prev_week, end = mgAdd(wk, 6), pw = mgAdd(wk, -7);
-    var box = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
-      '<div><div class="t">Цифры за ' + esc(mgWeekLabel(wk)) + '</div><div class="s">' +
-      (state.mgDept ? 'по всей компании: сквозная по отделам не делится. ' : 'лестница сквозной аналитики, ') +
-      'рядом неделя ' + esc(mgWeekLabel(pw)) + '</div></div></div>';
-    if (!can('marketing')) {
-      return box + '<div class="mg-note">Цифры сквозной открыты тем, у кого есть доступ к маркетингу. ' +
-        'Гипотезы и решения ниже видны всем.</div></div>';
+    return mgLadder({
+      title: 'Цифры за ' + mgWeekLabel(wk),
+      sub: (state.mgDept ? 'по всей компании: сквозная по отделам не делится. ' : 'лестница сквозной аналитики, ') +
+        'рядом неделя ' + mgWeekLabel(pw),
+      cur: [wk, end], prv: [pw, mgAdd(pw, 6)], plan: mgPlan(wk, end), full: null,
+      curLbl: mgDate(wk).getDate() + '–' + mgDate(end).getDate(),
+      prvLbl: mgDate(pw).getDate() + '–' + mgDate(mgAdd(pw, 6)).getDate(),
+      note: 'План недели — доля месячного плана из «План-факта» по дням.'
+    });
+  }
+
+  /* День: вчера против того же дня неделей раньше. Не против позавчера: понедельник
+     с воскресеньем сравнивать бессмысленно, а неделя назад — тот же ритм. */
+  function mgDayHtml() {
+    var d = mgDay(), p = mgAdd(d, -7);
+    return mgLadder({
+      title: (state.mgDayShift ? 'Цифры за ' : 'Вчера, ') + mgDayLabel(d),
+      sub: 'лестница сквозной, рядом ' + MG_WD[mgDate(p).getDay()] + ' неделей раньше',
+      cur: [d, d], prv: [p, p], plan: mgPlan(d, d), full: null, pf: true,
+      curLbl: mgSpan(d, d), prvLbl: mgSpan(p, p),
+      note: 'План дня — месячный план из «План-факта», деленный на дни месяца. Поэтому он бывает дробным: две оплаты на месяц это 0,1 в день.'
+    });
+  }
+
+  /* Месяц: идущий — с первого числа по сегодня, план «к этой дате» и под ним цель
+     месяца, рядом прошлый месяц за те же дни. Закрытый — целиком против прошлого. */
+  function mgMonthHtml() {
+    var a = mgMonth(), z = mgMonEnd(a), today = mgIso(new Date());
+    var going = today >= a && today <= z, b = going ? today : z;
+    var pa = mgAdd(a, -1).slice(0, 8) + '01', pz = mgMonEnd(pa);
+    var n = mgDate(b).getDate(), pb = going ? (n <= mgDate(pz).getDate() ? pa.slice(0, 8) + ('0' + n).slice(-2) : pz) : pz;
+    var future = today < a;
+    if (future) {
+      return '<div class="card"><div class="empty">Месяц еще не начался. План на него ставят в «План-факте».</div></div>';
     }
-    var cc = state._mkCross;
-    if (!cc) return box + '<div class="sk-list mg-pad"><div class="shim"></div><div class="shim"></div></div></div>';
-    if (cc === 'none' || !window.CROSSCUT || !window.CROSSCUT.week) {
-      return box + '<div class="mg-note">Сквозная не посчиталась. Обнови страницу через минуту.</div></div>';
-    }
-    var cur = window.CROSSCUT.week(cc, wk, end), prv = window.CROSSCUT.week(cc, pw, mgAdd(pw, 6));
-    var plan = (state._mgPlan && state._mgPlan[wk] && state._mgPlan[wk] !== 'wait') ? state._mgPlan[wk] : {};
-    var rows = [
-      ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', cur.leads, prv.leads, plan.leads],
-      ['Регистрации на интенсив', 'любой интенсив, по дате регистрации', cur.regs, prv.regs, null],
-      ['Разбор на платформе', 'анкета и разбор шансов на сайте', cur.diagPlat, prv.diagPlat, null],
-      ['Диагностика в боте', 'вошли в воронку теста', cur.diagStart, prv.diagStart, null],
-      ['Записались к диагносту', 'выбрали время разбора', cur.signed, prv.signed, null],
-      ['Разбор состоялся', 'встреча прошла', cur.meeting, prv.meeting, null],
-      ['Счета', 'выставлено', cur.invN, prv.invN, null],
-      ['Оплатили', 'людей', cur.payers, prv.payers, plan.payments],
-      ['Деньги', 'пришло на счет', cur.revenue, prv.revenue, plan.revenue, true],
-      ['Расход на рекламу', 'внесен в CRM', cur.spend, prv.spend, null, true]
-    ];
-    var anyPlan = rows.some(function (r) { return r[4] != null; });
-    return box + '<div class="mg-tbl' + (anyPlan ? '' : ' noplan') + '">' +
-      '<div class="mg-tr th"><span>Ступень</span>' + (anyPlan ? '<span class="r c-pl">План</span>' : '') +
-      '<span class="r">' + esc(mgDate(wk).getDate() + '–' + mgDate(end).getDate()) + '</span>' +
-      '<span class="r">' + esc(mgDate(pw).getDate() + '–' + mgDate(mgAdd(pw, 6)).getDate()) + '</span><span class="r c-dl"></span></div>' +
-      rows.map(function (r) {
-        var money = r[5], f = function (v) { return v == null ? '—' : money ? fmtMoney(Math.round(v)) + ' ₽' : mgNum(v); };
-        // Разница денег коротко, в тысячах: «−62 тыс.» читается быстрее, чем «−62 000 ₽».
-        var fd = function (v) { return money ? (Math.abs(v) >= 1000 ? Math.round(Math.abs(v) / 1000) + ' тыс.' : Math.round(Math.abs(v)) + ' ₽') : Math.abs(v); };
-        var dl = r[2] - r[3], cls = !dl ? '' : dl > 0 ? 'up' : 'down';
-        if (r[0] === 'Расход на рекламу') cls = '';
-        var pl = r[4] != null && r[4] > 0 ? (r[2] >= r[4] ? 'ok' : r[2] >= r[4] * .7 ? 'risk' : 'miss') : '';
-        return '<div class="mg-tr"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
-          (anyPlan ? '<span class="r num mute c-pl">' + (r[4] != null ? f(Math.round(r[4] * 10) / 10) : '') + '</span>' : '') +
-          '<span class="r num big ' + pl + '">' + f(r[2]) + '</span>' +
-          '<span class="r num mute">' + f(r[3]) + '</span>' +
-          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
-      }).join('') + '</div>' +
-      (anyPlan ? '<div class="mg-note">План недели — доля месячного плана из «План-факта» по дням.</div>' : '') +
-    '</div>';
+    return mgLadder({
+      title: going ? MG_MONN[mgDate(a).getMonth()] + ' на сегодня, ' + mgSpan(a, b) : MG_MONN[mgDate(a).getMonth()] + ' целиком',
+      sub: going ? 'рядом ' + mgSpan(pa, pb) + ', те же дни прошлого месяца' : 'рядом ' + MG_MONN[mgDate(pa).getMonth()].toLowerCase() + ' целиком',
+      cur: [a, b], prv: [pa, pb], plan: mgPlan(a, b), full: going ? mgPlan(a, z) : null, pf: true,
+      planLbl: going ? 'План к дате' : 'План',
+      curLbl: mgSpan(a, b), prvLbl: mgSpan(pa, pb),
+      note: going ? 'План к дате — сколько месячного плана приходится на прошедшие дни. Цвет факта считается по нему, под ним мелко — цель на весь месяц.'
+        : 'План месяца из «План-факта».'
+    });
   }
 
   function mgHypRow(h, n, sub) {
@@ -36332,6 +36432,15 @@
       b.addEventListener('click', function () {
         state.mgShift = b.dataset.mgw === 'now' ? 0 : (state.mgShift || 0) + Number(b.dataset.mgw);
         renderView();
+      });
+    });
+    [['mgdw', 'mgDayShift'], ['mgmw', 'mgMonShift']].forEach(function (k) {
+      view.querySelectorAll('[data-' + k[0] + ']').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var v = b.getAttribute('data-' + k[0]);
+          state[k[1]] = v === 'now' ? 0 : (state[k[1]] || 0) + Number(v);
+          renderView();
+        });
       });
     });
     view.querySelectorAll('[data-mgdept]').forEach(function (b) {
