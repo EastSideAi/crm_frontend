@@ -46170,12 +46170,25 @@
     if (!state.assignees || !peopleFresh(state._assigneesAt)) {
       fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
     }
+    if (toMainCard(id)) return;
     if (!state.details[id]) fetchDetail(id, function (got) {
       if (state.drawerId !== id) return;
+      if (got && toMainCard(id)) return;
       if (got) renderDrawer(true);
       // пришли по ссылке на клиента, которого уже нет (или нет прав) — честно скажем
       else if (!findLead(id)) { closeDrawer(); showToast('Клиент не найден — возможно, ссылка устарела'); }
     });
+  }
+  /* Один клиент — одна карточка (Вера 02.11.2026): дубль по старой ссылке или из поиска
+     открывает главную. Как есть его открывает только кнопка «Открыть» в разделе
+     «Склеено» — там дубль смотрят нарочно, чтобы проверить или расклеить. */
+  var DUP_AS_IS = null;
+  function toMainCard(id) {
+    var d = state.details[id], main = d && d.crm && d.crm.merged_into;
+    if (!main || main === id || DUP_AS_IS === id) return false;
+    showToast('Это дубль — открыта главная карточка клиента');
+    openDrawer(main);
+    return true;
   }
   function closeDrawer() {
     backToPageHash();
@@ -47941,6 +47954,34 @@
       '<button class="dup-b" data-unmerge="' + esc(state.drawerId) + '">Расклеить</button></div>';
   }
 
+  /* Кто, когда и почему склеил дубль — по этой строке автосклейку проверяют глазами. */
+  function mergedWhy(m) {
+    var who = !m.by ? '' : (m.by === 'сторож' ? 'склеил сторож' : 'склеил(а) ' + m.by);
+    var parts = ['карточка от ' + fmtWhen(m.created_at)];
+    if (who) parts.push(who + (m.merged_at ? ' ' + fmtWhen(m.merged_at) : ''));
+    if (m.reason) parts.push(m.reason);
+    return parts.join(' · ');
+  }
+  var MOVED_CH = { max: 'MAX', vk: 'ВК', instagram: 'инстаграм' };
+  function mergedMoved(m) {
+    var x = m.moved || {}, out = [];
+    if (x.docs) out.push(x.docs + ' док.');
+    if (x.diag) out.push('свежая анкета');
+    if (x.calls) out.push(x.calls + ' консульт.');
+    if (x.reports) out.push(x.reports + ' отчет.');
+    if (m.members) out.push('кабинет семьи');
+    (x.channels || []).forEach(function (c) {
+      out.push('чат ' + (MOVED_CH[c] || (c.indexOf('telegram') === 0 ? 'телеграм' : c)));
+    });
+    if (x.webinar) out.push('эфир');
+    if ((x.contacts || []).length) out.push('контакты');
+    return out.length ? 'переехало: ' + out.join(', ') : '';
+  }
+  function cardIdFrom(text) {
+    var m = String(text || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    return m ? m[0].toLowerCase() : '';
+  }
+
   function buildDupes(ctx) {
     var id = state.drawerId;
     var crm = dupCrm(ctx);
@@ -47952,10 +47993,18 @@
       html += '<div class="m-sec"><div class="m-sec-h">Склеено в это дело' +
         '<span class="dup-cnt num">' + merged.length + '</span></div>' +
         '<div class="dup-list">' + merged.map(function (m) {
-          return '<div class="dup-row"><div class="dup-nm"><b>' + esc(m.name || 'Без имени') + '</b>' +
-            '<small>' + esc(fmtWhen(m.created_at)) + '</small></div>' +
-            '<button class="dup-b" data-dupopen="' + esc(m.id) + '">Открыть</button>' +
-            '<button class="dup-b" data-unmerge="' + esc(m.id) + '">Расклеить</button></div>';
+          return '<div class="dup-row many"><div class="dup-nm"><b>' + esc(m.name || 'Без имени') + '</b>' +
+            '<small>' + esc(mergedWhy(m)) + '</small>' +
+            (mergedMoved(m) ? '<small>' + esc(mergedMoved(m)) + '</small>' : '') + '</div>' +
+            '<div class="dup-acts">' +
+            '<button class="dup-b" data-dupview="' + esc(m.id) + '">Открыть</button>' +
+            '<button class="dup-b" data-dupmove="' + esc(m.id) + '">Перенести</button>' +
+            '<button class="dup-b" data-unmerge="' + esc(m.id) + '">Расклеить</button></div>' +
+            '<div class="dup-move" data-moveform="' + esc(m.id) + '" hidden>' +
+              '<input type="text" placeholder="Ссылка или номер главной карточки клиента" ' +
+                'aria-label="Куда перенести дубль">' +
+              '<button class="dup-b primary" data-movego="' + esc(m.id) + '">Перенести</button></div>' +
+            '</div>';
         }).join('') + '</div></div>';
     }
 
@@ -47967,8 +48016,8 @@
 
     html += '<div class="m-sec"><div class="m-sec-h">Похоже, это тот же человек' +
       '<span class="dup-cnt num">' + list.length + '</span></div>' +
-      '<div class="dup-hint">Совпали личные признаки. Система сама ничего не склеивает: ' +
-        'реши сам, одно это дело или разные люди.</div>' +
+      '<div class="dup-hint">Совпали личные признаки. Очевидные дубли сторож склеивает сам, ' +
+        'здесь то, в чем он не уверен: реши, одно это дело или разные люди.</div>' +
       '<div class="dup-list">' + list.map(function (x) {
         var why = (x.matched || []).map(dupMatch).join(' · ');
         return '<div class="dup-row"><div class="dup-nm"><b>' + esc(x.name || 'Без имени') + '</b>' +
@@ -48591,7 +48640,7 @@
       if (e.type === 'anketa_step') {
         var s = (e.payload || {}).step || 0; if (s > maxStep) maxStep = s; return;
       }
-      var label = evText(e);
+      var label = evText(e) + (e.dup ? ' · из дубля' : '');
       var hi = (e.type === 'questionnaire_submitted' || e.type === 'viewed_result' ||
         e.type === 'lead_submitted' || e.type === 'magnet_registered');
       var bucket = (e.type === 'opened_product' || e.type === 'viewed_result') ? 'viewed'
@@ -50495,6 +50544,45 @@
     // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {
       b.addEventListener('click', function () { openDrawer(b.getAttribute('data-dupopen')); });
+    });
+    // вложенный дубль открываем как есть: без этого openDrawer сразу увел бы в главную
+    Array.prototype.forEach.call(host.querySelectorAll('[data-dupview]'), function (b) {
+      b.addEventListener('click', function () {
+        DUP_AS_IS = b.getAttribute('data-dupview');
+        openDrawer(DUP_AS_IS);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-dupmove]'), function (b) {
+      b.addEventListener('click', function () {
+        var f = host.querySelector('[data-moveform="' + b.getAttribute('data-dupmove') + '"]');
+        if (!f) return;
+        f.hidden = !f.hidden;
+        if (!f.hidden) f.querySelector('input').focus();
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-movego]'), function (b) {
+      b.addEventListener('click', function () {
+        var dupId = b.getAttribute('data-movego');
+        var into = cardIdFrom(b.parentNode.querySelector('input').value);
+        if (!into) { showToast('Вставь ссылку на карточку клиента или ее номер'); return; }
+        b.disabled = true;
+        api('/admin/api/leads/' + dupId + '/move', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ into: into }),
+        }).then(function () {
+          delete DUP[id]; delete state.details[id]; delete state.details[dupId];
+          delete state.details[into];
+          showToast('Перенесено — дубль теперь в карточке другого клиента', null, into);
+          refreshDetail(id, function () { if (state.drawerId === id) renderDrawer(true); });
+          loadLeads();
+        }).catch(function (e) {
+          b.disabled = false;
+          showToast(e.message === 'HTTP 409'
+            ? 'Туда нельзя — та карточка сама дубль, перенеси в ее главную'
+            : e.message === 'HTTP 404' ? 'Такой карточки нет — проверь ссылку'
+            : 'Не перенеслось — проверь сеть');
+        });
+      });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-merge]'), function (b) {
       b.addEventListener('click', function () {
