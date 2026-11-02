@@ -50435,14 +50435,14 @@
         var row = b.closest('.doc-row');
         var box = row && row.querySelector('.doc-audio');
         if (!box) return;
-        if (box.firstChild) { box.hidden = !box.hidden; return; }
+        if (box.firstChild) { box.hidden = !box.hidden; row.classList.toggle('playing', !box.hidden); return; }
         b.disabled = true;
         resolveDocLink(b.getAttribute('data-docplay'), function (url) {
           b.disabled = false;
           if (!url) { showToast('Запись не открылась — проверь сеть'); return; }
           var au = document.createElement('audio');
           au.controls = true; au.preload = 'none'; au.src = url;
-          box.appendChild(au); box.hidden = false;
+          box.appendChild(au); box.hidden = false; row.classList.add('playing');
           au.play().catch(function () {});
         });
       });
