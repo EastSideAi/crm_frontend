@@ -397,6 +397,9 @@
       clock: '<circle cx="10" cy="10" r="7.5"/><path d="M10 6v4.4l2.8 1.6"/>',
       chart: '<path d="M3.5 16.5v-6M8 16.5V7M12.5 16.5v-3.5M17 16.5V4"/>',
       // штурвал: «Управление» — куда ведем компанию на этой неделе
+      // Карта компании: узел в центре и четыре ветки. Своя, а не tree: дерево в
+      // наборе уже значит продуктовый портал, а здесь работа расходится от центра.
+      mindmap: '<circle cx="10" cy="10" r="2.6"/><circle cx="3.8" cy="4.8" r="1.8"/><circle cx="16.2" cy="4.8" r="1.8"/><circle cx="3.8" cy="15.2" r="1.8"/><circle cx="16.2" cy="15.2" r="1.8"/><path d="M8 8.3 5.2 6M12 8.3l2.8-2.3M8 11.7 5.2 14M12 11.7l2.8 2.3"/>',
       helm: '<circle cx="10" cy="10" r="5.5"/><circle cx="10" cy="10" r="1.6"/><path d="M10 2v6.4M10 11.6V18M2 10h6.4M11.6 10H18M4.3 4.3l4.6 4.6M11.1 11.1l4.6 4.6M15.7 4.3l-4.6 4.6M8.9 11.1l-4.6 4.6"/>',
       target: '<circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="3.5"/><circle cx="10" cy="10" r=".5" fill="currentColor"/>',
       coins: '<circle cx="7" cy="7" r="4"/><path d="M11 4.3a4 4 0 1 1 0 7.4"/><path d="M5.5 7h3M7 5.5v3"/>',
@@ -2413,6 +2416,10 @@
     // (видит задачи всей команды) — менеджеру и линейным ролям он не нужен и не
     // виден (Павел 28.10.2026: убрать из меню менеджера продаж).
     { id: 'manage', label: 'Управление', icon: 'helm', cap: 'tasks_all' },
+    // «Карта компании» — все цели отделов одной картой и вопросы, которые ждут
+    // решения (Виталий 19.10.2026). Cap выдает сервер по списку людей, а не роль:
+    // super_admin у нас семь, а карту сначала обкатывает один человек.
+    { id: 'cmap', label: 'Карта компании', icon: 'mindmap', cap: 'company_map' },
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
@@ -3316,11 +3323,14 @@
     if (state.page === 'manage') {
       html = '<div><h2>Управление</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('helm', 13) + '</span><span>' +
-        (mgTab() === 'leads'
-          ? 'Новые лиды недели. Отметь текущих клиентов, дубли и спам: они уйдут из счета сквозной и план-факта, карточка останется.'
-          : 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
+        (({
+          leads: 'Новые лиды недели. Отметь текущих клиентов, дубли и спам: они уйдут из счета сквозной и план-факта, карточка останется.',
+          day: 'Сверка дня: <b>вчерашние цифры против плана дня</b>. Зеленое — план сделан, желтое — близко, красное — сильно ниже.',
+          month: 'Месяц против плана. Идущий месяц сверяется <b>с тем, что должны были сделать к этой дате</b>, а не со всем планом сразу.'
+        })[mgTab()] || 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
         '</span></div></div>';
     }
+    if (state.page === 'cmap') html = cmHeadHtml();
     if (state.page === 'leads') {
       html = '<div><h2>Контакты</h2>' +
         '<div class="verdict" style="margin-top:8px"><span>' + esc(SEGS[state.seg].hint) + '</span></div></div>';
@@ -3956,6 +3966,7 @@
     else if (state.page === 'planfact') renderPlanFact(view);
     else if (state.page === 'reward') renderReward(view);
     else if (state.page === 'manage') renderManage(view);
+    else if (state.page === 'cmap') renderCmap(view);
     else if (state.page === 'stories') renderStories(view);
     else if (state.page === 'efirbot') renderEfirBot(view);
     else if (state.page === 'gifts') renderGifts(view);
@@ -14125,6 +14136,337 @@
     if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
   }
 
+  /* Упоминание в тексте реплики. Подсвечиваем те же имена, по которым сервер
+     зовет людей (staff_tasks._mentions): собачка плюс имя из справочника.
+     Проходим по сырому тексту, как fndMark, иначе подстановка попала бы внутрь
+     уже экранированного символа. */
+  function tskAt(text) {
+    text = text || '';
+    var people = state.taskPeople || [];
+    if (text.indexOf('@') === -1 || !people.length) return esc(text);
+    var names = people.map(function (p) { return String(p.name || '').trim(); })
+      .filter(Boolean)
+      // Длинные вперед: иначе «@Мария Шустова» подсветится как «@Мария».
+      .sort(function (a, b) { return b.length - a.length; })
+      .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+    var re = new RegExp('@(' + names.join('|') + ')', 'gi');
+    var out = '', last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      out += esc(text.slice(last, m.index)) + '<b class="tsk-at">' + esc(m[0]) + '</b>';
+      last = m.index + m[0].length;
+    }
+    return out + esc(text.slice(last));
+  }
+
+  /* Кого позвали в наборе прямо сейчас. Правило ровно как на сервере
+     (staff_tasks._mentions): полное имя из справочника, а одно имя без фамилии
+     считается только когда оно в команде единственное. Нужно строке доставки
+     под полем: человек должен видеть, что упомянутый получит сообщение, до
+     того как нажмет отправку. */
+  function tskAtIds(text) {
+    text = text || '';
+    var people = state.taskPeople || [];
+    if (text.indexOf('@') === -1 || !people.length) return [];
+    var low = text.toLowerCase(), hit = [], byFirst = {};
+    people.forEach(function (p) {
+      var name = String(p.name || '').trim();
+      if (!name) return;
+      var first = name.split(/\s+/)[0].toLowerCase();
+      (byFirst[first] = byFirst[first] || []).push(p.id);
+      if (low.indexOf('@' + name.toLowerCase()) > -1) hit.push(p.id);
+    });
+    Object.keys(byFirst).forEach(function (first) {
+      var ids = byFirst[first];
+      if (ids.length === 1 && low.indexOf('@' + first) > -1 && hit.indexOf(ids[0]) === -1) hit.push(ids[0]);
+    });
+    return hit;
+  }
+
+  /* Подсказка по собачке в поле обсуждения. Вставляет имя целиком: сервер зовет
+     людей по именам из справочника, а логин (ssplatonov) в разговоре никто не
+     пишет. Возвращает рулевого, чтобы карточка отдала ему стрелки и Ввод. */
+  function tskAtPicker(say, box) {
+    var list = [], idx = 0, at = -1;
+    /* Подсказку ставим на место руками, как поповер выбора человека (.ss-pop):
+       в потоке карточки ее режет прокрутка колонки. На телефоне с открытой
+       клавиатурой экран остается высотой в 420px, колонка разговора сжимается
+       до полутора строк — и список имен не было видно вообще (02.11.2026).
+       position: fixed прокрутка уже не режет. */
+    var place = function () {
+      var r = say.parentNode.getBoundingClientRect();
+      var vh = window.innerHeight;
+      var room = r.top - 16;
+      box.style.left = Math.round(r.left) + 'px';
+      box.style.width = Math.round(r.width) + 'px';
+      // Над полем тесно — роняем список под поле: лучше перекрыть кнопки, чем
+      // показать две строки из шести.
+      if (room < 132 && vh - r.bottom > room) {
+        box.style.top = Math.round(r.bottom + 8) + 'px';
+        box.style.bottom = 'auto';
+        box.style.maxHeight = Math.round(Math.min(232, vh - r.bottom - 16)) + 'px';
+      } else {
+        box.style.top = 'auto';
+        box.style.bottom = Math.round(vh - r.top + 8) + 'px';
+        box.style.maxHeight = Math.round(Math.max(96, Math.min(232, room))) + 'px';
+      }
+    };
+    var hide = function () {
+      list = []; at = -1; box.hidden = true; box.innerHTML = '';
+      say.setAttribute('aria-expanded', 'false');
+      say.removeAttribute('aria-activedescendant');
+    };
+    var pick = function (p) {
+      if (!p) return;
+      var name = String(p.name || p.login || '').trim();
+      var cur = say.selectionStart, v = say.value;
+      // Пробел после имени нужен, чтобы можно было продолжать писать, но если
+      // вставляем в середину фразы и дальше уже пробел — второй не ставим.
+      var tail = v.slice(cur), gap = /^[ \u00A0]/.test(tail) ? '' : ' ';
+      say.value = v.slice(0, at) + '@' + name + gap + tail;
+      var pos = at + name.length + 1 + gap.length;
+      hide();
+      say.focus();
+      say.setSelectionRange(pos, pos);
+      // Поле растет под текст, и после вставки высота может измениться.
+      say.dispatchEvent(new Event('input'));
+    };
+    var draw = function () {
+      box.hidden = !list.length;
+      if (!list.length) { box.innerHTML = ''; return; }
+      box.innerHTML = '<div class="tsk-at-h">кого позвать</div>' + list.map(function (p, i) {
+        var role = (ROLES[p.role] || {}).label || '';
+        return '<button type="button" role="option" id="tk-at-o' + i + '" aria-selected="' +
+          (i === idx ? 'true' : 'false') + '" class="tsk-at-i' + (i === idx ? ' on' : '') +
+          '" data-i="' + i + '">' + esc(p.name || p.login) +
+          (role ? '<i>' + esc(role) + '</i>' : '') +
+          (p.linked ? '' : '<u title="не подключен к боту">без бота</u>') + '</button>';
+      }).join('');
+      say.setAttribute('aria-expanded', 'true');
+      say.setAttribute('aria-activedescendant', 'tk-at-o' + idx);
+      place();
+      Array.prototype.forEach.call(box.querySelectorAll('[data-i]'), function (b) {
+        var take = function (e) {
+          e.preventDefault();
+          // list уже пуст после первого выбора, поэтому второе событие
+          // (click вслед за mousedown) ничего не вставляет повторно.
+          pick(list[+b.getAttribute('data-i')]);
+        };
+        // mousedown, а не click: click приходит после blur, и к этому моменту
+        // курсор в поле уже потерян, а вставлять надо именно в него. Но click
+        // нужен тоже: именно его посылают VoiceOver и TalkBack, и без него
+        // незрячий человек не выберет имя вообще.
+        b.addEventListener('mousedown', take);
+        b.addEventListener('click', take);
+      });
+    };
+    var scan = function () {
+      var cur = say.selectionStart, before = say.value.slice(0, cur);
+      var m = /(?:^|\s)@([^\s@]{0,24}(?:[ \u00A0][^\s@]{0,24})?)$/.exec(before);
+      if (!m) { hide(); return; }
+      at = cur - m[1].length - 1;
+      var q = m[1].trim().toLowerCase();
+      loadTaskPeople(function (people) {
+        list = people.filter(function (p) {
+          var n = String(p.name || p.login || '').toLowerCase();
+          return !q || n.indexOf(q) === 0 || n.indexOf(' ' + q) > 0;
+        }).slice(0, 6);
+        idx = 0;
+        draw();
+      });
+    };
+    say.addEventListener('input', scan);
+    say.addEventListener('click', scan);
+    say.addEventListener('blur', function () { setTimeout(hide, 120); });
+    // Поле едет вместе с прокруткой колонки и при появлении клавиатуры —
+    // открытый список едет за ним.
+    var follow = function () {
+      // Карточку закрыли — снимаем слушателей сами: пикер живет ровно столько,
+      // сколько его разметка.
+      if (!box.parentNode || !document.body.contains(box)) {
+        window.removeEventListener('scroll', follow, true);
+        window.removeEventListener('resize', follow);
+        return;
+      }
+      if (list.length) place();
+    };
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    return {
+      open: function () { return !!list.length; },
+      key: function (e) {
+        if (!list.length) return false;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          idx = (idx + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length;
+          draw();
+          return true;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') { pick(list[idx]); return true; }
+        if (e.key === 'Escape') { hide(); return true; }
+        return false;
+      },
+    };
+  }
+
+  /* Кому уйдет реплика: все, кто в задаче, кроме меня, плюс те, кого позвали
+     собачкой в наборе. Сервер шлет ровно по этому правилу
+     (staff_tasks.comment_task + _mentions), поэтому список здесь собирается из
+     тех же полей — исполнитель, постановщик, соисполнители, наблюдатели.
+     Строка живая: упомянутый появляется в ней сразу после вставки имени, иначе
+     интерфейс обещал бы доставку не тому человеку. */
+  function tskSayWho(t, text) {
+    var me = state.userId, seen = {}, who = [];
+    var byId = {};
+    (state.taskPeople || []).forEach(function (p) { byId[p.id] = p; });
+    var add = function (uid, name, called) {
+      if (!uid || uid === me || seen[uid] || !name) return;
+      seen[uid] = 1;
+      who.push({ name: name, called: !!called,
+        // Про бота знаем только из справочника. Не приехал — не пугаем зря.
+        nobot: byId[uid] ? byId[uid].linked === false : false });
+    };
+    tskAtIds(text).forEach(function (uid) { add(uid, (byId[uid] || {}).name, true); });
+    add(t.assignee_id, t.assignee_name);
+    add(t.author_id, t.author_name);
+    (t.executors || []).concat(t.watchers || []).forEach(function (p) { add(p.id, p.name); });
+    return who;
+  }
+
+  function tskSayToFill(t, text) {
+    var box = el('tk-sayto');
+    if (!box) return;
+    var who = tskSayWho(t, text);
+    box.hidden = !who.length;
+    if (!who.length) { box.innerHTML = ''; return; }
+    // Позванные идут первыми и не прячутся за «и еще N»: их назвали руками,
+    // именно про них человек и хочет знать, дойдет ли.
+    var called = who.filter(function (p) { return p.called; });
+    var crew = who.filter(function (p) { return !p.called; });
+    var room = Math.max(1, 4 - called.length);
+    var shown = called.concat(crew.slice(0, room));
+    var rest = Math.max(0, crew.length - room);
+    box.innerHTML = ic('send', 11) + '<span>уйдет в телеграм: ' +
+      shown.map(function (p) {
+        return esc(officeName(p.name)) + (p.nobot ? ' <i>(без бота)</i>' : '');
+      }).join(', ') + (rest > 0 ? ' и еще ' + rest : '') + '</span>';
+  }
+
+  /* Компаньон руководителя: раскладка цели на шаги по людям отдела.
+     Сервер только предлагает (POST /tasks/:id/steps/suggest), заводит человек:
+     каждый отмеченный шаг уходит обычной постановкой с parent_id, поэтому у
+     него те же права, неделя и уведомление исполнителю, что у шага руками.
+     Агент, который заводит задачи сам, за неделю засоряет задачник. */
+  function companionSplit(goal, box, btn, done) {
+    if (!box || btn.disabled) return;
+    btn.disabled = true;
+    box.hidden = false;
+    box.innerHTML = '<div class="al-ai cmp-wait">' +
+      '<div class="al-ai-h">' + ic('spark', 13) + 'Компаньон раскладывает цель на шаги</div>' +
+      '<div class="al-ai-note">Смотрит на цель, срок и людей отдела. Обычно это 10-20 секунд.</div></div>';
+    var shut = function () { box.hidden = true; box.innerHTML = ''; btn.disabled = false; };
+    apiSend('/admin/api/tasks/' + goal.id + '/steps/suggest', 'POST', null, function (r) {
+      loadTaskPeople(function (people) { paint(r, people); });
+    }, function (code, e) {
+      shut();
+      showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                'Компаньон не ответил, проверь интернет');
+    });
+
+    function paint(r, people) {
+      var steps = r.steps || [], team = r.team || [], qs = r.questions || [];
+      var today = isoDay(0);
+      var last = goal.due_at ? new Date(goal.due_at).toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }) : '';
+      var inTeam = {};
+      team.forEach(function (p) { inTeam[p.id] = 1; });
+      var others = people.filter(function (p) { return !inTeam[p.id]; });
+      var opts = function (sel) {
+        return '<option value="">не назначен</option>' +
+          '<optgroup label="Отдел">' + team.map(function (p) {
+            return '<option value="' + p.id + '"' + (p.id === sel ? ' selected' : '') + '>' +
+              esc(p.name) + ' · ' + p.open + ' в работе</option>';
+          }).join('') + '</optgroup>' +
+          (others.length ? '<optgroup label="Остальные">' + others.map(function (p) {
+            return '<option value="' + p.id + '"' + (p.id === sel ? ' selected' : '') + '>' +
+              esc(p.name || p.login) + '</option>';
+          }).join('') + '</optgroup>' : '');
+      };
+      if (!steps.length) {
+        box.innerHTML = '<div class="al-ai">' +
+          '<div class="al-ai-h">' + ic('spark', 13) + 'Компаньону не хватило данных</div>' +
+          (r.note ? '<div class="al-ai-note">' + esc(r.note) + '</div>' : '') +
+          qs.map(function (q) { return '<div class="al-ai-note ask">' + esc(q) + '</div>'; }).join('') +
+          '<div class="al-ai-note">Допиши описание цели и нажми «Разложить» еще раз.</div>' +
+          '<div class="al-ai-row"><button class="al-cancel" type="button" data-cx>Закрыть</button></div></div>';
+        box.querySelector('[data-cx]').addEventListener('click', shut);
+        return;
+      }
+      box.innerHTML = '<div class="al-ai">' +
+        '<div class="al-ai-h">' + ic('spark', 13) + 'Компаньон предлагает ' + steps.length + ' ' +
+          plural(steps.length, 'шаг', 'шага', 'шагов') + '</div>' +
+        (r.note ? '<div class="al-ai-note">' + esc(r.note) + '</div>' : '') +
+        qs.map(function (q) { return '<div class="al-ai-note ask">' + esc(q) + '</div>'; }).join('') +
+        '<div class="cmp-list">' + steps.map(function (s, i) {
+          return '<div class="cmp-row" data-i="' + i + '">' +
+            '<input type="checkbox" class="cmp-on" checked aria-label="Завести этот шаг">' +
+            '<div class="cmp-body">' +
+              '<input class="al-in sm cmp-t" maxlength="200" value="' + esc(s.title) + '" aria-label="Шаг">' +
+              (s.details ? '<div class="cmp-d">' + esc(s.details) + '</div>' : '') +
+              '<div class="cmp-meta">' +
+                '<select class="al-in sm cmp-who" aria-label="Кто делает">' +
+                  opts(s.assignee_id || goal.assignee_id || null) + '</select>' +
+                '<input type="date" class="al-in sm cmp-due num" value="' + esc(s.due_date) + '"' +
+                  ' min="' + today + '"' + (last ? ' max="' + last + '"' : '') + ' aria-label="Срок">' +
+              '</div>' +
+            '</div></div>';
+        }).join('') + '</div>' +
+        '<div class="al-ai-row">' +
+          '<button class="bp" type="button" data-go></button>' +
+          '<button class="al-cancel" type="button" data-cx>Отмена</button>' +
+          '<span class="al-ai-note">Шаги придут людям в бот, как поставленные руками.</span>' +
+        '</div></div>';
+      var go = box.querySelector('[data-go]');
+      var rows = Array.prototype.slice.call(box.querySelectorAll('.cmp-row'));
+      var count = function () {
+        var n = rows.filter(function (row) { return row.querySelector('.cmp-on').checked; }).length;
+        go.textContent = n ? 'Завести ' + n + ' ' + plural(n, 'шаг', 'шага', 'шагов') : 'Ничего не выбрано';
+        go.disabled = !n;
+        rows.forEach(function (row) { row.classList.toggle('off', !row.querySelector('.cmp-on').checked); });
+      };
+      rows.forEach(function (row) { row.querySelector('.cmp-on').addEventListener('change', count); });
+      count();
+      box.querySelector('[data-cx]').addEventListener('click', shut);
+      go.addEventListener('click', function () {
+        var items = rows.filter(function (row) { return row.querySelector('.cmp-on').checked; }).map(function (row) {
+          var s = steps[+row.getAttribute('data-i')];
+          var who = row.querySelector('.cmp-who').value, day = row.querySelector('.cmp-due').value;
+          return { title: row.querySelector('.cmp-t').value.trim(), details: s.details || '',
+                   parent_id: goal.id, source: 'ai',
+                   assignee_id: who ? +who : null,
+                   due_at: day ? new Date(day + 'T23:59:59+03:00').toISOString() : (goal.due_at || null) };
+        });
+        if (items.some(function (x) { return !x.title; })) { showToast('У шага пустое название'); return; }
+        go.disabled = true; go.textContent = 'Завожу…';
+        var made = 0, failed = [];
+        // По одному, а не разом: у человека бывает предел недели, и отказ по
+        // одному шагу не должен ронять остальные.
+        (function next(i) {
+          if (i >= items.length) {
+            if (failed.length) showToast('Завел ' + made + ' из ' + items.length, failed[0]);
+            else showToast('Завел ' + made + ' ' + plural(made, 'шаг', 'шага', 'шагов'));
+            done();
+            return;
+          }
+          apiSend('/admin/api/tasks', 'POST', items[i], function () { made++; next(i + 1); },
+            function (code, e) {
+              failed.push('«' + items[i].title + '»: ' +
+                ((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                 (code === 409 ? 'у человека полна неделя' : 'не завелся')));
+              next(i + 1);
+            });
+        })(0);
+      });
+    }
+  }
+
   function openTask(id, focusEv) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
@@ -14187,6 +14529,10 @@
       // Свой срок исполнитель двигает сам: раньше молча, позже — с сообщением
       // постановщику (Павел, 04.09.2026). Чужой — только cap tasks_due.
       var canDue = (can('tasks_due') || isAssignee) && t.status !== 'done' && t.status !== 'cancel';
+      // Компаньон руководителя: цель со встречи приходит одной строкой, и
+      // разложить ее на шаги по людям — самая долгая часть планерки отдела.
+      // Раскладывает тот, кто цель ведет или поставил: шаги ложатся на его людей.
+      var canSplit = (isAssignee || boss) && !t.parent_id && t.status !== 'done' && t.status !== 'cancel';
 
       // Кнопки — только те, что человек реально может нажать: серые запрещенные
       // кнопки учат тыкать наугад и получать отказ.
@@ -14212,6 +14558,12 @@
       // Обратно в «готово» возвращается то, что уже сдавали: правило «принимаем
       // только сданное» снятие приемки не отменяет.
       if (canAccept && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
+      // Вопрос руководителю: работа уперлась в решение, которое принимает не
+      // исполнитель. Вопрос встает на карту компании и уходит в бот; тот, кому
+      // карта открыта, сам на свои вопросы не отвечает, поэтому ему кнопки нет.
+      if ((isAssignee || isAuthor) && t.status !== 'done' && t.status !== 'cancel' && !can('company_map')) {
+        acts.push(['ask', 'Нужно решение', 'al-cancel']);
+      }
 
       /* Лента задачи — это разговор, и выглядеть должна разговором. Реплики
          людей идут пузырями тем же компонентом, что в «Диалогах» (.tg-msg /
@@ -14276,7 +14628,7 @@
               '" aria-label="Удалить ' + whose + '">Удалить</button>' : '');
         return '<div class="tg-msg tsk-msg ' + side + '" data-ev="' + e.id + '">' +
           '<div class="tg-bub">' + quote +
-            '<span class="tsk-ev-t">' + esc(e.text || '') + '</span>' +
+            '<span class="tsk-ev-t">' + tskAt(e.text) + '</span>' +
             '<span class="tg-mt">' + esc(fmtTime(e.at)) + '</span></div>' +
           // Время уже стоит в пузыре — под ним только имя автора (у своих и его
           // не нужно) и пометка о правке.
@@ -14466,7 +14818,9 @@
           (t.parent_id ? '' :
             '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
               (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span>' : '') +
+              (canSplit ? '<button class="tsk-addstep" id="tk-split" type="button">' + ic('spark', 12) + 'Разложить</button>' : '') +
               '</div>' +
+              '<div class="cmp" id="tk-comp" hidden></div>' +
               (steps.length
                 ? '<div class="tsk-steps">' + steps.map(function (s) {
                     var sst = TASK_ST[s.status] || TASK_ST.wait;
@@ -14527,9 +14881,22 @@
               '<button type="button" id="tk-replx">не отвечать</button></div>' +
             // Поле растет под текст: в одну строку не видно, что уже написал
             // (Павел 09.10.2026). Ввод отправляет, Shift+Ввод переносит строку.
-            '<div class="tsk-say"><textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
-              'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t"></textarea>' +
+            '<div class="tsk-say">' +
+              // Подсказка по собачке: кого позвать в реплику. Висит над самим
+              // рядом ввода, а не над всем подвалом: иначе плашка «Ответ · …»
+              // встает между списком имен и кареткой.
+              '<div class="tsk-atbox" id="tk-atbox" role="listbox" aria-label="Кого позвать" hidden></div>' +
+              '<textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
+              'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t" ' +
+              // role="combobox" полю НЕ ставим: он перебил бы собственную роль
+              // многострочного поля, и скринридер перестал бы объявлять, что
+              // здесь пишут абзацами. Связь с подсказкой держат aria-controls и
+              // aria-activedescendant, их textarea принимает как есть.
+              'aria-haspopup="listbox" aria-controls="tk-atbox" aria-expanded="false"></textarea>' +
               '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
+            // Кому уйдет реплика, видно до отправки: человек пишет в задачу и не
+            // знает, прочитает ли ее кто-нибудь (Виталий через Павла, 02.11.2026).
+            '<div class="tsk-sayto" id="tk-sayto" hidden></div>' +
           '</div>' +
         '</aside>' +
         '</div>' +
@@ -14617,6 +14984,15 @@
           if (e.key === 'Enter') { e.preventDefault(); qsAdd(); }
         });
       }
+      var splitB = el('tk-split');
+      if (splitB) splitB.addEventListener('click', function () {
+        companionSplit(t, el('tk-comp'), splitB, function () {
+          state.tasks = null; state.myweek = null; state.myboard = null;
+          state.stuck = null; state.mymonth = null;
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+          if (state.page === 'tasks') renderView();
+        });
+      });
       Array.prototype.forEach.call(ov.querySelectorAll('[data-step]'), function (b) {
         b.addEventListener('click', function () {
           var sid = +b.getAttribute('data-step');
@@ -14885,6 +15261,14 @@
       };
       say.addEventListener('input', grow);
       grow();
+      // Строка «уйдет в телеграм» пересобирается на каждый набор: вставили
+      // имя через собачку — человек тут же видит его в списке получателей.
+      var sayTo = function () { tskSayToFill(t, say.value); };
+      say.addEventListener('input', sayTo);
+      sayTo();
+      // Подсказка по собачке вешается до обработчика клавиш ниже: пока она
+      // открыта, Ввод выбирает человека, а не отправляет реплику.
+      var atPick = tskAtPicker(say, el('tk-atbox'));
 
       // Кому отвечаем. Держим id ветки, а не только подпись: после
       // перерисовки ленты DOM другой, а ветка та же.
@@ -14913,6 +15297,17 @@
         again.scrollTop = keepAt == null ? again.scrollHeight : keepAt;
       };
 
+      /* Подсветка упоминаний и подсказка берут имена из справочника команды.
+         Если его в этой сессии еще не тянули, лента перерисуется, когда он
+         приедет: иначе первое открытие карточки показывало бы «@Мария» серым
+         текстом, а второе — уже отметкой. */
+      if (!(state.taskPeople || []).length) {
+        loadTaskPeople(function (people) {
+          var th = thread();
+          if (people.length && th) redrawFeed(events, (scroller() || {}).scrollTop);
+        });
+      }
+
       var send = function () {
         var text = (say.value || '').trim();
         if (!text) { if (retMode) say.focus(); return; }
@@ -14928,6 +15323,8 @@
       };
       el('tk-send').addEventListener('click', send);
       say.addEventListener('keydown', function (e) {
+        // Пока открыта подсказка по собачке, стрелки и Ввод принадлежат ей.
+        if (atPick.key(e)) { e.preventDefault(); return; }
         // Shift+Ввод — перенос строки: реплика в задаче бывает и в два абзаца.
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
       });
@@ -15135,6 +15532,10 @@
       Array.prototype.forEach.call(ov.querySelectorAll('[data-act]'), function (b) {
         b.addEventListener('click', function () {
           var to = b.getAttribute('data-act');
+          if (to === 'ask') {
+            taskAskForm(ov, t, function () { api('/admin/api/tasks/' + id).then(draw); });
+            return;
+          }
           // Поле возврата уже открыто и текст набран — «Вернуть» отправляет его,
           // а не открывает поле второй раз (Павел 07.09.2026: «не могу вернуть»).
           if (to === 'return') { if (retMode && (say.value || '').trim()) send(); else setRet(true); return; }
@@ -29875,6 +30276,18 @@
           }).join('') + '</div>';
       }).join(''));
     }
+    /* Вопросы, которые разбор оставил человеку: в консультации с семьей задач
+       для команды обычно нет, зато есть «решить, какой тариф предложить». Раньше
+       они лежали только в черновике протокола, и встреча выглядела пустой
+       (Павел 31.10.2026). */
+    if ((c.for_decision || []).length) {
+      jumps.push(['dec', ic('note', 13) + 'На решение ' +
+        '<b class="num">' + c.for_decision.length + '</b>']);
+      parts.push('<div class="mx-h" id="mx-s-dec">Вопросы на решение</div>' +
+        c.for_decision.map(function (d) {
+          return '<div class="mx-step">' + esc(d) + '</div>';
+        }).join(''));
+    }
     if ((c.tasks || []).length) {
       jumps.push(['tasks', ic('task', 13) + 'Задачи со встречи ' +
         '<b class="num">' + c.tasks.length + '</b>']);
@@ -33042,12 +33455,249 @@
      запуска, и без неё «видели 110» рядом с «регистраций 34» читается как потеря
      людей, которых мы просто не считали. Источник называем прямо — это НЕ наш счёт,
      Метрика считает посетителей по-своему и с нашими цифрами сходится примерно. */
+  /* ── Порядок плашек запуска ────────────────────────────────────────────────
+     Порядок выбирает человек, перетаскиванием, и он запоминается в этом браузере
+     (Ольга, 31.10.2026: «можешь сделать плашки подвижными»). Почему в браузере, а не
+     в профиле: порядок — это привычка глаза на своём рабочем месте, а не настройка
+     команды, и ради неё не стоит ходить на сервер при каждой отрисовке.
+
+     По умолчанию первой идёт «Страницу видели»: воронка начинается с неё, а не с
+     регистраций (её же просьба). Плитки без ключа переставить нельзя — они встают
+     туда, где стояли.
+
+     Сохранённый порядок НЕ выбрасывает новые плитки: ключ, которого в списке нет,
+     добавляется в конец. Иначе после любой новой плашки человек видел бы экран без
+     неё и считал, что она не доехала. */
+  var LAUNCH_TILES_KEY = 'mk-launch-tiles';
+  var LAUNCH_TILES_DEFAULT = ['seen', 'reg', 'invoice', 'paid', 'channels', 'efir',
+                            'diag', 'cons', 'support'];
+
+  function launchTilesSaved() {
+    try {
+      var v = JSON.parse(localStorage.getItem(LAUNCH_TILES_KEY) || 'null');
+      return Array.isArray(v) ? v.filter(function (k) { return typeof k === 'string'; }) : null;
+    } catch (e) { return null; }
+  }
+
+  function launchTilesSave(order) {
+    try { localStorage.setItem(LAUNCH_TILES_KEY, JSON.stringify(order)); } catch (e) {}
+  }
+
+  function launchTiles(items) {
+    var order = launchTilesSaved() || LAUNCH_TILES_DEFAULT;
+    var byKey = {};
+    items.forEach(function (t) { if (t && t.key) byKey[t.key] = t; });
+    var out = [];
+    order.forEach(function (k) { if (byKey[k]) { out.push(byKey[k]); byKey[k] = null; } });
+    items.forEach(function (t) { if (t && (!t.key || byKey[t.key])) out.push(t); });
+    return out.map(function (t) { return t.key ? Object.assign({ drag: true }, t) : t; });
+  }
+
+  /* Плашки запуска переставляются мышью. Порядок сохраняем СРАЗУ по отпусканию:
+     человек проверяет перестановку перезагрузкой, и «сохраню потом» читается как
+     «не сработало». */
+  function launchTilesWire(view) {
+    var bar = view.querySelector('.statbar');
+    if (!bar) return;
+    var dragged = null;
+    Array.prototype.forEach.call(bar.querySelectorAll('[data-tile]'), function (n) {
+      n.addEventListener('dragstart', function (e) {
+        dragged = n;
+        n.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', n.getAttribute('data-tile')); } catch (err) {}
+      });
+      n.addEventListener('dragend', function () {
+        n.classList.remove('dragging');
+        Array.prototype.forEach.call(bar.querySelectorAll('.drop-to'), function (x) { x.classList.remove('drop-to'); });
+        dragged = null;
+      });
+      n.addEventListener('dragover', function (e) {
+        if (!dragged || dragged === n) return;
+        e.preventDefault();
+        n.classList.add('drop-to');
+      });
+      n.addEventListener('dragleave', function () { n.classList.remove('drop-to'); });
+      n.addEventListener('drop', function (e) {
+        e.preventDefault();
+        n.classList.remove('drop-to');
+        if (!dragged || dragged === n) return;
+        /* Куда вставлять: если тащим вправо — после цели, если влево — перед ней.
+           Без этого плитка всегда вставала перед целью, и «поменять две местами»
+           требовало двух движений. */
+        var all = Array.prototype.slice.call(bar.querySelectorAll('[data-tile]'));
+        var from = all.indexOf(dragged), to = all.indexOf(n);
+        bar.insertBefore(dragged, from < to ? n.nextSibling : n);
+        launchTilesSave(Array.prototype.map.call(
+          bar.querySelectorAll('[data-tile]'),
+          function (x) { return x.getAttribute('data-tile'); }));
+      });
+    });
+  }
+
+  /* Плашка эфира. Пока эфир впереди — обратный счёт, во время и после — СКОЛЬКО
+     ЧЕЛОВЕК его видело (Ольга, 31.10.2026: «вместо эфир прошел надо общее количество
+     уникальных человек на эфире и рядом смотрели запись количество человек»).
+     «Прошёл» на этом месте не отвечал ни на один рабочий вопрос.
+
+     Считаем людей: узнанных и тех, кто смотрел без регистрации, — сумма честна,
+     потому что это разные люди, а не один в двух строках. Запись идёт подписью:
+     это второе действие того же человека, и в одну цифру с живым эфиром их сложить
+     нельзя. */
+  function launchEfirTile(cur, daysVal, days, regShown) {
+    var v = cur && cur.viewers, r = cur && cur.recording;
+    var live = v ? (v.known.viewers || 0) + (v.anon.viewers || 0) : null;
+    var rec = r ? (r.known.viewers || 0) + (r.anon.viewers || 0) : 0;
+    var proshel = cur.stage && !/^\d+$/.test(String(cur.stage.title))
+      && String(cur.stage.title).toLowerCase().indexOf('до эфира') < 0;
+    if (live == null || !proshel) {
+      return cur.stage
+        ? { key: 'efir', label: 'Эфир', value: cur.stage.title, sub: cur.stage.sub,
+            word: !/^\d+$/.test(String(cur.stage.title)) }
+        : { key: 'efir', label: 'До эфира', value: daysVal,
+            sub: days > 0 ? plural(days, 'день', 'дня', 'дней')
+                          : cur.event_date.split('-').reverse().join('.') };
+    }
+    return { key: 'efir', label: 'Были на эфире', value: live,
+             sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
+                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : ''),
+             pct: launchPct(live, regShown, 'от регистраций') };
+  }
+
+  /* Доля плитки от предыдущего шага воронки: сколько из видевших страницу
+     записалось, сколько из записавшихся заплатило. Базы нет — доли нет вовсе:
+     «0%» читается как «ничего не вышло», а правда в том, что считать не от чего. */
+  function launchPct(n, base, what) {
+    if (!base || n == null) return '';
+    var v = n * 100 / base;
+    /* Доля меньше половины процента округляется в ноль, и «0% от регистраций» рядом
+       с живой двойкой читается как «никого не было». Пишем словами. */
+    return (v > 0 && v < 1 ? 'меньше 1%' : Math.round(v) + '%') + ' ' + what;
+  }
+
+  /* Диагностика в кабинете и запись на консультацию (владелец, 31.10.2026). Две
+     плитки, у каждой главная цифра — пройденный шаг, а начатый уходит в подпись:
+     «зашли в анкету» без «получили разбор» ничего не стоит, но показывает, где люди
+     осыпаются. Нет блока (старый бэкенд) — нет и плиток. */
+  function launchDiagTiles(cur, base, dc, zal, hvost, pay) {
+    dc = dc || cur.diagcons;
+    pay = pay || cur.payment;
+    if (!dc) return [];
+    /* У этих двух шагов доля от регистраций мало что объясняет: диагностику и
+       консультацию продают НА ЭФИРЕ, и честный знаменатель — зал. Поэтому владелец
+       31.10.2026 попросил обе базы сразу, а у консультации ещё и долю от прошедших
+       диагностику: это соседние шаги одной продажи. */
+    if (zal == null) {
+      var v = cur.viewers;
+      zal = v ? (v.known.viewers || 0) + (v.anon.viewers || 0) : 0;
+    }
+    hvost = hvost || '';
+    var zalTxt = 'от бывших на ' + (hvost ? 'повторе' : 'эфире');
+    var regTxt = 'от регистраций' + (hvost ? ' ' + hvost : '');
+    return [
+      { key: 'diag', label: 'Прошли диагностику', value: dc.done,
+        sub: 'зашли в анкету ' + dc.entered + ' · анкета и разбор в кабинете',
+        pct: [launchPct(dc.done, zal, zalTxt), launchPct(dc.done, base, regTxt)] },
+      { key: 'cons', label: 'Записались на консультацию', value: dc.booked,
+        sub: 'выбрали дату и время ' + dc.slotted,
+        pct: [launchPct(dc.booked, zal, zalTxt),
+              launchPct(dc.booked, dc.done, 'от прошедших диагностику'),
+              launchPct(dc.booked, base, regTxt)] },
+    ].concat(launchSupportTile(pay, dc, base, hvost));
+  }
+
+  /* Последняя плитка ряда — чем всё кончилось: оплаченное сопровождение. Участие за
+     690 ₽ сюда НЕ идёт, это продажа поступления (владелец, 31.10.2026: «оплатили
+     сопровождение, сумма и количество человек»). Деньги собираем по трём дорогам:
+     касса офферов, счета CRM и договоры из ведомости. */
+  function launchSupportTile(pay, dc, base, hvost) {
+    if (!pay || !pay.product) return [];
+    var pr = pay.product, cr = pay.crm || {}, ld = pay.ledger || {};
+    var rub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
+    var n = (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
+    return [{
+      /* Заголовок короткий, да ещё с мягким переносом внутри слова: колонка в самой
+         плотной полосе уже «Сопровождения», и без переноса слово обрезалось на
+         полуслове. Действие («оплатили») уходит в подпись. */
+      key: 'support', label: 'Сопро\u00ADвождение',
+      value: fmtMoney(rub) + ' \u20bd',
+      sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
+      pct: [launchPct(n, dc.booked, 'от записавшихся на консультацию'),
+            launchPct(n, base, 'от регистраций' + (hvost ? ' ' + hvost : ''))],
+    }];
+  }
+
+  /* Сетка полосы под число плиток. Больше шести в строку на обычном ноутбуке не
+     помещается — дальше ломаем на две строки той же ширины, чтобы колонки верхнего
+     и нижнего ряда остались друг под другом. */
+  function launchBarCls(n) {
+    return ({ 3: 'three', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine' })[n] || '';
+  }
+
+  /* Нижний ряд плашек — «в том числе повтор». Повтор это не отдельное
+     мероприятие, а второй этап того же интенсива (владелец, 31.10.2026), поэтому
+     его люди стоят и в верхнем ряду; здесь видно, сколько из них пришло со
+     второго этапа. Колонки повторяют верхний ряд — тот же порядок плиток, та же
+     ширина, — чтобы плашку можно было читать вертикально парой.
+
+     Тащить мышью можно только верхний ряд: нижний встаёт за ним следом, иначе
+     пары разъехались бы и читать стало бы нечего. */
+  function launchPovtorRow(cur) {
+    var p = cur.povtor;
+    if (!p) return '';
+    var reg = p.registrations || {}, pay = p.payment || {}, inCh = p.in_channel || {};
+    var vw = p.viewers || {};
+    var zal = (vw.known || 0) + (vw.anon || 0);
+    var base = reg.total || 0;
+    var dni = (p.event_days || []).map(function (d) {
+      var x = String(d).split('-');
+      return x.length === 3 ? (+x[2]) + '.' + x[1] : d;
+    }).join(' и ');
+    var tiles = [
+      /* Заголовки те же, что в верхнем ряду: ряд уже подписан «в том числе
+         повтор», и второе «на повтор» в каждой плитке не влезает в колонку —
+         на ширине 1280 оно обрезалось на полуслове. Пары читаются по вертикали. */
+      { key: 'reg', label: 'Регистрации', value: base,
+        sub: 'бесплатно ' + (reg.free || 0) + ' · платно ' + (reg.vip || 0),
+        pct: launchPct(base, p.pages && p.pages.users, 'от тех, кто видел страницу') },
+      { key: 'invoice', label: 'Счет на участие', value: pay.invoiced || 0,
+        sub: plural(pay.invoiced || 0, 'человек', 'человека', 'человек') + ' · 690 рублей',
+        pct: launchPct(pay.invoiced, base, 'от регистраций на повтор') },
+      { key: 'paid', label: 'Оплачено', value: fmtMoney(pay.paid_rub || 0) + ' \u20bd',
+        sub: (pay.paid || 0) + ' из ' + (pay.invoiced || 0) + ' ' +
+          plural(pay.invoiced || 0, 'человека', 'человек', 'человек'),
+        pct: launchPct(pay.paid, base, 'от регистраций на повтор') },
+      { key: 'channels', label: 'В закрытых каналах', value: inCh.total || 0,
+        sub: ['tg', 'vk', 'max'].map(function (k) {
+          var v = inCh[k];
+          return v ? ({ tg: 'телеграм ', vk: 'ВК ', max: 'МАКС ' })[k] + v.live : '';
+        }).filter(Boolean).join(' · ') + (inCh.gone ? ' · вышло ' + inCh.gone : ''),
+        pct: launchPct(inCh.total, base, 'от регистраций на повтор') },
+      { key: 'efir', label: 'Были на повторе', value: zal,
+        sub: (vw.known || 0) + ' с карточкой · ' + (vw.anon || 0) + ' без регистрации',
+        pct: launchPct(zal, base, 'от регистраций на повтор') },
+    ].concat(launchDiagTiles(cur, base, p.diagcons, zal, 'на повтор', p.payment));
+    if (p.pages && p.pages.users) {
+      /* «Страницу повтора видели» в колонку этой ширины не влезает и обрезается,
+         поэтому действие уехало в подпись, а в заголовке осталась сама страница. */
+      tiles.push({ key: 'seen', label: 'Страница повтора',
+        value: fmtMoney(p.pages.users),
+        sub: 'видели' + (p.pages.since ? ' с ' + fmtDay(p.pages.since) : '') +
+             ' · Яндекс Метрика' });
+    }
+    var ordered = launchTiles(tiles).map(function (t) {
+      return Object.assign({}, t, { drag: false });
+    });
+    return '<div class="lt-rh gap">В том числе повтор' + (dni ? ' · ' + dni : '') + '</div>' +
+      statBar(ordered, launchBarCls(ordered.length));
+  }
+
   function launchSeenTile(cur, reg) {
     var p = cur.pages;
     if (!p || !p.users) return [];
     var pct = reg.total && p.users ? Math.round(reg.total * 100 / p.users) : null;
     var since = p.since ? ('с ' + fmtDay(p.since)) : 'по Метрике';
     return [{
+      key: 'seen',
       label: 'Страницу видели',
       /* go — только маркер для обработчика ниже: плитка открывает разбор, а не
          уводит на другой экран. */
@@ -33892,12 +34542,22 @@
     var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid) + (cr.wait || 0);
     var money = function (n) { return fmtMoney(n) + ' ₽'; };
     var tail = function (rub) { return cr.invoiced ? ' · сопровождение ' + money(rub || 0) : ''; };
+    /* Сколько ЧЕЛОВЕК за этими деньгами (Ольга, 31.10.2026). Сумма без людей не
+       отвечает на рабочий вопрос: 100 000 рублей от одного и от десяти — это разные
+       запуски, а по строке они одинаковые. */
+    var lyudi = function (n) {
+      return n + ' ' + plural(n, 'человек', 'человека', 'человек') + ' · ';
+    };
+    var billedN = (pay.invoiced || 0) + (pr.invoiced || 0) + (cr.invoiced || 0);
+    var gotN = (pay.paid || 0) + (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
     var rows =
       flatRow('Выставлено счетов',
+        lyudi(billedN) +
         'участие ' + money(pay.invoiced_rub || 0) + ' · продукты ' + money(pr.invoiced_rub || 0) +
         tail(cr.invoiced_rub),
         money(billed)) +
       flatRow('Оплачено',
+        lyudi(gotN) +
         'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0) +
         tail(cr.paid_rub) +
         (ld.paid ? ' · договоры ' + money(ld.paid_rub || 0) : ''),
@@ -35001,6 +35661,9 @@
     var regStep = (cur.path || []).filter(function (s) { return s.key === 'reg'; })[0];
     var regInPeriod = (state._mkLaunchFrom || state._mkLaunchTo) && regStep
       ? regStep.people : null;
+    /* От чего считаем доли под плитками: от той цифры регистраций, которая СТОИТ
+       на экране. Иначе при выбранном периоде проценты объясняли бы чужое число. */
+    var regShown = regInPeriod == null ? reg.total : regInPeriod;
 
     /* лестница: полосы мерим от самой широкой настоящей ступени — кликов или
        регистраций. От одних регистраций 12 кликов рисовались бы той же полосой,
@@ -35089,30 +35752,40 @@
       return '<a class="tab' + (i === (state._mkLaunchIdx || 0) ? ' on' : '') + '" data-launch="' + i + '">' + esc(l.title) + '</a>';
     }).join('');
 
-    view.innerHTML = '<div class="dash">' +
-      (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      statBar([
+    /* Плитки верхнего ряда держим массивом: от их числа зависит сетка полосы,
+       а появляются они не все и не всегда. */
+    var topTiles = launchTiles([
         /* Период выбран — плитка обязана показывать ТО ЖЕ, что первая плашка пути.
            Раньше плитка всегда считала весь запуск, а плашка слушалась периода: на
            экране рядом стояли 31 и 26, и это читалось как сломанный счётчик (нашла
            Ольга 22.09). Число за период берём у самой плашки — она и есть источник,
            а «всего за запуск» уходит в подпись, чтобы обе цифры были названы. */
-        { label: 'Регистрации', value: (regInPeriod == null ? reg.total : regInPeriod),
+        { key: 'reg', label: 'Регистрации', value: regShown,
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
-            : 'за выбранный период · всего за запуск ' + reg.total },
+            : 'за выбранный период · всего за запуск ' + reg.total,
+          pct: launchPct(regShown, cur.pages && cur.pages.users, 'от тех, кто видел страницу') },
         /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
            это не сопровождение. Плитка держит участие, продукты живут ступенями. */
-        { label: 'Счет на участие', value: pay.invoiced,
-          sub: '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
-        { label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
-          sub: prod.paid_rub
-            ? 'участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
-            : pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
+        /* В плитке счетов и оплат — ЛЮДИ, а не только деньги (Ольга, 31.10.2026):
+           «5» без слова «человек» читалось как пять рублей или пять попыток. */
+        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced,
+          sub: plural(pay.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей · ' +
+            pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
+          pct: launchPct(pay.invoiced, regShown, 'от регистраций') },
+        { key: 'paid', label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
+          sub: (pay.paid + ' из ' + (pay.invoiced || 0) + ' ' +
+                plural(pay.invoiced || 0, 'человека', 'человек', 'человек')) +
+            (prod.paid_rub
+              ? ' · участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
+              : ''),
+          /* Доля считается по ЛЮДЯМ, хотя на плитке рубли: «3 450 ₽ — это 1% от
+             рублей» ничего не значит, а «заплатил 1% записавшихся» значит. */
+          pct: launchPct(pay.paid, regShown, 'от регистраций') },
         /* Каналов три. Плитка показывает людей во всех, а подпись — откуда они;
            без неё «29» читается как телеграм, и цифра спорит с блоком ниже.
            Без in_channel (старый бэкенд) остаётся прежний телеграмный счёт. */
-        { label: 'В закрытых каналах', value: chTotal,
+        { key: 'channels', label: 'В закрытых каналах', value: chTotal,
           sub: inCh
             ? ['tg', 'vk', 'max'].map(function (k) {
                 var v = inCh[k];
@@ -35121,16 +35794,20 @@
               /* Сколько ушло — вторая цифра, о которой просила Ольга: канал, из
                  которого уходят, и канал, в который не приходят, — разные беды. */
               (inCh.gone ? ' · вышло ' + inCh.gone : '')
-            : (tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет') },
+            : (tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет'),
+          pct: launchPct(chTotal, regShown, 'от регистраций') },
         /* Где мы относительно эфира, считает сервер (поле stage): у интенсива два
            вечера и час начала, а команда сидит в разных поясах — по часам браузера
            у двоих вышло бы разное «идет». Старый расчёт по дням оставлен запасным:
            ответ без stage приедет с непромоученного бэкенда. */
-        (cur.stage
-          ? { label: 'Эфир', value: cur.stage.title, sub: cur.stage.sub,
-              word: !/^\d+$/.test(String(cur.stage.title)) }
-          : { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') }),
-      ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
+        launchEfirTile(cur, daysVal, days, regShown),
+    ].concat(launchSeenTile(cur, reg)).concat(launchDiagTiles(cur, regShown)));
+
+    view.innerHTML = '<div class="dash">' +
+      (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
+      (cur.povtor ? '<div class="lt-rh">Всего по запуску</div>' : '') +
+      statBar(topTiles, launchBarCls(topTiles.length)) +
+      launchPovtorRow(cur) +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
@@ -35189,6 +35866,7 @@
           '</div></div>' +
       '</div></div>';
 
+    launchTilesWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-launch]'), function (t) {
       t.addEventListener('click', function () {
         state._mkLaunchIdx = parseInt(t.getAttribute('data-launch'), 10) || 0;
@@ -35564,10 +36242,18 @@
      Цифр тут своих нет: их считает сквозная Веры (CROSSCUT.week — тот же agg, что
      на экране «Маркетинг → Сквозная»), план берется из «План-факта». Гипотеза —
      цель задачника, поэтому двигают ее в «Задачах», а здесь только факт и вывод. */
+  /* «День» и «Месяц» (Виталий 02.11.2026): «каждый день сверяли план и факт
+     показатели за вчера, а так же месяц». Это та же лестница сквозной, только на
+     другом отрезке, поэтому вкладки открыты тем же, кому открыты цифры. */
   var MG_TABS = [
-    { id: 'rnp', label: 'РНП недели' },
+    { id: 'day', label: 'День', cap: 'marketing' },
+    { id: 'rnp', label: 'Неделя' },
+    { id: 'month', label: 'Месяц', cap: 'marketing' },
     { id: 'leads', label: 'Чистка лидов', cap: 'marketing' },
   ];
+  var MG_WD = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+  var MG_MONN = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август',
+                 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
   var MG_ST = { wait: 'поставлена', doing: 'в работе', review: 'на приемке', done: 'закрыта',
                 'return': 'возвращена', block: 'стоит', cancel: 'отменена' };
   var MG_MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
@@ -35606,6 +36292,26 @@
       .catch(function () { state._mg = { key: key, d: null }; })
       .then(function () { if (state._mgLoad === key) state._mgLoad = null; if (state.page === 'manage') renderView(); });
     // Цифры: срез сквозной общий с «Маркетингом», второй раз его не тянем.
+    mgCross();
+  }
+  /* План отрезка — доля месячного из «План-факта» по дням (сервер, /planfact/share).
+     undefined — еще грузится, {} — плана нет или нет доступа. */
+  function mgPlan(a, b) {
+    if (!can('planfact')) return {};
+    var key = a + '|' + b;
+    state._mgPlan = state._mgPlan || {};
+    var v = state._mgPlan[key];
+    if (v === 'wait') return undefined;
+    if (v) return v;
+    state._mgPlan[key] = 'wait';
+    api('/admin/api/planfact/share?from=' + a + '&to=' + b).then(function (r) {
+      state._mgPlan[key] = (r && r.plan) || {};
+    }).catch(function () { state._mgPlan[key] = {}; }).then(function () {
+      if (state.page === 'manage') renderView();
+    });
+    return undefined;
+  }
+  function mgCross() {
     if (can('marketing') && !state._mkCross && !state._mkCrossLoad) {
       state._mkCrossLoad = true;
       api('/admin/api/marketing/crosscut').then(function (r) {
@@ -35615,23 +36321,19 @@
         if (state.page === 'manage') renderView();
       });
     }
-    var wk = mgAdd(mgWeek(), -7);  // план той недели, чьи цифры на экране
-    if (can('planfact') && !(state._mgPlan && state._mgPlan[wk])) {
-      state._mgPlan = state._mgPlan || {};
-      state._mgPlan[wk] = 'wait';
-      api('/admin/api/planfact/week?week=' + wk).then(function (r) {
-        var by = {};
-        ((r && r.rows) || []).forEach(function (x) { by[x.key] = x.plan; });
-        state._mgPlan[wk] = by;
-      }).catch(function () { state._mgPlan[wk] = {}; }).then(function () {
-        if (state.page === 'manage') renderView();
-      });
-    }
   }
+  // День экрана: вчера по умолчанию, стрелки двигают по дню, дальше сегодня не уходим.
+  function mgDay() { return mgAdd(mgIso(new Date()), -1 + Math.min(state.mgDayShift || 0, 1)); }
+  function mgDayLabel(iso) { var d = mgDate(iso); return d.getDate() + ' ' + MG_MON[d.getMonth()] + ', ' + MG_WD[d.getDay()]; }
+  // Месяц экрана: первое число. Текущий считаем по сегодня, закрытый целиком.
+  function mgMonth() { var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + (state.mgMonShift || 0)); return mgIso(d); }
+  function mgMonEnd(first) { var d = mgDate(first); d.setMonth(d.getMonth() + 1); d.setDate(0); return mgIso(d); }
   function mgReload() { state._mg = null; state._mkCross = null; state._mgLeads = null; renderView(); }
 
   function renderManage(view) {
     var tab = mgTab();
+    // Подпись в шапке своя у каждой вкладки, а вкладку меняют и клик, и ссылка.
+    if (state._mgHeadTab !== tab) { state._mgHeadTab = tab; renderHead(); }
     var depts = ['', 'marketing', 'sales', 'product', 'edu', 'teach', 'finance', 'manage'];
     var deptBar = tab !== 'rnp' ? '' : '<div class="list-quick mg-depts">' + depts.map(function (d) {
       return '<button class="qchip' + ((state.mgDept || '') === d ? ' on' : '') + '" data-mgdept="' + d + '">' +
@@ -35642,14 +36344,14 @@
       (tabs.length > 1 ? '<div class="list-quick mg-tabs">' + tabs.map(function (x) {
         return '<button class="qchip' + (x.id === tab ? ' on' : '') + '" data-mgtab="' + x.id + '">' + esc(x.label) + '</button>';
       }).join('') + '</div>' : '') +
-      '<div class="brd-nav">' +
-        '<button class="icobtn sm brd-arrow prev" data-mgw="-1" title="Прошлая неделя">' + ic('go', 15) + '</button>' +
-        '<span class="brd-label">' + esc(mgWeekLabel(mgWeek())) + '</span>' +
-        '<button class="icobtn sm brd-arrow" data-mgw="1" title="Следующая неделя">' + ic('go', 15) + '</button>' +
-        (state.mgShift ? '<button class="qchip" data-mgw="now">Эта неделя</button>' : '') +
-      '</div>' + deptBar +
+      mgNav(tab) + deptBar +
     '</div>';
     if (tab === 'leads') { view.innerHTML = '<div class="dash mg">' + head + mgLeadsHtml() + '</div>'; mgBind(view); return; }
+    if (tab === 'day' || tab === 'month') {
+      mgCross();
+      view.innerHTML = '<div class="dash mg">' + head + (tab === 'day' ? mgDayHtml() : mgMonthHtml()) + '</div>';
+      mgBind(view); return;
+    }
 
     mgLoad();
     var m = state._mg && state._mg.key === mgKey() ? state._mg.d : undefined;
@@ -35668,6 +36370,90 @@
     mgBind(view);
   }
 
+  function mgNav(tab) {
+    var n = function (k, back, fwd, label, now, nowTxt) {
+      return '<div class="brd-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-' + k + '="-1" title="' + back + '">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(label) + '</span>' +
+        (fwd ? '<button class="icobtn sm brd-arrow" data-' + k + '="1" title="' + fwd + '">' + ic('go', 15) + '</button>' : '') +
+        (now ? '<button class="qchip" data-' + k + '="now">' + nowTxt + '</button>' : '') + '</div>';
+    };
+    if (tab === 'day') {
+      var sh = state.mgDayShift || 0;
+      return n('mgdw', 'Днем раньше', sh < 1 ? 'Днем позже' : '', mgDayLabel(mgDay()), sh !== 0, 'Вчера');
+    }
+    if (tab === 'month') {
+      var m = mgDate(mgMonth());
+      return n('mgmw', 'Прошлый месяц', 'Следующий месяц', MG_MONN[m.getMonth()] + ' ' + m.getFullYear(), !!state.mgMonShift, 'Этот месяц');
+    }
+    return n('mgw', 'Прошлая неделя', 'Следующая неделя', mgWeekLabel(mgWeek()), !!state.mgShift, 'Эта неделя');
+  }
+  function mgSpan(a, b) {
+    var x = mgDate(a), y = mgDate(b);
+    if (a === b) return x.getDate() + ' ' + MG_MON[x.getMonth()];
+    return x.getMonth() === y.getMonth() ? x.getDate() + '–' + y.getDate() + ' ' + MG_MON[y.getMonth()]
+      : x.getDate() + ' ' + MG_MON[x.getMonth()] + ' – ' + y.getDate() + ' ' + MG_MON[y.getMonth()];
+  }
+
+  /* Лестница сквозной на любом отрезке: неделя, день, месяц. Отрезок, отрезок для
+     сравнения и план. o.full — план всего месяца, когда месяц еще идет: красим факт
+     по плану «к этой дате», а цель месяца стоит под ним мелко. */
+  function mgLadder(o) {
+    var box = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
+      '<div><div class="t">' + esc(o.title) + '</div><div class="s">' + esc(o.sub) + '</div></div></div>';
+    if (!can('marketing')) {
+      return box + '<div class="mg-note">Цифры сквозной открыты тем, у кого есть доступ к маркетингу. ' +
+        'Гипотезы и решения ниже видны всем.</div></div>';
+    }
+    var cc = state._mkCross;
+    if (!cc || o.plan === undefined || o.full === undefined) {
+      return box + '<div class="sk-list mg-pad"><div class="shim"></div><div class="shim"></div></div></div>';
+    }
+    if (cc === 'none' || !window.CROSSCUT || !window.CROSSCUT.week) {
+      return box + '<div class="mg-note">Сквозная не посчиталась. Обнови страницу через минуту.</div></div>';
+    }
+    var cur = window.CROSSCUT.week(cc, o.cur[0], o.cur[1]), prv = window.CROSSCUT.week(cc, o.prv[0], o.prv[1]);
+    var plan = o.plan || {}, full = o.full || {};
+    var rows = [
+      ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
+      ['Регистрации на интенсив', 'любой интенсив, по дате регистрации', 'regs'],
+      ['Разбор на платформе', 'анкета и разбор шансов на сайте', 'diagPlat'],
+      ['Диагностика в боте', 'вошли в воронку теста', 'diagStart'],
+      ['Записались к диагносту', 'выбрали время разбора', 'signed'],
+      ['Разбор состоялся', 'встреча прошла', 'meeting'],
+      ['Счета', 'выставлено', 'invN'],
+      ['Оплатили', 'людей', 'payers', 'payments'],
+      ['Деньги', 'пришло на счет', 'revenue', 'revenue', true],
+      ['Расход на рекламу', 'внесен в CRM', 'spend', null, true]
+    ];
+    var anyPlan = rows.some(function (r) { return r[3] && plan[r[3]] != null; });
+    return box + '<div class="mg-tbl' + (anyPlan ? '' : ' noplan') + (o.pf ? ' pf' : '') + '">' +
+      '<div class="mg-tr th"><span>Ступень</span>' + (anyPlan ? '<span class="r c-pl">' + esc(o.planLbl || 'План') + '</span>' : '') +
+      '<span class="r">' + esc(o.curLbl) + '</span>' +
+      '<span class="r c-pv">' + esc(o.prvLbl) + '</span><span class="r c-dl"></span></div>' +
+      rows.map(function (r) {
+        var money = r[4], f = function (v) { return v == null ? '—' : money ? fmtMoney(Math.round(v)) + ' ₽' : mgNum(v); };
+        // Разница денег коротко, в тысячах: «−62 тыс.» читается быстрее, чем «−62 000 ₽».
+        var fd = function (v) { return money ? (Math.abs(v) >= 1000 ? Math.round(Math.abs(v) / 1000) + ' тыс.' : Math.round(Math.abs(v)) + ' ₽') : Math.abs(v); };
+        var c = cur[r[2]], p = prv[r[2]], pv = r[3] ? plan[r[3]] : null, fv = r[3] ? full[r[3]] : null;
+        // План дня бывает дробным (две оплаты на месяц — 0,1 в день): деньги округляем, людей нет.
+        var fp = function (v) { return money ? f(v) : mgNum(Math.round(v * 10) / 10); };
+        var dl = c - p, cls = !dl || r[2] === 'spend' ? '' : dl > 0 ? 'up' : 'down';
+        var pl = pv != null && pv > 0 ? (c >= pv ? 'ok' : c >= pv * .7 ? 'risk' : 'miss') : '';
+        // Виталий 02.11.2026: «меня интересует отношение к плановым показателям» — процент рядом с цифрой.
+        var pct = function (v) { return Math.round(c / v * 100) + '%'; };
+        return '<div class="mg-tr"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
+          (anyPlan ? '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
+            (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + (fv > 0 ? ' · ' + pct(fv) : '') + '</small>' : '') : '') + '</span>' : '') +
+          '<span class="r num big ' + pl + '">' + f(c) +
+            (pl ? '<small class="mg-pc">' + pct(pv) + (o.full ? ' к дате' : ' плана') + '</small>' : '') + '</span>' +
+          '<span class="r num mute c-pv">' + f(p) + '</span>' +
+          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
+      }).join('') + '</div>' +
+      (anyPlan ? '<div class="mg-note">' + esc(o.note) + '</div>' : '') +
+    '</div>';
+  }
+
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
      маркетинга и продаж (это их воронка) стоят цифры всей компании с прямой
      подписью об этом, а остальным отделам блок не показываем. */
@@ -35678,53 +36464,50 @@
        открытую. Поэтому неделя экрана — та, на которую планируем, а цифры — за ту,
        что перед ней, и рядом еще одна раньше. */
     var wk = m.prev_week, end = mgAdd(wk, 6), pw = mgAdd(wk, -7);
-    var box = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
-      '<div><div class="t">Цифры за ' + esc(mgWeekLabel(wk)) + '</div><div class="s">' +
-      (state.mgDept ? 'по всей компании: сквозная по отделам не делится. ' : 'лестница сквозной аналитики, ') +
-      'рядом неделя ' + esc(mgWeekLabel(pw)) + '</div></div></div>';
-    if (!can('marketing')) {
-      return box + '<div class="mg-note">Цифры сквозной открыты тем, у кого есть доступ к маркетингу. ' +
-        'Гипотезы и решения ниже видны всем.</div></div>';
+    return mgLadder({
+      title: 'Цифры за ' + mgWeekLabel(wk),
+      sub: (state.mgDept ? 'по всей компании: сквозная по отделам не делится. ' : 'лестница сквозной аналитики, ') +
+        'рядом неделя ' + mgWeekLabel(pw),
+      cur: [wk, end], prv: [pw, mgAdd(pw, 6)], plan: mgPlan(wk, end), full: null,
+      curLbl: mgDate(wk).getDate() + '–' + mgDate(end).getDate(),
+      prvLbl: mgDate(pw).getDate() + '–' + mgDate(mgAdd(pw, 6)).getDate(),
+      note: 'План недели — доля месячного плана из «План-факта» по дням.'
+    });
+  }
+
+  /* День: вчера против того же дня неделей раньше. Не против позавчера: понедельник
+     с воскресеньем сравнивать бессмысленно, а неделя назад — тот же ритм. */
+  function mgDayHtml() {
+    var d = mgDay(), p = mgAdd(d, -7);
+    return mgLadder({
+      title: (state.mgDayShift ? 'Цифры за ' : 'Вчера, ') + mgSpan(d, d),
+      sub: 'лестница сквозной, рядом ' + MG_WD[mgDate(p).getDay()] + ' неделей раньше',
+      cur: [d, d], prv: [p, p], plan: mgPlan(d, d), full: null, pf: true,
+      curLbl: mgSpan(d, d), prvLbl: mgSpan(p, p),
+      note: 'План дня — месячный план из «План-факта», деленный на дни месяца. Поэтому он бывает дробным: две оплаты на месяц это 0,1 в день.'
+    });
+  }
+
+  /* Месяц: идущий — с первого числа по сегодня, план «к этой дате» и под ним цель
+     месяца, рядом прошлый месяц за те же дни. Закрытый — целиком против прошлого. */
+  function mgMonthHtml() {
+    var a = mgMonth(), z = mgMonEnd(a), today = mgIso(new Date());
+    var going = today >= a && today <= z, b = going ? today : z;
+    var pa = mgAdd(a, -1).slice(0, 8) + '01', pz = mgMonEnd(pa);
+    var n = mgDate(b).getDate(), pb = going ? (n <= mgDate(pz).getDate() ? pa.slice(0, 8) + ('0' + n).slice(-2) : pz) : pz;
+    var future = today < a;
+    if (future) {
+      return '<div class="card"><div class="empty">Месяц еще не начался. План на него ставят в «План-факте».</div></div>';
     }
-    var cc = state._mkCross;
-    if (!cc) return box + '<div class="sk-list mg-pad"><div class="shim"></div><div class="shim"></div></div></div>';
-    if (cc === 'none' || !window.CROSSCUT || !window.CROSSCUT.week) {
-      return box + '<div class="mg-note">Сквозная не посчиталась. Обнови страницу через минуту.</div></div>';
-    }
-    var cur = window.CROSSCUT.week(cc, wk, end), prv = window.CROSSCUT.week(cc, pw, mgAdd(pw, 6));
-    var plan = (state._mgPlan && state._mgPlan[wk] && state._mgPlan[wk] !== 'wait') ? state._mgPlan[wk] : {};
-    var rows = [
-      ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', cur.leads, prv.leads, plan.leads],
-      ['Регистрации на интенсив', 'любой интенсив, по дате регистрации', cur.regs, prv.regs, null],
-      ['Разбор на платформе', 'анкета и разбор шансов на сайте', cur.diagPlat, prv.diagPlat, null],
-      ['Диагностика в боте', 'вошли в воронку теста', cur.diagStart, prv.diagStart, null],
-      ['Записались к диагносту', 'выбрали время разбора', cur.signed, prv.signed, null],
-      ['Разбор состоялся', 'встреча прошла', cur.meeting, prv.meeting, null],
-      ['Счета', 'выставлено', cur.invN, prv.invN, null],
-      ['Оплатили', 'людей', cur.payers, prv.payers, plan.payments],
-      ['Деньги', 'пришло на счет', cur.revenue, prv.revenue, plan.revenue, true],
-      ['Расход на рекламу', 'внесен в CRM', cur.spend, prv.spend, null, true]
-    ];
-    var anyPlan = rows.some(function (r) { return r[4] != null; });
-    return box + '<div class="mg-tbl' + (anyPlan ? '' : ' noplan') + '">' +
-      '<div class="mg-tr th"><span>Ступень</span>' + (anyPlan ? '<span class="r c-pl">План</span>' : '') +
-      '<span class="r">' + esc(mgDate(wk).getDate() + '–' + mgDate(end).getDate()) + '</span>' +
-      '<span class="r">' + esc(mgDate(pw).getDate() + '–' + mgDate(mgAdd(pw, 6)).getDate()) + '</span><span class="r c-dl"></span></div>' +
-      rows.map(function (r) {
-        var money = r[5], f = function (v) { return v == null ? '—' : money ? fmtMoney(Math.round(v)) + ' ₽' : mgNum(v); };
-        // Разница денег коротко, в тысячах: «−62 тыс.» читается быстрее, чем «−62 000 ₽».
-        var fd = function (v) { return money ? (Math.abs(v) >= 1000 ? Math.round(Math.abs(v) / 1000) + ' тыс.' : Math.round(Math.abs(v)) + ' ₽') : Math.abs(v); };
-        var dl = r[2] - r[3], cls = !dl ? '' : dl > 0 ? 'up' : 'down';
-        if (r[0] === 'Расход на рекламу') cls = '';
-        var pl = r[4] != null && r[4] > 0 ? (r[2] >= r[4] ? 'ok' : r[2] >= r[4] * .7 ? 'risk' : 'miss') : '';
-        return '<div class="mg-tr"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
-          (anyPlan ? '<span class="r num mute c-pl">' + (r[4] != null ? f(Math.round(r[4] * 10) / 10) : '') + '</span>' : '') +
-          '<span class="r num big ' + pl + '">' + f(r[2]) + '</span>' +
-          '<span class="r num mute">' + f(r[3]) + '</span>' +
-          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
-      }).join('') + '</div>' +
-      (anyPlan ? '<div class="mg-note">План недели — доля месячного плана из «План-факта» по дням.</div>' : '') +
-    '</div>';
+    return mgLadder({
+      title: going ? MG_MONN[mgDate(a).getMonth()] + ' на сегодня, ' + mgSpan(a, b) : MG_MONN[mgDate(a).getMonth()] + ' целиком',
+      sub: going ? 'рядом ' + mgSpan(pa, pb) + ', те же дни прошлого месяца' : 'рядом ' + MG_MONN[mgDate(pa).getMonth()].toLowerCase() + ' целиком',
+      cur: [a, b], prv: [pa, pb], plan: mgPlan(a, b), full: going ? mgPlan(a, z) : null, pf: true,
+      planLbl: going ? 'План к дате' : 'План',
+      curLbl: mgSpan(a, b), prvLbl: mgSpan(pa, pb),
+      note: going ? 'План к дате — сколько месячного плана приходится на прошедшие дни. Процент под фактом считается от него, а процент рядом с целью месяца — от всего плана.'
+        : 'План месяца из «План-факта».'
+    });
   }
 
   function mgHypRow(h, n, sub) {
@@ -35910,6 +36693,15 @@
       b.addEventListener('click', function () {
         state.mgShift = b.dataset.mgw === 'now' ? 0 : (state.mgShift || 0) + Number(b.dataset.mgw);
         renderView();
+      });
+    });
+    [['mgdw', 'mgDayShift'], ['mgmw', 'mgMonShift']].forEach(function (k) {
+      view.querySelectorAll('[data-' + k[0] + ']').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var v = b.getAttribute('data-' + k[0]);
+          state[k[1]] = v === 'now' ? 0 : (state[k[1]] || 0) + Number(v);
+          renderView();
+        });
       });
     });
     view.querySelectorAll('[data-mgdept]').forEach(function (b) {
@@ -37856,6 +38648,337 @@
      репозитории, а статика CRM раздается БЕЗ входа (§10.7): список всех людей
      компании с обязанностями открывался по прямой ссылке. ФИО вместе с
      ролью — персональные данные, и держать их открытыми нельзя. */
+  /* ── КАРТА КОМПАНИИ — вся работа одним взглядом ───────────────────────────
+     Виталий 19.10.2026: «я не успеваю за всеми нововведениями и информацией, хочу
+     в сжатом формате, с возможностью полноценно ознакомиться». Карта читает те же
+     цели, шаги и гипотезы, что задачник и РНП (eastside-backend
+     routers/company_map.py), и раскладывает их сверху вниз: компания, отдел, цель,
+     шаг. Своих данных у нее нет, кроме вопросов «ждет решения».
+
+     Не путать с «Картой» клиентов (`roadmap`): там семьи по этапам пути, здесь
+     работа команды. Поэтому и название другое.
+
+     Состояние узла и его причину считает сервер. Цвет на экране — только
+     следствие: зеленый идет, амбер отстает (причина словами рядом), синий ждет
+     решения руководителя. Синий здесь не второй акцент, а тот же «ожидание, не
+     авария», что у «Приглашен» в модуле самозанятых. */
+  var CM_ST = { ok: 'идет', lag: 'отстает', ask: 'ждет решения' };
+
+  function cmLoad(force) {
+    if (state._cmBusy || (state._cm && !force)) return;
+    state._cmBusy = true;
+    api('/admin/api/company-map').then(function (d) {
+      state._cmBusy = false; state._cm = d;
+      if (!state.cmDept) state.cmDept = cmFirstDept(d);
+      if (state.page === 'cmap') { renderHead(); renderView(); }
+    }).catch(function () {
+      state._cmBusy = false; state._cm = 'none';
+      if (state.page === 'cmap') renderView();
+    });
+  }
+  /* Открываем тот отдел, где больше всего работы для руководителя: сначала
+     вопросы к нему, потом отставание. Пустой экран с семью закрытыми ветками
+     заставил бы искать самому — ровно то, от чего карта и спасает. */
+  function cmFirstDept(d) {
+    var best = null, score = -1;
+    (d.depts || []).forEach(function (x) {
+      var s = x.ask * 1000 + x.lag;
+      if (s > score) { score = s; best = x.dept; }
+    });
+    return best == null ? '' : best;
+  }
+  function cmNodeLoad(id) {
+    state._cmNode = state._cmNode || {};
+    if (state._cmNode[id] && state._cmNode[id] !== 'wait') return;
+    state._cmNode[id] = 'wait';
+    api('/admin/api/company-map/node/' + id).then(function (d) {
+      state._cmNode[id] = d; if (state.page === 'cmap') renderView();
+    }).catch(function () {
+      state._cmNode[id] = 'none'; if (state.page === 'cmap') renderView();
+    });
+  }
+  function cmReload() {
+    state._cmNode = {};
+    cmLoad(true);
+  }
+
+  function cmDay(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1);
+  }
+  function cmNum(v) { return v == null ? '—' : String(v).replace('.', ','); }
+
+  /* Шапка раздела: две строки, ради которых карта и заведена. Первая — сколько
+     всего и сколько ждет его. Вторая — одна главная дыра словами. */
+  function cmHeadHtml() {
+    var d = state._cm;
+    var line = 'Цели всех отделов одной картой: кто ведет, какая цифра, где застряло.';
+    if (d && d !== 'none') {
+      var t = d.total;
+      // Разбивка обязана складываться в итог: вопросов на одной цели бывает
+      // несколько, поэтому считаем цели, а не вопросы.
+      var askG = (d.goals || []).filter(function (g) { return g.state === 'ask'; }).length;
+      line = '<b>' + t.goals + ' ' + plural(t.goals, 'цель', 'цели', 'целей') + ' в работе</b>: ' +
+        t.ok + ' ' + plural(t.ok, 'идет', 'идут', 'идут') + ', ' + t.lag + ' ' +
+        plural(t.lag, 'отстает', 'отстают', 'отстают') +
+        (askG ? ', <b>' + askG + ' ' + plural(askG, 'ждет', 'ждут', 'ждут') + ' твоего решения</b>' : '') + '. ' +
+        (t.no_steps ? 'Главная дыра: у ' + t.no_steps + ' ' + plural(t.no_steps, 'цели', 'целей', 'целей') +
+          ' нет ни одного шага, значит по ним никто ничего не делает.'
+          : t.late ? 'Просрочено ' + t.late + ' ' + plural(t.late, 'цель', 'цели', 'целей') + '.' : '');
+    }
+    return '<div><h2>Карта компании</h2><div class="verdict"><span class="vspark">' + ic('mindmap', 13) +
+      '</span><span>' + line + '</span></div></div>';
+  }
+
+  function cmAsksHtml(d) {
+    var asks = d.asks || [];
+    if (!asks.length) return '';
+    var rows = asks.map(function (a) {
+      var open = state.cmBack === a.id;
+      return '<div class="cm-ask" data-cmask="' + a.id + '">' +
+        '<div class="cm-ask-b">' +
+          '<div class="cm-ask-q">' + esc(a.question) + '</div>' +
+          '<div class="cm-ask-m"><button type="button" class="cm-link" data-cmtask="' + a.task_id + '">' +
+            esc(a.goal_title ? a.goal_title + ' → ' + a.task_title : a.task_title) + '</button>' +
+            '<span class="cm-who">' + esc(a.asked_by_name || 'кто-то из команды') + ' · ' + esc(fmtWhen(a.asked_at)) + '</span></div>' +
+          (open ? '<div class="cm-ask-f"><textarea class="al-in cm-ask-ta" id="cm-back-' + a.id + '" rows="2" maxlength="2000" ' +
+              'placeholder="Что не так или что уточнить"></textarea>' +
+              '<div class="cm-ask-fb"><button class="al-cancel" data-cmcancel="1">Отмена</button>' +
+              '<button class="bp" data-cmsend="' + a.id + '">Вернуть</button></div></div>' : '') +
+        '</div>' +
+        (open ? '' : '<div class="cm-ask-acts"><button class="bp sm" data-cmok="' + a.id + '">Утвердить</button>' +
+          '<button class="bp ghost sm" data-cmback="' + a.id + '">Вернуть с вопросом</button></div>') +
+      '</div>';
+    }).join('');
+    return '<div class="card cm-asks"><div class="sec-head pad"><span class="ic">' + ic('hand', 14) + '</span>' +
+      '<div><div class="t">Ждут твоего решения</div><div class="s">ответ уйдет человеку в бот и ляжет в ленту задачи</div></div>' +
+      '<span class="cnt">' + asks.length + '</span></div>' + rows + '</div>';
+  }
+
+  function cmDots(x) {
+    return '<span class="cm-dots">' +
+      (x.ok ? '<span class="cm-dot ok" title="идут"><i></i>' + x.ok + '</span>' : '') +
+      (x.lag ? '<span class="cm-dot lag" title="отстают"><i></i>' + x.lag + '</span>' : '') +
+      (x.ask ? '<span class="cm-dot ask" title="ждут решения"><i></i>' + x.ask + '</span>' : '') + '</span>';
+  }
+
+  function cmTreeHtml(d) {
+    var t = d.total, depts = d.depts || [];
+    var root = '<div class="org-one"><div class="org-node k-owner flat cm-root">' +
+      '<b>EastSide</b><i>' + depts.length + ' ' + plural(depts.length, 'ветка', 'ветки', 'веток') + ': общие цели и отделы</i>' +
+      cmDots({ ask: depts.reduce(function (n, x) { return n + x.ask; }, 0), lag: t.lag, ok: t.ok }) +
+      '</div></div>';
+    var cols = depts.map(function (x) {
+      var on = x.dept === state.cmDept;
+      return '<div class="org-col"><span class="org-tick"></span>' +
+        '<button type="button" class="org-node cm-dept s-' + x.state + (on ? ' on' : '') + '" data-cmdept="' + esc(x.dept) + '" aria-pressed="' + on + '">' +
+          '<b>' + esc(x.label) + '</b>' +
+          '<i>' + esc(x.head ? x.head.name : x.dept ? 'руководитель не назначен' : 'без отдела') + '</i>' +
+          '<span class="cm-bar" title="шаги целей: ' + x.steps_done + ' из ' + x.steps_total + '"><span style="width:' + x.pct + '%"></span></span>' +
+          '<span class="cm-dl">' + x.goals + ' ' + plural(x.goals, 'цель', 'цели', 'целей') + cmDots(x) + '</span>' +
+        '</button></div>';
+    }).join('');
+    return '<div class="card org-board cm-board"><div class="org-tree">' + root +
+      '<div class="org-stem"></div><div class="org-cols cm-cols" style="--org-n:' + depts.length + '">' + cols + '</div></div>' +
+      '<div class="cm-legend"><span class="cm-dot ok"><i></i>идет</span><span class="cm-dot lag"><i></i>отстает</span>' +
+      '<span class="cm-dot ask"><i></i>ждет решения</span><span class="cm-lg-s">полоса: сколько шагов целей уже сделано</span></div></div>';
+  }
+
+  function cmMetric(g) {
+    if (g.hyp) {
+      var h = g.hyp;
+      // Неразрывные пробелы: «регистрации» не должно отрываться от «290 → 400».
+      return '<span class="cm-met"><b>' + esc(h.metric) + '</b>&nbsp;' +
+        (h.base != null ? cmNum(h.base) + '&nbsp;→&nbsp;' : '') + cmNum(h.target) +
+        // Факт до срока — это ход, а не провал: красным на карте горит только
+        // просрочка, иначе цель в процессе выглядит аварией.
+        (h.fact != null ? ' · <b' + (h.fact >= h.target ? ' class="ok"' : '') + '>факт ' + cmNum(h.fact) + '</b>' : '') + '</span>';
+    }
+    if (!g.steps_total) return '';
+    return '<span class="cm-met"><b>' + g.steps_done + ' из ' + g.steps_total + '</b> ' +
+      plural(g.steps_total, 'шага', 'шагов', 'шагов') + ' сделано' +
+      (g.steps_review ? ' · ' + g.steps_review + ' на приемке' : '') + '</span>';
+  }
+
+  function cmNodeHtml(g) {
+    var n = (state._cmNode || {})[g.id];
+    if (!n || n === 'wait') return '<div class="cm-body"><div class="sk-list"><div class="shim"></div><div class="shim"></div></div></div>';
+    if (n === 'none') return '<div class="cm-body"><div class="cm-note">Не загрузилось. <button class="cm-link" data-cmretry="' + g.id + '">Еще раз</button></div></div>';
+    var steps = n.steps.map(function (s) {
+      var st = TASK_ST[s.status] || TASK_ST.wait;
+      return '<button type="button" class="cm-step' + (s.late ? ' late' : '') + '" data-cmtask="' + s.id + '">' +
+        '<span class="cm-step-t">' + esc(s.title) + '</span>' +
+        '<span class="cm-step-m">' + esc(s.assignee_name || 'без исполнителя') +
+          (s.due_at ? ' · ' + (s.late ? 'просрочен с ' : 'до ') + cmDay(s.due_at) : '') + '</span>' +
+        '<span class="cm-step-c">' +
+          (s.asks_open ? '<span class="sev cm-askchip">' + ic('hand', 11) + 'ждет решения</span>' : '') +
+          '<span class="sev ' + st.cls + '">' + esc(st.label) + '</span></span></button>';
+    }).join('');
+    var asks = n.asks.filter(function (a) { return a.verdict; }).slice(0, 3).map(function (a) {
+      return '<div class="cm-hist"><b>' + esc(a.question) + '</b><span>' +
+        (a.verdict === 'ok' ? 'Утверждено' : 'Вернули с вопросом') + (a.answer ? ': ' + esc(a.answer) : '') +
+        ' · ' + esc(a.answered_by_name || '') + ' · ' + esc(fmtWhen(a.answered_at)) + '</span></div>';
+    }).join('');
+    var like = n.similar.map(function (s) {
+      return '<button type="button" class="cm-like" data-cmtask="' + s.id + '"><b>' + esc(s.title) + '</b>' +
+        '<span>' + esc(s.assignee_name || 'без ведущего') + (s.closed_at ? ' · закрыта ' + cmDay(s.closed_at) : '') + '</span></button>';
+    }).join('');
+    return '<div class="cm-body">' +
+      (n.goal.result_expect ? '<div class="cm-exp"><span class="po-lbl">Как поймем, что дошли</span>' + esc(n.goal.result_expect) + '</div>' : '') +
+      '<div class="cm-sec"><span class="po-lbl">Шаги</span>' +
+        (steps || '<div class="cm-note">Шагов нет. Открой цель и нажми «Разложить»: компаньон предложит шаги по людям отдела.</div>') + '</div>' +
+      (asks ? '<div class="cm-sec"><span class="po-lbl">Решения</span>' + asks + '</div>' : '') +
+      (like ? '<div class="cm-sec"><span class="po-lbl">Похожее уже делали</span>' + like + '</div>' : '') +
+      '<div class="cm-foot"><button class="bp ghost sm" data-cmtask="' + g.id + '">Открыть цель</button></div>' +
+    '</div>';
+  }
+
+  function cmGoalsHtml(d) {
+    var dept = (d.depts || []).filter(function (x) { return x.dept === state.cmDept; })[0];
+    if (!dept) return '';
+    var goals = (d.goals || []).filter(function (g) { return g.dept === dept.dept; });
+    var open = state.cmOpen;
+    var rows = goals.map(function (g) {
+      var on = open === g.id;
+      // Каждый факт называем один раз: «нет ведущего» и «нет шагов» живут чипом,
+      // просрочка — красной датой в строке, а не еще одним чипом рядом.
+      var late = g.why.indexOf('просрочена') !== -1;
+      var why = g.why.filter(function (w) { return w !== 'просрочена'; })
+        .map(function (w) { return '<span class="cm-why">' + esc(w) + '</span>'; }).join('');
+      var met = cmMetric(g);
+      var meta = [];
+      if (g.assignee_name) meta.push(esc(g.assignee_name));
+      if (g.due_at) meta.push(late ? '<span class="cm-late">просрочена с ' + cmDay(g.due_at) + '</span>' : 'до ' + cmDay(g.due_at));
+      if (met) meta.push(met);
+      return '<div class="cm-goal s-' + g.state + (on ? ' on' : '') + '">' +
+        '<button type="button" class="cm-grow" data-cmgoal="' + g.id + '" aria-expanded="' + on + '">' +
+          '<span class="cm-gb"><span class="cm-gt">' + esc(g.title) + '</span>' +
+            (meta.length ? '<span class="cm-gm">' + meta.join(' · ') + '</span>' : '') +
+            (why || g.asks_open ? '<span class="cm-whys">' +
+              (g.asks_open ? '<span class="cm-why ask">' + g.asks_open + ' ' + plural(g.asks_open, 'вопрос', 'вопроса', 'вопросов') + ' к тебе</span>' : '') +
+              why + '</span>' : '') +
+          '</span>' +
+          '<span class="org-plus">' + ic('plus', 13) + '</span>' +
+        '</button>' +
+        (on ? cmNodeHtml(g) : '') +
+      '</div>';
+    }).join('');
+    return '<div class="card cm-branch"><div class="sec-head pad"><div><div class="t">' + esc(dept.label) + '</div>' +
+      '<div class="s">' + esc(dept.head ? 'ведет ' + dept.head.name + ' · ' : '') + dept.goals + ' ' +
+        plural(dept.goals, 'цель', 'цели', 'целей') + ', сверху то, что ждет решения и отстает</div></div></div>' +
+      (rows || '<div class="cm-note">Живых целей нет.</div>') + '</div>';
+  }
+
+  function renderCmap(view) {
+    if (!state._cm) {
+      cmLoad();
+      view.innerHTML = '<div class="dash cm"><div class="card"><div class="sk-list"><div class="shim"></div><div class="shim"></div><div class="shim"></div></div></div></div>';
+      return;
+    }
+    if (state._cm === 'none') {
+      view.innerHTML = '<div class="dash cm"><div class="card"><div class="empty">Карта не загрузилась. ' +
+        '<button class="bp ghost" data-cmreload="1">Попробовать еще раз</button></div></div></div>';
+      view.querySelector('[data-cmreload]').addEventListener('click', function () { state._cm = null; renderView(); });
+      return;
+    }
+    var d = state._cm;
+    if (state.cmOpen) cmNodeLoad(state.cmOpen);
+    view.innerHTML = '<div class="dash cm">' + cmAsksHtml(d) + cmTreeHtml(d) + cmGoalsHtml(d) + '</div>';
+    cmBind(view);
+  }
+
+  function cmBind(view) {
+    view.querySelectorAll('[data-cmdept]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.cmDept = b.getAttribute('data-cmdept'); state.cmOpen = null; renderView();
+        var br = view.querySelector('.cm-branch');
+        var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // На телефоне ветки идут столбиком, и список целей оказывается за экраном:
+        // нажатие без прокрутки выглядело бы как «ничего не случилось».
+        if (br && window.innerWidth <= 860) br.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+      });
+    });
+    view.querySelectorAll('[data-cmgoal]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-cmgoal');
+        state.cmOpen = state.cmOpen === id ? null : id;
+        renderView();
+        var again = view.querySelector('[data-cmgoal="' + id + '"]');
+        if (again) again.focus();
+      });
+    });
+    view.querySelectorAll('[data-cmtask]').forEach(function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-cmtask')); });
+    });
+    view.querySelectorAll('[data-cmretry]').forEach(function (b) {
+      b.addEventListener('click', function () { delete state._cmNode[b.getAttribute('data-cmretry')]; renderView(); });
+    });
+    view.querySelectorAll('[data-cmback]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.cmBack = +b.getAttribute('data-cmback'); renderView();
+        var ta = el('cm-back-' + state.cmBack); if (ta) ta.focus();
+      });
+    });
+    view.querySelectorAll('[data-cmcancel]').forEach(function (b) {
+      b.addEventListener('click', function () { state.cmBack = null; renderView(); });
+    });
+    view.querySelectorAll('[data-cmok]').forEach(function (b) {
+      b.addEventListener('click', function () { cmAnswer(+b.getAttribute('data-cmok'), 'ok', '', b); });
+    });
+    view.querySelectorAll('[data-cmsend]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-cmsend'), ta = el('cm-back-' + id);
+        var txt = ta ? ta.value.trim() : '';
+        if (!txt) { if (ta) ta.focus(); showToast('Напиши, что не так: без этого человек будет гадать'); return; }
+        cmAnswer(id, 'back', txt, b);
+      });
+    });
+  }
+
+  function cmAnswer(id, verdict, answer, btn) {
+    btn.disabled = true;
+    apiSend('/admin/api/company-map/asks/' + id + '/answer', 'POST', { verdict: verdict, answer: answer }, function () {
+      state.cmBack = null;
+      showToast(verdict === 'ok' ? 'Утвердил, человек получит ответ в бот' : 'Вернул с вопросом, человек получит его в бот');
+      cmReload();
+    }, function (code, e) {
+      btn.disabled = false;
+      if (code === 409) { showToast('На этот вопрос уже ответили'); cmReload(); return; }
+      showToast((e && e.body && e.body.detail) || 'Не сохранилось, проверь сеть');
+    });
+  }
+
+  /* Вопрос руководителю из карточки задачи. Спрашивает тот, кто ведет работу:
+     поле встает на место кнопок карточки, отдельного окна поверх окна нет
+     (design.md §7.6, вложенные модалки). */
+  function taskAskForm(ov, t, reload) {
+    var foot = ov.querySelector('.tsk-acts');
+    if (!foot) return;
+    foot.innerHTML = '<div class="tsk-ask"><label class="tsk-askh" for="tk-askq">' + ic('hand', 13) +
+        'Вопрос руководителю по этой задаче</label>' +
+      '<textarea class="al-in tsk-askta" id="tk-askq" rows="2" maxlength="1000" ' +
+        'placeholder="Что нужно решить? Например: берем посевы на 60 тысяч или режем до 40"></textarea>' +
+      '<div class="tsk-askb"><span class="tsk-askn">Вопрос уйдет руководителю в бот и встанет на карту компании</span>' +
+        '<button class="al-cancel" id="tk-askx">Отмена</button><button class="bp" id="tk-asks">Спросить</button></div></div>';
+    var q = el('tk-askq');
+    q.focus();
+    el('tk-askx').addEventListener('click', reload);
+    el('tk-asks').addEventListener('click', function () {
+      var txt = q.value.trim();
+      if (txt.length < 5) { q.focus(); showToast('Напиши вопрос так, чтобы на него можно было ответить'); return; }
+      var b = this; b.disabled = true;
+      apiSend('/admin/api/company-map/asks', 'POST', { task_id: t.id, question: txt }, function () {
+        showToast('Вопрос ушел руководителю');
+        state._cm = null;
+        reload();
+      }, function (code, e) {
+        b.disabled = false;
+        showToast((e && e.body && e.body.detail) || 'Не отправилось, проверь сеть');
+      });
+    });
+  }
+
   function fetchOrg() {
     api('/admin/api/org')
       .then(function (d) { state._org = d; if (state.page === 'org') renderView(); })
@@ -40902,7 +42025,11 @@
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
-      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') + '"' +
+      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') +
+        (s.drag ? ' movable' : '') + '"' +
+        /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
+           порядок, draggable — чтобы браузер вообще начал её тащить. */
+        (s.drag && s.key ? ' draggable="true" data-tile="' + s.key + '"' : '') +
         (s.go ? ' data-go="' + s.go + '"' : '') +
         /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
            вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
@@ -40915,6 +42042,16 @@
            Поэтому кегль выбирается по длине: считаем текст без разметки. */
         '<div class="sv num' + svFit(s) + '">' + s.value + '</div>' +
         '<div class="sd">' + foot + '</div>' +
+        /* Доля плитки от предыдущего шага воронки (экран запусков). Отдельной
+           строкой под подписью, а не внутри неё: это ответ на другой вопрос —
+           не «что это за число», а «много это или мало». */
+        /* Доля бывает не одна: у диагностики и записи на консультацию знаменателей
+           несколько — зал, регистрации, предыдущий шаг. Каждая своей строкой. */
+        (s.pct
+          ? (Array.isArray(s.pct) ? s.pct : [s.pct]).filter(Boolean).map(function (x) {
+              return '<div class="spct num">' + x + '</div>';
+            }).join('')
+          : '') +
       '</button>';
     }).join('') + '</div>';
   }
@@ -43452,9 +44589,19 @@
       if (q && ((c.name || '') + ' ' + (c.last_text || '')).toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
+    /* Выбранного диалога нет среди ЗАГРУЖЕННЫХ вовсе (а не просто отфильтрован) —
+       значит пришли по ссылке #dialog/<id> на переписку за пределом выдачи. Открыть
+       вместо нее первую в списке нельзя: 01.11.2026 так и вышло — по ссылке на одну
+       семью показали чужой диалог, и это заметил оператор, а не мы. Молчать тут
+       опаснее пустого экрана: менеджер пишет не тому человеку. */
+    var missingSel = state.inboxSel &&
+      !convos.some(function (c) { return String(c.id) === String(state.inboxSel); })
+      ? state.inboxSel : null;
+    if (missingSel) state.inboxSel = null;
     if (!state.inboxSel || !list.some(function (c) { return String(c.id) === String(state.inboxSel); })) {
       state.inboxSel = list[0] ? list[0].id : null;
     }
+    if (missingSel) state.inboxSel = null;
 
     var chips = '<button class="tg-fch' + (!state.inboxCh ? ' on' : '') + '" data-ch="">Все</button>' +
       CHAN_ORDER.map(function (k) {
@@ -43481,9 +44628,14 @@
     }
     var rows = list.length ? list.map(rowHtml).join('') : '<div class="tg-empty-list">Ничего не найдено</div>';
 
+    var missBanner = missingSel
+      ? '<div class="tg-empty-list" style="color:var(--ink)">Диалог не открылся: его нет среди загруженных. ' +
+        'Найдите человека в мессенджере напрямую и скажите нам — поднимем выдачу.</div>'
+      : '';
+
     view.innerHTML =
       '<div class="tg' + (state.inboxSel ? ' show-chat' : '') + '" id="tg">' +
-        '<aside class="tg-list">' + inboxSwitch() +
+        '<aside class="tg-list">' + inboxSwitch() + missBanner +
           '<div class="tg-search"><span class="searchwrap">' + ic('leads', 15) + '<input id="tg-q" class="search" type="search" placeholder="Поиск диалога" autocomplete="off"></span></div>' +
           '<div class="tg-fchips">' + chips + '</div>' +
           '<div class="tg-rows" id="tg-rows">' + rows + '</div>' +
@@ -48405,31 +49557,57 @@
     }).join('') + '</select>';
   }
 
+  /* Служебные записи кладет не человек, а сам продукт: запись речи с языкового
+     теста лежит в документах дела только потому, что своего хранилища у нее нет
+     (она привязана к попытке, бэкенд — doc_checklist.SERVICE_KINDS). В кабинете
+     семьи такие строки спрятаны, а в карточке торчали машинным именем
+     «det-speaking-17.webm» и техническим словом в выпадашке категорий: 02.11.2026
+     Мария приняла такую запись за видео-визитку, открыла ее прямой ссылкой и
+     увидела черный экран. Картинки там нет вовсе, это звук. */
+  var DOC_SERVICE_KINDS = { det_speaking: 'Устный ответ на языковом тесте' };
+  function docService(dc) {
+    var name = DOC_SERVICE_KINDS[String(dc.kind || '').trim().toLowerCase()];
+    if (!name) return '';
+    var n = /(\d+)/.exec(String(dc.name || ''));
+    return name + (n ? ', задание ' + n[1] : '');
+  }
+  /* Звук новой вкладкой не открываем: браузер рисует черный прямоугольник
+     видеоплеера, и живой файл выглядит сломанным. Слушаем прямо в строке. */
+  function docIsAudio(dc) { return String(dc.mime || '').indexOf('audio/') === 0; }
+
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
       /* Внешняя ссылка открывается как есть, файл в Storage — через openDoc. */
       var href = dc.link || '#';
       var by = docBy(dc);
+      var svc = docService(dc);
+      var audio = docIsAudio(dc);
       var meta = [dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
       var m = (by ? '<span class="doc-by' + (dc.uploaded_side === 'team' ? ' doc-by-own' : '') + '">' + esc(by) + '</span> · ' : '') + esc(meta);
-      return '<div class="doc-row" data-did="' + dc.id + '">' +
-        '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
-        '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div>' +
+      return '<div class="doc-row' + (svc ? ' doc-row--svc' : '') + '" data-did="' + dc.id + '">' +
+        '<span class="doc-ic">' + ic(svc ? 'mic' : dc.link ? 'ext' : 'doc', 17) + '</span>' +
+        '<div class="doc-b"><div class="doc-n">' + esc(svc || dc.name) + '</div>' +
           '<div class="doc-m">' +
-            // Категория правится прямо в строке: именно она закрывает пункт пакета в
-            // кабинете семьи, и поймать чужую ошибку проще там, где файл видно.
-            docKindSelect('doc-kind', '', dc.kind) +
-            // Статус правится там же, где видно файл: до этого поменять его из CRM
-            // было нельзя вовсе, и «нужна замена» стояло только у меня в базе.
-            docStSelect(dc.status) +
+            // У служебной записи ни категории, ни статуса нет: пакет документов она
+            // не закрывает, а статус читает семья, которой эта строка не видна.
+            (svc ? '<span class="doc-svc">запись тренажера, семья ее не видит</span>'
+              // Категория правится прямо в строке: именно она закрывает пункт пакета в
+              // кабинете семьи, и поймать чужую ошибку проще там, где файл видно.
+              : docKindSelect('doc-kind', '', dc.kind) +
+                // Статус правится там же, где видно файл: до этого поменять его из CRM
+                // было нельзя вовсе, и «нужна замена» стояло только у меня в базе.
+                docStSelect(dc.status)) +
             (m ? '<span class="doc-mt">' + m + '</span>' : '') +
           '</div>' +
           // Причина разворота — ровно тот текст, который семья читает в кабинете
           '<div class="doc-why"' + (dc.review_note ? '' : ' hidden') + '>' +
             esc(dc.review_note || '') + '</div>' +
+          (audio ? '<div class="doc-audio" hidden></div>' : '') +
         '</div>' +
         '<div class="doc-act">' +
+          (audio ? '<button class="icobtn" data-docplay="' + dc.id + '" title="Прослушать">' +
+            ic('play', 14) + '</button>' : '') +
           '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
             ' href="' + esc(dc.link ? safeHref(href) : href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
             ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
@@ -50098,6 +51276,27 @@
       a.addEventListener('click', function (e) {
         e.preventDefault();
         openDoc(a.getAttribute('data-docdl'));
+      });
+    });
+    /* Звук играет в самой строке: ссылка на Storage, открытая вкладкой, дает
+       черный экран видеоплеера, и файл читается как сломанный. Ссылку резолвим
+       тем же resolveDocLink, что и превью сдач, — подпись у нее не вечная,
+       поэтому плеер строим один раз на показ. */
+    Array.prototype.forEach.call(host.querySelectorAll('[data-docplay]'), function (b) {
+      b.addEventListener('click', function () {
+        var row = b.closest('.doc-row');
+        var box = row && row.querySelector('.doc-audio');
+        if (!box) return;
+        if (box.firstChild) { box.hidden = !box.hidden; row.classList.toggle('playing', !box.hidden); return; }
+        b.disabled = true;
+        resolveDocLink(b.getAttribute('data-docplay'), function (url) {
+          b.disabled = false;
+          if (!url) { showToast('Запись не открылась — проверь сеть'); return; }
+          var au = document.createElement('audio');
+          au.controls = true; au.preload = 'none'; au.src = url;
+          box.appendChild(au); box.hidden = false; row.classList.add('playing');
+          au.play().catch(function () {});
+        });
       });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-deldoc]'), function (b) {
