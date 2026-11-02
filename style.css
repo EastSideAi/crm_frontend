@@ -14086,7 +14086,7 @@ video.cs-media { background: #000; }
   .mg-btnph { display: none; }
   .mg-tr .c-pl, .mg-tr .c-dl { display: none; }
   /* На телефоне у дня и месяца остается план и факт, сравнение уходит */
-  .mg-tbl.pf:not(.noplan) .mg-tr { grid-template-columns: minmax(0, 1fr) 84px 84px; }
+  .mg-tbl.pf:not(.noplan) .mg-tr { grid-template-columns: minmax(0, 1fr) 72px 72px; }
   .mg-tbl.pf:not(.noplan) .mg-tr .c-pl { display: block; }
   .mg-tbl.pf:not(.noplan) .mg-tr .c-pv { display: none; }
   .mg-tr .num.big { font-size: 17px; }

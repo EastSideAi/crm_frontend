@@ -3323,9 +3323,11 @@
     if (state.page === 'manage') {
       html = '<div><h2>Управление</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('helm', 13) + '</span><span>' +
-        (mgTab() === 'leads'
-          ? 'Новые лиды недели. Отметь текущих клиентов, дубли и спам: они уйдут из счета сквозной и план-факта, карточка останется.'
-          : 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
+        (({
+          leads: 'Новые лиды недели. Отметь текущих клиентов, дубли и спам: они уйдут из счета сквозной и план-факта, карточка останется.',
+          day: 'Сверка дня: <b>вчерашние цифры против плана дня</b>. Зеленое — план сделан, желтое — близко, красное — сильно ниже.',
+          month: 'Месяц против плана. Идущий месяц сверяется <b>с тем, что должны были сделать к этой дате</b>, а не со всем планом сразу.'
+        })[mgTab()] || 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
         '</span></div></div>';
     }
     if (state.page === 'cmap') html = cmHeadHtml();
@@ -36076,6 +36078,8 @@
 
   function renderManage(view) {
     var tab = mgTab();
+    // Подпись в шапке своя у каждой вкладки, а вкладку меняют и клик, и ссылка.
+    if (state._mgHeadTab !== tab) { state._mgHeadTab = tab; renderHead(); }
     var depts = ['', 'marketing', 'sales', 'product', 'edu', 'teach', 'finance', 'manage'];
     var deptBar = tab !== 'rnp' ? '' : '<div class="list-quick mg-depts">' + depts.map(function (d) {
       return '<button class="qchip' + ((state.mgDept || '') === d ? ' on' : '') + '" data-mgdept="' + d + '">' +
@@ -36219,7 +36223,7 @@
   function mgDayHtml() {
     var d = mgDay(), p = mgAdd(d, -7);
     return mgLadder({
-      title: (state.mgDayShift ? 'Цифры за ' : 'Вчера, ') + mgDayLabel(d),
+      title: (state.mgDayShift ? 'Цифры за ' : 'Вчера, ') + mgSpan(d, d),
       sub: 'лестница сквозной, рядом ' + MG_WD[mgDate(p).getDay()] + ' неделей раньше',
       cur: [d, d], prv: [p, p], plan: mgPlan(d, d), full: null, pf: true,
       curLbl: mgSpan(d, d), prvLbl: mgSpan(p, p),
