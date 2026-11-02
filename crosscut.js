@@ -153,7 +153,8 @@ window.CROSSCUT = (function () {
     var LAUNCH = {
       title: 'Интенсив 28–29 октября',
       from: '2026-10-01',
-      camps: {'intensiv-okt': 1, 'diag': 1}
+      camps: {'intensiv-okt': 1, 'intensiv-2829okt': 1, 'intensiv2': 1,
+              'intensiv_zak': 1, 'guide5': 1, 'guide5_insta': 1, 'diag': 1}
     };
 
     var TODAY = SNAP.snap.slice(0, 10);
