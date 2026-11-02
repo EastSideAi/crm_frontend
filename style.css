@@ -1913,6 +1913,17 @@ a { color: inherit; text-decoration: none; }
 .doc-why { margin-top: 5px; font-size: 12px; line-height: 1.45; color: #8A5A15;
   background: rgba(224, 146, 47, .09); border-radius: 8px; padding: 6px 9px; }
 .doc-why[hidden] { display: none; }
+/* Служебная запись продукта (речь с языкового теста) лежит в тех же документах,
+   но документом дела не является: пакет не закрывает и семье не видна. Поэтому
+   строка приглушена, иконка микрофонная, а вместо полей стоит подпись — чтобы
+   никто больше не принял ее за видео-визитку (Мария 02.11.2026). */
+.doc-row--svc .doc-ic { background: var(--fill); color: var(--ink-3); }
+.doc-row--svc .doc-n { font-weight: 500; color: var(--ink-2); }
+.doc-svc { color: var(--ink-3); font-style: italic; }
+/* Плеер строит сам браузер, нам остается место под него и ширина по строке. */
+.doc-audio { margin-top: 7px; }
+.doc-audio[hidden] { display: none; }
+.doc-audio audio { width: 100%; max-width: 360px; height: 34px; display: block; }
 /* Строки, вписанные семьей руками (телефон и адрес в Китае). Файла у них нет, и
    строкой документа они быть не могут — но спрашиваются в том же пакете, поэтому
    стоят над архивом плотным блоком, без иконок и кнопок: тут нечего открывать. */
