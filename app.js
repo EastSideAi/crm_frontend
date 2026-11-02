@@ -122,8 +122,8 @@
     // свободен» (Павел 26.10.2026). Сетка команды — вторым переключателем.
     schedScope: 'my', schedHow: false, schedHide: {},
     // Встречи — одна сетка в двух видах: 'slots' (часы на дни, как в расписании)
-    // и 'cal' (месяц целиком, как гугл-календарь). Раздела «Расписание» в меню
-    // больше нет: 16.09.2026 Павел свел оба места в одно.
+    // и 'cal' (месяц целиком, как гугл-календарь). С 02.11.2026 это раздел
+    // «Расписание» в меню, под «Задачами».
     meetView: 'slots', meetMonth: 0, meetMonthData: {},
     news: null, newsUnread: 0,
     teamMode: 'office', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
@@ -2425,6 +2425,10 @@
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
        Отдельным пунктом под «Задачами» и открыт всем, у кого есть задачи
        (Павел 06.10.2026): встречи проводит вся команда, а не руководители. */
+    /* «Расписание» — свой пункт под «Задачами» (Павел 02.11.2026): вкладкой внутри
+       EastSide Meeting сетка часов терялась среди встреч и записей, а ходят в нее
+       каждый день — посмотреть, кто к тебе записан, и поставить свои часы. */
+    { id: 'sched', label: 'Расписание', icon: 'cal', cap: 'tasks' },
     { id: 'meetx', label: 'EastSide Meeting', short: 'Meeting', icon: 'mic', cap: 'tasks' },
     /* «Фокус недели» и «Застряло» больше не пункты меню: с 06.10.2026 это срезы
        вкладки «Команда» внутри «Задач» (Павел: «перенести фильтрами в задачник и
@@ -3919,10 +3923,12 @@
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
       return;
     }
-    // «Расписание» и вкладка «Встречи» в задачах переехали в EastSide Meeting
-    // (06.10.2026). Старые страницы и закладки ведут туда же, куда раньше.
-    if (state.page === 'sched' || (state.page === 'tasks' && state.taskSeg === 'meet')) {
-      state.page = 'meetx'; state.taskSeg = 'week'; state.mxTab = 'sched';
+    // Вкладка «Встречи» в задачах и вкладка «Расписание» в EastSide Meeting стали
+    // разделом «Расписание» (02.11.2026). Старые закладки ведут туда же.
+    if ((state.page === 'tasks' && state.taskSeg === 'meet') ||
+        (state.page === 'meetx' && state.mxTab === 'sched')) {
+      if (state.page === 'tasks') state.taskSeg = 'week';
+      state.page = 'sched'; state.mxTab = 'soon';
     }
     // «Фокус недели» и «Застряло» переехали в срезы вкладки «Команда» (06.10.2026).
     // Старые ссылки из бота и закладки ведут туда же, куда раньше.
@@ -3958,6 +3964,7 @@
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'meetx') renderMeetx(view);
+    else if (state.page === 'sched') renderSchedPage(view);
     else if (state.page === 'news') renderNews(view);
     else if (state.page === 'workshops') renderWorkshops(view);
     else if (state.page === 'team') renderTeam(view);
@@ -8803,7 +8810,7 @@
     var fit = function (p) { return !who || p === who; };
     // Фильтр направления из шапки раздела режет и планерки: отдел у них свой
     // (kind, с 17.09.2026) и справочник тот же, что у зумов.
-    var deptKinds = state.page === 'meetx' && state.meetxDept ? mxDeptKinds(state.meetxDept) : null;
+    var deptKinds = state.page === 'sched' && state.meetxDept ? mxDeptKinds(state.meetxDept) : null;
     var meets = (d.meetings || []).filter(function (m) {
       if (deptKinds && deptKinds.indexOf(m.kind) === -1) return false;
       return m.date === day && hour >= m.hour && hour < m.hour + m.duration &&
@@ -10490,7 +10497,7 @@
   /* Расписание, зумы и журнал записей живут теперь в разделе EastSide Meeting,
      а не во вкладке задач. Ответы к ним приходят через секунду, и перерисовывать
      экран можно, только если человек с него не ушел. */
-  function onMeetPage() { return state.page === 'meetx'; }
+  function onMeetPage() { return state.page === 'meetx' || state.page === 'sched'; }
 
   function meetLens() {
     var at = meetView();
@@ -10499,10 +10506,9 @@
       '<button type="button" class="' + (at === 'cal' ? 'on' : '') + '" data-mlens="cal">Календарь</button></div>';
   }
 
-  /* gridOnly — сетка без списков под ней. Во вкладке «Расписание» раздела
-     EastSide Meeting свои встречи и журнал записей лежат в соседних вкладках
-     («Ближайшие» и «Записи»), и повторять их под сеткой значит показать одно и
-     то же дважды на одном экране. */
+  /* gridOnly — сетка без списков под ней. В разделе «Расписание» свои встречи и
+     журнал записей не повторяем: они живут в EastSide Meeting («Ближайшие» и
+     «Записи»), и второй их копии рядом с сеткой не нужно. */
   function renderMeetings(view, gridOnly) {
     view.innerHTML = '<div id="mt-pane"></div>';
     var pane = el('mt-pane');
@@ -30460,7 +30466,7 @@
         '<span class="mx-act-b"><b>Запланировать</b>' +
           '<i>' + (on ? 'позову людей и напомню' : 'тоже ждет сервер встреч') +
           '</i></span></button>',
-      /* Свое свободное время отмечали во вкладке «Расписание», и до него никто не
+      /* Свое свободное время отмечали в «Расписании», и до него никто не
          доходил: в сетке продаж не было ни одного окна, а лид в боте и на сайте
          видит ровно эти окна (Павел 26.10.2026). Теперь это действие раздела, а
          не настройка внутри вкладки. */
@@ -30483,16 +30489,15 @@
     return '<div class="pay-seg plan-seg mx-tabs">' +
       '<button type="button" class="' + (tab === 'soon' ? 'on' : '') + '" data-mxtab="soon">' +
         'Ближайшие' + (soon ? '<i class="mx-tn num">' + soon + '</i>' : '') + '</button>' +
-      '<button type="button" class="' + (tab === 'sched' ? 'on' : '') + '" data-mxtab="sched">Расписание</button>' +
       '<button type="button" class="' + (tab === 'rec' ? 'on' : '') + '" data-mxtab="rec">Записи</button>' +
       '</div>';
   }
   function mxTab() {
     var t = state.mxTab;
-    return t === 'rec' || t === 'sched' ? t : 'soon';
+    return t === 'rec' ? t : 'soon';
   }
-  /* Шапка раздела одна на все вкладки, поэтому и обработчики у нее общие:
-     «Расписание» рисует себя само и до своего кода не доходит. */
+  /* Шапка раздела одна на все вкладки, поэтому и обработчики у нее общие.
+     Чипы направлений и их обработчик делит с разделом «Расписание». */
   function mxWireTop(view) {
     el('mx-start') && el('mx-start').addEventListener('click', function () {
       if (!meetOn()) { mxNoServer(); return; }
@@ -30505,9 +30510,8 @@
     el('mx-slots') && el('mx-slots').addEventListener('click', function () {
       // Открываем расписание сразу в режиме отметки: человек пришел ставить часы,
       // а не смотреть сетку.
-      state.mxTab = 'sched';
       state.schedEdit = true;
-      saveUi(); renderHead(); renderView();
+      setPage('sched');
     });
     /* Шапка раздела считает идущие встречи тем же счетом, что и список, поэтому
        перерисовывается вместе с ним: иначе на одном экране оказывались два разных
@@ -30567,7 +30571,7 @@
     /* «Из офиса» стоит в том же ряду, что направления, но это другой вопрос:
        не чья встреча, а где она прошла. Разговоры в голосовых каналах иначе
        терялись среди назначенных встреч (Павел 26.10.2026). */
-    var office = mxTab() === 'rec'
+    var office = state.page === 'meetx' && mxTab() === 'rec'
       ? '<button type="button" class="qchip mx-office-chip' + (state.meetxOffice ? ' on' : '') +
           '" data-mxoffice="1">' + ic('mic', 13) + 'Из офиса</button>'
       : '';
@@ -30581,9 +30585,9 @@
   }
   function mxScopeSeg() {
     var d = state.meetx;
-    // В «Расписании» свой выбор человека («Все люди» / «Только мои встречи»), и
-    // второй переключатель про то же самое рядом только путает.
-    if (mxTab() === 'sched') return '';
+    // В «Расписании» свой выбор человека («Мое» / «Вся команда»), и второй
+    // переключатель про то же самое рядом только путает.
+    if (state.page === 'sched') return '';
     if (!d || d === 'none' || !d.can_all) return '';
     return '<div class="pay-seg plan-seg">' +
       '<button type="button" class="' + (state.meetxScope === 'my' ? '' : 'on') + '" data-mxscope="all">Вся команда</button>' +
@@ -30917,19 +30921,17 @@
       });
     });
   }
+  /* Раздел «Расписание» (02.11.2026, Павел: «лучше и менее нагрузочно, если
+     сделаем его отдельным блоком»). От журнала встреч не зависит и его не ждет:
+     сетка сама грузит данные и вешает обработчики, сверху только чипы
+     направлений, общие с EastSide Meeting. */
+  function renderSchedPage(view) {
+    view.innerHTML = mxDeptChips() + '<div id="mx-sched"></div>';
+    renderMeetings(el('mx-sched'), true);
+    mxWireTop(view);
+  }
   function renderMeetx(view) {
     if (state.meetRooms === null || state.meetRooms === undefined) loadMeetRooms();
-    /* «Расписание» переехало сюда из задач целиком (Павел 06.10.2026) и от
-       журнала записей не зависит: оно открывается, даже если журнал не ответил,
-       и не ждет его загрузки. Экран свой — рисуем его в свой контейнер и отдаем
-       ему управление, он сам грузит данные и вешает обработчики. */
-    if (mxTab() === 'sched' && !state.meetxOpen) {
-      view.innerHTML = mxActions() + '<div class="wk-top mx-tabrow">' + mxTabs() + '</div>' +
-        mxDeptChips() + '<div id="mx-sched"></div>';
-      renderMeetings(el('mx-sched'), true);
-      mxWireTop(view);
-      return;
-    }
     if (state.meetx === null) { view.innerHTML = dashSkeleton(); loadMeetx(); return; }
     if (state.meetx === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
@@ -53772,8 +53774,9 @@
        шапка успевала нарисовать старый раздел и человек по ссылке из бота видел
        хлебную крошку «Фокус недели» вместо вкладок задач. */
     if (pg === 'focus' || pg === 'stuck') { state.teamMode = pg; return ['tasks', 'team']; }
-    // Расписание и зумы уехали из задач в EastSide Meeting (06.10.2026).
-    if (pg === 'sched' || (pg === 'tasks' && seg === 'meet')) { state.mxTab = 'sched'; return ['meetx', '']; }
+    // Встречи из задач и вкладка расписания из EastSide Meeting — теперь раздел
+    // «Расписание» (02.11.2026).
+    if ((pg === 'tasks' && seg === 'meet') || (pg === 'meetx' && seg === 'sched')) return ['sched', ''];
     if (pg === 'attestations' && can('academy_review')) { state.acTab = 'att'; return ['academy', '']; }
     // Воркшопы стали курсом Академии (Павел 28.09.2026), но ссылки на раздел
     // ходят по чатам — ведем их в тот же курс, а не на пустую страницу.
@@ -53907,7 +53910,7 @@
           if (!slug || slug === state.mxChan) return false;
           state.mxWantChan = slug; state.mxTab = 'soon'; return true;
         }
-        if ((s !== 'soon' && s !== 'sched' && s !== 'rec') || s === mxTab()) return false;
+        if ((s !== 'soon' && s !== 'rec') || s === mxTab()) return false;
         state.mxTab = s; return true;
       },
     },
