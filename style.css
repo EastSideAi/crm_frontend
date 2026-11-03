@@ -4121,6 +4121,14 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-my-row.room { box-shadow: inset 2px 0 0 var(--green); }
 .sc-my-row.live { background: var(--blue-tint); box-shadow: inset 2px 0 0 var(--blue); }
 .sc-my-row.live .sc-my-h { color: var(--blue); }
+/* Встреча в ленте открывается на правку — строка ведет себя как кнопка, а не
+   текст: курсор, тихая подсветка на наведении, карандаш проступает ярче. */
+.sc-my-row.tap { cursor: pointer; transition: background .15s var(--ease); }
+.sc-my-row.tap:hover { background: var(--fill); }
+.sc-my-row.tap:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.sc-my-ed { flex: none; display: inline-flex; color: var(--ink-3); opacity: .55;
+  transition: opacity .15s var(--ease), color .15s var(--ease); }
+.sc-my-row.tap:hover .sc-my-ed { opacity: 1; color: var(--blue); }
 .sc-my-go { flex: none; padding: 5px 12px; border-radius: 9px; font-size: 12.5px;
   font-weight: 650; color: var(--blue); background: var(--blue-tint); text-decoration: none;
   transition: .15s var(--ease); }

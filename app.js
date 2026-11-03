@@ -8816,6 +8816,21 @@
       '<button type="button" class="' + (my ? '' : 'on') + '" data-ss="all">Вся команда</button></div>';
   }
 
+  // Все люди расписания: и те, кто ведет окна (people), и те, кого зовут только на
+  // встречи (staff — руководство, МОПы). Фильтр «Чье расписание» строился лишь по
+  // people, и половина команды в него не попадала (Павел 03.11.2026: «отображаются
+  // не все»).
+  function schedPeopleAll(d) {
+    var seen = {}, out = [];
+    ((d && d.people) || []).concat(((d && d.staff) || []).map(function (p) {
+      return { person: p.person, role: 'staff' };
+    })).forEach(function (p) {
+      if (!p || !p.person || seen[p.person]) return;
+      seen[p.person] = 1; out.push(p);
+    });
+    return out;
+  }
+
   // Селектор «Чье расписание» — явный и всегда на виду, чтобы было понятно, где
   // посмотреть чужое расписание (а не прятался только в режиме сетки).
   function schedWhoSel(people, myName) {
@@ -9080,7 +9095,7 @@
       (d.meetings || []).forEach(function (m) {
         if (!(m.people || []).some(function (p) { return p.person === myName; })) return;
         out.push({ ymd: m.date, hour: m.hour, cls: 'plan', title: m.title,
-                   sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false });
+                   sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false, meet: m });
       });
       (d.slots || []).forEach(function (s) {
         if (s.person !== myName || !s.booked) return;
@@ -9139,10 +9154,17 @@
         WDAYS_RU[dt.getDay()] + ', ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] +
         (ymd === todayKey ? '<i>сегодня</i>' : '') + '</div>';
       return head + seen[ymd].map(function (r) {
-        return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + '">' +
+        // Встречу из ленты можно открыть и поправить прямо здесь — тем же редактором,
+        // что по клику в сетке. Раньше в нее было не провалиться: приходилось идти в
+        // «Календарь» (Павел 03.11.2026: «чтобы редактор был везде»). Занятые часы и
+        // комнаты встреч так не открываются: у первых правка в карточке клиента, у
+        // вторых — ссылка «Войти».
+        var ed = r.meet ? schedMeetAttr(r.meet) : '';
+        return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + (r.meet ? ' tap' : '') + '"' + ed + '>' +
           '<span class="sc-my-h' + (tz ? ' two' : '') + '">' +
             (tz ? '<b>' + r.hour + ':00</b><i>' + r.msk + ':00 мск</i>' : r.hour + ':00') + '</span>' +
           '<span class="sc-my-b"><b>' + esc(r.title) + '</b><i>' + esc(r.sub) + '</i></span>' +
+          (r.meet ? '<span class="sc-my-ed" title="Изменить встречу: время, участников">' + ic('edit', 14) + '</span>' : '') +
           (r.url ? '<a class="sc-my-go" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
             (r.live ? 'Войти' : 'Открыть') + '</a>' : '') + '</div>';
       }).join('') + '';
@@ -9336,7 +9358,7 @@
     var grid = !my || state.schedEdit || viewingOther;
     // В ленте «Мое» фильтровать нечего — там только свое; оставляем лишь выбор
     // «чье расписание», чтобы можно было перейти к чужому. В сетке — полный фильтр.
-    var flt = '<div class="zw-fltrow">' + schedWhoSel(people, myName) +
+    var flt = '<div class="zw-fltrow">' + schedWhoSel(schedPeopleAll(d), myName) +
       (grid ? schedRoleChips() + schedLegend() : '') + '</div>';
 
     // Пока человек не сказал, кто он в расписании, отмечать ему нечего: имена в CRM
@@ -9705,8 +9727,12 @@
     var all = (d.people || []).map(function (p) { return { role: p.role, person: p.person, label: p.person + ' · ' + (SC_WHAT[p.role] || p.role) }; })
       .concat((d.staff || []).map(function (p) { return { role: 'staff', person: p.person, label: p.person }; }));
     // Правка: участники встречи приезжают парой «роль + имя», отмечаем их в списке.
+    // Новую встречу всегда заводит кто-то из команды и сам в ней участвует —
+    // поэтому создателя сразу отмечаем участником (Павел 03.11.2026: «кто ставит,
+    // тот уже участник, это логично»), иначе встреча не попадает в его «Мое».
     var had = {};
     ((m && m.people) || []).forEach(function (p) { had[p.role + '|' + p.person] = 1; });
+    if (!m && d.me && d.me.person) had[(d.me.role || 'staff') + '|' + d.me.person] = 1;
     var ov = document.createElement('div');
     ov.className = 'al-ov over sc-ov';
     ov.innerHTML =
@@ -10825,8 +10851,7 @@
         '<div class="mm-num">' + d.getDate() + cnt + '<span class="mm-cnts">' + free + load + '</span></div>' +
         shown + more + '</div>';
     }
-    var people = (data.people || []).slice();
-    var flt = '<div class="zw-fltrow">' + schedWhoSel(people, schedMyName(data)) + schedRoleChips() + '</div>';
+    var flt = '<div class="zw-fltrow">' + schedWhoSel(schedPeopleAll(data), schedMyName(data)) + schedRoleChips() + '</div>';
     view.innerHTML = '<div class="card zw">' + head + flt +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
       '<div class="zw-foot">Клик по дню откроет сетку слотов на этот день. '
