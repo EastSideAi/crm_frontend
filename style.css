@@ -6040,6 +6040,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .ads-kv { margin-top: 6px; font-size: 21px; font-weight: 700; color: var(--ink);
   letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .ads-ks { margin-top: 3px; font-size: 11.5px; color: var(--ink-2); }
+/* Подпись второго ряда плашек: что было с людьми ПОСЛЕ регистрации. Без неё два
+   ряда цифр читаются как один список, и доли во втором ряду повисают без базы. */
+.ads-sub { margin: 18px 0 -8px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
 
 .ads-tbl { border-top: 1px solid var(--line); }
 .ads-th, .ads-tr { display: grid; align-items: center; gap: 12px;
