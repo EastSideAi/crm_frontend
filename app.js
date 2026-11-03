@@ -8806,6 +8806,123 @@
   // глазами целиком (Павел 26.10.2026: «чтобы не наслаивалось»).
   function schedRoleOn(role) { return !(state.schedHide || {})[role]; }
 
+  // ── Общие контролы расписания: одинаковые в видах «Слоты» и «Календарь» ──────
+  // Раньше фильтр (чье расписание, роли) и переключатель «Мое/Вся команда» жили
+  // только во вкладке «Слоты», а в «Календаре» их не было — переключение между
+  // видами выглядело так, будто фильтр ни на что не влияет (Павел 03.11.2026).
+  function schedScopeSeg(my) {
+    return '<div class="due-seg zw-seg sc-scope">' +
+      '<button type="button" class="' + (my ? 'on' : '') + '" data-ss="my">Мое</button>' +
+      '<button type="button" class="' + (my ? '' : 'on') + '" data-ss="all">Вся команда</button></div>';
+  }
+
+  // Селектор «Чье расписание» — явный и всегда на виду, чтобы было понятно, где
+  // посмотреть чужое расписание (а не прятался только в режиме сетки).
+  function schedWhoSel(people, myName) {
+    var ppl = (people || []).slice().sort(function (a, b) { return a.person.localeCompare(b.person, 'ru'); });
+    return '<div class="sc-who"><span class="sc-wholbl">Чье расписание</span>' +
+      '<label class="al-selwrap"><select class="al-sel" id="sc-who">' +
+      '<option value="">Вся команда</option>' +
+      (myName ? '<option value="' + esc(myName) + '"' + (state.schedWho === myName ? ' selected' : '') + '>Только мое</option>' : '') +
+      ppl.filter(function (p) { return p.person !== myName; }).map(function (p) {
+        return '<option value="' + esc(p.person) + '"' + (state.schedWho === p.person ? ' selected' : '') + '>' + esc(p.person) + '</option>';
+      }).join('') + '</select></label></div>';
+  }
+
+  function schedRoleChips() {
+    return '<div class="sc-roles">' + [['curator', 'Разборы'], ['teacher', 'Уроки'], ['staff', 'Команда']]
+      .map(function (r) {
+        return '<button type="button" class="qchip sm' + (schedRoleOn(r[0]) ? ' on' : '') +
+          '" data-srole="' + r[0] + '" aria-pressed="' + (schedRoleOn(r[0]) ? 'true' : 'false') + '">' +
+          r[1] + '</button>';
+      }).join('') + '</div>';
+  }
+
+  function schedLegend() {
+    return '<div class="sc-legend">' +
+      '<span class="sc-chip free" title="Человек свободен: этот час можно продать клиенту">свободно</span>' +
+      '<span class="sc-chip busy" title="Час уже занят уроком или разбором">занято</span>' +
+      '<span class="sc-chip meet" title="Внутренняя встреча команды">планерка</span>' +
+      '<span class="sc-chip room" title="Наша встреча: комната EastSide Meeting, нажатие открывает ее">наша встреча</span></div>';
+  }
+
+  // Что человек может добавить в расписание — зависит от его роли. Преподаватель
+  // ставит уроки, остальные ведущие — консультации (разборы); руководитель вдобавок
+  // ставит собрания. Пустой список — кнопки «Добавить» нет (человек сперва выбирает
+  // себя в расписании через селектор «Кто вы»).
+  function schedAddItems(d) {
+    var items = [];
+    if (d && d.me) items.push(d.me.role === 'teacher'
+      ? { k: 'hours', label: 'Часы под уроки' }
+      : { k: 'hours', label: 'Часы под консультации' });
+    if (d && d.can_edit_all) items.push({ k: 'meet', label: 'Собрание / планерка' });
+    return items;
+  }
+
+  // Одна понятная кнопка «Добавить». Один доступный пункт — кнопка сразу ведет в
+  // него и подписана им же; несколько — кнопка «Добавить» с маленьким меню.
+  function schedAddBtn(d) {
+    var items = schedAddItems(d);
+    if (!items.length) return '';
+    if (items.length === 1) {
+      return '<div class="sc-addwrap"><button class="bp sm sc-addbtn" id="sc-add" data-add="' +
+        items[0].k + '">' + ic('plus', 14) + esc(items[0].label) + '</button></div>';
+    }
+    return '<div class="sc-addwrap">' +
+      '<button class="bp sm sc-addbtn" id="sc-add" aria-haspopup="true" aria-expanded="false">' +
+        ic('plus', 14) + 'Добавить</button>' +
+      '<div class="flp-menu sc-addmenu" id="sc-addmenu" hidden>' +
+      items.map(function (it) {
+        return '<button type="button" class="flp-opt" data-add="' + it.k + '">' + esc(it.label) + '</button>';
+      }).join('') + '</div></div>';
+  }
+
+  // Переход из меню «Добавить» в нужное действие. «Часы» всегда ставятся в сетке
+  // слотов, поэтому из «Календаря» сначала уводим в «Слоты» и включаем отметку.
+  function schedAddRun(d, k) {
+    if (k === 'meet') return openSchedMeet(d);
+    state.meetView = 'slots';
+    state.schedEdit = true;
+    saveUi();
+    renderView();
+  }
+
+  function wireSchedCtl(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ss]'), function (b) {
+      b.addEventListener('click', function () {
+        state.schedScope = b.getAttribute('data-ss') === 'all' ? 'all' : 'my';
+        // Из чужой сетки в свою ленту режим отметки не переносим: там отмечать нечего.
+        if (state.schedScope === 'my') state.schedEdit = false;
+        saveUi(); renderView();
+      });
+    });
+    var who = view.querySelector('#sc-who');
+    if (who) who.addEventListener('change', function () { state.schedWho = this.value || ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
+      b.addEventListener('click', function () {
+        var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
+        if (h[r]) delete h[r]; else h[r] = 1;
+        saveUi(); renderView();
+      });
+    });
+  }
+
+  function wireSchedAdd(view, d) {
+    var add = view.querySelector('#sc-add');
+    if (!add) return;
+    var menu = view.querySelector('#sc-addmenu');
+    if (!menu) { add.addEventListener('click', function () { schedAddRun(d, add.getAttribute('data-add')); }); return; }
+    function close() { menu.hidden = true; add.setAttribute('aria-expanded', 'false'); document.removeEventListener('mousedown', onOut, true); }
+    function onOut(e) { if (!menu.contains(e.target) && !add.contains(e.target)) close(); }
+    add.addEventListener('click', function () {
+      if (menu.hidden) { menu.hidden = false; add.setAttribute('aria-expanded', 'true'); setTimeout(function () { document.addEventListener('mousedown', onOut, true); }, 0); }
+      else close();
+    });
+    Array.prototype.forEach.call(menu.querySelectorAll('[data-add]'), function (b) {
+      b.addEventListener('click', function () { var k = b.getAttribute('data-add'); close(); schedAddRun(d, k); });
+    });
+  }
+
   function schedAt(d, day, hour, who) {
     var fit = function (p) { return !who || p === who; };
     // Фильтр направления из шапки раздела режет и планерки: отдел у них свой
@@ -9172,8 +9289,7 @@
     var head = '<div class="sec-head zw-head">' + meetLens() +
       // Первый переключатель экрана — чье расписание смотрим. Он стоит раньше
       // навигации по датам: сначала «чье», потом «когда».
-      '<div class="due-seg zw-seg sc-scope"><button type="button" class="' + (my ? 'on' : '') + '" data-ss="my">Мое</button>' +
-      '<button type="button" class="' + (my ? '' : 'on') + '" data-ss="all">Вся команда</button></div>' +
+      schedScopeSeg(my) +
       (my || mqMobile.matches ? '' :
         '<div class="due-seg zw-seg"><button type="button" class="' + (dayView ? '' : 'on') + '" data-sv="week">Неделя</button>' +
         '<button type="button" class="' + (dayView ? 'on' : '') + '" data-sv="day">День</button></div>') +
@@ -9181,15 +9297,15 @@
       '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-sw0 title="' + (atNow ? '' : 'Вернуться к сегодня') + '">' + range + '</button>' +
       '<button class="icobtn" data-sw="1" title="' + (dayView ? 'Следующий день' : 'Следующая неделя') + '">' + ic('go', 14) + '</button></div>' +
       // Действия лежат в своем блоке, а не соседями в шапке. Иначе на ноутбуке
-      // 1280 «Мое время» оставалось в первом ряду у правого края, а «Планерка»
-      // уезжала во второй и вставала слева под заголовком: в одной шапке два
-      // разных выравнивания. Блоком они переносятся вместе.
+      // 1280 действия уезжали во вторую строку с другим выравниванием. Блоком они
+      // переносятся вместе. В режиме отметки главное действие — «Готово» (выйти);
+      // иначе — одна кнопка «Добавить» (часы/собрание по роли).
       (ok ? '<div class="zw-acts">' + schedGcalBtn(d) +
         '<button class="bp ghost sm sc-how" id="sc-how" aria-expanded="' + (state.schedHow ? 'true' : 'false') + '">' +
           ic('info', 14) + 'Как ставить часы</button>' +
-        (d.me ? '<button class="bp ghost sm sc-edit" id="sc-edit">' +
-          ic(state.schedEdit ? 'check' : 'pen', 14) + (state.schedEdit ? 'Готово' : 'Мое время') + '</button>' : '') +
-        (d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
+        (state.schedEdit
+          ? (d.me ? '<button class="bp sm sc-edit" id="sc-edit">' + ic('check', 14) + 'Готово</button>' : '')
+          : schedAddBtn(d)) +
         '</div>' : '') +
       '</div>';
 
@@ -9209,31 +9325,19 @@
     }
 
     var people = (d.people || []).slice().sort(function (a, b) { return a.person.localeCompare(b.person, 'ru'); });
-    // «Только мои встречи» (просьба Павла 17.09.2026) стоит первым и работает до
-    // того, как человек выбрал себя в расписании: имя берется из учетки.
+    // «Только мое» работает до того, как человек выбрал себя в расписании: имя
+    // берется из учетки.
     var myName = schedMyName(d);
-    var flt = '<div class="zw-fltrow"><label class="al-selwrap sc-who"><select class="al-sel" id="sc-who">' +
-      '<option value="">Все люди</option>' +
-      (myName ? '<option value="' + esc(myName) + '"' + (state.schedWho === myName ? ' selected' : '') + '>Только мои встречи</option>' : '') +
-      people.filter(function (p) { return p.person !== myName; }).map(function (p) {
-        return '<option value="' + esc(p.person) + '"' + (state.schedWho === p.person ? ' selected' : '') + '>' + esc(p.person) + '</option>';
-      }).join('') + '</select></label>' +
-      // Кого показывать: чипы-переключатели рядом с выбором человека. Выключенная
-      // роль не исчезает из расписания, она просто не загромождает эту сетку.
-      '<div class="sc-roles">' + [['curator', 'Разборы'], ['teacher', 'Уроки'], ['staff', 'Команда']]
-        .map(function (r) {
-          return '<button type="button" class="qchip sm' + (schedRoleOn(r[0]) ? ' on' : '') +
-            '" data-srole="' + r[0] + '" aria-pressed="' + (schedRoleOn(r[0]) ? 'true' : 'false') + '">' +
-            r[1] + '</button>';
-        }).join('') + '</div>' +
-      // Цвет без слова рядом читается только тем, кто его придумал. Подпись к
-      // каждому чипу — что именно он означает в этой сетке (Павел 17.09.2026).
-      '<div class="sc-legend">' +
-        '<span class="sc-chip free" title="Человек свободен: этот час можно продать клиенту">свободно</span>' +
-        '<span class="sc-chip busy" title="Час уже занят уроком или разбором">занято</span>' +
-        '<span class="sc-chip meet" title="Внутренняя встреча команды">планерка</span>' +
-        '<span class="sc-chip room" title="Наша встреча: комната EastSide Meeting, ' +
-          'нажатие открывает ее">наша встреча</span></div></div>';
+    // Выбран чужой человек — показываем его сетку, даже если экран «Мое»: иначе
+    // выбрать чужое расписание и не увидеть его (Павел 03.11.2026).
+    var viewingOther = state.schedWho && state.schedWho !== myName;
+    // В режиме отметки сетка нужна и в своем расписании: часы ставят в ней, а не в
+    // ленте. Легенда цветов нужна только там, где эти цвета есть, — в сетке.
+    var grid = !my || state.schedEdit || viewingOther;
+    // В ленте «Мое» фильтровать нечего — там только свое; оставляем лишь выбор
+    // «чье расписание», чтобы можно было перейти к чужому. В сетке — полный фильтр.
+    var flt = '<div class="zw-fltrow">' + schedWhoSel(people, myName) +
+      (grid ? schedRoleChips() + schedLegend() : '') + '</div>';
 
     // Пока человек не сказал, кто он в расписании, отмечать ему нечего: имена в CRM
     // и в расписании разные, угадывать их нельзя (можно отметить чужие часы).
@@ -9258,9 +9362,6 @@
         '</select></label></div>';
     }
 
-    // В режиме отметки времени сетка нужна и в своем расписании: часы ставят в
-    // ней, а не в ленте. Поэтому «Мое время» временно показывает команду.
-    var grid = !my || state.schedEdit;
     var body = grid
       ? (dayView ? schedDayList(d, day, today) : schedWeekGrid(d, lo, today))
       : schedMyList(d, lo, today);
@@ -9270,7 +9371,7 @@
         ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
         : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
     view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
-      (grid ? flt : '') + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
+      flt + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
     schedWire(view, d);
   }
 
@@ -9370,24 +9471,10 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-sv]'), function (b) {
       b.addEventListener('click', function () { state.schedView = b.getAttribute('data-sv') === 'day' ? 'day' : 'week'; renderView(); });
     });
-    if (el('sc-who')) el('sc-who').addEventListener('change', function () { state.schedWho = el('sc-who').value || ''; renderView(); });
+    wireSchedCtl(view);
+    wireSchedAdd(view, d);
     if (el('sc-edit')) el('sc-edit').addEventListener('click', function () { state.schedEdit = !state.schedEdit; renderView(); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-ss]'), function (b) {
-      b.addEventListener('click', function () {
-        state.schedScope = b.getAttribute('data-ss') === 'all' ? 'all' : 'my';
-        // Из чужой сетки в свою ленту режим отметки не переносим: там отмечать нечего.
-        if (state.schedScope === 'my') state.schedEdit = false;
-        saveUi(); renderView();
-      });
-    });
     if (el('sc-how')) el('sc-how').addEventListener('click', function () { state.schedHow = !state.schedHow; renderView(); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
-      b.addEventListener('click', function () {
-        var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
-        if (h[r]) delete h[r]; else h[r] = 1;
-        saveUi(); renderView();
-      });
-    });
     if (el('sc-gcal')) el('sc-gcal').addEventListener('click', function () { openSchedGcal(d); });
     if (el('sc-me')) el('sc-me').addEventListener('change', function () {
       var v = el('sc-me').value; if (!v) return;
@@ -9408,7 +9495,6 @@
           'Не получилось сохранить, попробуйте еще раз');
       });
     });
-    if (el('sc-meet')) el('sc-meet').addEventListener('click', function () { openSchedMeet(d); });
     if (!d || !d.enabled) return;
 
     // Клик по клетке копит выбор, протяжка мышью берет сразу прямоугольник дней и
@@ -10608,29 +10694,28 @@
       api('/admin/api/sched/week?from=' + zoomYmd(from) + '&to=' + zoomYmd(mid)).catch(function () { return null; }),
       api('/admin/api/sched/week?from=' + zoomYmd(mid) + '&to=' + zoomYmd(to)).catch(function () { return null; }),
     ]).then(function (r) {
-      var meets = [], gcal = '', busy = {}, seen = {};
+      var meets = [], gcal = '', slots = [], seen = {};
       [r[0], r[1]].forEach(function (x) {
         if (!x) return;
         gcal = gcal || x.gcal || '';
         (x.meetings || []).forEach(function (m) {
           if (!meets.some(function (y) { return y.id === m.id && y.date === m.date; })) meets.push(m);
         });
-        // Занятые часы в клетку дня не помещаются плашками, но день с записанными
-        // учениками не должен выглядеть свободным: иначе на него ставят планерку.
-        // Копим счетчик, а не список: имя ученика в календарь команды не идет.
+        // Держим сырые слоты: из них и счетчик занятых, и счетчик свободных окон
+        // в дне — оба считаются уже с учетом фильтра (чей человек, какие роли).
         (x.slots || []).forEach(function (sl) {
-          if (!sl.booked) return;
           var k = sl.date + '|' + sl.hour + '|' + sl.person;
           if (seen[k]) return;      // два куска месяца перекрываются по краю
           seen[k] = 1;
-          busy[sl.date] = (busy[sl.date] || 0) + 1;
+          slots.push(sl);
         });
       });
       // Права и список людей нужны кнопке «Планерка»: форма собирает из них
-      // галочки участников. Берем из первого ответа — он про те же роли.
+      // галочки участников. me — чтобы знать роль для кнопки «Добавить». Берем из
+      // первого ответа — он про те же роли.
       var w = r[0] || r[1] || {};
-      state.meetMonthData[key] = { meetings: meets, gcal: gcal, busy: busy,
-        gcal_me: w.gcal_me || '', gcal_service: w.gcal_service || '',
+      state.meetMonthData[key] = { meetings: meets, gcal: gcal, slots: slots,
+        gcal_me: w.gcal_me || '', gcal_service: w.gcal_service || '', me: w.me || null,
         can_edit_all: !!w.can_edit_all, people: w.people || [], staff: w.staff || [] };
       if (onMeetPage()) renderView();
     }).catch(function () {
@@ -10639,11 +10724,33 @@
     });
   }
 
-  /* Что показать в дне: планерки команды по времени. */
+  // Кого показываем в календаре: явно выбранный человек, иначе в режиме «Мое» —
+  // я сам, а в «Вся команда» — все. Один и тот же смысл, что у фильтра в слотах.
+  function schedWhoActive(data) {
+    var who = state.schedWho || '';
+    if (who) return who;
+    if (schedScope() === 'my') return schedMyName(data);
+    return '';
+  }
+
+  // Занятые и свободные часы в дне — уже с учетом фильтра (чей человек, роли).
+  function meetMonthCounts(data, ymd) {
+    var who = schedWhoActive(data), busy = 0, free = 0;
+    (data.slots || []).forEach(function (s) {
+      if (s.date !== ymd || !schedRoleOn(s.role)) return;
+      if (who && s.person !== who) return;
+      if (s.booked) busy++;
+      else if (!s.blocked) free++;
+    });
+    return { busy: busy, free: free };
+  }
+
+  /* Что показать в дне: планерки команды по времени, с учетом фильтра человека. */
   function meetMonthDay(data, ymd) {
-    var out = [];
+    var who = schedWhoActive(data), out = [];
     (data.meetings || []).forEach(function (m) {
       if (m.date !== ymd) return;
+      if (who && !(m.people || []).some(function (x) { return x.person === who; })) return;
       out.push({ kind: 'plan', hour: m.hour, min: 0, title: m.title,
                  who: (m.people || []).map(function (x) { return x.person; }).join(', ') });
     });
@@ -10664,18 +10771,17 @@
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var atNow = !(state.meetMonth || 0);
     var title = MONTHS_FULL_RU[first.getMonth()] + ' ' + first.getFullYear();
-    var mayMeet = !!(data && typeof data === 'object' && data.can_edit_all);
-    var head = '<div class="sec-head zw-head">' + meetLens() +
+    var dd = (data && typeof data === 'object') ? data : null;
+    var my = schedScope() === 'my';
+    var head = '<div class="sec-head zw-head">' + meetLens() + schedScopeSeg(my) +
       '<div class="zw-nav"><button class="icobtn" data-mm="-1" title="Прошлый месяц">' + ic('go', 14) + '</button>' +
       '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-mm0 title="' +
         (atNow ? '' : 'Вернуться к этому месяцу') + '">' + esc(title) + '</button>' +
       '<button class="icobtn" data-mm="1" title="Следующий месяц">' + ic('go', 14) + '</button></div>' +
-      // Действия и слова те же, что в виде слотов, с одним исключением: «Мое время»
-      // здесь нет, потому что отмечать нечего — свои свободные часы человек ставит
-      // в клетке часа, а в месяце клетка это целый день.
-      '<div class="zw-acts">' + schedGcalBtn(typeof data === 'object' ? data : null) +
-        (mayMeet ? '<button class="bp ghost sm sc-meetnew" id="mm-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
-        '</div>' +
+      // Одна кнопка «Добавить» с тем же меню, что в слотах: «часы» уводят в сетку
+      // слотов и включают отметку (в месяце клетка это целый день, в ней не отметишь),
+      // «собрание» открывает форму планерки.
+      '<div class="zw-acts">' + schedGcalBtn(dd) + schedAddBtn(dd) + '</div>' +
       '</div>';
 
     if (data === 'loading') {
@@ -10707,17 +10813,24 @@
       // не прочитать («11:0…»), поэтому там вместо плашек счетчик, а подробности
       // открываются кликом по дню.
       var cnt = ev.length ? '<span class="mm-cnt">' + ev.length + '</span>' : '';
-      var busy = (data.busy || {})[ymd] || 0;
-      var load = busy ? '<span class="mm-load" title="Занятых часов с учениками: ' + busy +
-        '">' + busy + '</span>' : '';
+      var cc = meetMonthCounts(data, ymd);
+      // Зеленым — сколько свободных окон в этот день (это и есть «все слоты» на
+      // календаре), серым — сколько часов уже заняты учениками.
+      var free = cc.free ? '<span class="mm-free" title="Свободных окон в этот день: ' + cc.free +
+        '">' + cc.free + '</span>' : '';
+      var load = cc.busy ? '<span class="mm-load" title="Занятых часов с учениками: ' + cc.busy +
+        '">' + cc.busy + '</span>' : '';
       cells += '<div class="mm-cell' + (other ? ' out' : '') + (isToday ? ' now' : '') +
         '" data-mmday="' + ymd + '" role="button" tabindex="0">' +
-        '<div class="mm-num">' + d.getDate() + load + cnt + '</div>' + shown + more + '</div>';
+        '<div class="mm-num">' + d.getDate() + cnt + '<span class="mm-cnts">' + free + load + '</span></div>' +
+        shown + more + '</div>';
     }
-    view.innerHTML = '<div class="card zw">' + head +
+    var people = (data.people || []).slice();
+    var flt = '<div class="zw-fltrow">' + schedWhoSel(people, schedMyName(data)) + schedRoleChips() + '</div>';
+    view.innerHTML = '<div class="card zw">' + head + flt +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
       '<div class="zw-foot">Клик по дню откроет сетку слотов на этот день. '
-        + 'Серая цифра справа — сколько часов в этот день уже заняты учениками.</div></div>';
+        + 'Зеленая цифра — сколько в этот день свободных окон, серая — сколько часов уже заняты учениками.</div></div>';
     meetMonthWire(view, data);
   }
 
@@ -10731,7 +10844,8 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-mm0]'), function (b) {
       b.addEventListener('click', function () { state.meetMonth = 0; renderView(); });
     });
-    if (el('mm-meet')) el('mm-meet').addEventListener('click', function () { openSchedMeet(d); });
+    wireSchedCtl(view);
+    wireSchedAdd(view, d);
     if (el('sc-gcal')) el('sc-gcal').addEventListener('click', function () { openSchedGcal(d); });
     // Клик по дню уводит в слоты этого дня: месяц отвечает «что происходит»,
     // слоты — «кто свободен и куда влезет еще одна встреча».
