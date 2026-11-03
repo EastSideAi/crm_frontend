@@ -10886,9 +10886,31 @@
     // кнопкой, и клавишей, и стрелки не должны после этого показывать не то.
     if (up) {
       up.innerHTML = ic(v === '' ? 'expand' : 'shrink', 14);
-      up.title = v === '' ? 'Развернуть окно' : 'Вернуть обычный размер';
+      up.title = v === '' ? 'Сделать окно больше' : 'Вернуть обычный размер';
+      // Имя для озвучки держим тем же, что в подсказке: иначе кнопка остается
+      // безымянной ровно в том состоянии, из которого человек ищет выход.
+      up.setAttribute('aria-label', up.title);
     }
-    if (fs) fs.title = v === 'full' ? 'Выйти из полного экрана' : 'Во весь экран';
+    if (fs) {
+      var slovo = v === 'full' ? 'Свернуть' : 'Во весь экран';
+      // Имя кнопки начинается с того же слова, что человек видит: иначе голосом
+      // ее не назвать, а озвучка прочтет не то, что написано.
+      fs.title = v === 'full' ? 'Свернуть окно обратно в страницу (Esc)'
+                              : 'Во весь экран';
+      fs.setAttribute('aria-label', fs.title);
+      var tx = fs.querySelector('.mx-office-fs-t');
+      if (tx) tx.textContent = slovo;
+      // В полном экране подсказываем клавишу: выход ею быстрее, а знают о нем не все.
+      var esc = fs.querySelector('.mx-office-esc');
+      if (v === 'full' && !esc) {
+        esc = document.createElement('kbd');
+        esc.className = 'mx-office-esc';
+        esc.textContent = 'Esc';
+        fs.appendChild(esc);
+      } else if (v !== 'full' && esc) {
+        esc.remove();
+      }
+    }
   }
 
   function officeShow() {
@@ -10913,7 +10935,16 @@
     }
     state.mxWantChan = '';
     d.setAttribute('data-on', '1');
-    d.innerHTML = '<div class="mx-office-wait">Открываю офис…</div>';
+    // Строку ставим сразу, до ответа сервера: пока офис грузится, окно иначе
+    // стоит безымянным прямоугольником, а на ошибке так и остается без подписи
+    // и без кнопок (поймано на приемке 03.11.2026).
+    d.innerHTML = '';
+    d.appendChild(officeHead());
+    var zhdem = document.createElement('div');
+    zhdem.className = 'mx-office-wait';
+    zhdem.textContent = 'Открываю офис…';
+    d.appendChild(zhdem);
+    officeSetSize(officeSize());
     /* Пропуск «я из команды» отдаем рамке хвостом ссылки: хвост браузер на
        сервер не шлет, и в логах его не будет. Вход в CRM и есть доказательство,
        что человек свой, — подтверждаться еще раз в боте не просим. */
@@ -10928,13 +10959,12 @@
         + (r && r.pass
           ? '#p=' + encodeURIComponent(r.pass) + '&n=' + encodeURIComponent(r.name || '')
           : '');
-      d.innerHTML = '';
+      zhdem.remove();
       d.appendChild(f);
-      d.appendChild(officeTools());
       officeSetSize(officeSize());
     }).catch(function () {
       d.removeAttribute('data-on');
-      d.innerHTML = '<div class="mx-office-wait">Не вышло открыть офис. Обнови страницу.</div>';
+      zhdem.textContent = 'Не вышло открыть офис. Обнови страницу.';
     });
   }
   function officeHide() {
@@ -10948,15 +10978,30 @@
     if (officeSize() === 'full') officeNow = 'big';
   }
 
-  /* Кнопки размера лежат поверх рамки, а не внутри нее: внутри рамка чужая,
-     туда мы дотянуться не можем. */
+  /* Своя полоса над рамкой. Раньше кнопки размера лежали ПОВЕРХ чужого окна,
+     двумя безымянными квадратиками в правом верхнем углу: там же шапка самого
+     офиса с «Позвать» и «Выйти из канала», и наши кнопки с ней соседствовали
+     так, что читались как ее часть. Никто их не находил — развернув окно во
+     весь экран, человек решал, что раздел CRM пропал (Виталий и Павел
+     03.11.2026). Теперь у окна есть своя строка: слева видно, что это офис,
+     справа — чем управляют. Чужого содержимого она не закрывает. */
+  function officeHead() {
+    var head = document.createElement('div');
+    head.className = 'mx-office-head';
+    var ttl = document.createElement('span');
+    ttl.className = 'mx-office-ttl';
+    ttl.textContent = 'Офис команды';
+    head.appendChild(ttl);
+    head.appendChild(officeTools());
+    return head;
+  }
+
   function officeTools() {
     var box = document.createElement('div');
     box.className = 'mx-office-tools';
     var up = document.createElement('button');
     up.type = 'button';
-    up.className = 'mx-office-up';
-    up.setAttribute('aria-label', 'Размер окна офиса');
+    up.className = 'icobtn mx-office-up';
     up.innerHTML = ic(officeSize() === '' ? 'expand' : 'shrink', 14);
     up.addEventListener('click', function () {
       officeSetSize(officeSize() === '' ? 'big' : '');
@@ -10964,13 +11009,8 @@
     var fs = document.createElement('button');
     fs.type = 'button';
     fs.className = 'mx-office-fs';
-    fs.setAttribute('aria-label', 'Во весь экран');
-    // Квадрат во весь кадр: «во весь экран» это про рамку, а не про стрелки,
-    // которыми рядом меняют высоту.
-    fs.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" '
-      + 'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" '
-      + 'stroke-linejoin="round"><rect x="3" y="4" width="14" height="12" rx="2.5"/>'
-      + '<path d="M7.5 8.5h5v3h-5z"/></svg>';
+    // Словом, а не значком: значок в этом углу человек уже один раз не прочел.
+    fs.innerHTML = '<span class="mx-office-fs-t"></span>';
     fs.addEventListener('click', function () {
       officeSetSize(officeSize() === 'full' ? 'big' : 'full');
     });
@@ -10985,6 +11025,12 @@
   window.addEventListener('message', function (e) {
     if (e.origin !== API) return;
     var d = e.data || {};
+    // Escape нажали внутри рамки. Своим обработчиком мы его не видим: фокус в
+    // чужом окне, и клавиша до нас не доходит — офис передает ее сам.
+    if (d.es === 'office-esc') {
+      if (officeSize() === 'full' && officeBox && !officeBox.hidden) officeSetSize('big');
+      return;
+    }
     if (d.es !== 'office-chan') return;
     var slug = String(d.c || '').slice(0, 64);
     if (slug === state.mxChan) return;

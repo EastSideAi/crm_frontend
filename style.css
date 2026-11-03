@@ -12821,7 +12821,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    своя колонка каналов со своей прокруткой. */
 .mx-office { position: relative; height: min(520px, 58vh); margin-bottom: 18px;
   border-radius: var(--r-xl); border: 1px solid var(--line); background: var(--card);
-  overflow: hidden; transition: height .18s var(--ease); }
+  overflow: hidden; display: flex; flex-direction: column;
+  transition: height .18s var(--ease); }
 /* Средний размер: чужой экран в низком окне нечитаем, а на весь экран нужно не
    всегда (Павел 26.10.2026). */
 .mx-office.big { height: calc(100vh - 210px); min-height: 420px; }
@@ -12830,24 +12831,39 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Под окном во весь экран страница не прокручивается: иначе за ним уезжает
    раздел, и выход возвращает человека не туда, где он был. */
 body.office-full { overflow: hidden; }
-/* Кнопки размера лежат поверх рамки: внутрь нее, на чужую страницу, не дотянуться. */
-.mx-office-tools { position: absolute; right: 12px; top: 10px; z-index: 2;
-  display: flex; gap: 6px; }
-.mx-office-tools button { width: 28px; height: 28px; display: grid; place-items: center;
-  border: 0; border-radius: 9px; cursor: pointer; color: var(--ink-2);
-  background: rgba(255,255,255,.82); backdrop-filter: blur(8px);
-  box-shadow: 0 1px 2px rgba(15,19,32,.1); transition: .15s; }
-.mx-office-tools button:hover { color: var(--ink); background: #fff; }
-.mx-office-tools svg { width: 14px; height: 14px; }
+/* Своя строка окна: слева видно, чье это окно, справа — чем управляют. Раньше
+   кнопки лежали поверх чужой страницы и сливались с ее шапкой. */
+.mx-office-head { flex: none; height: 40px; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--line); background: #fff; }
+.mx-office-ttl { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.mx-office-tools { display: flex; align-items: center; gap: 8px; }
+/* Кнопка с подписью держит рецепт .icobtn: та же высота, бордер и ховер — это
+   та же тихая кнопка, только со словом вместо значка. */
+.mx-office-fs { height: 32px; padding: 0 12px; border: 1px solid var(--line-2);
+  border-radius: 9px; background: #fff; color: var(--ink-2); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: inherit; font-weight: 600; font-size: 12.5px; line-height: 1;
+  transition: .15s; }
+.mx-office-fs:hover { color: var(--blue); border-color: #C9D7FB; }
+.mx-office-tools button:focus-visible { outline: none; color: var(--blue);
+  box-shadow: inset 0 0 0 1.5px var(--blue); border-color: var(--blue); }
+/* Подсказка клавиши. Плашка маленькая, поэтому радиус меньше контрольного:
+   на 18px высоты радиус 10 превращает клавишу в пилюлю. */
+.mx-office-esc { font-family: inherit; font-weight: 700; font-size: 11px;
+  line-height: 1; color: var(--ink-2); background: var(--fill);
+  border-radius: 6px; padding: 4px 6px; }
 .mx-office[hidden] { display: none; }
-.mx-office-f { width: 100%; height: 100%; border: 0; display: block; }
-.mx-office-wait { height: 100%; display: grid; place-items: center;
+.mx-office-f { flex: 1; min-height: 0; width: 100%; border: 0; display: block; }
+.mx-office-wait { flex: 1; display: grid; place-items: center;
   color: var(--ink-3); font-size: 13px; }
 /* На телефоне офис занимает почти экран: колонка каналов там лентой сверху, и
    на половине высоты от нее остается полоска. */
 @media (max-width: 760px) {
   .mx-office { height: 74vh; margin-bottom: 14px; }
-  /* Лента каналов там идет поверху — кнопки в углу закрывали бы ее названия. */
+  /* Размер на телефоне один: окно там и так почти во весь экран. Строку
+     оставляем — по ней видно, где кончается наша страница и начинается офис. */
   .mx-office-tools { display: none; }
 }
 
