@@ -33777,7 +33777,8 @@
             sub: days > 0 ? plural(days, 'день', 'дня', 'дней')
                           : cur.event_date.split('-').reverse().join('.') };
     }
-    return { key: 'efir', label: 'Были на эфире', value: live,
+    return { key: 'efir', label: 'Были на эфире', value: live, step: 'viewers',
+             stepPlate: live,
              sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
                   ' без регистрации' + (rec ? ' · запись смотрели ' + rec : ''),
              pct: launchPct(live, regShown, 'от регистраций') };
@@ -33798,7 +33799,7 @@
      плитки, у каждой главная цифра — пройденный шаг, а начатый уходит в подпись:
      «зашли в анкету» без «получили разбор» ничего не стоит, но показывает, где люди
      осыпаются. Нет блока (старый бэкенд) — нет и плиток. */
-  function launchDiagTiles(cur, base, dc, zal, hvost, pay) {
+  function launchDiagTiles(cur, base, dc, zal, hvost, pay, ot) {
     dc = dc || cur.diagcons;
     pay = pay || cur.payment;
     if (!dc) return [];
@@ -33815,21 +33816,23 @@
     var regTxt = 'от регистраций' + (hvost ? ' ' + hvost : '');
     return [
       { key: 'diag', label: 'Прошли диагностику', value: dc.done,
+        step: 'plat_diag', stepFrom: ot, stepPlate: dc.done,
         sub: 'зашли в анкету ' + dc.entered + ' · анкета и разбор в кабинете',
         pct: [launchPct(dc.done, zal, zalTxt), launchPct(dc.done, base, regTxt)] },
       { key: 'cons', label: 'Записались на консультацию', value: dc.booked,
+        step: 'tutor', stepFrom: ot, stepPlate: dc.booked,
         sub: 'выбрали дату и время ' + dc.slotted,
         pct: [launchPct(dc.booked, zal, zalTxt),
               launchPct(dc.booked, dc.done, 'от прошедших диагностику'),
               launchPct(dc.booked, base, regTxt)] },
-    ].concat(launchSupportTile(pay, dc, base, hvost));
+    ].concat(launchSupportTile(pay, dc, base, hvost, ot));
   }
 
   /* Последняя плитка ряда — чем всё кончилось: оплаченное сопровождение. Участие за
      690 ₽ сюда НЕ идёт, это продажа поступления (владелец, 31.10.2026: «оплатили
      сопровождение, сумма и количество человек»). Деньги собираем по трём дорогам:
      касса офферов, счета CRM и договоры из ведомости. */
-  function launchSupportTile(pay, dc, base, hvost) {
+  function launchSupportTile(pay, dc, base, hvost, ot) {
     if (!pay || !pay.product) return [];
     var pr = pay.product, cr = pay.crm || {}, ld = pay.ledger || {};
     var rub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
@@ -33838,7 +33841,8 @@
       /* Заголовок короткий, да ещё с мягким переносом внутри слова: колонка в самой
          плотной полосе уже «Сопровождения», и без переноса слово обрезалось на
          полуслове. Действие («оплатили») уходит в подпись. */
-      key: 'support', label: 'Сопро\u00ADвождение',
+      key: 'support', label: 'Сопро\u00ADвождение', step: 'support', stepFrom: ot,
+      stepPlate: n,
       value: fmtMoney(rub) + ' \u20bd',
       sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
       pct: [launchPct(n, dc.booked, 'от записавшихся на консультацию'),
@@ -33877,9 +33881,12 @@
          повтор», и второе «на повтор» в каждой плитке не влезает в колонку —
          на ширине 1280 оно обрезалось на полуслове. Пары читаются по вертикали. */
       { key: 'reg', label: 'Регистрации', value: base,
+        step: 'reach', stepTitle: 'Регистрации на повтор', stepFrom: p.since,
+        stepPlate: base,
         sub: 'бесплатно ' + (reg.free || 0) + ' · платно ' + (reg.vip || 0),
         pct: launchPct(base, p.pages && p.pages.users, 'от тех, кто видел страницу') },
       { key: 'invoice', label: 'Счет на участие', value: pay.invoiced || 0,
+        step: 'invoiced', stepFrom: p.since, stepPlate: pay.invoiced || 0,
         sub: plural(pay.invoiced || 0, 'человек', 'человека', 'человек') + ' · 690 рублей',
         pct: launchPct(pay.invoiced, base, 'от регистраций на повтор') },
       { key: 'paid', label: 'Оплачено', value: fmtMoney(pay.paid_rub || 0) + ' \u20bd',
@@ -33895,7 +33902,7 @@
       { key: 'efir', label: 'Были на повторе', value: zal,
         sub: (vw.known || 0) + ' с карточкой · ' + (vw.anon || 0) + ' без регистрации',
         pct: launchPct(zal, base, 'от регистраций на повтор') },
-    ].concat(launchDiagTiles(cur, base, p.diagcons, zal, 'на повтор', p.payment));
+    ].concat(launchDiagTiles(cur, base, p.diagcons, zal, 'на повтор', p.payment, p.since));
     if (p.pages && p.pages.users) {
       /* «Страницу повтора видели» в колонку этой ширины не влезает и обрезается,
          поэтому действие уехало в подпись, а в заголовке осталась сама страница. */
@@ -34102,13 +34109,13 @@
     return '?' + q.join('&');
   }
 
-  function launchPeopleOpen(slug, step, launchTitle, plate) {
+  function launchPeopleOpen(slug, step, launchTitle, plate, ot, ownTitle) {
     state._lpPeople = {
-      kind: 'step', id: 'step:' + step.key,
-      slug: slug, step: step.key, title: step.title,
+      kind: 'step', id: 'step:' + step.key + (ot ? ':' + ot : ''),
+      slug: slug, step: step.key, title: step.title, ownTitle: !!ownTitle,
       plate: step.people == null ? 0 : step.people,
       launch: launchTitle || '',
-      from: state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
+      from: ot || state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
       day: state._mkLaunchDay || '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: plate || null,          /* куда вернуть фокус после закрытия */
@@ -34174,7 +34181,10 @@
       cur.rows = cur.rows.concat((r && r.people) || []);
       if (r && r.total != null) cur.total = r.total;
       else cur.total = cur.rows.length;        /* ручка промолчала — считаем по факту */
-      if (r && r.title) cur.title = r.title;
+      /* Заголовок с плашки не перебиваем названием ступени: под плашкой
+         «Регистрации» лежит ступень «Охват запуска», и человек, открывший список,
+         не должен гадать, то ли это, по чему он нажал. */
+      if (r && r.title && !cur.ownTitle) cur.title = r.title;
       cur.loading = false;
       launchPeopleModal();
     }).catch(function (e) {
@@ -35981,6 +35991,10 @@
            Ольга 22.09). Число за период берём у самой плашки — она и есть источник,
            а «всего за запуск» уходит в подпись, чтобы обе цифры были названы. */
         { key: 'reg', label: 'Регистрации', value: regShown,
+          /* Список за плашкой — ступень «Охват запуска»: плашка считает всех людей
+             запуска, а «Зарегистрировались» — только тех, кто оставил контакт
+             (221 из 624), и список спорил бы с цифрой над ним. */
+          step: 'reach', stepTitle: 'Регистрации', stepPlate: regShown,
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total,
@@ -35989,7 +36003,8 @@
            это не сопровождение. Плитка держит участие, продукты живут ступенями. */
         /* В плитке счетов и оплат — ЛЮДИ, а не только деньги (Ольга, 31.10.2026):
            «5» без слова «человек» читалось как пять рублей или пять попыток. */
-        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced,
+        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced, step: 'invoiced',
+          stepPlate: pay.invoiced,
           sub: plural(pay.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей · ' +
             pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
           pct: launchPct(pay.invoiced, regShown, 'от регистраций') },
@@ -36123,7 +36138,19 @@
             st.title, cur.title, st.wide, n);
           return;
         }
-        launchPeopleOpen(cur.slug, st, cur.title, n);
+        /* Плашка нижнего ряда просит людей СВОЕГО окна: повтор начинается своей
+           датой, и список обязан показать тех же, кого посчитала плашка. */
+        var ot = n.getAttribute('data-lfrom');
+        var own = n.getAttribute('data-ltitle');
+        /* Заголовок списка — слово с плашки, по которой нажали: ступень может
+           называться иначе («Охват запуска» под плашкой «Регистрации»). */
+        var ttl = own || (ot ? st.title + ' · повтор' : '');
+        var pl = n.getAttribute('data-lplate');
+        var st2 = (ttl || pl != null) ? Object.assign({}, st, {
+          title: ttl || st.title,
+          people: pl != null ? parseInt(pl, 10) : st.people,
+        }) : st;
+        launchPeopleOpen(cur.slug, st2, cur.title, n, ot || '', !!ttl);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
@@ -42245,7 +42272,8 @@
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
-      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') +
+      return '<button class="stat' + (s.lead ? ' lead' : '') +
+        (s.go || s.ebl || s.step ? ' go' : '') +
         (s.drag ? ' movable' : '') + '"' +
         /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
            порядок, draggable — чтобы браузер вообще начал её тащить. */
@@ -42254,7 +42282,15 @@
         /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
            вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
            другую страницу, а здесь список открывается поверх. */
-        (s.ebl ? ' data-ebl="' + s.ebl + '" title="Показать этих людей поименно"' : '') + '>' +
+        (s.ebl ? ' data-ebl="' + s.ebl + '" title="Показать этих людей поименно"' : '') +
+        /* data-lstep — плашка запуска, за которой стоит ступень пути: клик
+           разворачивает её в поимённый список (владелец, 3.11.2026: «чтобы я прям
+           видела, кто эти люди»). from/to — окно нижнего ряда, у повтора своё. */
+        (s.step ? ' data-lstep="' + s.step + '"' +
+                  (s.stepFrom ? ' data-lfrom="' + s.stepFrom + '"' : '') +
+                  (s.stepTitle ? ' data-ltitle="' + esc(s.stepTitle) + '"' : '') +
+                  (s.stepPlate != null ? ' data-lplate="' + s.stepPlate + '"' : '') +
+                  ' title="Показать этих людей поименно"' : '') + '>' +
         '<div class="sl">' + s.label + '</div>' +
         /* Кегль плитки рассчитан на короткое число. Длинное значение («19 320 ₽»)
            и значение словом («Сегодня») в него не влезают и наезжают на соседнюю
