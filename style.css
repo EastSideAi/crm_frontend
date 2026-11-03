@@ -4069,6 +4069,15 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-roles .qchip { font-size: 12px; padding: 6px 11px; }
 .sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .sc-legend .sc-chip { cursor: default; }
+/* Селектор «Чье расписание» — с подписью сверху, чтобы было понятно, что это выбор
+   чужого расписания, а не просто список имен. */
+.sc-who { display: flex; flex-direction: column; gap: 3px; }
+.sc-wholbl { font-size: 11px; font-weight: 600; color: var(--ink-3); padding-left: 2px; }
+/* Кнопка «Добавить» с меню (часы/собрание по роли). Меню прижато к правому краю
+   кнопки, как сами действия в шапке. */
+.sc-addwrap { position: relative; display: inline-flex; }
+.sc-addmenu { left: auto; right: 0; min-width: 210px; }
+.sc-addmenu .flp-opt { font-weight: 600; }
 /* На телефоне легенда стоила целой строки шапки, а расшифровывала то, что и так
    написано словами в самих плашках («Козубенко (урок)»). Пятый ряд управления
    уводил первый час расписания ниже середины экрана — это дороже подсказки. */
@@ -11630,9 +11639,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   font-size: 12.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 /* Счетчик встреч в дне — только для узкого экрана, где плашки не читаются. */
 .mm-cnt { display: none; }
+/* Счетчики дня у правого края номера: зеленым — свободные окна, серым — занятые
+   часы. Группа, чтобы обе цифры стояли вместе, а не разъезжались по строке. */
+.mm-cnts { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 /* Сколько часов этого дня уже проданы ученикам. Тихая цифра, а не плашка:
    в месяце это фон для решения «куда влезет планерка», а не событие. */
-.mm-load { margin-left: auto; font-size: 10.5px; font-weight: 600; color: var(--ink-3);
+.mm-load { font-size: 10.5px; font-weight: 600; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+/* Сколько в этот день свободных окон — это и есть «все слоты» на календаре. */
+.mm-free { font-size: 10.5px; font-weight: 700; color: var(--green-ink);
   font-variant-numeric: tabular-nums; }
 
 .mm-cell.now .mm-num { color: var(--blue); }
@@ -11668,9 +11683,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      планерка остается в клетке обрезанным «11:0…». */
   .mm-ev, .mm-ev.plan, .mm-more { display: none; }
   .mm-cell { min-height: 54px; }
-  /* Цифра занятости уступает место счетчику встреч: два числа в клетке шириной
-     в палец не читаются, а счетчик отвечает на более частый вопрос. */
-  .mm-load { display: none; }
+  /* Цифры занятости и свободных окон уступают место счетчику встреч: в клетке
+     шириной в палец столько чисел не читается, подробности — по клику на день. */
+  .mm-cnts { display: none; }
   .mm-cnt { display: inline-flex; align-items: center; justify-content: center;
     min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--r-pill);
     background: var(--blue-tint); color: var(--blue); font-size: 10px; font-weight: 700; }
