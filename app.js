@@ -9463,35 +9463,76 @@
       paint();
     }
 
+    function cellKeyFromPoint(x, y) {
+      var n = document.elementFromPoint(x, y);
+      while (n && n !== document.body) {
+        if (n.getAttribute && n.getAttribute('data-sc-cell')) return n.getAttribute('data-sc-cell');
+        n = n.parentNode;
+      }
+      return null;
+    }
+
+    // Тап по клетке: свой час снимаем (или говорим, что на нем клиент), пустой —
+    // копим в выбор. Та же логика нужна и с клавиатуры, поэтому вынесена отдельно.
+    function tapCell(kk) {
+      if (!kk || kk.split('|').length < 2) return;
+      var m = mine(kk);
+      if (m && m.booked) return showToast('На этот час записан клиент — снимите запись в карточке');
+      if (m) return schedDrop(m);
+      state.schedPick[kk] = !state.schedPick[kk];
+      if (!state.schedPick[kk]) delete state.schedPick[kk];
+      paint();
+    }
+
+    // Указатель вместо мыши: один код и для мыши на компе, и для пальца на
+    // планшете. Мышь тянет прямоугольник, палец выбирает по тапу (а протяжка
+    // пальцем — это скролл сетки, не выбор). Захват указателя держит move/up на
+    // исходной клетке, даже если увели за ее край. Раньше тут были mousedown +
+    // click: на тач-экране синтетический click снимал только что поставленный
+    // час — выходило «Выбрано часов: 0», и часы не ставились.
     cells.forEach(function (c) {
       var key = c.getAttribute('data-sc-cell') || '';
-      schedKeyClick(c);
-      c.addEventListener('mousedown', function (e) {
-        if (e.button !== 0 || !d.me || mine(key)) return;
+      c.style.touchAction = 'manipulation';
+      c.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
-        var base = {}, k;
-        for (k in state.schedPick) if (state.schedPick[k]) base[k] = true;
-        drag = { from: key, add: !state.schedPick[key], base: base, moved: false };
-        stretch(key);
+        if (d.me) tapCell(key);
       });
-      c.addEventListener('mouseenter', function () {
-        if (!drag) return;
-        drag.moved = true;
-        stretch(key);
-      });
-      c.addEventListener('click', function () {
+      c.addEventListener('pointerdown', function (e) {
         if (!d.me || key.split('|').length < 2) return;
-        var m = mine(key);
-        if (m && m.booked) return showToast('На этот час записан клиент — снимите запись в карточке');
-        if (m) return schedDrop(m);
-        if (drag && drag.moved) return;    // это был конец протяжки, не отдельный клик
-        if (drag) return;                  // мышь уже все поставила на mousedown
-        state.schedPick[key] = !state.schedPick[key];
-        if (!state.schedPick[key]) delete state.schedPick[key];
-        paint();
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        var startX = e.clientX, startY = e.clientY, moved = false, dr = null;
+        if (!mine(key) && e.pointerType === 'mouse') {
+          e.preventDefault();
+          var base = {}, k;
+          for (k in state.schedPick) if (state.schedPick[k]) base[k] = true;
+          dr = drag = { from: key, add: !state.schedPick[key], base: base, moved: false };
+          stretch(key);
+        }
+        try { c.setPointerCapture(e.pointerId); } catch (_) {}
+        function move(ev) {
+          if (Math.abs(ev.clientX - startX) > 8 || Math.abs(ev.clientY - startY) > 8) moved = true;
+          if (dr) {
+            var k2 = cellKeyFromPoint(ev.clientX, ev.clientY);
+            if (k2) { dr.moved = true; stretch(k2); }
+          }
+        }
+        function up(ev) {
+          c.removeEventListener('pointermove', move);
+          c.removeEventListener('pointerup', up);
+          c.removeEventListener('pointercancel', up);
+          try { c.releasePointerCapture(ev.pointerId); } catch (_) {}
+          drag = null;
+          if (dr && dr.moved) return;                      // протяжка мышью — выбор уже стоит
+          if (moved && ev.pointerType !== 'mouse') return; // палец скроллил, не тапал
+          if (dr) return;                                  // мышь: клетку переключил pointerdown
+          tapCell(cellKeyFromPoint(ev.clientX, ev.clientY) || key);
+        }
+        c.addEventListener('pointermove', move);
+        c.addEventListener('pointerup', up);
+        c.addEventListener('pointercancel', up);
       });
     });
-    document.addEventListener('mouseup', function () { drag = null; });
 
     if (el('sc-rep')) el('sc-rep').addEventListener('change', function () {
       state.schedRep = +el('sc-rep').value || 1;
