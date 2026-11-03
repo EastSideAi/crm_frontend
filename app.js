@@ -8830,7 +8830,7 @@
   }
 
   function schedRoleChips() {
-    return '<div class="sc-roles">' + [['curator', 'Разборы'], ['teacher', 'Уроки'], ['staff', 'Команда']]
+    return '<div class="sc-roles">' + [['curator', 'Консультации ОП'], ['teacher', 'Уроки'], ['staff', 'Команда']]
       .map(function (r) {
         return '<button type="button" class="qchip sm' + (schedRoleOn(r[0]) ? ' on' : '') +
           '" data-srole="' + r[0] + '" aria-pressed="' + (schedRoleOn(r[0]) ? 'true' : 'false') + '">' +
