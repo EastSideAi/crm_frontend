@@ -28380,8 +28380,14 @@
       '<span class="num">выплачено</span><span class="num">остаток</span></div>';
     var body = rows.map(function (r) {
       var debt = r.debt >= 1;
+      // Сверка накопительная, поэтому под именем — за какие месяцы наработано: иначе
+      // остаток нечем прочитать, и непонятно, закрыт ли он уже выплатой этого месяца.
+      var mon = (r.months || []).slice().reverse().slice(0, 3).map(function (m) {
+        return finMonthLabel(m.month).split(' ')[0].toLowerCase() + ' ' + finRub(m.earned, 0);
+      }).join(' · ');
       return '<div class="trow pck-grid' + (debt ? ' warn' : '') + '">' +
-        '<span class="fo-what"><b>' + esc(r.name) + '</b></span>' +
+        '<span class="fo-what"><b>' + esc(r.name) + '</b>' +
+          (mon ? '<i>' + esc(mon) + '</i>' : '') + '</span>' +
         '<span class="num">' + finRub(r.earned) + '</span>' +
         '<span class="num">' + finRub(r.paid) + '</span>' +
         '<span class="num pck-debt' + (debt ? ' on' : '') + '">' +
