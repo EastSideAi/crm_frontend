@@ -10855,9 +10855,19 @@
      выбранный помним — каждый раз тыкать одно и то же человек не должен. */
   var OFFICE_SIZE_LS = 'es_office_size';
   var OFFICE_SIZES = ['', 'big', 'full'];
+  /* Полный экран запоминать нельзя: он закрывает собой страницу целиком, и
+     человек, вернувшийся завтра на «Записи», видит вместо них окно офиса и
+     решает, что раздел пропал (Павел 03.11.2026). Поэтому на весь экран офис
+     живет до ухода со страницы, а в памяти браузера остается большой размер. */
+  var officeNow = null;
 
   function officeSize() {
+    if (officeNow !== null) return officeNow;
     var v = lsGet(OFFICE_SIZE_LS) || '';
+    // У тех, кто разворачивал офис до этой правки, в памяти браузера лежит
+    // полный экран. Читаем его как большой размер, иначе страница так и будет
+    // открываться закрытой.
+    if (v === 'full') v = 'big';
     return OFFICE_SIZES.indexOf(v) >= 0 ? v : '';
   }
   function officeSetSize(v) {
@@ -10869,7 +10879,8 @@
     d.classList.toggle('big', p === 'big');
     d.classList.toggle('full', p === 'full');
     document.body.classList.toggle('office-full', p === 'full');
-    try { localStorage.setItem(OFFICE_SIZE_LS, v); } catch (e) {}
+    officeNow = v;
+    try { localStorage.setItem(OFFICE_SIZE_LS, v === 'full' ? 'big' : v); } catch (e) {}
     var up = d.querySelector('.mx-office-up'), fs = d.querySelector('.mx-office-fs');
     // Иконку переписываем здесь, а не в обработчике: из полного экрана выходят и
     // кнопкой, и клавишей, и стрелки не должны после этого показывать не то.
@@ -10885,6 +10896,9 @@
     if (!d) return;
     d.hidden = false;
     var zovut = state.mxWantChan || '';
+    // Размер применяем на каждый показ: уходя со страницы, мы снимаем полный
+    // экран, и без этого рамка вернулась бы без своего размера вовсе.
+    officeSetSize(officeSize());
     if (d.getAttribute('data-on')) {
       // Рамка уже стоит: просим ее перейти в канал из ссылки, а не пересобираем
       // ее заново — пересборка выбросила бы человека из разговора.
@@ -10927,8 +10941,11 @@
     if (!officeBox) return;
     officeBox.hidden = true;
     // Полный экран — состояние ЭТОГО раздела: уходя в задачи, человек не должен
-    // оставить за собой страницу без прокрутки.
+    // оставить за собой страницу без прокрутки. Вернется — окно будет большим,
+    // но страница под ним останется видна.
     document.body.classList.remove('office-full');
+    officeBox.classList.remove('full');
+    if (officeSize() === 'full') officeNow = 'big';
   }
 
   /* Кнопки размера лежат поверх рамки, а не внутри нее: внутри рамка чужая,
