@@ -9095,7 +9095,7 @@
       (d.meetings || []).forEach(function (m) {
         if (!(m.people || []).some(function (p) { return p.person === myName; })) return;
         out.push({ ymd: m.date, hour: m.hour, cls: 'plan', title: m.title,
-                   sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false });
+                   sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false, meet: m });
       });
       (d.slots || []).forEach(function (s) {
         if (s.person !== myName || !s.booked) return;
@@ -9154,10 +9154,17 @@
         WDAYS_RU[dt.getDay()] + ', ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] +
         (ymd === todayKey ? '<i>сегодня</i>' : '') + '</div>';
       return head + seen[ymd].map(function (r) {
-        return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + '">' +
+        // Встречу из ленты можно открыть и поправить прямо здесь — тем же редактором,
+        // что по клику в сетке. Раньше в нее было не провалиться: приходилось идти в
+        // «Календарь» (Павел 03.11.2026: «чтобы редактор был везде»). Занятые часы и
+        // комнаты встреч так не открываются: у первых правка в карточке клиента, у
+        // вторых — ссылка «Войти».
+        var ed = r.meet ? schedMeetAttr(r.meet) : '';
+        return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + (r.meet ? ' tap' : '') + '"' + ed + '>' +
           '<span class="sc-my-h' + (tz ? ' two' : '') + '">' +
             (tz ? '<b>' + r.hour + ':00</b><i>' + r.msk + ':00 мск</i>' : r.hour + ':00') + '</span>' +
           '<span class="sc-my-b"><b>' + esc(r.title) + '</b><i>' + esc(r.sub) + '</i></span>' +
+          (r.meet ? '<span class="sc-my-ed" title="Изменить встречу: время, участников">' + ic('edit', 14) + '</span>' : '') +
           (r.url ? '<a class="sc-my-go" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
             (r.live ? 'Войти' : 'Открыть') + '</a>' : '') + '</div>';
       }).join('') + '';
