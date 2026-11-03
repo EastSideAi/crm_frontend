@@ -33136,8 +33136,9 @@
     var base = f.reg || 0;
     /* Деньги тут целыми рублями, как на экране запусков: копейки в выручке запуска
        ничего не решают, а в плашке съедают кегль у самой цифры. */
-    return adsKpi('Прошли диагностику', adsNum(f.diag_done),
-             'зашли в анкету ' + adsNum(f.diag_entered) + adsShare(f.diag_done, base)) +
+    return adsKpi('Записались на диагностику', adsNum(f.diag_done),
+             'на платформе · зашли в анкету ' + adsNum(f.diag_entered) +
+             adsShare(f.diag_done, base)) +
       adsKpi('Записались на консультацию', adsNum(f.cons_booked),
              'выбрали время ' + adsNum(f.cons_slotted) + adsShare(f.cons_booked, base)) +
       adsKpi('Платное участие', fmtMoney(Math.round(f.uch_rub || 0)) + ' ₽',
@@ -33872,15 +33873,18 @@
     var zalTxt = 'от бывших на ' + (hvost ? 'повторе' : 'эфире');
     var regTxt = 'от регистраций' + (hvost ? ' ' + hvost : '');
     return [
-      { key: 'diag', label: 'Прошли диагностику', value: dc.done,
+      /* «Записались», а не «прошли»: речь о диагностике на платформе ИстСайд, и
+         путать её с тестом в боте или разбором у тьютора нельзя (владелец,
+         3.11.2026). Подпись называет платформу прямо. */
+      { key: 'diag', label: 'Записались на диагностику', value: dc.done,
         step: 'plat_diag', stepFrom: ot, stepPlate: dc.done,
-        sub: 'зашли в анкету ' + dc.entered + ' · анкета и разбор в кабинете',
+        sub: 'зашли в анкету ' + dc.entered + ' · на платформе ИстСайд',
         pct: [launchPct(dc.done, zal, zalTxt), launchPct(dc.done, base, regTxt)] },
       { key: 'cons', label: 'Записались на консультацию', value: dc.booked,
         step: 'tutor', stepFrom: ot, stepPlate: dc.booked,
         sub: 'выбрали дату и время ' + dc.slotted,
         pct: [launchPct(dc.booked, zal, zalTxt),
-              launchPct(dc.booked, dc.done, 'от прошедших диагностику'),
+              launchPct(dc.booked, dc.done, 'от записавшихся на диагностику'),
               launchPct(dc.booked, base, regTxt)] },
     ].concat(launchSupportTile(pay, dc, base, hvost, ot));
   }
