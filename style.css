@@ -14335,3 +14335,33 @@ video.cs-media { background: #000; }
 
 /* Вкладки раздела «Процессы»: семь штук, на 1280 без переноса во вторую строку. */
 .prc-tabs .tab { padding-left: 13px; padding-right: 13px; }
+
+/* Проектная деятельность в карточке ученика: шаги дорожной карты. Плотно, как вся
+   CRM; сданный на проверку шаг подсвечен — это то, что ждет команду. */
+.pj-topic { display: flex; gap: 8px; }
+.pj-topic .al-in { flex: 1; }
+.pj-s { padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); }
+.pj-s + .pj-s { margin-top: 8px; }
+.pj-s.hot { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue-tint); }
+.pj-s-h { display: flex; align-items: center; gap: 10px; }
+.pj-s-h b { font-size: 14px; }
+.pj-n { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; color: var(--ink-2); background: var(--fill); }
+.pj-who { font-size: 12px; color: var(--ink-3); }
+.pj-s-h .sev { margin-left: auto; }
+.pj-fs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.pj-f { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink); background: var(--fill); text-decoration: none; }
+.pj-f:hover { color: var(--blue); }
+.pj-ms { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.pj-m { font-size: 12px; color: var(--ink-3); padding: 8px 10px; border-radius: 10px; background: var(--fill); }
+.pj-m.team { background: var(--blue-tint); }
+.pj-m b { color: var(--ink-2); font-weight: 600; }
+.pj-m div { margin-top: 3px; font-size: 13px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
+.pj-reply { margin-top: 10px; }
+.pj-reply .al-in { width: 100%; resize: vertical; }
+.pj-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pj-s--min { padding: 10px 16px; }
+.pj-s--min .pj-s-h { cursor: pointer; }
+.pj-s--min .pj-b { display: none; }
+.pj-s--min.open .pj-b { display: block; }
