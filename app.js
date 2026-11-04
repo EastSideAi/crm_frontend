@@ -33872,6 +33872,30 @@
     hvost = hvost || '';
     var zalTxt = 'от бывших на ' + (hvost ? 'повторе' : 'эфире');
     var regTxt = 'от регистраций' + (hvost ? ' ' + hvost : '');
+    /* По меткам ссылок (владелец, 4.11.2026): диагностику продают ссылкой с меткой,
+       и среди регистраций этих людей почти не узнать — плашка показывала 2 при 54
+       заполнивших анкету. Консультация — все заявки периода, со временем и без.
+       Каждая цифра, и в подписи тоже, открывает своих людей. */
+    var t = dc.tag;
+    if (t) {
+      var blk = function (b, txt) {
+        return '<span class="go-sub" data-lblk="' + b + '" role="button" tabindex="0"' +
+          (ot ? ' data-lfrom="' + ot + '"' : '') +
+          ' title="Показать этих людей поименно">' + txt + '</span>';
+      };
+      return [
+        { key: 'diag', label: 'Записались на диагностику', value: t.anketa,
+          blk: 'tag_anketa', blkFrom: ot,
+          sub: blk('tag_diag', 'получили разбор ' + t.diag) + ' · на платформе ИстСайд',
+          pct: [launchPct(t.anketa, zal, zalTxt), launchPct(t.anketa, base, regTxt)] },
+        { key: 'cons', label: 'Записались на консультацию', value: t.cons,
+          blk: 'tag_cons', blkFrom: ot,
+          sub: 'выбрали время ' + t.cons_slot,
+          pct: [launchPct(t.cons, zal, zalTxt),
+                launchPct(t.cons, t.anketa, 'от записавшихся на диагностику'),
+                launchPct(t.cons, base, regTxt)] },
+      ].concat(launchSupportTile(pay, { booked: t.cons }, base, hvost, ot));
+    }
     return [
       /* «Записались», а не «прошли»: речь о диагностике на платформе ИстСайд, и
          путать её с тестом в боте или разбором у тьютора нельзя (владелец,
@@ -34154,11 +34178,14 @@
     }
     if (p.kind === 'block') {
       /* Период сюда НЕ передаём: блоки его не слушаются — они считают весь запуск.
-         Обещать в списке фильтр, которого нет в цифре, значит снова их развести. */
-      return '?' + ['slug=' + encodeURIComponent(p.slug),
-                    'block=' + encodeURIComponent(p.block),
-                    'value=' + encodeURIComponent(p.value || ''),
-                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+         Обещать в списке фильтр, которого нет в цифре, значит снова их развести.
+         from — только у плашек по меткам в ряду повтора: у того своё окно. */
+      var bq = ['slug=' + encodeURIComponent(p.slug),
+                'block=' + encodeURIComponent(p.block),
+                'value=' + encodeURIComponent(p.value || ''),
+                'limit=' + LP_LIMIT, 'offset=' + offset];
+      if (p.from) bq.push('from=' + encodeURIComponent(p.from));
+      return '?' + bq.join('&');
     }
     var q = ['slug=' + encodeURIComponent(p.slug), 'step=' + encodeURIComponent(p.step),
              'limit=' + LP_LIMIT, 'offset=' + offset];
@@ -34188,12 +34215,13 @@
      зарегистрировавшихся: тест открывают из постов, в канал вступают по общей ссылке.
      Связать их с регистрацией нечем — но показать, кто это, можно и нужно: «тест прошли
      22» без имён команда проверить не может и пересчитывает у себя. */
-  function launchBlockOpen(slug, block, value, title, launchTitle, count, node) {
+  function launchBlockOpen(slug, block, value, title, launchTitle, count, node, from) {
     state._lpPeople = {
-      kind: 'block', id: 'block:' + block + ':' + value,
+      kind: 'block', id: 'block:' + block + ':' + value + ':' + (from || ''),
       slug: slug, block: block, value: value, step: '',
       title: title, plate: count || 0, launch: launchTitle || '',
-      from: '', to: '',
+      ownTitle: !!from,
+      from: from || '', to: '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: node || null,
     };
@@ -36216,6 +36244,27 @@
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+      });
+    });
+    /* Плашка по меткам и цифра в её подписи → свой список. Подпись лежит внутри
+       плашки, поэтому клик дальше не всплывает: иначе поверх списка «получили
+       разбор» сразу открылся бы список всей плашки. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lblk]'), function (n) {
+      var openIt = function (e) {
+        e.stopPropagation();
+        var tile = n.closest('.stat') || n;
+        var lbl = n === tile ? (tile.querySelector('.sl') || {}).textContent : n.textContent;
+        var num = n === tile ? parseInt((tile.querySelector('.sv') || {}).textContent, 10)
+                             : parseInt(String(n.textContent).replace(/\D+/g, ''), 10);
+        var ttl = String(lbl || 'Люди').replace(/\s*\d+$/, '');
+        ttl = ttl.charAt(0).toUpperCase() + ttl.slice(1);
+        var ot = n.getAttribute('data-lfrom') || '';
+        launchBlockOpen(cur.slug, n.getAttribute('data-lblk'), '',
+          ot ? ttl + ' · повтор' : ttl, cur.title, isNaN(num) ? 0 : num, tile, ot);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(e); }
       });
     });
     /* Плитка «Страницу видели» → разбор по дням и источникам. Людей там нет и быть
@@ -42343,7 +42392,7 @@
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
       return '<button class="stat' + (s.lead ? ' lead' : '') +
-        (s.go || s.ebl || s.step ? ' go' : '') +
+        (s.go || s.ebl || s.step || s.blk ? ' go' : '') +
         (s.drag ? ' movable' : '') + '"' +
         /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
            порядок, draggable — чтобы браузер вообще начал её тащить. */
@@ -42360,7 +42409,12 @@
                   (s.stepFrom ? ' data-lfrom="' + s.stepFrom + '"' : '') +
                   (s.stepTitle ? ' data-ltitle="' + esc(s.stepTitle) + '"' : '') +
                   (s.stepPlate != null ? ' data-lplate="' + s.stepPlate + '"' : '') +
-                  ' title="Показать этих людей поименно"' : '') + '>' +
+                  ' title="Показать этих людей поименно"' : '') +
+        /* data-lblk — плашка, за которой стоит список блока, а не ступень пути
+           (диагностика и консультация по меткам, 4.11.2026). */
+        (s.blk ? ' data-lblk="' + s.blk + '"' +
+                 (s.blkFrom ? ' data-lfrom="' + s.blkFrom + '"' : '') +
+                 ' title="Показать этих людей поименно"' : '') + '>' +
         '<div class="sl">' + s.label + '</div>' +
         /* Кегль плитки рассчитан на короткое число. Длинное значение («19 320 ₽»)
            и значение словом («Сегодня») в него не влезают и наезжают на соседнюю
