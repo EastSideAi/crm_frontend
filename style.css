@@ -466,6 +466,12 @@ a { color: inherit; text-decoration: none; }
 .stat.go { cursor: pointer; }
 .stat.go:hover { background: var(--fill); }
 .stat.go:hover::before, .stat.go:hover + .stat::before { opacity: 0; }
+/* Цифра в подписи плашки со своим списком («получили разбор 41»): кликается
+   отдельно от плашки, поэтому видна как ссылка. */
+.stat .go-sub { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
+  text-decoration-thickness: 1px; border-radius: 4px; }
+.stat .go-sub:hover { color: var(--ink); text-decoration-style: solid; }
+.stat .go-sub:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .stat .sl { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-2);
   letter-spacing: .005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Приписка под числом: сколько в списке было своих. Тише подписи и сильно тише
