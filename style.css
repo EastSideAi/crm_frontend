@@ -11840,6 +11840,22 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
            padding: 10px 0; border-top: 1px solid var(--line);
            color: var(--ink-2); font-size: 13px; }
 .idup-log .idup-k { margin: 0; }
+.cdup-top { display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; margin: 0 0 6px; }
+.cdup-sec { font-size: 20px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 6px; }
+.cdup-top .cdup-sec { margin: 0; }
+.cdup-gap { margin-top: 36px; }
+.cdup-h { display: flex; align-items: center; gap: 8px; margin: 22px 0 0;
+          font-size: 15px; font-weight: 700; }
+.cdup-h .n { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: var(--r-pill);
+             background: var(--fill); color: var(--ink-2); }
+.cdup-hn { margin: 2px 0 10px; }
+.cdup-more { width: 100%; margin-bottom: 14px; }
+/* Карточки группы рядом, а не столбиком: решение — это сравнение двух-трех карточек,
+   и глазу проще, когда они стоят бок о бок. На телефоне сетка сама уходит в столбец. */
+.cdup-g .idup-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.cdup-g .idup-c { display: flex; flex-direction: column; }
+.cdup-g .idup-c-b { margin-top: auto; padding-top: 10px; }
 @media (max-width: 560px) {
   .idup-g { padding: 14px; }
   .idup-c-b button, .idup-a button { flex: 1 1 100%; }
