@@ -33176,11 +33176,15 @@
     var sh = function (k) { return adsShare(n[k], base).replace(/^ · /, ''); };
     return [
       { key: 'live', label: 'Пришли на эфир', value: adsNum(n.live), step: 'live', sub: esc(sh('live')) },
-      { key: 'rec', label: 'Посмотрели запись', value: adsNum(n.rec), step: 'rec', sub: esc(sh('rec')) },
+      { key: 'rec', label: 'Посмотрели запись', value: adsNum(n.rec), step: 'rec',
+        sub: (n.rec_new != null ? adsStepSpan('rec_new', 'из них новых ' + adsNum(n.rec_new)) +
+                                  esc(', на эфире не были') : '') +
+             (sh('rec') ? esc(' · ' + sh('rec')) : '') },
       { key: 'diag_click', label: 'Нажали кнопку диагностики', value: adsNum(n.diag_click),
         step: 'diag_click', sub: esc('в комнате эфира' + (sh('diag_click') ? ' · ' + sh('diag_click') : '')) },
       { key: 'anketa', label: 'Записались на диагностику', value: adsNum(n.anketa), step: 'anketa',
-        sub: esc('заполнили анкету на платформе' + (sh('anketa') ? ' · ' + sh('anketa') : '')) },
+        sub: (n.diag != null ? adsStepSpan('diag', 'получили разбор ' + adsNum(n.diag)) + ' · ' : '') +
+             esc('анкета на платформе' + (sh('anketa') ? ' · ' + sh('anketa') : '')) },
       { key: 'cons', label: 'Записались на консультацию', value: adsNum(n.cons), step: 'cons',
         sub: esc(sh('cons')) },
       { key: 'uch', label: 'Платное участие', value: fmtMoney(Math.round((f && f.uch_rub) || 0)) + ' ₽',
