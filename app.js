@@ -33117,6 +33117,37 @@
       (sub ? '<div class="ads-ks">' + esc(sub) + '</div>' : '') + '</div>';
   }
 
+  /* Доля от регистраций с рекламы. Отдельной функцией, а не делением по месту:
+     эта же доля стоит в трёх плашках подряд, и считаться она обязана одинаково. */
+  function adsShare(n, base) {
+    /* Ноль долей не имеет: «0% от регистраций» — шум, который занимает место рядом
+       с честным нулём и ничего к нему не добавляет. */
+    if (!base || !n) return '';
+    var v = n * 100 / base;
+    if (n > 0 && v < 1) return ' · меньше 1% от регистраций';
+    return ' · ' + String(Math.round(v * 10) / 10).replace('.', ',') + '% от регистраций';
+  }
+
+  /* Что реклама принесла ДАЛЬШЕ регистрации: разбор, заявка, деньги. Считается по
+     людям с рекламной меткой — раздел про платный трафик, и общий итог запуска в
+     нём читался бы как заслуга рекламы (владелец, 3.11.2026). */
+  function adsFunnelKpis(f) {
+    if (!f) return '';
+    var base = f.reg || 0;
+    /* Деньги тут целыми рублями, как на экране запусков: копейки в выручке запуска
+       ничего не решают, а в плашке съедают кегль у самой цифры. */
+    return adsKpi('Записались на диагностику', adsNum(f.diag_done),
+             'на платформе · зашли в анкету ' + adsNum(f.diag_entered) +
+             adsShare(f.diag_done, base)) +
+      adsKpi('Записались на консультацию', adsNum(f.cons_booked),
+             'выбрали время ' + adsNum(f.cons_slotted) + adsShare(f.cons_booked, base)) +
+      adsKpi('Платное участие', fmtMoney(Math.round(f.uch_rub || 0)) + ' ₽',
+             'оплатили ' + adsNum(f.uch_people) + ' · 690 ₽' +
+             adsShare(f.uch_people, base)) +
+      adsKpi('Сопровождение', fmtMoney(Math.round(f.sup_rub || 0)) + ' ₽',
+             'оплатили ' + adsNum(f.sup_people) + adsShare(f.sup_people, base));
+  }
+
   function adsDayCard(r) {
     /* Развёрнутый день: всё, что не поместилось в строку, плюс расхождения.
        Достижения цели рядом с людьми стоят намеренно — это тот самый случай, где
@@ -33197,6 +33228,8 @@
         '<span style="flex:1"></span>' +
         '<button class="mk-btn primary" id="ads-sync">' + ic('refresh', 12) + 'Пересобрать</button></div>' +
         '<div class="ads-kpis">' + kpis + '</div>' +
+        (d.funnel ? '<div class="ads-sub">Что было дальше · по людям с рекламы</div>' +
+                    '<div class="ads-kpis">' + adsFunnelKpis(d.funnel) + '</div>' : '') +
       '</div>' +
       '<div class="card" style="overflow:hidden;margin-top:16px">' +
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
@@ -33840,15 +33873,18 @@
     var zalTxt = 'от бывших на ' + (hvost ? 'повторе' : 'эфире');
     var regTxt = 'от регистраций' + (hvost ? ' ' + hvost : '');
     return [
-      { key: 'diag', label: 'Прошли диагностику', value: dc.done,
+      /* «Записались», а не «прошли»: речь о диагностике на платформе ИстСайд, и
+         путать её с тестом в боте или разбором у тьютора нельзя (владелец,
+         3.11.2026). Подпись называет платформу прямо. */
+      { key: 'diag', label: 'Записались на диагностику', value: dc.done,
         step: 'plat_diag', stepFrom: ot, stepPlate: dc.done,
-        sub: 'зашли в анкету ' + dc.entered + ' · анкета и разбор в кабинете',
+        sub: 'зашли в анкету ' + dc.entered + ' · на платформе ИстСайд',
         pct: [launchPct(dc.done, zal, zalTxt), launchPct(dc.done, base, regTxt)] },
       { key: 'cons', label: 'Записались на консультацию', value: dc.booked,
         step: 'tutor', stepFrom: ot, stepPlate: dc.booked,
         sub: 'выбрали дату и время ' + dc.slotted,
         pct: [launchPct(dc.booked, zal, zalTxt),
-              launchPct(dc.booked, dc.done, 'от прошедших диагностику'),
+              launchPct(dc.booked, dc.done, 'от записавшихся на диагностику'),
               launchPct(dc.booked, base, regTxt)] },
     ].concat(launchSupportTile(pay, dc, base, hvost, ot));
   }
