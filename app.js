@@ -122,8 +122,8 @@
     // свободен» (Павел 26.10.2026). Сетка команды — вторым переключателем.
     schedScope: 'my', schedHow: false, schedHide: {},
     // Встречи — одна сетка в двух видах: 'slots' (часы на дни, как в расписании)
-    // и 'cal' (месяц целиком, как гугл-календарь). Раздела «Расписание» в меню
-    // больше нет: 16.09.2026 Павел свел оба места в одно.
+    // и 'cal' (месяц целиком, как гугл-календарь). С 02.11.2026 это раздел
+    // «Расписание» в меню, под «Задачами».
     meetView: 'slots', meetMonth: 0, meetMonthData: {},
     news: null, newsUnread: 0,
     teamMode: 'office', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
@@ -2425,6 +2425,10 @@
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
        Отдельным пунктом под «Задачами» и открыт всем, у кого есть задачи
        (Павел 06.10.2026): встречи проводит вся команда, а не руководители. */
+    /* «Расписание» — свой пункт под «Задачами» (Павел 02.11.2026): вкладкой внутри
+       EastSide Meeting сетка часов терялась среди встреч и записей, а ходят в нее
+       каждый день — посмотреть, кто к тебе записан, и поставить свои часы. */
+    { id: 'sched', label: 'Расписание', icon: 'cal', cap: 'tasks' },
     { id: 'meetx', label: 'EastSide Meeting', short: 'Meeting', icon: 'mic', cap: 'tasks' },
     /* «Фокус недели» и «Застряло» больше не пункты меню: с 06.10.2026 это срезы
        вкладки «Команда» внутри «Задач» (Павел: «перенести фильтрами в задачник и
@@ -3919,10 +3923,12 @@
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
       return;
     }
-    // «Расписание» и вкладка «Встречи» в задачах переехали в EastSide Meeting
-    // (06.10.2026). Старые страницы и закладки ведут туда же, куда раньше.
-    if (state.page === 'sched' || (state.page === 'tasks' && state.taskSeg === 'meet')) {
-      state.page = 'meetx'; state.taskSeg = 'week'; state.mxTab = 'sched';
+    // Вкладка «Встречи» в задачах и вкладка «Расписание» в EastSide Meeting стали
+    // разделом «Расписание» (02.11.2026). Старые закладки ведут туда же.
+    if ((state.page === 'tasks' && state.taskSeg === 'meet') ||
+        (state.page === 'meetx' && state.mxTab === 'sched')) {
+      if (state.page === 'tasks') state.taskSeg = 'week';
+      state.page = 'sched'; state.mxTab = 'soon';
     }
     // «Фокус недели» и «Застряло» переехали в срезы вкладки «Команда» (06.10.2026).
     // Старые ссылки из бота и закладки ведут туда же, куда раньше.
@@ -3958,6 +3964,7 @@
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'meetx') renderMeetx(view);
+    else if (state.page === 'sched') renderSchedPage(view);
     else if (state.page === 'news') renderNews(view);
     else if (state.page === 'workshops') renderWorkshops(view);
     else if (state.page === 'team') renderTeam(view);
@@ -8799,11 +8806,143 @@
   // глазами целиком (Павел 26.10.2026: «чтобы не наслаивалось»).
   function schedRoleOn(role) { return !(state.schedHide || {})[role]; }
 
+  // ── Общие контролы расписания: одинаковые в видах «Слоты» и «Календарь» ──────
+  // Раньше фильтр (чье расписание, роли) и переключатель «Мое/Вся команда» жили
+  // только во вкладке «Слоты», а в «Календаре» их не было — переключение между
+  // видами выглядело так, будто фильтр ни на что не влияет (Павел 03.11.2026).
+  function schedScopeSeg(my) {
+    return '<div class="due-seg zw-seg sc-scope">' +
+      '<button type="button" class="' + (my ? 'on' : '') + '" data-ss="my">Мое</button>' +
+      '<button type="button" class="' + (my ? '' : 'on') + '" data-ss="all">Вся команда</button></div>';
+  }
+
+  // Все люди расписания: и те, кто ведет окна (people), и те, кого зовут только на
+  // встречи (staff — руководство, МОПы). Фильтр «Чье расписание» строился лишь по
+  // people, и половина команды в него не попадала (Павел 03.11.2026: «отображаются
+  // не все»).
+  function schedPeopleAll(d) {
+    var seen = {}, out = [];
+    ((d && d.people) || []).concat(((d && d.staff) || []).map(function (p) {
+      return { person: p.person, role: 'staff' };
+    })).forEach(function (p) {
+      if (!p || !p.person || seen[p.person]) return;
+      seen[p.person] = 1; out.push(p);
+    });
+    return out;
+  }
+
+  // Селектор «Чье расписание» — явный и всегда на виду, чтобы было понятно, где
+  // посмотреть чужое расписание (а не прятался только в режиме сетки).
+  function schedWhoSel(people, myName) {
+    var ppl = (people || []).slice().sort(function (a, b) { return a.person.localeCompare(b.person, 'ru'); });
+    return '<div class="sc-who"><span class="sc-wholbl">Чье расписание</span>' +
+      '<label class="al-selwrap"><select class="al-sel" id="sc-who">' +
+      '<option value="">Вся команда</option>' +
+      (myName ? '<option value="' + esc(myName) + '"' + (state.schedWho === myName ? ' selected' : '') + '>Только мое</option>' : '') +
+      ppl.filter(function (p) { return p.person !== myName; }).map(function (p) {
+        return '<option value="' + esc(p.person) + '"' + (state.schedWho === p.person ? ' selected' : '') + '>' + esc(p.person) + '</option>';
+      }).join('') + '</select></label></div>';
+  }
+
+  function schedRoleChips() {
+    return '<div class="sc-roles">' + [['curator', 'Консультации ОП'], ['teacher', 'Уроки'], ['staff', 'Команда']]
+      .map(function (r) {
+        return '<button type="button" class="qchip sm' + (schedRoleOn(r[0]) ? ' on' : '') +
+          '" data-srole="' + r[0] + '" aria-pressed="' + (schedRoleOn(r[0]) ? 'true' : 'false') + '">' +
+          r[1] + '</button>';
+      }).join('') + '</div>';
+  }
+
+  function schedLegend() {
+    return '<div class="sc-legend">' +
+      '<span class="sc-chip free" title="Человек свободен: этот час можно продать клиенту">свободно</span>' +
+      '<span class="sc-chip busy" title="Час уже занят уроком или разбором">занято</span>' +
+      '<span class="sc-chip meet" title="Внутренняя встреча команды">планерка</span>' +
+      '<span class="sc-chip room" title="Наша встреча: комната EastSide Meeting, нажатие открывает ее">наша встреча</span></div>';
+  }
+
+  // Что человек может добавить в расписание — зависит от его роли. Преподаватель
+  // ставит уроки, остальные ведущие — консультации (разборы); руководитель вдобавок
+  // ставит собрания. Пустой список — кнопки «Добавить» нет (человек сперва выбирает
+  // себя в расписании через селектор «Кто вы»).
+  function schedAddItems(d) {
+    var items = [];
+    if (d && d.me) items.push(d.me.role === 'teacher'
+      ? { k: 'hours', label: 'Часы под уроки' }
+      : { k: 'hours', label: 'Часы под консультации' });
+    if (d && d.can_edit_all) items.push({ k: 'meet', label: 'Собрание / планерка' });
+    return items;
+  }
+
+  // Одна понятная кнопка «Добавить». Один доступный пункт — кнопка сразу ведет в
+  // него и подписана им же; несколько — кнопка «Добавить» с маленьким меню.
+  function schedAddBtn(d) {
+    var items = schedAddItems(d);
+    if (!items.length) return '';
+    if (items.length === 1) {
+      return '<div class="sc-addwrap"><button class="bp sm sc-addbtn" id="sc-add" data-add="' +
+        items[0].k + '">' + ic('plus', 14) + esc(items[0].label) + '</button></div>';
+    }
+    return '<div class="sc-addwrap">' +
+      '<button class="bp sm sc-addbtn" id="sc-add" aria-haspopup="true" aria-expanded="false">' +
+        ic('plus', 14) + 'Добавить</button>' +
+      '<div class="flp-menu sc-addmenu" id="sc-addmenu" hidden>' +
+      items.map(function (it) {
+        return '<button type="button" class="flp-opt" data-add="' + it.k + '">' + esc(it.label) + '</button>';
+      }).join('') + '</div></div>';
+  }
+
+  // Переход из меню «Добавить» в нужное действие. «Часы» всегда ставятся в сетке
+  // слотов, поэтому из «Календаря» сначала уводим в «Слоты» и включаем отметку.
+  function schedAddRun(d, k) {
+    if (k === 'meet') return openSchedMeet(d);
+    state.meetView = 'slots';
+    state.schedEdit = true;
+    saveUi();
+    renderView();
+  }
+
+  function wireSchedCtl(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ss]'), function (b) {
+      b.addEventListener('click', function () {
+        state.schedScope = b.getAttribute('data-ss') === 'all' ? 'all' : 'my';
+        // Из чужой сетки в свою ленту режим отметки не переносим: там отмечать нечего.
+        if (state.schedScope === 'my') state.schedEdit = false;
+        saveUi(); renderView();
+      });
+    });
+    var who = view.querySelector('#sc-who');
+    if (who) who.addEventListener('change', function () { state.schedWho = this.value || ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
+      b.addEventListener('click', function () {
+        var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
+        if (h[r]) delete h[r]; else h[r] = 1;
+        saveUi(); renderView();
+      });
+    });
+  }
+
+  function wireSchedAdd(view, d) {
+    var add = view.querySelector('#sc-add');
+    if (!add) return;
+    var menu = view.querySelector('#sc-addmenu');
+    if (!menu) { add.addEventListener('click', function () { schedAddRun(d, add.getAttribute('data-add')); }); return; }
+    function close() { menu.hidden = true; add.setAttribute('aria-expanded', 'false'); document.removeEventListener('mousedown', onOut, true); }
+    function onOut(e) { if (!menu.contains(e.target) && !add.contains(e.target)) close(); }
+    add.addEventListener('click', function () {
+      if (menu.hidden) { menu.hidden = false; add.setAttribute('aria-expanded', 'true'); setTimeout(function () { document.addEventListener('mousedown', onOut, true); }, 0); }
+      else close();
+    });
+    Array.prototype.forEach.call(menu.querySelectorAll('[data-add]'), function (b) {
+      b.addEventListener('click', function () { var k = b.getAttribute('data-add'); close(); schedAddRun(d, k); });
+    });
+  }
+
   function schedAt(d, day, hour, who) {
     var fit = function (p) { return !who || p === who; };
     // Фильтр направления из шапки раздела режет и планерки: отдел у них свой
     // (kind, с 17.09.2026) и справочник тот же, что у зумов.
-    var deptKinds = state.page === 'meetx' && state.meetxDept ? mxDeptKinds(state.meetxDept) : null;
+    var deptKinds = state.page === 'sched' && state.meetxDept ? mxDeptKinds(state.meetxDept) : null;
     var meets = (d.meetings || []).filter(function (m) {
       if (deptKinds && deptKinds.indexOf(m.kind) === -1) return false;
       return m.date === day && hour >= m.hour && hour < m.hour + m.duration &&
@@ -8956,7 +9095,7 @@
       (d.meetings || []).forEach(function (m) {
         if (!(m.people || []).some(function (p) { return p.person === myName; })) return;
         out.push({ ymd: m.date, hour: m.hour, cls: 'plan', title: m.title,
-                   sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false });
+                   sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false, meet: m });
       });
       (d.slots || []).forEach(function (s) {
         if (s.person !== myName || !s.booked) return;
@@ -9015,10 +9154,17 @@
         WDAYS_RU[dt.getDay()] + ', ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] +
         (ymd === todayKey ? '<i>сегодня</i>' : '') + '</div>';
       return head + seen[ymd].map(function (r) {
-        return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + '">' +
+        // Встречу из ленты можно открыть и поправить прямо здесь — тем же редактором,
+        // что по клику в сетке. Раньше в нее было не провалиться: приходилось идти в
+        // «Календарь» (Павел 03.11.2026: «чтобы редактор был везде»). Занятые часы и
+        // комнаты встреч так не открываются: у первых правка в карточке клиента, у
+        // вторых — ссылка «Войти».
+        var ed = r.meet ? schedMeetAttr(r.meet) : '';
+        return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + (r.meet ? ' tap' : '') + '"' + ed + '>' +
           '<span class="sc-my-h' + (tz ? ' two' : '') + '">' +
             (tz ? '<b>' + r.hour + ':00</b><i>' + r.msk + ':00 мск</i>' : r.hour + ':00') + '</span>' +
           '<span class="sc-my-b"><b>' + esc(r.title) + '</b><i>' + esc(r.sub) + '</i></span>' +
+          (r.meet ? '<span class="sc-my-ed" title="Изменить встречу: время, участников">' + ic('edit', 14) + '</span>' : '') +
           (r.url ? '<a class="sc-my-go" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
             (r.live ? 'Войти' : 'Открыть') + '</a>' : '') + '</div>';
       }).join('') + '';
@@ -9165,8 +9311,7 @@
     var head = '<div class="sec-head zw-head">' + meetLens() +
       // Первый переключатель экрана — чье расписание смотрим. Он стоит раньше
       // навигации по датам: сначала «чье», потом «когда».
-      '<div class="due-seg zw-seg sc-scope"><button type="button" class="' + (my ? 'on' : '') + '" data-ss="my">Мое</button>' +
-      '<button type="button" class="' + (my ? '' : 'on') + '" data-ss="all">Вся команда</button></div>' +
+      schedScopeSeg(my) +
       (my || mqMobile.matches ? '' :
         '<div class="due-seg zw-seg"><button type="button" class="' + (dayView ? '' : 'on') + '" data-sv="week">Неделя</button>' +
         '<button type="button" class="' + (dayView ? 'on' : '') + '" data-sv="day">День</button></div>') +
@@ -9174,15 +9319,15 @@
       '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-sw0 title="' + (atNow ? '' : 'Вернуться к сегодня') + '">' + range + '</button>' +
       '<button class="icobtn" data-sw="1" title="' + (dayView ? 'Следующий день' : 'Следующая неделя') + '">' + ic('go', 14) + '</button></div>' +
       // Действия лежат в своем блоке, а не соседями в шапке. Иначе на ноутбуке
-      // 1280 «Мое время» оставалось в первом ряду у правого края, а «Планерка»
-      // уезжала во второй и вставала слева под заголовком: в одной шапке два
-      // разных выравнивания. Блоком они переносятся вместе.
+      // 1280 действия уезжали во вторую строку с другим выравниванием. Блоком они
+      // переносятся вместе. В режиме отметки главное действие — «Готово» (выйти);
+      // иначе — одна кнопка «Добавить» (часы/собрание по роли).
       (ok ? '<div class="zw-acts">' + schedGcalBtn(d) +
         '<button class="bp ghost sm sc-how" id="sc-how" aria-expanded="' + (state.schedHow ? 'true' : 'false') + '">' +
           ic('info', 14) + 'Как ставить часы</button>' +
-        (d.me ? '<button class="bp ghost sm sc-edit" id="sc-edit">' +
-          ic(state.schedEdit ? 'check' : 'pen', 14) + (state.schedEdit ? 'Готово' : 'Мое время') + '</button>' : '') +
-        (d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
+        (state.schedEdit
+          ? (d.me ? '<button class="bp sm sc-edit" id="sc-edit">' + ic('check', 14) + 'Готово</button>' : '')
+          : schedAddBtn(d)) +
         '</div>' : '') +
       '</div>';
 
@@ -9202,31 +9347,19 @@
     }
 
     var people = (d.people || []).slice().sort(function (a, b) { return a.person.localeCompare(b.person, 'ru'); });
-    // «Только мои встречи» (просьба Павла 17.09.2026) стоит первым и работает до
-    // того, как человек выбрал себя в расписании: имя берется из учетки.
+    // «Только мое» работает до того, как человек выбрал себя в расписании: имя
+    // берется из учетки.
     var myName = schedMyName(d);
-    var flt = '<div class="zw-fltrow"><label class="al-selwrap sc-who"><select class="al-sel" id="sc-who">' +
-      '<option value="">Все люди</option>' +
-      (myName ? '<option value="' + esc(myName) + '"' + (state.schedWho === myName ? ' selected' : '') + '>Только мои встречи</option>' : '') +
-      people.filter(function (p) { return p.person !== myName; }).map(function (p) {
-        return '<option value="' + esc(p.person) + '"' + (state.schedWho === p.person ? ' selected' : '') + '>' + esc(p.person) + '</option>';
-      }).join('') + '</select></label>' +
-      // Кого показывать: чипы-переключатели рядом с выбором человека. Выключенная
-      // роль не исчезает из расписания, она просто не загромождает эту сетку.
-      '<div class="sc-roles">' + [['curator', 'Разборы'], ['teacher', 'Уроки'], ['staff', 'Команда']]
-        .map(function (r) {
-          return '<button type="button" class="qchip sm' + (schedRoleOn(r[0]) ? ' on' : '') +
-            '" data-srole="' + r[0] + '" aria-pressed="' + (schedRoleOn(r[0]) ? 'true' : 'false') + '">' +
-            r[1] + '</button>';
-        }).join('') + '</div>' +
-      // Цвет без слова рядом читается только тем, кто его придумал. Подпись к
-      // каждому чипу — что именно он означает в этой сетке (Павел 17.09.2026).
-      '<div class="sc-legend">' +
-        '<span class="sc-chip free" title="Человек свободен: этот час можно продать клиенту">свободно</span>' +
-        '<span class="sc-chip busy" title="Час уже занят уроком или разбором">занято</span>' +
-        '<span class="sc-chip meet" title="Внутренняя встреча команды">планерка</span>' +
-        '<span class="sc-chip room" title="Наша встреча: комната EastSide Meeting, ' +
-          'нажатие открывает ее">наша встреча</span></div></div>';
+    // Выбран чужой человек — показываем его сетку, даже если экран «Мое»: иначе
+    // выбрать чужое расписание и не увидеть его (Павел 03.11.2026).
+    var viewingOther = state.schedWho && state.schedWho !== myName;
+    // В режиме отметки сетка нужна и в своем расписании: часы ставят в ней, а не в
+    // ленте. Легенда цветов нужна только там, где эти цвета есть, — в сетке.
+    var grid = !my || state.schedEdit || viewingOther;
+    // В ленте «Мое» фильтровать нечего — там только свое; оставляем лишь выбор
+    // «чье расписание», чтобы можно было перейти к чужому. В сетке — полный фильтр.
+    var flt = '<div class="zw-fltrow">' + schedWhoSel(schedPeopleAll(d), myName) +
+      (grid ? schedRoleChips() + schedLegend() : '') + '</div>';
 
     // Пока человек не сказал, кто он в расписании, отмечать ему нечего: имена в CRM
     // и в расписании разные, угадывать их нельзя (можно отметить чужие часы).
@@ -9251,9 +9384,6 @@
         '</select></label></div>';
     }
 
-    // В режиме отметки времени сетка нужна и в своем расписании: часы ставят в
-    // ней, а не в ленте. Поэтому «Мое время» временно показывает команду.
-    var grid = !my || state.schedEdit;
     var body = grid
       ? (dayView ? schedDayList(d, day, today) : schedWeekGrid(d, lo, today))
       : schedMyList(d, lo, today);
@@ -9263,7 +9393,7 @@
         ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
         : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
     view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
-      (grid ? flt : '') + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
+      flt + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
     schedWire(view, d);
   }
 
@@ -9363,24 +9493,10 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-sv]'), function (b) {
       b.addEventListener('click', function () { state.schedView = b.getAttribute('data-sv') === 'day' ? 'day' : 'week'; renderView(); });
     });
-    if (el('sc-who')) el('sc-who').addEventListener('change', function () { state.schedWho = el('sc-who').value || ''; renderView(); });
+    wireSchedCtl(view);
+    wireSchedAdd(view, d);
     if (el('sc-edit')) el('sc-edit').addEventListener('click', function () { state.schedEdit = !state.schedEdit; renderView(); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-ss]'), function (b) {
-      b.addEventListener('click', function () {
-        state.schedScope = b.getAttribute('data-ss') === 'all' ? 'all' : 'my';
-        // Из чужой сетки в свою ленту режим отметки не переносим: там отмечать нечего.
-        if (state.schedScope === 'my') state.schedEdit = false;
-        saveUi(); renderView();
-      });
-    });
     if (el('sc-how')) el('sc-how').addEventListener('click', function () { state.schedHow = !state.schedHow; renderView(); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
-      b.addEventListener('click', function () {
-        var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
-        if (h[r]) delete h[r]; else h[r] = 1;
-        saveUi(); renderView();
-      });
-    });
     if (el('sc-gcal')) el('sc-gcal').addEventListener('click', function () { openSchedGcal(d); });
     if (el('sc-me')) el('sc-me').addEventListener('change', function () {
       var v = el('sc-me').value; if (!v) return;
@@ -9401,7 +9517,6 @@
           'Не получилось сохранить, попробуйте еще раз');
       });
     });
-    if (el('sc-meet')) el('sc-meet').addEventListener('click', function () { openSchedMeet(d); });
     if (!d || !d.enabled) return;
 
     // Клик по клетке копит выбор, протяжка мышью берет сразу прямоугольник дней и
@@ -9456,35 +9571,76 @@
       paint();
     }
 
+    function cellKeyFromPoint(x, y) {
+      var n = document.elementFromPoint(x, y);
+      while (n && n !== document.body) {
+        if (n.getAttribute && n.getAttribute('data-sc-cell')) return n.getAttribute('data-sc-cell');
+        n = n.parentNode;
+      }
+      return null;
+    }
+
+    // Тап по клетке: свой час снимаем (или говорим, что на нем клиент), пустой —
+    // копим в выбор. Та же логика нужна и с клавиатуры, поэтому вынесена отдельно.
+    function tapCell(kk) {
+      if (!kk || kk.split('|').length < 2) return;
+      var m = mine(kk);
+      if (m && m.booked) return showToast('На этот час записан клиент — снимите запись в карточке');
+      if (m) return schedDrop(m);
+      state.schedPick[kk] = !state.schedPick[kk];
+      if (!state.schedPick[kk]) delete state.schedPick[kk];
+      paint();
+    }
+
+    // Указатель вместо мыши: один код и для мыши на компе, и для пальца на
+    // планшете. Мышь тянет прямоугольник, палец выбирает по тапу (а протяжка
+    // пальцем — это скролл сетки, не выбор). Захват указателя держит move/up на
+    // исходной клетке, даже если увели за ее край. Раньше тут были mousedown +
+    // click: на тач-экране синтетический click снимал только что поставленный
+    // час — выходило «Выбрано часов: 0», и часы не ставились.
     cells.forEach(function (c) {
       var key = c.getAttribute('data-sc-cell') || '';
-      schedKeyClick(c);
-      c.addEventListener('mousedown', function (e) {
-        if (e.button !== 0 || !d.me || mine(key)) return;
+      c.style.touchAction = 'manipulation';
+      c.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
-        var base = {}, k;
-        for (k in state.schedPick) if (state.schedPick[k]) base[k] = true;
-        drag = { from: key, add: !state.schedPick[key], base: base, moved: false };
-        stretch(key);
+        if (d.me) tapCell(key);
       });
-      c.addEventListener('mouseenter', function () {
-        if (!drag) return;
-        drag.moved = true;
-        stretch(key);
-      });
-      c.addEventListener('click', function () {
+      c.addEventListener('pointerdown', function (e) {
         if (!d.me || key.split('|').length < 2) return;
-        var m = mine(key);
-        if (m && m.booked) return showToast('На этот час записан клиент — снимите запись в карточке');
-        if (m) return schedDrop(m);
-        if (drag && drag.moved) return;    // это был конец протяжки, не отдельный клик
-        if (drag) return;                  // мышь уже все поставила на mousedown
-        state.schedPick[key] = !state.schedPick[key];
-        if (!state.schedPick[key]) delete state.schedPick[key];
-        paint();
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        var startX = e.clientX, startY = e.clientY, moved = false, dr = null;
+        if (!mine(key) && e.pointerType === 'mouse') {
+          e.preventDefault();
+          var base = {}, k;
+          for (k in state.schedPick) if (state.schedPick[k]) base[k] = true;
+          dr = drag = { from: key, add: !state.schedPick[key], base: base, moved: false };
+          stretch(key);
+        }
+        try { c.setPointerCapture(e.pointerId); } catch (_) {}
+        function move(ev) {
+          if (Math.abs(ev.clientX - startX) > 8 || Math.abs(ev.clientY - startY) > 8) moved = true;
+          if (dr) {
+            var k2 = cellKeyFromPoint(ev.clientX, ev.clientY);
+            if (k2) { dr.moved = true; stretch(k2); }
+          }
+        }
+        function up(ev) {
+          c.removeEventListener('pointermove', move);
+          c.removeEventListener('pointerup', up);
+          c.removeEventListener('pointercancel', up);
+          try { c.releasePointerCapture(ev.pointerId); } catch (_) {}
+          drag = null;
+          if (dr && dr.moved) return;                      // протяжка мышью — выбор уже стоит
+          if (moved && ev.pointerType !== 'mouse') return; // палец скроллил, не тапал
+          if (dr) return;                                  // мышь: клетку переключил pointerdown
+          tapCell(cellKeyFromPoint(ev.clientX, ev.clientY) || key);
+        }
+        c.addEventListener('pointermove', move);
+        c.addEventListener('pointerup', up);
+        c.addEventListener('pointercancel', up);
       });
     });
-    document.addEventListener('mouseup', function () { drag = null; });
 
     if (el('sc-rep')) el('sc-rep').addEventListener('change', function () {
       state.schedRep = +el('sc-rep').value || 1;
@@ -9571,8 +9727,12 @@
     var all = (d.people || []).map(function (p) { return { role: p.role, person: p.person, label: p.person + ' · ' + (SC_WHAT[p.role] || p.role) }; })
       .concat((d.staff || []).map(function (p) { return { role: 'staff', person: p.person, label: p.person }; }));
     // Правка: участники встречи приезжают парой «роль + имя», отмечаем их в списке.
+    // Новую встречу всегда заводит кто-то из команды и сам в ней участвует —
+    // поэтому создателя сразу отмечаем участником (Павел 03.11.2026: «кто ставит,
+    // тот уже участник, это логично»), иначе встреча не попадает в его «Мое».
     var had = {};
     ((m && m.people) || []).forEach(function (p) { had[p.role + '|' + p.person] = 1; });
+    if (!m && d.me && d.me.person) had[(d.me.role || 'staff') + '|' + d.me.person] = 1;
     var ov = document.createElement('div');
     ov.className = 'al-ov over sc-ov';
     ov.innerHTML =
@@ -10490,7 +10650,7 @@
   /* Расписание, зумы и журнал записей живут теперь в разделе EastSide Meeting,
      а не во вкладке задач. Ответы к ним приходят через секунду, и перерисовывать
      экран можно, только если человек с него не ушел. */
-  function onMeetPage() { return state.page === 'meetx'; }
+  function onMeetPage() { return state.page === 'meetx' || state.page === 'sched'; }
 
   function meetLens() {
     var at = meetView();
@@ -10499,10 +10659,9 @@
       '<button type="button" class="' + (at === 'cal' ? 'on' : '') + '" data-mlens="cal">Календарь</button></div>';
   }
 
-  /* gridOnly — сетка без списков под ней. Во вкладке «Расписание» раздела
-     EastSide Meeting свои встречи и журнал записей лежат в соседних вкладках
-     («Ближайшие» и «Записи»), и повторять их под сеткой значит показать одно и
-     то же дважды на одном экране. */
+  /* gridOnly — сетка без списков под ней. В разделе «Расписание» свои встречи и
+     журнал записей не повторяем: они живут в EastSide Meeting («Ближайшие» и
+     «Записи»), и второй их копии рядом с сеткой не нужно. */
   function renderMeetings(view, gridOnly) {
     view.innerHTML = '<div id="mt-pane"></div>';
     var pane = el('mt-pane');
@@ -10561,29 +10720,28 @@
       api('/admin/api/sched/week?from=' + zoomYmd(from) + '&to=' + zoomYmd(mid)).catch(function () { return null; }),
       api('/admin/api/sched/week?from=' + zoomYmd(mid) + '&to=' + zoomYmd(to)).catch(function () { return null; }),
     ]).then(function (r) {
-      var meets = [], gcal = '', busy = {}, seen = {};
+      var meets = [], gcal = '', slots = [], seen = {};
       [r[0], r[1]].forEach(function (x) {
         if (!x) return;
         gcal = gcal || x.gcal || '';
         (x.meetings || []).forEach(function (m) {
           if (!meets.some(function (y) { return y.id === m.id && y.date === m.date; })) meets.push(m);
         });
-        // Занятые часы в клетку дня не помещаются плашками, но день с записанными
-        // учениками не должен выглядеть свободным: иначе на него ставят планерку.
-        // Копим счетчик, а не список: имя ученика в календарь команды не идет.
+        // Держим сырые слоты: из них и счетчик занятых, и счетчик свободных окон
+        // в дне — оба считаются уже с учетом фильтра (чей человек, какие роли).
         (x.slots || []).forEach(function (sl) {
-          if (!sl.booked) return;
           var k = sl.date + '|' + sl.hour + '|' + sl.person;
           if (seen[k]) return;      // два куска месяца перекрываются по краю
           seen[k] = 1;
-          busy[sl.date] = (busy[sl.date] || 0) + 1;
+          slots.push(sl);
         });
       });
       // Права и список людей нужны кнопке «Планерка»: форма собирает из них
-      // галочки участников. Берем из первого ответа — он про те же роли.
+      // галочки участников. me — чтобы знать роль для кнопки «Добавить». Берем из
+      // первого ответа — он про те же роли.
       var w = r[0] || r[1] || {};
-      state.meetMonthData[key] = { meetings: meets, gcal: gcal, busy: busy,
-        gcal_me: w.gcal_me || '', gcal_service: w.gcal_service || '',
+      state.meetMonthData[key] = { meetings: meets, gcal: gcal, slots: slots,
+        gcal_me: w.gcal_me || '', gcal_service: w.gcal_service || '', me: w.me || null,
         can_edit_all: !!w.can_edit_all, people: w.people || [], staff: w.staff || [] };
       if (onMeetPage()) renderView();
     }).catch(function () {
@@ -10592,11 +10750,33 @@
     });
   }
 
-  /* Что показать в дне: планерки команды по времени. */
+  // Кого показываем в календаре: явно выбранный человек, иначе в режиме «Мое» —
+  // я сам, а в «Вся команда» — все. Один и тот же смысл, что у фильтра в слотах.
+  function schedWhoActive(data) {
+    var who = state.schedWho || '';
+    if (who) return who;
+    if (schedScope() === 'my') return schedMyName(data);
+    return '';
+  }
+
+  // Занятые и свободные часы в дне — уже с учетом фильтра (чей человек, роли).
+  function meetMonthCounts(data, ymd) {
+    var who = schedWhoActive(data), busy = 0, free = 0;
+    (data.slots || []).forEach(function (s) {
+      if (s.date !== ymd || !schedRoleOn(s.role)) return;
+      if (who && s.person !== who) return;
+      if (s.booked) busy++;
+      else if (!s.blocked) free++;
+    });
+    return { busy: busy, free: free };
+  }
+
+  /* Что показать в дне: планерки команды по времени, с учетом фильтра человека. */
   function meetMonthDay(data, ymd) {
-    var out = [];
+    var who = schedWhoActive(data), out = [];
     (data.meetings || []).forEach(function (m) {
       if (m.date !== ymd) return;
+      if (who && !(m.people || []).some(function (x) { return x.person === who; })) return;
       out.push({ kind: 'plan', hour: m.hour, min: 0, title: m.title,
                  who: (m.people || []).map(function (x) { return x.person; }).join(', ') });
     });
@@ -10617,18 +10797,17 @@
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var atNow = !(state.meetMonth || 0);
     var title = MONTHS_FULL_RU[first.getMonth()] + ' ' + first.getFullYear();
-    var mayMeet = !!(data && typeof data === 'object' && data.can_edit_all);
-    var head = '<div class="sec-head zw-head">' + meetLens() +
+    var dd = (data && typeof data === 'object') ? data : null;
+    var my = schedScope() === 'my';
+    var head = '<div class="sec-head zw-head">' + meetLens() + schedScopeSeg(my) +
       '<div class="zw-nav"><button class="icobtn" data-mm="-1" title="Прошлый месяц">' + ic('go', 14) + '</button>' +
       '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-mm0 title="' +
         (atNow ? '' : 'Вернуться к этому месяцу') + '">' + esc(title) + '</button>' +
       '<button class="icobtn" data-mm="1" title="Следующий месяц">' + ic('go', 14) + '</button></div>' +
-      // Действия и слова те же, что в виде слотов, с одним исключением: «Мое время»
-      // здесь нет, потому что отмечать нечего — свои свободные часы человек ставит
-      // в клетке часа, а в месяце клетка это целый день.
-      '<div class="zw-acts">' + schedGcalBtn(typeof data === 'object' ? data : null) +
-        (mayMeet ? '<button class="bp ghost sm sc-meetnew" id="mm-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
-        '</div>' +
+      // Одна кнопка «Добавить» с тем же меню, что в слотах: «часы» уводят в сетку
+      // слотов и включают отметку (в месяце клетка это целый день, в ней не отметишь),
+      // «собрание» открывает форму планерки.
+      '<div class="zw-acts">' + schedGcalBtn(dd) + schedAddBtn(dd) + '</div>' +
       '</div>';
 
     if (data === 'loading') {
@@ -10660,17 +10839,23 @@
       // не прочитать («11:0…»), поэтому там вместо плашек счетчик, а подробности
       // открываются кликом по дню.
       var cnt = ev.length ? '<span class="mm-cnt">' + ev.length + '</span>' : '';
-      var busy = (data.busy || {})[ymd] || 0;
-      var load = busy ? '<span class="mm-load" title="Занятых часов с учениками: ' + busy +
-        '">' + busy + '</span>' : '';
+      var cc = meetMonthCounts(data, ymd);
+      // Зеленым — сколько свободных окон в этот день (это и есть «все слоты» на
+      // календаре), серым — сколько часов уже заняты учениками.
+      var free = cc.free ? '<span class="mm-free" title="Свободных окон в этот день: ' + cc.free +
+        '">' + cc.free + '</span>' : '';
+      var load = cc.busy ? '<span class="mm-load" title="Занятых часов с учениками: ' + cc.busy +
+        '">' + cc.busy + '</span>' : '';
       cells += '<div class="mm-cell' + (other ? ' out' : '') + (isToday ? ' now' : '') +
         '" data-mmday="' + ymd + '" role="button" tabindex="0">' +
-        '<div class="mm-num">' + d.getDate() + load + cnt + '</div>' + shown + more + '</div>';
+        '<div class="mm-num">' + d.getDate() + cnt + '<span class="mm-cnts">' + free + load + '</span></div>' +
+        shown + more + '</div>';
     }
-    view.innerHTML = '<div class="card zw">' + head +
+    var flt = '<div class="zw-fltrow">' + schedWhoSel(schedPeopleAll(data), schedMyName(data)) + schedRoleChips() + '</div>';
+    view.innerHTML = '<div class="card zw">' + head + flt +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
       '<div class="zw-foot">Клик по дню откроет сетку слотов на этот день. '
-        + 'Серая цифра справа — сколько часов в этот день уже заняты учениками.</div></div>';
+        + 'Зеленая цифра — сколько в этот день свободных окон, серая — сколько часов уже заняты учениками.</div></div>';
     meetMonthWire(view, data);
   }
 
@@ -10684,7 +10869,8 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-mm0]'), function (b) {
       b.addEventListener('click', function () { state.meetMonth = 0; renderView(); });
     });
-    if (el('mm-meet')) el('mm-meet').addEventListener('click', function () { openSchedMeet(d); });
+    wireSchedCtl(view);
+    wireSchedAdd(view, d);
     if (el('sc-gcal')) el('sc-gcal').addEventListener('click', function () { openSchedGcal(d); });
     // Клик по дню уводит в слоты этого дня: месяц отвечает «что происходит»,
     // слоты — «кто свободен и куда влезет еще одна встреча».
@@ -10849,9 +11035,19 @@
      выбранный помним — каждый раз тыкать одно и то же человек не должен. */
   var OFFICE_SIZE_LS = 'es_office_size';
   var OFFICE_SIZES = ['', 'big', 'full'];
+  /* Полный экран запоминать нельзя: он закрывает собой страницу целиком, и
+     человек, вернувшийся завтра на «Записи», видит вместо них окно офиса и
+     решает, что раздел пропал (Павел 03.11.2026). Поэтому на весь экран офис
+     живет до ухода со страницы, а в памяти браузера остается большой размер. */
+  var officeNow = null;
 
   function officeSize() {
+    if (officeNow !== null) return officeNow;
     var v = lsGet(OFFICE_SIZE_LS) || '';
+    // У тех, кто разворачивал офис до этой правки, в памяти браузера лежит
+    // полный экран. Читаем его как большой размер, иначе страница так и будет
+    // открываться закрытой.
+    if (v === 'full') v = 'big';
     return OFFICE_SIZES.indexOf(v) >= 0 ? v : '';
   }
   function officeSetSize(v) {
@@ -10863,15 +11059,38 @@
     d.classList.toggle('big', p === 'big');
     d.classList.toggle('full', p === 'full');
     document.body.classList.toggle('office-full', p === 'full');
-    try { localStorage.setItem(OFFICE_SIZE_LS, v); } catch (e) {}
+    officeNow = v;
+    try { localStorage.setItem(OFFICE_SIZE_LS, v === 'full' ? 'big' : v); } catch (e) {}
     var up = d.querySelector('.mx-office-up'), fs = d.querySelector('.mx-office-fs');
     // Иконку переписываем здесь, а не в обработчике: из полного экрана выходят и
     // кнопкой, и клавишей, и стрелки не должны после этого показывать не то.
     if (up) {
       up.innerHTML = ic(v === '' ? 'expand' : 'shrink', 14);
-      up.title = v === '' ? 'Развернуть окно' : 'Вернуть обычный размер';
+      up.title = v === '' ? 'Сделать окно больше' : 'Вернуть обычный размер';
+      // Имя для озвучки держим тем же, что в подсказке: иначе кнопка остается
+      // безымянной ровно в том состоянии, из которого человек ищет выход.
+      up.setAttribute('aria-label', up.title);
     }
-    if (fs) fs.title = v === 'full' ? 'Выйти из полного экрана' : 'Во весь экран';
+    if (fs) {
+      var slovo = v === 'full' ? 'Свернуть' : 'Во весь экран';
+      // Имя кнопки начинается с того же слова, что человек видит: иначе голосом
+      // ее не назвать, а озвучка прочтет не то, что написано.
+      fs.title = v === 'full' ? 'Свернуть окно обратно в страницу (Esc)'
+                              : 'Во весь экран';
+      fs.setAttribute('aria-label', fs.title);
+      var tx = fs.querySelector('.mx-office-fs-t');
+      if (tx) tx.textContent = slovo;
+      // В полном экране подсказываем клавишу: выход ею быстрее, а знают о нем не все.
+      var esc = fs.querySelector('.mx-office-esc');
+      if (v === 'full' && !esc) {
+        esc = document.createElement('kbd');
+        esc.className = 'mx-office-esc';
+        esc.textContent = 'Esc';
+        fs.appendChild(esc);
+      } else if (v !== 'full' && esc) {
+        esc.remove();
+      }
+    }
   }
 
   function officeShow() {
@@ -10879,6 +11098,9 @@
     if (!d) return;
     d.hidden = false;
     var zovut = state.mxWantChan || '';
+    // Размер применяем на каждый показ: уходя со страницы, мы снимаем полный
+    // экран, и без этого рамка вернулась бы без своего размера вовсе.
+    officeSetSize(officeSize());
     if (d.getAttribute('data-on')) {
       // Рамка уже стоит: просим ее перейти в канал из ссылки, а не пересобираем
       // ее заново — пересборка выбросила бы человека из разговора.
@@ -10893,7 +11115,16 @@
     }
     state.mxWantChan = '';
     d.setAttribute('data-on', '1');
-    d.innerHTML = '<div class="mx-office-wait">Открываю офис…</div>';
+    // Строку ставим сразу, до ответа сервера: пока офис грузится, окно иначе
+    // стоит безымянным прямоугольником, а на ошибке так и остается без подписи
+    // и без кнопок (поймано на приемке 03.11.2026).
+    d.innerHTML = '';
+    d.appendChild(officeHead());
+    var zhdem = document.createElement('div');
+    zhdem.className = 'mx-office-wait';
+    zhdem.textContent = 'Открываю офис…';
+    d.appendChild(zhdem);
+    officeSetSize(officeSize());
     /* Пропуск «я из команды» отдаем рамке хвостом ссылки: хвост браузер на
        сервер не шлет, и в логах его не будет. Вход в CRM и есть доказательство,
        что человек свой, — подтверждаться еще раз в боте не просим. */
@@ -10908,32 +11139,49 @@
         + (r && r.pass
           ? '#p=' + encodeURIComponent(r.pass) + '&n=' + encodeURIComponent(r.name || '')
           : '');
-      d.innerHTML = '';
+      zhdem.remove();
       d.appendChild(f);
-      d.appendChild(officeTools());
       officeSetSize(officeSize());
     }).catch(function () {
       d.removeAttribute('data-on');
-      d.innerHTML = '<div class="mx-office-wait">Не вышло открыть офис. Обнови страницу.</div>';
+      zhdem.textContent = 'Не вышло открыть офис. Обнови страницу.';
     });
   }
   function officeHide() {
     if (!officeBox) return;
     officeBox.hidden = true;
     // Полный экран — состояние ЭТОГО раздела: уходя в задачи, человек не должен
-    // оставить за собой страницу без прокрутки.
+    // оставить за собой страницу без прокрутки. Вернется — окно будет большим,
+    // но страница под ним останется видна.
     document.body.classList.remove('office-full');
+    officeBox.classList.remove('full');
+    if (officeSize() === 'full') officeNow = 'big';
   }
 
-  /* Кнопки размера лежат поверх рамки, а не внутри нее: внутри рамка чужая,
-     туда мы дотянуться не можем. */
+  /* Своя полоса над рамкой. Раньше кнопки размера лежали ПОВЕРХ чужого окна,
+     двумя безымянными квадратиками в правом верхнем углу: там же шапка самого
+     офиса с «Позвать» и «Выйти из канала», и наши кнопки с ней соседствовали
+     так, что читались как ее часть. Никто их не находил — развернув окно во
+     весь экран, человек решал, что раздел CRM пропал (Виталий и Павел
+     03.11.2026). Теперь у окна есть своя строка: слева видно, что это офис,
+     справа — чем управляют. Чужого содержимого она не закрывает. */
+  function officeHead() {
+    var head = document.createElement('div');
+    head.className = 'mx-office-head';
+    var ttl = document.createElement('span');
+    ttl.className = 'mx-office-ttl';
+    ttl.textContent = 'Офис команды';
+    head.appendChild(ttl);
+    head.appendChild(officeTools());
+    return head;
+  }
+
   function officeTools() {
     var box = document.createElement('div');
     box.className = 'mx-office-tools';
     var up = document.createElement('button');
     up.type = 'button';
-    up.className = 'mx-office-up';
-    up.setAttribute('aria-label', 'Размер окна офиса');
+    up.className = 'icobtn mx-office-up';
     up.innerHTML = ic(officeSize() === '' ? 'expand' : 'shrink', 14);
     up.addEventListener('click', function () {
       officeSetSize(officeSize() === '' ? 'big' : '');
@@ -10941,13 +11189,8 @@
     var fs = document.createElement('button');
     fs.type = 'button';
     fs.className = 'mx-office-fs';
-    fs.setAttribute('aria-label', 'Во весь экран');
-    // Квадрат во весь кадр: «во весь экран» это про рамку, а не про стрелки,
-    // которыми рядом меняют высоту.
-    fs.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" '
-      + 'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" '
-      + 'stroke-linejoin="round"><rect x="3" y="4" width="14" height="12" rx="2.5"/>'
-      + '<path d="M7.5 8.5h5v3h-5z"/></svg>';
+    // Словом, а не значком: значок в этом углу человек уже один раз не прочел.
+    fs.innerHTML = '<span class="mx-office-fs-t"></span>';
     fs.addEventListener('click', function () {
       officeSetSize(officeSize() === 'full' ? 'big' : 'full');
     });
@@ -10962,6 +11205,12 @@
   window.addEventListener('message', function (e) {
     if (e.origin !== API) return;
     var d = e.data || {};
+    // Escape нажали внутри рамки. Своим обработчиком мы его не видим: фокус в
+    // чужом окне, и клавиша до нас не доходит — офис передает ее сам.
+    if (d.es === 'office-esc') {
+      if (officeSize() === 'full' && officeBox && !officeBox.hidden) officeSetSize('big');
+      return;
+    }
     if (d.es !== 'office-chan') return;
     var slug = String(d.c || '').slice(0, 64);
     if (slug === state.mxChan) return;
@@ -14136,6 +14385,220 @@
     if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
   }
 
+  /* Упоминание в тексте реплики. Подсвечиваем те же имена, по которым сервер
+     зовет людей (staff_tasks._mentions): собачка плюс имя из справочника.
+     Проходим по сырому тексту, как fndMark, иначе подстановка попала бы внутрь
+     уже экранированного символа. */
+  function tskAt(text) {
+    text = text || '';
+    var people = state.taskPeople || [];
+    if (text.indexOf('@') === -1 || !people.length) return esc(text);
+    var names = people.map(function (p) { return String(p.name || '').trim(); })
+      .filter(Boolean)
+      // Длинные вперед: иначе «@Мария Шустова» подсветится как «@Мария».
+      .sort(function (a, b) { return b.length - a.length; })
+      .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+    var re = new RegExp('@(' + names.join('|') + ')', 'gi');
+    var out = '', last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      out += esc(text.slice(last, m.index)) + '<b class="tsk-at">' + esc(m[0]) + '</b>';
+      last = m.index + m[0].length;
+    }
+    return out + esc(text.slice(last));
+  }
+
+  /* Кого позвали в наборе прямо сейчас. Правило ровно как на сервере
+     (staff_tasks._mentions): полное имя из справочника, а одно имя без фамилии
+     считается только когда оно в команде единственное. Нужно строке доставки
+     под полем: человек должен видеть, что упомянутый получит сообщение, до
+     того как нажмет отправку. */
+  function tskAtIds(text) {
+    text = text || '';
+    var people = state.taskPeople || [];
+    if (text.indexOf('@') === -1 || !people.length) return [];
+    var low = text.toLowerCase(), hit = [], byFirst = {};
+    people.forEach(function (p) {
+      var name = String(p.name || '').trim();
+      if (!name) return;
+      var first = name.split(/\s+/)[0].toLowerCase();
+      (byFirst[first] = byFirst[first] || []).push(p.id);
+      if (low.indexOf('@' + name.toLowerCase()) > -1) hit.push(p.id);
+    });
+    Object.keys(byFirst).forEach(function (first) {
+      var ids = byFirst[first];
+      if (ids.length === 1 && low.indexOf('@' + first) > -1 && hit.indexOf(ids[0]) === -1) hit.push(ids[0]);
+    });
+    return hit;
+  }
+
+  /* Подсказка по собачке в поле обсуждения. Вставляет имя целиком: сервер зовет
+     людей по именам из справочника, а логин (ssplatonov) в разговоре никто не
+     пишет. Возвращает рулевого, чтобы карточка отдала ему стрелки и Ввод. */
+  function tskAtPicker(say, box) {
+    var list = [], idx = 0, at = -1;
+    /* Подсказку ставим на место руками, как поповер выбора человека (.ss-pop):
+       в потоке карточки ее режет прокрутка колонки. На телефоне с открытой
+       клавиатурой экран остается высотой в 420px, колонка разговора сжимается
+       до полутора строк — и список имен не было видно вообще (02.11.2026).
+       position: fixed прокрутка уже не режет. */
+    var place = function () {
+      var r = say.parentNode.getBoundingClientRect();
+      var vh = window.innerHeight;
+      var room = r.top - 16;
+      box.style.left = Math.round(r.left) + 'px';
+      box.style.width = Math.round(r.width) + 'px';
+      // Над полем тесно — роняем список под поле: лучше перекрыть кнопки, чем
+      // показать две строки из шести.
+      if (room < 132 && vh - r.bottom > room) {
+        box.style.top = Math.round(r.bottom + 8) + 'px';
+        box.style.bottom = 'auto';
+        box.style.maxHeight = Math.round(Math.min(232, vh - r.bottom - 16)) + 'px';
+      } else {
+        box.style.top = 'auto';
+        box.style.bottom = Math.round(vh - r.top + 8) + 'px';
+        box.style.maxHeight = Math.round(Math.max(96, Math.min(232, room))) + 'px';
+      }
+    };
+    var hide = function () {
+      list = []; at = -1; box.hidden = true; box.innerHTML = '';
+      say.setAttribute('aria-expanded', 'false');
+      say.removeAttribute('aria-activedescendant');
+    };
+    var pick = function (p) {
+      if (!p) return;
+      var name = String(p.name || p.login || '').trim();
+      var cur = say.selectionStart, v = say.value;
+      // Пробел после имени нужен, чтобы можно было продолжать писать, но если
+      // вставляем в середину фразы и дальше уже пробел — второй не ставим.
+      var tail = v.slice(cur), gap = /^[ \u00A0]/.test(tail) ? '' : ' ';
+      say.value = v.slice(0, at) + '@' + name + gap + tail;
+      var pos = at + name.length + 1 + gap.length;
+      hide();
+      say.focus();
+      say.setSelectionRange(pos, pos);
+      // Поле растет под текст, и после вставки высота может измениться.
+      say.dispatchEvent(new Event('input'));
+    };
+    var draw = function () {
+      box.hidden = !list.length;
+      if (!list.length) { box.innerHTML = ''; return; }
+      box.innerHTML = '<div class="tsk-at-h">кого позвать</div>' + list.map(function (p, i) {
+        var role = (ROLES[p.role] || {}).label || '';
+        return '<button type="button" role="option" id="tk-at-o' + i + '" aria-selected="' +
+          (i === idx ? 'true' : 'false') + '" class="tsk-at-i' + (i === idx ? ' on' : '') +
+          '" data-i="' + i + '">' + esc(p.name || p.login) +
+          (role ? '<i>' + esc(role) + '</i>' : '') +
+          (p.linked ? '' : '<u title="не подключен к боту">без бота</u>') + '</button>';
+      }).join('');
+      say.setAttribute('aria-expanded', 'true');
+      say.setAttribute('aria-activedescendant', 'tk-at-o' + idx);
+      place();
+      Array.prototype.forEach.call(box.querySelectorAll('[data-i]'), function (b) {
+        var take = function (e) {
+          e.preventDefault();
+          // list уже пуст после первого выбора, поэтому второе событие
+          // (click вслед за mousedown) ничего не вставляет повторно.
+          pick(list[+b.getAttribute('data-i')]);
+        };
+        // mousedown, а не click: click приходит после blur, и к этому моменту
+        // курсор в поле уже потерян, а вставлять надо именно в него. Но click
+        // нужен тоже: именно его посылают VoiceOver и TalkBack, и без него
+        // незрячий человек не выберет имя вообще.
+        b.addEventListener('mousedown', take);
+        b.addEventListener('click', take);
+      });
+    };
+    var scan = function () {
+      var cur = say.selectionStart, before = say.value.slice(0, cur);
+      var m = /(?:^|\s)@([^\s@]{0,24}(?:[ \u00A0][^\s@]{0,24})?)$/.exec(before);
+      if (!m) { hide(); return; }
+      at = cur - m[1].length - 1;
+      var q = m[1].trim().toLowerCase();
+      loadTaskPeople(function (people) {
+        list = people.filter(function (p) {
+          var n = String(p.name || p.login || '').toLowerCase();
+          return !q || n.indexOf(q) === 0 || n.indexOf(' ' + q) > 0;
+        }).slice(0, 6);
+        idx = 0;
+        draw();
+      });
+    };
+    say.addEventListener('input', scan);
+    say.addEventListener('click', scan);
+    say.addEventListener('blur', function () { setTimeout(hide, 120); });
+    // Поле едет вместе с прокруткой колонки и при появлении клавиатуры —
+    // открытый список едет за ним.
+    var follow = function () {
+      // Карточку закрыли — снимаем слушателей сами: пикер живет ровно столько,
+      // сколько его разметка.
+      if (!box.parentNode || !document.body.contains(box)) {
+        window.removeEventListener('scroll', follow, true);
+        window.removeEventListener('resize', follow);
+        return;
+      }
+      if (list.length) place();
+    };
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    return {
+      open: function () { return !!list.length; },
+      key: function (e) {
+        if (!list.length) return false;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          idx = (idx + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length;
+          draw();
+          return true;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') { pick(list[idx]); return true; }
+        if (e.key === 'Escape') { hide(); return true; }
+        return false;
+      },
+    };
+  }
+
+  /* Кому уйдет реплика: все, кто в задаче, кроме меня, плюс те, кого позвали
+     собачкой в наборе. Сервер шлет ровно по этому правилу
+     (staff_tasks.comment_task + _mentions), поэтому список здесь собирается из
+     тех же полей — исполнитель, постановщик, соисполнители, наблюдатели.
+     Строка живая: упомянутый появляется в ней сразу после вставки имени, иначе
+     интерфейс обещал бы доставку не тому человеку. */
+  function tskSayWho(t, text) {
+    var me = state.userId, seen = {}, who = [];
+    var byId = {};
+    (state.taskPeople || []).forEach(function (p) { byId[p.id] = p; });
+    var add = function (uid, name, called) {
+      if (!uid || uid === me || seen[uid] || !name) return;
+      seen[uid] = 1;
+      who.push({ name: name, called: !!called,
+        // Про бота знаем только из справочника. Не приехал — не пугаем зря.
+        nobot: byId[uid] ? byId[uid].linked === false : false });
+    };
+    tskAtIds(text).forEach(function (uid) { add(uid, (byId[uid] || {}).name, true); });
+    add(t.assignee_id, t.assignee_name);
+    add(t.author_id, t.author_name);
+    (t.executors || []).concat(t.watchers || []).forEach(function (p) { add(p.id, p.name); });
+    return who;
+  }
+
+  function tskSayToFill(t, text) {
+    var box = el('tk-sayto');
+    if (!box) return;
+    var who = tskSayWho(t, text);
+    box.hidden = !who.length;
+    if (!who.length) { box.innerHTML = ''; return; }
+    // Позванные идут первыми и не прячутся за «и еще N»: их назвали руками,
+    // именно про них человек и хочет знать, дойдет ли.
+    var called = who.filter(function (p) { return p.called; });
+    var crew = who.filter(function (p) { return !p.called; });
+    var room = Math.max(1, 4 - called.length);
+    var shown = called.concat(crew.slice(0, room));
+    var rest = Math.max(0, crew.length - room);
+    box.innerHTML = ic('send', 11) + '<span>уйдет в телеграм: ' +
+      shown.map(function (p) {
+        return esc(officeName(p.name)) + (p.nobot ? ' <i>(без бота)</i>' : '');
+      }).join(', ') + (rest > 0 ? ' и еще ' + rest : '') + '</span>';
+  }
+
   /* Компаньон руководителя: раскладка цели на шаги по людям отдела.
      Сервер только предлагает (POST /tasks/:id/steps/suggest), заводит человек:
      каждый отмеченный шаг уходит обычной постановкой с parent_id, поэтому у
@@ -14414,7 +14877,7 @@
               '" aria-label="Удалить ' + whose + '">Удалить</button>' : '');
         return '<div class="tg-msg tsk-msg ' + side + '" data-ev="' + e.id + '">' +
           '<div class="tg-bub">' + quote +
-            '<span class="tsk-ev-t">' + esc(e.text || '') + '</span>' +
+            '<span class="tsk-ev-t">' + tskAt(e.text) + '</span>' +
             '<span class="tg-mt">' + esc(fmtTime(e.at)) + '</span></div>' +
           // Время уже стоит в пузыре — под ним только имя автора (у своих и его
           // не нужно) и пометка о правке.
@@ -14667,9 +15130,22 @@
               '<button type="button" id="tk-replx">не отвечать</button></div>' +
             // Поле растет под текст: в одну строку не видно, что уже написал
             // (Павел 09.10.2026). Ввод отправляет, Shift+Ввод переносит строку.
-            '<div class="tsk-say"><textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
-              'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t"></textarea>' +
+            '<div class="tsk-say">' +
+              // Подсказка по собачке: кого позвать в реплику. Висит над самим
+              // рядом ввода, а не над всем подвалом: иначе плашка «Ответ · …»
+              // встает между списком имен и кареткой.
+              '<div class="tsk-atbox" id="tk-atbox" role="listbox" aria-label="Кого позвать" hidden></div>' +
+              '<textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
+              'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t" ' +
+              // role="combobox" полю НЕ ставим: он перебил бы собственную роль
+              // многострочного поля, и скринридер перестал бы объявлять, что
+              // здесь пишут абзацами. Связь с подсказкой держат aria-controls и
+              // aria-activedescendant, их textarea принимает как есть.
+              'aria-haspopup="listbox" aria-controls="tk-atbox" aria-expanded="false"></textarea>' +
               '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
+            // Кому уйдет реплика, видно до отправки: человек пишет в задачу и не
+            // знает, прочитает ли ее кто-нибудь (Виталий через Павла, 02.11.2026).
+            '<div class="tsk-sayto" id="tk-sayto" hidden></div>' +
           '</div>' +
         '</aside>' +
         '</div>' +
@@ -15034,6 +15510,14 @@
       };
       say.addEventListener('input', grow);
       grow();
+      // Строка «уйдет в телеграм» пересобирается на каждый набор: вставили
+      // имя через собачку — человек тут же видит его в списке получателей.
+      var sayTo = function () { tskSayToFill(t, say.value); };
+      say.addEventListener('input', sayTo);
+      sayTo();
+      // Подсказка по собачке вешается до обработчика клавиш ниже: пока она
+      // открыта, Ввод выбирает человека, а не отправляет реплику.
+      var atPick = tskAtPicker(say, el('tk-atbox'));
 
       // Кому отвечаем. Держим id ветки, а не только подпись: после
       // перерисовки ленты DOM другой, а ветка та же.
@@ -15062,6 +15546,17 @@
         again.scrollTop = keepAt == null ? again.scrollHeight : keepAt;
       };
 
+      /* Подсветка упоминаний и подсказка берут имена из справочника команды.
+         Если его в этой сессии еще не тянули, лента перерисуется, когда он
+         приедет: иначе первое открытие карточки показывало бы «@Мария» серым
+         текстом, а второе — уже отметкой. */
+      if (!(state.taskPeople || []).length) {
+        loadTaskPeople(function (people) {
+          var th = thread();
+          if (people.length && th) redrawFeed(events, (scroller() || {}).scrollTop);
+        });
+      }
+
       var send = function () {
         var text = (say.value || '').trim();
         if (!text) { if (retMode) say.focus(); return; }
@@ -15077,6 +15572,8 @@
       };
       el('tk-send').addEventListener('click', send);
       say.addEventListener('keydown', function (e) {
+        // Пока открыта подсказка по собачке, стрелки и Ввод принадлежат ей.
+        if (atPick.key(e)) { e.preventDefault(); return; }
         // Shift+Ввод — перенос строки: реплика в задаче бывает и в два абзаца.
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
       });
@@ -28109,8 +28606,14 @@
       '<span class="num">выплачено</span><span class="num">остаток</span></div>';
     var body = rows.map(function (r) {
       var debt = r.debt >= 1;
+      // Сверка накопительная, поэтому под именем — за какие месяцы наработано: иначе
+      // остаток нечем прочитать, и непонятно, закрыт ли он уже выплатой этого месяца.
+      var mon = (r.months || []).slice().reverse().slice(0, 3).map(function (m) {
+        return finMonthLabel(m.month).split(' ')[0].toLowerCase() + ' ' + finRub(m.earned, 0);
+      }).join(' · ');
       return '<div class="trow pck-grid' + (debt ? ' warn' : '') + '">' +
-        '<span class="fo-what"><b>' + esc(r.name) + '</b></span>' +
+        '<span class="fo-what"><b>' + esc(r.name) + '</b>' +
+          (mon ? '<i>' + esc(mon) + '</i>' : '') + '</span>' +
         '<span class="num">' + finRub(r.earned) + '</span>' +
         '<span class="num">' + finRub(r.paid) + '</span>' +
         '<span class="num pck-debt' + (debt ? ' on' : '') + '">' +
@@ -30206,7 +30709,7 @@
         '<span class="mx-act-b"><b>Запланировать</b>' +
           '<i>' + (on ? 'позову людей и напомню' : 'тоже ждет сервер встреч') +
           '</i></span></button>',
-      /* Свое свободное время отмечали во вкладке «Расписание», и до него никто не
+      /* Свое свободное время отмечали в «Расписании», и до него никто не
          доходил: в сетке продаж не было ни одного окна, а лид в боте и на сайте
          видит ровно эти окна (Павел 26.10.2026). Теперь это действие раздела, а
          не настройка внутри вкладки. */
@@ -30229,16 +30732,15 @@
     return '<div class="pay-seg plan-seg mx-tabs">' +
       '<button type="button" class="' + (tab === 'soon' ? 'on' : '') + '" data-mxtab="soon">' +
         'Ближайшие' + (soon ? '<i class="mx-tn num">' + soon + '</i>' : '') + '</button>' +
-      '<button type="button" class="' + (tab === 'sched' ? 'on' : '') + '" data-mxtab="sched">Расписание</button>' +
       '<button type="button" class="' + (tab === 'rec' ? 'on' : '') + '" data-mxtab="rec">Записи</button>' +
       '</div>';
   }
   function mxTab() {
     var t = state.mxTab;
-    return t === 'rec' || t === 'sched' ? t : 'soon';
+    return t === 'rec' ? t : 'soon';
   }
-  /* Шапка раздела одна на все вкладки, поэтому и обработчики у нее общие:
-     «Расписание» рисует себя само и до своего кода не доходит. */
+  /* Шапка раздела одна на все вкладки, поэтому и обработчики у нее общие.
+     Чипы направлений и их обработчик делит с разделом «Расписание». */
   function mxWireTop(view) {
     el('mx-start') && el('mx-start').addEventListener('click', function () {
       if (!meetOn()) { mxNoServer(); return; }
@@ -30251,9 +30753,8 @@
     el('mx-slots') && el('mx-slots').addEventListener('click', function () {
       // Открываем расписание сразу в режиме отметки: человек пришел ставить часы,
       // а не смотреть сетку.
-      state.mxTab = 'sched';
       state.schedEdit = true;
-      saveUi(); renderHead(); renderView();
+      setPage('sched');
     });
     /* Шапка раздела считает идущие встречи тем же счетом, что и список, поэтому
        перерисовывается вместе с ним: иначе на одном экране оказывались два разных
@@ -30313,7 +30814,7 @@
     /* «Из офиса» стоит в том же ряду, что направления, но это другой вопрос:
        не чья встреча, а где она прошла. Разговоры в голосовых каналах иначе
        терялись среди назначенных встреч (Павел 26.10.2026). */
-    var office = mxTab() === 'rec'
+    var office = state.page === 'meetx' && mxTab() === 'rec'
       ? '<button type="button" class="qchip mx-office-chip' + (state.meetxOffice ? ' on' : '') +
           '" data-mxoffice="1">' + ic('mic', 13) + 'Из офиса</button>'
       : '';
@@ -30327,9 +30828,9 @@
   }
   function mxScopeSeg() {
     var d = state.meetx;
-    // В «Расписании» свой выбор человека («Все люди» / «Только мои встречи»), и
-    // второй переключатель про то же самое рядом только путает.
-    if (mxTab() === 'sched') return '';
+    // В «Расписании» свой выбор человека («Мое» / «Вся команда»), и второй
+    // переключатель про то же самое рядом только путает.
+    if (state.page === 'sched') return '';
     if (!d || d === 'none' || !d.can_all) return '';
     return '<div class="pay-seg plan-seg">' +
       '<button type="button" class="' + (state.meetxScope === 'my' ? '' : 'on') + '" data-mxscope="all">Вся команда</button>' +
@@ -30663,19 +31164,17 @@
       });
     });
   }
+  /* Раздел «Расписание» (02.11.2026, Павел: «лучше и менее нагрузочно, если
+     сделаем его отдельным блоком»). От журнала встреч не зависит и его не ждет:
+     сетка сама грузит данные и вешает обработчики, сверху только чипы
+     направлений, общие с EastSide Meeting. */
+  function renderSchedPage(view) {
+    view.innerHTML = mxDeptChips() + '<div id="mx-sched"></div>';
+    renderMeetings(el('mx-sched'), true);
+    mxWireTop(view);
+  }
   function renderMeetx(view) {
     if (state.meetRooms === null || state.meetRooms === undefined) loadMeetRooms();
-    /* «Расписание» переехало сюда из задач целиком (Павел 06.10.2026) и от
-       журнала записей не зависит: оно открывается, даже если журнал не ответил,
-       и не ждет его загрузки. Экран свой — рисуем его в свой контейнер и отдаем
-       ему управление, он сам грузит данные и вешает обработчики. */
-    if (mxTab() === 'sched' && !state.meetxOpen) {
-      view.innerHTML = mxActions() + '<div class="wk-top mx-tabrow">' + mxTabs() + '</div>' +
-        mxDeptChips() + '<div id="mx-sched"></div>';
-      renderMeetings(el('mx-sched'), true);
-      mxWireTop(view);
-      return;
-    }
     if (state.meetx === null) { view.innerHTML = dashSkeleton(); loadMeetx(); return; }
     if (state.meetx === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
@@ -33303,7 +33802,8 @@
             sub: days > 0 ? plural(days, 'день', 'дня', 'дней')
                           : cur.event_date.split('-').reverse().join('.') };
     }
-    return { key: 'efir', label: 'Были на эфире', value: live,
+    return { key: 'efir', label: 'Были на эфире', value: live, step: 'viewers',
+             stepPlate: live,
              sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
                   ' без регистрации' + (rec ? ' · запись смотрели ' + rec : ''),
              pct: launchPct(live, regShown, 'от регистраций') };
@@ -33324,7 +33824,7 @@
      плитки, у каждой главная цифра — пройденный шаг, а начатый уходит в подпись:
      «зашли в анкету» без «получили разбор» ничего не стоит, но показывает, где люди
      осыпаются. Нет блока (старый бэкенд) — нет и плиток. */
-  function launchDiagTiles(cur, base, dc, zal, hvost, pay) {
+  function launchDiagTiles(cur, base, dc, zal, hvost, pay, ot) {
     dc = dc || cur.diagcons;
     pay = pay || cur.payment;
     if (!dc) return [];
@@ -33341,21 +33841,23 @@
     var regTxt = 'от регистраций' + (hvost ? ' ' + hvost : '');
     return [
       { key: 'diag', label: 'Прошли диагностику', value: dc.done,
+        step: 'plat_diag', stepFrom: ot, stepPlate: dc.done,
         sub: 'зашли в анкету ' + dc.entered + ' · анкета и разбор в кабинете',
         pct: [launchPct(dc.done, zal, zalTxt), launchPct(dc.done, base, regTxt)] },
       { key: 'cons', label: 'Записались на консультацию', value: dc.booked,
+        step: 'tutor', stepFrom: ot, stepPlate: dc.booked,
         sub: 'выбрали дату и время ' + dc.slotted,
         pct: [launchPct(dc.booked, zal, zalTxt),
               launchPct(dc.booked, dc.done, 'от прошедших диагностику'),
               launchPct(dc.booked, base, regTxt)] },
-    ].concat(launchSupportTile(pay, dc, base, hvost));
+    ].concat(launchSupportTile(pay, dc, base, hvost, ot));
   }
 
   /* Последняя плитка ряда — чем всё кончилось: оплаченное сопровождение. Участие за
      690 ₽ сюда НЕ идёт, это продажа поступления (владелец, 31.10.2026: «оплатили
      сопровождение, сумма и количество человек»). Деньги собираем по трём дорогам:
      касса офферов, счета CRM и договоры из ведомости. */
-  function launchSupportTile(pay, dc, base, hvost) {
+  function launchSupportTile(pay, dc, base, hvost, ot) {
     if (!pay || !pay.product) return [];
     var pr = pay.product, cr = pay.crm || {}, ld = pay.ledger || {};
     var rub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
@@ -33364,7 +33866,8 @@
       /* Заголовок короткий, да ещё с мягким переносом внутри слова: колонка в самой
          плотной полосе уже «Сопровождения», и без переноса слово обрезалось на
          полуслове. Действие («оплатили») уходит в подпись. */
-      key: 'support', label: 'Сопро\u00ADвождение',
+      key: 'support', label: 'Сопро\u00ADвождение', step: 'support', stepFrom: ot,
+      stepPlate: n,
       value: fmtMoney(rub) + ' \u20bd',
       sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
       pct: [launchPct(n, dc.booked, 'от записавшихся на консультацию'),
@@ -33403,9 +33906,12 @@
          повтор», и второе «на повтор» в каждой плитке не влезает в колонку —
          на ширине 1280 оно обрезалось на полуслове. Пары читаются по вертикали. */
       { key: 'reg', label: 'Регистрации', value: base,
+        step: 'reach', stepTitle: 'Регистрации на повтор', stepFrom: p.since,
+        stepPlate: base,
         sub: 'бесплатно ' + (reg.free || 0) + ' · платно ' + (reg.vip || 0),
         pct: launchPct(base, p.pages && p.pages.users, 'от тех, кто видел страницу') },
       { key: 'invoice', label: 'Счет на участие', value: pay.invoiced || 0,
+        step: 'invoiced', stepFrom: p.since, stepPlate: pay.invoiced || 0,
         sub: plural(pay.invoiced || 0, 'человек', 'человека', 'человек') + ' · 690 рублей',
         pct: launchPct(pay.invoiced, base, 'от регистраций на повтор') },
       { key: 'paid', label: 'Оплачено', value: fmtMoney(pay.paid_rub || 0) + ' \u20bd',
@@ -33421,7 +33927,7 @@
       { key: 'efir', label: 'Были на повторе', value: zal,
         sub: (vw.known || 0) + ' с карточкой · ' + (vw.anon || 0) + ' без регистрации',
         pct: launchPct(zal, base, 'от регистраций на повтор') },
-    ].concat(launchDiagTiles(cur, base, p.diagcons, zal, 'на повтор', p.payment));
+    ].concat(launchDiagTiles(cur, base, p.diagcons, zal, 'на повтор', p.payment, p.since));
     if (p.pages && p.pages.users) {
       /* «Страницу повтора видели» в колонку этой ширины не влезает и обрезается,
          поэтому действие уехало в подпись, а в заголовке осталась сама страница. */
@@ -33628,13 +34134,13 @@
     return '?' + q.join('&');
   }
 
-  function launchPeopleOpen(slug, step, launchTitle, plate) {
+  function launchPeopleOpen(slug, step, launchTitle, plate, ot, ownTitle) {
     state._lpPeople = {
-      kind: 'step', id: 'step:' + step.key,
-      slug: slug, step: step.key, title: step.title,
+      kind: 'step', id: 'step:' + step.key + (ot ? ':' + ot : ''),
+      slug: slug, step: step.key, title: step.title, ownTitle: !!ownTitle,
       plate: step.people == null ? 0 : step.people,
       launch: launchTitle || '',
-      from: state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
+      from: ot || state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
       day: state._mkLaunchDay || '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: plate || null,          /* куда вернуть фокус после закрытия */
@@ -33700,7 +34206,10 @@
       cur.rows = cur.rows.concat((r && r.people) || []);
       if (r && r.total != null) cur.total = r.total;
       else cur.total = cur.rows.length;        /* ручка промолчала — считаем по факту */
-      if (r && r.title) cur.title = r.title;
+      /* Заголовок с плашки не перебиваем названием ступени: под плашкой
+         «Регистрации» лежит ступень «Охват запуска», и человек, открывший список,
+         не должен гадать, то ли это, по чему он нажал. */
+      if (r && r.title && !cur.ownTitle) cur.title = r.title;
       cur.loading = false;
       launchPeopleModal();
     }).catch(function (e) {
@@ -35507,6 +36016,10 @@
            Ольга 22.09). Число за период берём у самой плашки — она и есть источник,
            а «всего за запуск» уходит в подпись, чтобы обе цифры были названы. */
         { key: 'reg', label: 'Регистрации', value: regShown,
+          /* Список за плашкой — ступень «Охват запуска»: плашка считает всех людей
+             запуска, а «Зарегистрировались» — только тех, кто оставил контакт
+             (221 из 624), и список спорил бы с цифрой над ним. */
+          step: 'reach', stepTitle: 'Регистрации', stepPlate: regShown,
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total,
@@ -35515,7 +36028,8 @@
            это не сопровождение. Плитка держит участие, продукты живут ступенями. */
         /* В плитке счетов и оплат — ЛЮДИ, а не только деньги (Ольга, 31.10.2026):
            «5» без слова «человек» читалось как пять рублей или пять попыток. */
-        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced,
+        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced, step: 'invoiced',
+          stepPlate: pay.invoiced,
           sub: plural(pay.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей · ' +
             pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
           pct: launchPct(pay.invoiced, regShown, 'от регистраций') },
@@ -35649,7 +36163,19 @@
             st.title, cur.title, st.wide, n);
           return;
         }
-        launchPeopleOpen(cur.slug, st, cur.title, n);
+        /* Плашка нижнего ряда просит людей СВОЕГО окна: повтор начинается своей
+           датой, и список обязан показать тех же, кого посчитала плашка. */
+        var ot = n.getAttribute('data-lfrom');
+        var own = n.getAttribute('data-ltitle');
+        /* Заголовок списка — слово с плашки, по которой нажали: ступень может
+           называться иначе («Охват запуска» под плашкой «Регистрации»). */
+        var ttl = own || (ot ? st.title + ' · повтор' : '');
+        var pl = n.getAttribute('data-lplate');
+        var st2 = (ttl || pl != null) ? Object.assign({}, st, {
+          title: ttl || st.title,
+          people: pl != null ? parseInt(pl, 10) : st.people,
+        }) : st;
+        launchPeopleOpen(cur.slug, st2, cur.title, n, ot || '', !!ttl);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
@@ -41780,7 +42306,8 @@
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
-      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') +
+      return '<button class="stat' + (s.lead ? ' lead' : '') +
+        (s.go || s.ebl || s.step ? ' go' : '') +
         (s.drag ? ' movable' : '') + '"' +
         /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
            порядок, draggable — чтобы браузер вообще начал её тащить. */
@@ -41789,7 +42316,15 @@
         /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
            вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
            другую страницу, а здесь список открывается поверх. */
-        (s.ebl ? ' data-ebl="' + s.ebl + '" title="Показать этих людей поименно"' : '') + '>' +
+        (s.ebl ? ' data-ebl="' + s.ebl + '" title="Показать этих людей поименно"' : '') +
+        /* data-lstep — плашка запуска, за которой стоит ступень пути: клик
+           разворачивает её в поимённый список (владелец, 3.11.2026: «чтобы я прям
+           видела, кто эти люди»). from/to — окно нижнего ряда, у повтора своё. */
+        (s.step ? ' data-lstep="' + s.step + '"' +
+                  (s.stepFrom ? ' data-lfrom="' + s.stepFrom + '"' : '') +
+                  (s.stepTitle ? ' data-ltitle="' + esc(s.stepTitle) + '"' : '') +
+                  (s.stepPlate != null ? ' data-lplate="' + s.stepPlate + '"' : '') +
+                  ' title="Показать этих людей поименно"' : '') + '>' +
         '<div class="sl">' + s.label + '</div>' +
         /* Кегль плитки рассчитан на короткое число. Длинное значение («19 320 ₽»)
            и значение словом («Сегодня») в него не влезают и наезжают на соседнюю
@@ -53615,8 +54150,9 @@
        шапка успевала нарисовать старый раздел и человек по ссылке из бота видел
        хлебную крошку «Фокус недели» вместо вкладок задач. */
     if (pg === 'focus' || pg === 'stuck') { state.teamMode = pg; return ['tasks', 'team']; }
-    // Расписание и зумы уехали из задач в EastSide Meeting (06.10.2026).
-    if (pg === 'sched' || (pg === 'tasks' && seg === 'meet')) { state.mxTab = 'sched'; return ['meetx', '']; }
+    // Встречи из задач и вкладка расписания из EastSide Meeting — теперь раздел
+    // «Расписание» (02.11.2026).
+    if ((pg === 'tasks' && seg === 'meet') || (pg === 'meetx' && seg === 'sched')) return ['sched', ''];
     if (pg === 'attestations' && can('academy_review')) { state.acTab = 'att'; return ['academy', '']; }
     // Воркшопы стали курсом Академии (Павел 28.09.2026), но ссылки на раздел
     // ходят по чатам — ведем их в тот же курс, а не на пустую страницу.
@@ -53750,7 +54286,7 @@
           if (!slug || slug === state.mxChan) return false;
           state.mxWantChan = slug; state.mxTab = 'soon'; return true;
         }
-        if ((s !== 'soon' && s !== 'sched' && s !== 'rec') || s === mxTab()) return false;
+        if ((s !== 'soon' && s !== 'rec') || s === mxTab()) return false;
         state.mxTab = s; return true;
       },
     },

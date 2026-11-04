@@ -3615,6 +3615,39 @@ button.tr-crumb:hover { color: var(--blue); }
 /* Цитата в пузыре вместо лесенки отступов: в колонке 420px ветка отступом
    съедала бы половину строки, а так видно, на что отвечают, и по клику
    прыгаешь к оригиналу. */
+/* Упоминание в реплике. Не кнопка: это пометка «тебя позвали», нажимать не на
+   что, поэтому только вес и цвет акцента. В своем пузыре фон синий, там акцент
+   белым, иначе сливается. */
+.tsk-at { font-weight: 700; color: var(--blue); }
+.tsk-msg.out .tsk-at { color: #fff; }
+/* Подсказка «кого позвать». Стоит над самим полем ввода, а не в потоке
+   подвала: в потоке ее вытесняли кнопки и плашка «Ответ», а на телефоне с
+   открытой клавиатурой список не влезал вовсе (проверено 02.11.2026).
+   Перекрытые две строки ленты человека не смущают — он смотрит в имена.
+   Поверхность — тот же рецепт, что у выбора человека (.ss-pop) и у срока
+   задачи (.due-pop): три разных окошка под одно действие «выбери из списка»
+   читались бы как три разные механики. Тень тут по делу — она единственное,
+   что отрывает список от серой ленты под ним. Координаты ставит app.js
+   (tskAtPicker.place), как у .ss-pop: в потоке карточки список резала бы
+   прокрутка колонки, а на телефоне с клавиатурой срезала целиком. */
+.tsk-atbox { position: fixed; z-index: 100;
+  border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  box-shadow: 0 14px 40px -16px rgba(20,25,40,.28); animation: rmPop .16s ease;
+  background: var(--card); overflow-y: auto; max-height: 232px; }
+.tsk-at-h { padding: 7px 12px 5px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.tsk-at-i { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  padding: 8px 12px; font-size: 13.5px; color: var(--ink); background: none; }
+/* Роль различает тезок (у нас два Марка), поэтому ink-2 (4.9:1), а не ink-3:
+   на ink-3 единственный различающий признак был самым бледным в строке.
+   min-width: 0 — чтобы длинная пара «имя + роль» обрезалась, а не выдавливала
+   пометку «без бота», которую как раз надо видеть до отправки. */
+.tsk-at-i i { font-style: normal; font-size: 11.5px; color: var(--ink-2);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-at-i u { margin-left: auto; flex: none; text-decoration: none; font-size: 11px;
+  color: var(--amber-ink); }
+.tsk-at-i:hover, .tsk-at-i.on { background: var(--blue-tint); }
+.tsk-at-i:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 .tsk-quote { display: block; width: 100%; text-align: left; font-size: 11.5px; line-height: 1.4;
   color: var(--ink-2); background: rgba(17,21,31,.05); border-radius: 8px;
   padding: 5px 8px; margin-bottom: 5px; }
@@ -3682,6 +3715,13 @@ button.tr-crumb:hover { color: var(--blue); }
   .tsk-evb { min-height: 32px; }
   .tsk-evacts { gap: 0 18px; }
   .tsk-evdel { margin-left: 6px; }
+}
+
+/* Телефон: строка списка имен под палец, тем же рецептом, что у выбора
+   человека (.ss-i). На 36 пикселях рядом стоящие имена промахиваются. */
+@media (max-width: 480px) {
+  .tsk-at-i { padding: 12px; font-size: 14px; }
+  .tsk-at-i i { font-size: 12px; }
 }
 
 /* На узком экране выбора ширины нет: две колонки туда не помещаются, и кнопка
@@ -4038,6 +4078,15 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-roles .qchip { font-size: 12px; padding: 6px 11px; }
 .sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .sc-legend .sc-chip { cursor: default; }
+/* Селектор «Чье расписание» — с подписью сверху, чтобы было понятно, что это выбор
+   чужого расписания, а не просто список имен. */
+.sc-who { display: flex; flex-direction: column; gap: 3px; }
+.sc-wholbl { font-size: 11px; font-weight: 600; color: var(--ink-3); padding-left: 2px; }
+/* Кнопка «Добавить» с меню (часы/собрание по роли). Меню прижато к правому краю
+   кнопки, как сами действия в шапке. */
+.sc-addwrap { position: relative; display: inline-flex; }
+.sc-addmenu { left: auto; right: 0; min-width: 210px; }
+.sc-addmenu .flp-opt { font-weight: 600; }
 /* На телефоне легенда стоила целой строки шапки, а расшифровывала то, что и так
    написано словами в самих плашках («Козубенко (урок)»). Пятый ряд управления
    уводил первый час расписания ниже середины экрана — это дороже подсказки. */
@@ -4081,6 +4130,14 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-my-row.room { box-shadow: inset 2px 0 0 var(--green); }
 .sc-my-row.live { background: var(--blue-tint); box-shadow: inset 2px 0 0 var(--blue); }
 .sc-my-row.live .sc-my-h { color: var(--blue); }
+/* Встреча в ленте открывается на правку — строка ведет себя как кнопка, а не
+   текст: курсор, тихая подсветка на наведении, карандаш проступает ярче. */
+.sc-my-row.tap { cursor: pointer; transition: background .15s var(--ease); }
+.sc-my-row.tap:hover { background: var(--fill); }
+.sc-my-row.tap:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.sc-my-ed { flex: none; display: inline-flex; color: var(--ink-3); opacity: .55;
+  transition: opacity .15s var(--ease), color .15s var(--ease); }
+.sc-my-row.tap:hover .sc-my-ed { opacity: 1; color: var(--blue); }
 .sc-my-go { flex: none; padding: 5px 12px; border-radius: 9px; font-size: 12.5px;
   font-weight: 650; color: var(--blue); background: var(--blue-tint); text-decoration: none;
   transition: .15s var(--ease); }
@@ -4363,6 +4420,18 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
    ручная тяга спорила бы с авторостом и оставляла поле в чужой высоте. */
 .tsk-sayta { resize: none; overflow-y: auto; min-height: 42px; max-height: 132px;
   line-height: 1.45; padding-top: 11px; padding-bottom: 11px; }
+/* Кому уйдет реплика. Тихая строка под полем: это подсказка, а не действие,
+   и спорить за внимание с самим полем она не должна. */
+.tsk-sayto { display: flex; align-items: center; gap: 6px; padding: 0 2px 2px;
+  font-size: 11.5px; color: var(--ink-3); line-height: 1.3; }
+.tsk-sayto svg { flex: none; opacity: .7; }
+.tsk-sayto span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* У строки свой display, и без этого правила атрибут hidden проигрывает классу
+   (та же грабля, что у .tsk-repl). */
+.tsk-sayto[hidden] { display: none; }
+/* Кому сообщение не дойдет: он не нажимал «Старт» у бота. Амбер — ожидание и
+   внимание по палитре, красным тут пугать нечего. */
+.tsk-sayto i { font-style: normal; color: var(--amber-ink); }
 /* Кому отвечаем — плашка над полем. */
 .tsk-repl { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
   border-radius: 10px; background: var(--blue-tint); font-size: 12px; color: var(--navy); }
@@ -11587,9 +11656,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   font-size: 12.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 /* Счетчик встреч в дне — только для узкого экрана, где плашки не читаются. */
 .mm-cnt { display: none; }
+/* Счетчики дня у правого края номера: зеленым — свободные окна, серым — занятые
+   часы. Группа, чтобы обе цифры стояли вместе, а не разъезжались по строке. */
+.mm-cnts { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 /* Сколько часов этого дня уже проданы ученикам. Тихая цифра, а не плашка:
    в месяце это фон для решения «куда влезет планерка», а не событие. */
-.mm-load { margin-left: auto; font-size: 10.5px; font-weight: 600; color: var(--ink-3);
+.mm-load { font-size: 10.5px; font-weight: 600; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+/* Сколько в этот день свободных окон — это и есть «все слоты» на календаре. */
+.mm-free { font-size: 10.5px; font-weight: 700; color: var(--green-ink);
   font-variant-numeric: tabular-nums; }
 
 .mm-cell.now .mm-num { color: var(--blue); }
@@ -11625,9 +11700,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      планерка остается в клетке обрезанным «11:0…». */
   .mm-ev, .mm-ev.plan, .mm-more { display: none; }
   .mm-cell { min-height: 54px; }
-  /* Цифра занятости уступает место счетчику встреч: два числа в клетке шириной
-     в палец не читаются, а счетчик отвечает на более частый вопрос. */
-  .mm-load { display: none; }
+  /* Цифры занятости и свободных окон уступают место счетчику встреч: в клетке
+     шириной в палец столько чисел не читается, подробности — по клику на день. */
+  .mm-cnts { display: none; }
   .mm-cnt { display: inline-flex; align-items: center; justify-content: center;
     min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--r-pill);
     background: var(--blue-tint); color: var(--blue); font-size: 10px; font-weight: 700; }
@@ -12778,7 +12853,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    своя колонка каналов со своей прокруткой. */
 .mx-office { position: relative; height: min(520px, 58vh); margin-bottom: 18px;
   border-radius: var(--r-xl); border: 1px solid var(--line); background: var(--card);
-  overflow: hidden; transition: height .18s var(--ease); }
+  overflow: hidden; display: flex; flex-direction: column;
+  transition: height .18s var(--ease); }
 /* Средний размер: чужой экран в низком окне нечитаем, а на весь экран нужно не
    всегда (Павел 26.10.2026). */
 .mx-office.big { height: calc(100vh - 210px); min-height: 420px; }
@@ -12787,24 +12863,39 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Под окном во весь экран страница не прокручивается: иначе за ним уезжает
    раздел, и выход возвращает человека не туда, где он был. */
 body.office-full { overflow: hidden; }
-/* Кнопки размера лежат поверх рамки: внутрь нее, на чужую страницу, не дотянуться. */
-.mx-office-tools { position: absolute; right: 12px; top: 10px; z-index: 2;
-  display: flex; gap: 6px; }
-.mx-office-tools button { width: 28px; height: 28px; display: grid; place-items: center;
-  border: 0; border-radius: 9px; cursor: pointer; color: var(--ink-2);
-  background: rgba(255,255,255,.82); backdrop-filter: blur(8px);
-  box-shadow: 0 1px 2px rgba(15,19,32,.1); transition: .15s; }
-.mx-office-tools button:hover { color: var(--ink); background: #fff; }
-.mx-office-tools svg { width: 14px; height: 14px; }
+/* Своя строка окна: слева видно, чье это окно, справа — чем управляют. Раньше
+   кнопки лежали поверх чужой страницы и сливались с ее шапкой. */
+.mx-office-head { flex: none; height: 40px; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--line); background: #fff; }
+.mx-office-ttl { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.mx-office-tools { display: flex; align-items: center; gap: 8px; }
+/* Кнопка с подписью держит рецепт .icobtn: та же высота, бордер и ховер — это
+   та же тихая кнопка, только со словом вместо значка. */
+.mx-office-fs { height: 32px; padding: 0 12px; border: 1px solid var(--line-2);
+  border-radius: 9px; background: #fff; color: var(--ink-2); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: inherit; font-weight: 600; font-size: 12.5px; line-height: 1;
+  transition: .15s; }
+.mx-office-fs:hover { color: var(--blue); border-color: #C9D7FB; }
+.mx-office-tools button:focus-visible { outline: none; color: var(--blue);
+  box-shadow: inset 0 0 0 1.5px var(--blue); border-color: var(--blue); }
+/* Подсказка клавиши. Плашка маленькая, поэтому радиус меньше контрольного:
+   на 18px высоты радиус 10 превращает клавишу в пилюлю. */
+.mx-office-esc { font-family: inherit; font-weight: 700; font-size: 11px;
+  line-height: 1; color: var(--ink-2); background: var(--fill);
+  border-radius: 6px; padding: 4px 6px; }
 .mx-office[hidden] { display: none; }
-.mx-office-f { width: 100%; height: 100%; border: 0; display: block; }
-.mx-office-wait { height: 100%; display: grid; place-items: center;
+.mx-office-f { flex: 1; min-height: 0; width: 100%; border: 0; display: block; }
+.mx-office-wait { flex: 1; display: grid; place-items: center;
   color: var(--ink-3); font-size: 13px; }
 /* На телефоне офис занимает почти экран: колонка каналов там лентой сверху, и
    на половине высоты от нее остается полоска. */
 @media (max-width: 760px) {
   .mx-office { height: 74vh; margin-bottom: 14px; }
-  /* Лента каналов там идет поверху — кнопки в углу закрывали бы ее названия. */
+  /* Размер на телефоне один: окно там и так почти во весь экран. Строку
+     оставляем — по ней видно, где кончается наша страница и начинается офис. */
   .mx-office-tools { display: none; }
 }
 
