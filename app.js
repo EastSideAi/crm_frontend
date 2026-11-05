@@ -33119,6 +33119,100 @@
       (sub ? '<div class="ads-ks">' + esc(sub) + '</div>' : '') + '</div>';
   }
 
+  /* Плашка рекламы, которую можно таскать и открывать (владелец, 4.11.2026: «их
+     я могла бы двигать», «я должна открыть и увидеть этих людей»). t: key —
+     для порядка, step — список людей за цифрой, subHtml — подпись уже собранная
+     (в ней бывает своя кликабельная цифра). */
+  function adsTile(t) {
+    return '<div class="ads-k movable' + (t.step ? ' go' : '') + '" draggable="true"' +
+      ' data-tile="' + t.key + '"' +
+      (t.step ? ' data-ads="' + t.step + '" role="button" tabindex="0"' +
+                ' title="Показать этих людей поименно"' : '') + '>' +
+      '<div class="ads-kl">' + esc(t.label) + '</div>' +
+      '<div class="ads-kv num">' + t.value + '</div>' +
+      (t.sub ? '<div class="ads-ks">' + t.sub + '</div>' : '') + '</div>';
+  }
+
+  function adsStepSpan(step, txt) {
+    return '<span class="go-sub" data-ads="' + step + '" role="button" tabindex="0"' +
+      ' title="Показать этих людей поименно">' + txt + '</span>';
+  }
+
+  var ADS_ORDER = {
+    top: ['spend', 'reg', 'price', 'shows', 'visits'],
+    next: ['live', 'rec', 'diag_click', 'anketa', 'cons', 'uch', 'sup'],
+  };
+
+  function adsOrderSaved(row) {
+    try {
+      var v = JSON.parse(localStorage.getItem('mk-ads-tiles-' + row) || 'null');
+      return Array.isArray(v) ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function adsRow(row, items) {
+    return '<div class="ads-kpis" data-adsrow="' + row + '">' +
+      tilesOrdered(items, adsOrderSaved(row) || ADS_ORDER[row]).map(adsTile).join('') +
+      '</div>';
+  }
+
+  /* Доля от регистраций с рекламы. Отдельной функцией, а не делением по месту:
+     эта же доля стоит в трёх плашках подряд, и считаться она обязана одинаково. */
+  function adsShare(n, base) {
+    /* Ноль долей не имеет: «0% от регистраций» — шум, который занимает место рядом
+       с честным нулём и ничего к нему не добавляет. */
+    if (!base || !n) return '';
+    var v = n * 100 / base;
+    if (n > 0 && v < 1) return ' · меньше 1% от регистраций';
+    return ' · ' + String(Math.round(v * 10) / 10).replace('.', ',') + '% от регистраций';
+  }
+
+  /* Что реклама принесла ДАЛЬШЕ регистрации: разбор, заявка, деньги. Считается по
+     людям с рекламной меткой — раздел про платный трафик, и общий итог запуска в
+     нём читался бы как заслуга рекламы (владелец, 3.11.2026). */
+  /* Второй ряд — по людям с рекламы поимённо (d.people): каждое число открывает
+     список. Деньги берём из funnel — там суммы; люди и суммы считаются по одним
+     и тем же правилам. */
+  function adsNextTiles(n, f) {
+    var base = n.reg || 0;
+    var sh = function (k) { return adsShare(n[k], base).replace(/^ · /, ''); };
+    return [
+      { key: 'live', label: 'Пришли на эфир', value: adsNum(n.live), step: 'live', sub: esc(sh('live')) },
+      { key: 'rec', label: 'Посмотрели запись', value: adsNum(n.rec), step: 'rec',
+        sub: (n.rec_new != null ? adsStepSpan('rec_new', 'из них новых ' + adsNum(n.rec_new)) +
+                                  esc(', на эфире не были') : '') +
+             (sh('rec') ? esc(' · ' + sh('rec')) : '') },
+      { key: 'diag_click', label: 'Нажали кнопку диагностики', value: adsNum(n.diag_click),
+        step: 'diag_click', sub: esc('в комнате эфира' + (sh('diag_click') ? ' · ' + sh('diag_click') : '')) },
+      { key: 'anketa', label: 'Записались на диагностику', value: adsNum(n.anketa), step: 'anketa',
+        sub: (n.diag != null ? adsStepSpan('diag', 'получили разбор ' + adsNum(n.diag)) + ' · ' : '') +
+             esc('анкета на платформе' + (sh('anketa') ? ' · ' + sh('anketa') : '')) },
+      { key: 'cons', label: 'Записались на консультацию', value: adsNum(n.cons), step: 'cons',
+        sub: esc(sh('cons')) },
+      { key: 'uch', label: 'Платное участие', value: fmtMoney(Math.round((f && f.uch_rub) || 0)) + ' ₽',
+        step: 'uch', sub: esc('оплатили ' + adsNum(n.uch) + ' · 690 ₽') },
+      { key: 'sup', label: 'Сопровождение', value: fmtMoney(Math.round((f && f.sup_rub) || 0)) + ' ₽',
+        step: 'sup', sub: esc('оплатили ' + adsNum(n.sup)) },
+    ];
+  }
+
+  function adsFunnelKpis(f) {
+    if (!f) return '';
+    var base = f.reg || 0;
+    /* Деньги тут целыми рублями, как на экране запусков: копейки в выручке запуска
+       ничего не решают, а в плашке съедают кегль у самой цифры. */
+    return adsKpi('Записались на диагностику', adsNum(f.diag_done),
+             'на платформе · зашли в анкету ' + adsNum(f.diag_entered) +
+             adsShare(f.diag_done, base)) +
+      adsKpi('Записались на консультацию', adsNum(f.cons_booked),
+             'выбрали время ' + adsNum(f.cons_slotted) + adsShare(f.cons_booked, base)) +
+      adsKpi('Платное участие', fmtMoney(Math.round(f.uch_rub || 0)) + ' ₽',
+             'оплатили ' + adsNum(f.uch_people) + ' · 690 ₽' +
+             adsShare(f.uch_people, base)) +
+      adsKpi('Сопровождение', fmtMoney(Math.round(f.sup_rub || 0)) + ' ₽',
+             'оплатили ' + adsNum(f.sup_people) + adsShare(f.sup_people, base));
+  }
+
   function adsDayCard(r) {
     /* Развёрнутый день: всё, что не поместилось в строку, плюс расхождения.
        Достижения цели рядом с людьми стоят намеренно — это тот самый случай, где
@@ -33161,19 +33255,28 @@
     var d = state._mkAds, rows = d.rows || [], t = d.total || {};
     var open = state._mkAdsOpen || '';
 
-    var kpis =
-      adsKpi('Расход', adsMoney(t.spend) + ' ₽', 'с НДС ' + adsMoney(t.spend_nds) + ' ₽') +
-      adsKpi('Отправок формы', adsNum(t.form_sent),
-             t.form_price ? 'по ' + adsMoney(t.form_price) + ' ₽' : 'автоцель Метрики') +
-      adsKpi('Регистраций', adsNum(t.reg_total),
-             'бесплатно ' + adsNum(t.reg_free) + ' · за 690 ' + adsNum(t.reg_paid)) +
-      adsKpi('Цена регистрации', adsMoney(t.reg_price) + ' ₽',
-             'с НДС ' + adsMoney(t.reg_price_nds) + ' ₽') +
-      adsKpi('Показы и клики', adsNum(t.shows) + ' · ' + adsNum(t.clicks),
-             'CTR ' + adsPct(t.ctr) + ' · клик ' + adsMoney(t.cpc) + ' ₽') +
-      adsKpi('Визиты', adsNum(t.visits), 'подписок в ботов ' +
-             adsNum((t.bot_vk || 0) + (t.bot_max || 0) + (t.bot_tg || 0)) +
-             ' · с рекламы ' + adsNum(t.bot_ads || 0));
+    var ppl = d.people;
+    /* Регистрации — люди, заполнившие форму с рекламной меткой, по нашей базе, а
+       не цель Метрики (владелец, 4.11.2026): Метрика видит не всех. Бот — шаг
+       тех же людей, поэтому он в подписи, а не слагаемым. «Отправок формы» с
+       экрана убрана по просьбе владельца, в разборе дня она осталась. */
+    var kpis = adsRow('top', [
+      { key: 'spend', label: 'Расход', value: adsMoney(t.spend) + ' ₽',
+        sub: esc('с НДС ' + adsMoney(t.spend_nds) + ' ₽') },
+      ppl ? { key: 'reg', label: 'Регистрации', value: adsNum(ppl.reg), step: 'reg',
+              sub: adsStepSpan('to_bot', 'из них в бота ' + adsNum(ppl.to_bot)) +
+                   esc(' · заполнили форму') }
+          : { key: 'reg', label: 'Регистраций', value: adsNum(t.reg_total),
+              sub: esc('бесплатно ' + adsNum(t.reg_free) + ' · за 690 ' + adsNum(t.reg_paid)) },
+      { key: 'price', label: 'Цена регистрации',
+        value: adsMoney(ppl ? t.reg_form_price : t.reg_price) + ' ₽',
+        sub: esc('с НДС ' + adsMoney(ppl ? t.reg_form_price_nds : t.reg_price_nds) + ' ₽') },
+      { key: 'shows', label: 'Показы и клики', value: adsNum(t.shows) + ' · ' + adsNum(t.clicks),
+        sub: esc('CTR ' + adsPct(t.ctr) + ' · клик ' + adsMoney(t.cpc) + ' ₽') },
+      { key: 'visits', label: 'Визиты', value: adsNum(t.visits),
+        sub: esc('подписок в ботов ' + adsNum((t.bot_vk || 0) + (t.bot_max || 0) + (t.bot_tg || 0)) +
+                 ' · с рекламы ' + adsNum(t.bot_ads || 0)) },
+    ]);
 
     var list = rows.map(function (r) {
       var isOpen = open === r.on_date;
@@ -33198,7 +33301,11 @@
         '<div class="s">собирается сама: кабинет ВК, Метрика и наша база, одна строка на сутки</div></div>' +
         '<span style="flex:1"></span>' +
         '<button class="mk-btn primary" id="ads-sync">' + ic('refresh', 12) + 'Пересобрать</button></div>' +
-        '<div class="ads-kpis">' + kpis + '</div>' +
+        kpis +
+        (ppl ? '<div class="ads-sub">Что было дальше · по людям с рекламы</div>' +
+               adsRow('next', adsNextTiles(ppl, d.funnel))
+         : d.funnel ? '<div class="ads-sub">Что было дальше · по людям с рекламы</div>' +
+                      '<div class="ads-kpis">' + adsFunnelKpis(d.funnel) + '</div>' : '') +
       '</div>' +
       '<div class="card" style="overflow:hidden;margin-top:16px">' +
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
@@ -33212,6 +33319,35 @@
       '</div>' +
     '</div>';
 
+    Array.prototype.forEach.call(view.querySelectorAll('[data-adsrow]'), function (bar) {
+      var row = bar.getAttribute('data-adsrow');
+      tilesWire(bar, function (order) {
+        try { localStorage.setItem('mk-ads-tiles-' + row, JSON.stringify(order)); } catch (e) {}
+      });
+    });
+    /* Цифра рекламы → люди за ней. Подпись внутри плашки кликается отдельно,
+       поэтому клик дальше не всплывает. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ads]'), function (n) {
+      var openIt = function (e) {
+        e.stopPropagation();
+        var tile = n.closest('.ads-k') || n;
+        var step = n.getAttribute('data-ads');
+        var lbl = n === tile ? (tile.querySelector('.ads-kl') || {}).textContent
+                             : String(n.textContent).replace(/\s*[\d\s]+$/, '');
+        state._lpPeople = {
+          kind: 'ads', id: 'ads:' + step, slug: '', block: '', value: '', step: step,
+          title: (lbl.charAt(0).toUpperCase() + lbl.slice(1)) + ' · с рекламы',
+          plate: 0, launch: 'Реклама ВК', ownTitle: false, from: '', to: '',
+          days: state._mkAdsLoad || 366,
+          rows: [], total: null, loading: true, error: '', fresh: true, back: tile,
+        };
+        launchPeopleLoad(false);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(e); }
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-adsday]'), function (row) {
       row.addEventListener('click', function () {
         var day = row.getAttribute('data-adsday');
@@ -33731,7 +33867,10 @@
   }
 
   function launchTiles(items) {
-    var order = launchTilesSaved() || LAUNCH_TILES_DEFAULT;
+    return tilesOrdered(items, launchTilesSaved() || LAUNCH_TILES_DEFAULT);
+  }
+
+  function tilesOrdered(items, order) {
     var byKey = {};
     items.forEach(function (t) { if (t && t.key) byKey[t.key] = t; });
     var out = [];
@@ -33744,7 +33883,12 @@
      человек проверяет перестановку перезагрузкой, и «сохраню потом» читается как
      «не сработало». */
   function launchTilesWire(view) {
-    var bar = view.querySelector('.statbar');
+    tilesWire(view.querySelector('.statbar'), launchTilesSave);
+  }
+
+  /* Перетаскивание плашек внутри одного ряда — общее для «Запусков» и «Рекламы».
+     save получает новый порядок ключей сразу по отпусканию. */
+  function tilesWire(bar, save) {
     if (!bar) return;
     var dragged = null;
     Array.prototype.forEach.call(bar.querySelectorAll('[data-tile]'), function (n) {
@@ -33774,7 +33918,7 @@
         var all = Array.prototype.slice.call(bar.querySelectorAll('[data-tile]'));
         var from = all.indexOf(dragged), to = all.indexOf(n);
         bar.insertBefore(dragged, from < to ? n.nextSibling : n);
-        launchTilesSave(Array.prototype.map.call(
+        save(Array.prototype.map.call(
           bar.querySelectorAll('[data-tile]'),
           function (x) { return x.getAttribute('data-tile'); }));
       });
@@ -33804,7 +33948,8 @@
             sub: days > 0 ? plural(days, 'день', 'дня', 'дней')
                           : cur.event_date.split('-').reverse().join('.') };
     }
-    return { key: 'efir', label: 'Были на эфире', value: live,
+    return { key: 'efir', label: 'Были на эфире', value: live, step: 'viewers',
+             stepPlate: live,
              sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
                   ' без регистрации' + (rec ? ' · запись смотрели ' + rec : ''),
              pct: launchPct(live, regShown, 'от регистраций') };
@@ -33825,7 +33970,7 @@
      плитки, у каждой главная цифра — пройденный шаг, а начатый уходит в подпись:
      «зашли в анкету» без «получили разбор» ничего не стоит, но показывает, где люди
      осыпаются. Нет блока (старый бэкенд) — нет и плиток. */
-  function launchDiagTiles(cur, base, dc, zal, hvost, pay) {
+  function launchDiagTiles(cur, base, dc, zal, hvost, pay, ot) {
     dc = dc || cur.diagcons;
     pay = pay || cur.payment;
     if (!dc) return [];
@@ -33840,23 +33985,52 @@
     hvost = hvost || '';
     var zalTxt = 'от бывших на ' + (hvost ? 'повторе' : 'эфире');
     var regTxt = 'от регистраций' + (hvost ? ' ' + hvost : '');
+    /* По меткам ссылок (владелец, 4.11.2026): диагностику продают ссылкой с меткой,
+       и среди регистраций этих людей почти не узнать — плашка показывала 2 при 54
+       заполнивших анкету. Консультация — все заявки периода, со временем и без.
+       Каждая цифра, и в подписи тоже, открывает своих людей. */
+    var t = dc.tag;
+    if (t) {
+      var blk = function (b, txt) {
+        return '<span class="go-sub" data-lblk="' + b + '" role="button" tabindex="0"' +
+          (ot ? ' data-lfrom="' + ot + '"' : '') +
+          ' title="Показать этих людей поименно">' + txt + '</span>';
+      };
+      return [
+        { key: 'diag', label: 'Записались на диагностику', value: t.anketa,
+          blk: 'tag_anketa', blkFrom: ot,
+          sub: blk('tag_diag', 'получили разбор ' + t.diag) + ' · на платформе ИстСайд',
+          pct: [launchPct(t.anketa, zal, zalTxt), launchPct(t.anketa, base, regTxt)] },
+        { key: 'cons', label: 'Записались на консультацию', value: t.cons,
+          blk: 'tag_cons', blkFrom: ot,
+          sub: 'выбрали время ' + t.cons_slot,
+          pct: [launchPct(t.cons, zal, zalTxt),
+                launchPct(t.cons, t.anketa, 'от записавшихся на диагностику'),
+                launchPct(t.cons, base, regTxt)] },
+      ].concat(launchSupportTile(pay, { booked: t.cons }, base, hvost, ot));
+    }
     return [
-      { key: 'diag', label: 'Прошли диагностику', value: dc.done,
-        sub: 'зашли в анкету ' + dc.entered + ' · анкета и разбор в кабинете',
+      /* «Записались», а не «прошли»: речь о диагностике на платформе ИстСайд, и
+         путать её с тестом в боте или разбором у тьютора нельзя (владелец,
+         3.11.2026). Подпись называет платформу прямо. */
+      { key: 'diag', label: 'Записались на диагностику', value: dc.done,
+        step: 'plat_diag', stepFrom: ot, stepPlate: dc.done,
+        sub: 'зашли в анкету ' + dc.entered + ' · на платформе ИстСайд',
         pct: [launchPct(dc.done, zal, zalTxt), launchPct(dc.done, base, regTxt)] },
       { key: 'cons', label: 'Записались на консультацию', value: dc.booked,
+        step: 'tutor', stepFrom: ot, stepPlate: dc.booked,
         sub: 'выбрали дату и время ' + dc.slotted,
         pct: [launchPct(dc.booked, zal, zalTxt),
-              launchPct(dc.booked, dc.done, 'от прошедших диагностику'),
+              launchPct(dc.booked, dc.done, 'от записавшихся на диагностику'),
               launchPct(dc.booked, base, regTxt)] },
-    ].concat(launchSupportTile(pay, dc, base, hvost));
+    ].concat(launchSupportTile(pay, dc, base, hvost, ot));
   }
 
   /* Последняя плитка ряда — чем всё кончилось: оплаченное сопровождение. Участие за
      690 ₽ сюда НЕ идёт, это продажа поступления (владелец, 31.10.2026: «оплатили
      сопровождение, сумма и количество человек»). Деньги собираем по трём дорогам:
      касса офферов, счета CRM и договоры из ведомости. */
-  function launchSupportTile(pay, dc, base, hvost) {
+  function launchSupportTile(pay, dc, base, hvost, ot) {
     if (!pay || !pay.product) return [];
     var pr = pay.product, cr = pay.crm || {}, ld = pay.ledger || {};
     var rub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
@@ -33865,7 +34039,8 @@
       /* Заголовок короткий, да ещё с мягким переносом внутри слова: колонка в самой
          плотной полосе уже «Сопровождения», и без переноса слово обрезалось на
          полуслове. Действие («оплатили») уходит в подпись. */
-      key: 'support', label: 'Сопро\u00ADвождение',
+      key: 'support', label: 'Сопро\u00ADвождение', step: 'support', stepFrom: ot,
+      stepPlate: n,
       value: fmtMoney(rub) + ' \u20bd',
       sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
       pct: [launchPct(n, dc.booked, 'от записавшихся на консультацию'),
@@ -33904,9 +34079,12 @@
          повтор», и второе «на повтор» в каждой плитке не влезает в колонку —
          на ширине 1280 оно обрезалось на полуслове. Пары читаются по вертикали. */
       { key: 'reg', label: 'Регистрации', value: base,
+        step: 'reach', stepTitle: 'Регистрации на повтор', stepFrom: p.since,
+        stepPlate: base,
         sub: 'бесплатно ' + (reg.free || 0) + ' · платно ' + (reg.vip || 0),
         pct: launchPct(base, p.pages && p.pages.users, 'от тех, кто видел страницу') },
       { key: 'invoice', label: 'Счет на участие', value: pay.invoiced || 0,
+        step: 'invoiced', stepFrom: p.since, stepPlate: pay.invoiced || 0,
         sub: plural(pay.invoiced || 0, 'человек', 'человека', 'человек') + ' · 690 рублей',
         pct: launchPct(pay.invoiced, base, 'от регистраций на повтор') },
       { key: 'paid', label: 'Оплачено', value: fmtMoney(pay.paid_rub || 0) + ' \u20bd',
@@ -33922,7 +34100,7 @@
       { key: 'efir', label: 'Были на повторе', value: zal,
         sub: (vw.known || 0) + ' с карточкой · ' + (vw.anon || 0) + ' без регистрации',
         pct: launchPct(zal, base, 'от регистраций на повтор') },
-    ].concat(launchDiagTiles(cur, base, p.diagcons, zal, 'на повтор', p.payment));
+    ].concat(launchDiagTiles(cur, base, p.diagcons, zal, 'на повтор', p.payment, p.since));
     if (p.pages && p.pages.users) {
       /* «Страницу повтора видели» в колонку этой ширины не влезает и обрезается,
          поэтому действие уехало в подпись, а в заголовке осталась сама страница. */
@@ -34105,6 +34283,11 @@
 
   function launchPeopleQS(offset) {
     var p = state._lpPeople;
+    if (p.kind === 'ads') {
+      /* Период рекламы — тот же, что у плашек над списком: дни экрана. */
+      return '?' + ['step=' + encodeURIComponent(p.step), 'days=' + (p.days || 366),
+                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+    }
     if (p.kind === 'efir') {
       /* У эфира нет периода: он сам и есть период. */
       return '?' + ['slug=' + encodeURIComponent(p.slug),
@@ -34113,11 +34296,14 @@
     }
     if (p.kind === 'block') {
       /* Период сюда НЕ передаём: блоки его не слушаются — они считают весь запуск.
-         Обещать в списке фильтр, которого нет в цифре, значит снова их развести. */
-      return '?' + ['slug=' + encodeURIComponent(p.slug),
-                    'block=' + encodeURIComponent(p.block),
-                    'value=' + encodeURIComponent(p.value || ''),
-                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+         Обещать в списке фильтр, которого нет в цифре, значит снова их развести.
+         from — только у плашек по меткам в ряду повтора: у того своё окно. */
+      var bq = ['slug=' + encodeURIComponent(p.slug),
+                'block=' + encodeURIComponent(p.block),
+                'value=' + encodeURIComponent(p.value || ''),
+                'limit=' + LP_LIMIT, 'offset=' + offset];
+      if (p.from) bq.push('from=' + encodeURIComponent(p.from));
+      return '?' + bq.join('&');
     }
     var q = ['slug=' + encodeURIComponent(p.slug), 'step=' + encodeURIComponent(p.step),
              'limit=' + LP_LIMIT, 'offset=' + offset];
@@ -34129,13 +34315,13 @@
     return '?' + q.join('&');
   }
 
-  function launchPeopleOpen(slug, step, launchTitle, plate) {
+  function launchPeopleOpen(slug, step, launchTitle, plate, ot, ownTitle) {
     state._lpPeople = {
-      kind: 'step', id: 'step:' + step.key,
-      slug: slug, step: step.key, title: step.title,
+      kind: 'step', id: 'step:' + step.key + (ot ? ':' + ot : ''),
+      slug: slug, step: step.key, title: step.title, ownTitle: !!ownTitle,
       plate: step.people == null ? 0 : step.people,
       launch: launchTitle || '',
-      from: state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
+      from: ot || state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
       day: state._mkLaunchDay || '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: plate || null,          /* куда вернуть фокус после закрытия */
@@ -34147,12 +34333,13 @@
      зарегистрировавшихся: тест открывают из постов, в канал вступают по общей ссылке.
      Связать их с регистрацией нечем — но показать, кто это, можно и нужно: «тест прошли
      22» без имён команда проверить не может и пересчитывает у себя. */
-  function launchBlockOpen(slug, block, value, title, launchTitle, count, node) {
+  function launchBlockOpen(slug, block, value, title, launchTitle, count, node, from) {
     state._lpPeople = {
-      kind: 'block', id: 'block:' + block + ':' + value,
+      kind: 'block', id: 'block:' + block + ':' + value + ':' + (from || ''),
       slug: slug, block: block, value: value, step: '',
       title: title, plate: count || 0, launch: launchTitle || '',
-      from: '', to: '',
+      ownTitle: !!from,
+      from: from || '', to: '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: node || null,
     };
@@ -34192,6 +34379,7 @@
        пустой строке ответ на «Телеграм» лёг бы в открытый список «Тест». */
     var who = p.id;
     var url = p.kind === 'efir' ? '/admin/api/marketing/efir/people'
+            : (p.kind === 'ads') ? '/admin/api/marketing/ads/people'
             : (p.kind === 'block') ? '/admin/api/marketing/launch/block'
                                    : '/admin/api/marketing/launch/people';
     launchPeopleModal();
@@ -34201,7 +34389,10 @@
       cur.rows = cur.rows.concat((r && r.people) || []);
       if (r && r.total != null) cur.total = r.total;
       else cur.total = cur.rows.length;        /* ручка промолчала — считаем по факту */
-      if (r && r.title) cur.title = r.title;
+      /* Заголовок с плашки не перебиваем названием ступени: под плашкой
+         «Регистрации» лежит ступень «Охват запуска», и человек, открывший список,
+         не должен гадать, то ли это, по чему он нажал. */
+      if (r && r.title && !cur.ownTitle) cur.title = r.title;
       cur.loading = false;
       launchPeopleModal();
     }).catch(function (e) {
@@ -34357,7 +34548,7 @@
     /* Правка доступна только на ступенях пути: у блоков за строкой стоит человек из
        бота, у которого нет карточки регистрации. Считаем до сборки окна — от этого
        зависит и ширина окна, и набор колонок. */
-    var canEdit = p.kind !== 'block';
+    var canEdit = p.kind !== 'block' && p.kind !== 'ads';
     var body;
     if (p.error) {
       body = '<div class="mk-logic-empty">' + esc(p.error) + '</div>';
@@ -34381,8 +34572,9 @@
          не к чему прицепиться. */
       var edit = !bot && p.kind !== 'efir' && canEdit;
       var cols = bot
-        ? ['Человек', 'Ник', 'Откуда пришёл',
-           p.kind === 'efir' ? 'Письмо' : (p.block === 'channel' ? 'Вступил' : 'Зашёл в тест')]
+        ? ['Человек', /^tag_/.test(p.block || '') ? 'Контакт' : 'Ник', 'Откуда пришёл',
+           p.kind === 'efir' ? 'Письмо' : (p.block === 'channel' ? 'Вступил'
+             : (/^tag_/.test(p.block || '') ? 'Пришёл' : 'Зашёл в тест'))]
         : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
       /* В режиме правки колонок шесть, и «Регистрация» перестаёт помещаться в свою
          ширину — заголовок наезжал на соседний. В ней и так одна дата. */
@@ -34401,7 +34593,10 @@
               (p.loading ? 'Загружаю…' : 'Показать ещё') + '</button>' : '') +
       '</div>' : '';
 
-    var per = (p.from || p.to)
+    var per = p.kind === 'ads'
+      ? (p.days && p.days < 366 ? 'за ' + p.days + ' ' + plural(p.days, 'день', 'дня', 'дней')
+                                : 'за все время')
+      : (p.from || p.to)
       ? ('период ' + (p.from ? fmtDay(p.from) : '…') + ' — ' + (p.to ? fmtDay(p.to) : '…'))
       : 'весь запуск';
     /* Заголовок называет ступень и её число: человек должен видеть, что список и
@@ -34411,9 +34606,11 @@
     var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
         ' · <span class="num">' + fmtMoney(total) + '</span></span></div>' +
       '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') +
-        esc(p.kind === 'block' ? 'весь запуск' : (p.kind === 'efir' ? 'весь эфир' : per)) + ' · ' +
+        esc(p.kind === 'block' ? (p.from ? 'с ' + p.from.split('-').reverse().join('.')
+                                          : 'весь запуск')
+                               : (p.kind === 'efir' ? 'весь эфир' : per)) + ' · ' +
         (p.kind === 'block'
-          ? (p.block === 'source'
+          ? (p.block === 'source' || /^tag_/.test(p.block || '')
               ? 'это те же люди, что посчитаны в блоке'
               : 'это те же люди, что посчитаны в блоке · ' +
                 'связаны ли они с регистрацией — мы не знаем')
@@ -36008,6 +36205,10 @@
            Ольга 22.09). Число за период берём у самой плашки — она и есть источник,
            а «всего за запуск» уходит в подпись, чтобы обе цифры были названы. */
         { key: 'reg', label: 'Регистрации', value: regShown,
+          /* Список за плашкой — ступень «Охват запуска»: плашка считает всех людей
+             запуска, а «Зарегистрировались» — только тех, кто оставил контакт
+             (221 из 624), и список спорил бы с цифрой над ним. */
+          step: 'reach', stepTitle: 'Регистрации', stepPlate: regShown,
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total,
@@ -36016,7 +36217,8 @@
            это не сопровождение. Плитка держит участие, продукты живут ступенями. */
         /* В плитке счетов и оплат — ЛЮДИ, а не только деньги (Ольга, 31.10.2026):
            «5» без слова «человек» читалось как пять рублей или пять попыток. */
-        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced,
+        { key: 'invoice', label: 'Счет на участие', value: pay.invoiced, step: 'invoiced',
+          stepPlate: pay.invoiced,
           sub: plural(pay.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей · ' +
             pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
           pct: launchPct(pay.invoiced, regShown, 'от регистраций') },
@@ -36150,11 +36352,44 @@
             st.title, cur.title, st.wide, n);
           return;
         }
-        launchPeopleOpen(cur.slug, st, cur.title, n);
+        /* Плашка нижнего ряда просит людей СВОЕГО окна: повтор начинается своей
+           датой, и список обязан показать тех же, кого посчитала плашка. */
+        var ot = n.getAttribute('data-lfrom');
+        var own = n.getAttribute('data-ltitle');
+        /* Заголовок списка — слово с плашки, по которой нажали: ступень может
+           называться иначе («Охват запуска» под плашкой «Регистрации»). */
+        var ttl = own || (ot ? st.title + ' · повтор' : '');
+        var pl = n.getAttribute('data-lplate');
+        var st2 = (ttl || pl != null) ? Object.assign({}, st, {
+          title: ttl || st.title,
+          people: pl != null ? parseInt(pl, 10) : st.people,
+        }) : st;
+        launchPeopleOpen(cur.slug, st2, cur.title, n, ot || '', !!ttl);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+      });
+    });
+    /* Плашка по меткам и цифра в её подписи → свой список. Подпись лежит внутри
+       плашки, поэтому клик дальше не всплывает: иначе поверх списка «получили
+       разбор» сразу открылся бы список всей плашки. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lblk]'), function (n) {
+      var openIt = function (e) {
+        e.stopPropagation();
+        var tile = n.closest('.stat') || n;
+        var lbl = n === tile ? (tile.querySelector('.sl') || {}).textContent : n.textContent;
+        var num = n === tile ? parseInt((tile.querySelector('.sv') || {}).textContent, 10)
+                             : parseInt(String(n.textContent).replace(/\D+/g, ''), 10);
+        var ttl = String(lbl || 'Люди').replace(/\s*\d+$/, '');
+        ttl = ttl.charAt(0).toUpperCase() + ttl.slice(1);
+        var ot = n.getAttribute('data-lfrom') || '';
+        launchBlockOpen(cur.slug, n.getAttribute('data-lblk'), '',
+          ot ? ttl + ' · повтор' : ttl, cur.title, isNaN(num) ? 0 : num, tile, ot);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(e); }
       });
     });
     /* Плитка «Страницу видели» → разбор по дням и источникам. Людей там нет и быть
@@ -39453,6 +39688,13 @@
     if (!a) return id;
     return a.name + ' · куратор ' + prcPerson(a.curator).name;
   }
+  /* Шаг, который сейчас делает человек, а потом заберет агент (Вера 02.11.2026: «помечая, что
+     вот этот блок мы отдаем агенту потом»). Агентов пока три, у остальных шагов ответственный
+     живой, поэтому пометка тихая и стоит рядом с ним, а не вместо него. */
+  function prcLater(s) {
+    var a = s.agent_later && (state._prc._agents || {})[s.agent_later];
+    return a ? 'потом ' + a.name.charAt(0).toLowerCase() + a.name.slice(1) : '';
+  }
   function prcPerson(id) {
     var p = state._prc._people[id];
     return p || { id: id, name: id, role: '' };
@@ -39738,6 +39980,7 @@
       return '<span class="prc-p' + (x === who ? ' me' : '') + (p.system ? ' sys' : '') + '">' + esc(p.name) + '</span>';
     };
     var people = s.who.map(pp).join('<i>, </i>');
+    var later = prcLater(s);
     var marks = [];
     if (sub) marks.push('<span class="prc-subn">' + ic('flow', 12) + subN + ' ' + plural(subN, 'шаг', 'шага', 'шагов') + ' внутри</span>');
     if ((s.variants || []).length) marks.push('<span class="prc-subn">' + s.variants.length + ' ' + plural(s.variants.length, 'вариант', 'варианта', 'вариантов') + '</span>');
@@ -39746,7 +39989,7 @@
       '<button type="button" class="prc-row" aria-expanded="' + (open ? 'true' : 'false') + '">' +
         '<span class="prc-n">' + (i + 1) + '</span>' +
         '<span class="prc-what"><b>' + esc(s.title) + '</b>' +
-          '<span class="prc-meta-l"><span class="prc-ppl">' + people + '</span></span>' +
+          '<span class="prc-meta-l"><span class="prc-ppl">' + people + '</span>' + (later ? '<span class="prc-later">' + esc(later) + '</span>' : '') + '</span>' +
           (marks.length ? '<span class="prc-marks">' + marks.join('') + '</span>' : '') + '</span>' +
         '<span class="prc-chev">' + ic('go', 14) + '</span>' +
       '</button>' +
@@ -39812,7 +40055,7 @@
     var fact = function (k, v, sub) { return '<div class="prc-fact"><span class="po-lbl">' + k + '</span><b>' + v + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
     var facts = '<div class="prc-facts">' +
       (owner ? fact('Ведет', esc(owner)) : '') +
-      (ag ? fact('Бот', esc(ag.name)) : '') + '</div>';
+      (ag ? fact('Агент', esc(ag.name.charAt(0).toUpperCase() + ag.name.slice(1)) + (ag.live ? '' : ' · пока нет')) : '') + '</div>';
     /* Схема процесса как на рисунках Рыбакова (рис. 1 и 12 книги): слева событие,
        с которого все начинается, дальше пронумерованные шаги стрелками рядами, справа
        результат. Это картинка процесса целиком, ее читают первой; подробности — в
@@ -39821,10 +40064,11 @@
     var scheme = '<ol class="prc-scheme" aria-label="Схема процесса">' +
       (n.trigger ? '<li class="prc-sc-end start" title="' + esc(n.trigger) + '"><span class="po-lbl">Начало</span><p>' + esc(n.trigger) + '</p></li>' : '') +
       n.steps.map(function (s, i) {
-        var sub = s.sub ? prcLight(s.sub) : null;
+        var sub = s.sub ? prcLight(s.sub) : null, later = prcLater(s);
         return '<li><button type="button" class="prc-sc-box' + (sub ? ' sub' : '') + (state.prcStep === i ? ' on' : '') + '" data-sc="' + i + '" title="' + esc(s.title) + '">' +
           '<span class="prc-sc-top"><i>' + (i + 1) + '</i>' + prcCorner(s) + '</span><span>' + esc(s.title) + '</span>' +
-          (sub ? '<small>' + sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри</small>' : '') + '</button></li>';
+          (sub || later ? '<small>' + (sub ? '<span>' + sub.steps.length + ' ' + plural(sub.steps.length, 'шаг', 'шага', 'шагов') + ' внутри</span>' : '') +
+            (later ? '<em>' + esc(later) + '</em>' : '') + '</small>' : '') + '</button></li>';
       }).join('') +
       (n.done ? '<li class="prc-sc-end done" title="' + esc(n.done) + '"><span class="po-lbl">' + ic('check', 12) + 'Результат</span><p>' + esc(n.done) + '</p></li>' : '') +
       '</ol>';
@@ -42272,7 +42516,8 @@
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
-      return '<button class="stat' + (s.lead ? ' lead' : '') + (s.go || s.ebl ? ' go' : '') +
+      return '<button class="stat' + (s.lead ? ' lead' : '') +
+        (s.go || s.ebl || s.step || s.blk ? ' go' : '') +
         (s.drag ? ' movable' : '') + '"' +
         /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
            порядок, draggable — чтобы браузер вообще начал её тащить. */
@@ -42281,7 +42526,20 @@
         /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
            вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
            другую страницу, а здесь список открывается поверх. */
-        (s.ebl ? ' data-ebl="' + s.ebl + '" title="Показать этих людей поименно"' : '') + '>' +
+        (s.ebl ? ' data-ebl="' + s.ebl + '" title="Показать этих людей поименно"' : '') +
+        /* data-lstep — плашка запуска, за которой стоит ступень пути: клик
+           разворачивает её в поимённый список (владелец, 3.11.2026: «чтобы я прям
+           видела, кто эти люди»). from/to — окно нижнего ряда, у повтора своё. */
+        (s.step ? ' data-lstep="' + s.step + '"' +
+                  (s.stepFrom ? ' data-lfrom="' + s.stepFrom + '"' : '') +
+                  (s.stepTitle ? ' data-ltitle="' + esc(s.stepTitle) + '"' : '') +
+                  (s.stepPlate != null ? ' data-lplate="' + s.stepPlate + '"' : '') +
+                  ' title="Показать этих людей поименно"' : '') +
+        /* data-lblk — плашка, за которой стоит список блока, а не ступень пути
+           (диагностика и консультация по меткам, 4.11.2026). */
+        (s.blk ? ' data-lblk="' + s.blk + '"' +
+                 (s.blkFrom ? ' data-lfrom="' + s.blkFrom + '"' : '') +
+                 ' title="Показать этих людей поименно"' : '') + '>' +
         '<div class="sl">' + s.label + '</div>' +
         /* Кегль плитки рассчитан на короткое число. Длинное значение («19 320 ₽»)
            и значение словом («Сегодня») в него не влезают и наезжают на соседнюю
@@ -46664,12 +46922,25 @@
     if (!state.assignees || !peopleFresh(state._assigneesAt)) {
       fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
     }
+    if (toMainCard(id)) return;
     if (!state.details[id]) fetchDetail(id, function (got) {
       if (state.drawerId !== id) return;
+      if (got && toMainCard(id)) return;
       if (got) renderDrawer(true);
       // пришли по ссылке на клиента, которого уже нет (или нет прав) — честно скажем
       else if (!findLead(id)) { closeDrawer(); showToast('Клиент не найден — возможно, ссылка устарела'); }
     });
+  }
+  /* Один клиент — одна карточка (Вера 02.11.2026): дубль по старой ссылке или из поиска
+     открывает главную. Как есть его открывает только кнопка «Открыть» в разделе
+     «Склеено» — там дубль смотрят нарочно, чтобы проверить или расклеить. */
+  var DUP_AS_IS = null;
+  function toMainCard(id) {
+    var d = state.details[id], main = d && d.crm && d.crm.merged_into;
+    if (!main || main === id || DUP_AS_IS === id) return false;
+    showToast('Это дубль — открыта главная карточка клиента');
+    openDrawer(main);
+    return true;
   }
   function closeDrawer() {
     backToPageHash();
@@ -48590,6 +48861,34 @@
       '<button class="dup-b" data-unmerge="' + esc(state.drawerId) + '">Расклеить</button></div>';
   }
 
+  /* Кто, когда и почему склеил дубль — по этой строке автосклейку проверяют глазами. */
+  function mergedWhy(m) {
+    var who = !m.by ? '' : (m.by === 'сторож' ? 'склеил сторож' : 'склеил(а) ' + m.by);
+    var parts = ['карточка от ' + fmtWhen(m.created_at)];
+    if (who) parts.push(who + (m.merged_at ? ' ' + fmtWhen(m.merged_at) : ''));
+    if (m.reason) parts.push(m.reason);
+    return parts.join(' · ');
+  }
+  var MOVED_CH = { max: 'MAX', vk: 'ВК', instagram: 'инстаграм' };
+  function mergedMoved(m) {
+    var x = m.moved || {}, out = [];
+    if (x.docs) out.push(x.docs + ' док.');
+    if (x.diag) out.push('свежая анкета');
+    if (x.calls) out.push(x.calls + ' консульт.');
+    if (x.reports) out.push(x.reports + ' отчет.');
+    if (m.members) out.push('кабинет семьи');
+    (x.channels || []).forEach(function (c) {
+      out.push('чат ' + (MOVED_CH[c] || (c.indexOf('telegram') === 0 ? 'телеграм' : c)));
+    });
+    if (x.webinar) out.push('эфир');
+    if ((x.contacts || []).length) out.push('контакты');
+    return out.length ? 'переехало: ' + out.join(', ') : '';
+  }
+  function cardIdFrom(text) {
+    var m = String(text || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    return m ? m[0].toLowerCase() : '';
+  }
+
   function buildDupes(ctx) {
     var id = state.drawerId;
     var crm = dupCrm(ctx);
@@ -48601,10 +48900,18 @@
       html += '<div class="m-sec"><div class="m-sec-h">Склеено в это дело' +
         '<span class="dup-cnt num">' + merged.length + '</span></div>' +
         '<div class="dup-list">' + merged.map(function (m) {
-          return '<div class="dup-row"><div class="dup-nm"><b>' + esc(m.name || 'Без имени') + '</b>' +
-            '<small>' + esc(fmtWhen(m.created_at)) + '</small></div>' +
-            '<button class="dup-b" data-dupopen="' + esc(m.id) + '">Открыть</button>' +
-            '<button class="dup-b" data-unmerge="' + esc(m.id) + '">Расклеить</button></div>';
+          return '<div class="dup-row many"><div class="dup-nm"><b>' + esc(m.name || 'Без имени') + '</b>' +
+            '<small>' + esc(mergedWhy(m)) + '</small>' +
+            (mergedMoved(m) ? '<small>' + esc(mergedMoved(m)) + '</small>' : '') + '</div>' +
+            '<div class="dup-acts">' +
+            '<button class="dup-b" data-dupview="' + esc(m.id) + '">Открыть</button>' +
+            '<button class="dup-b" data-dupmove="' + esc(m.id) + '">Перенести</button>' +
+            '<button class="dup-b" data-unmerge="' + esc(m.id) + '">Расклеить</button></div>' +
+            '<div class="dup-move" data-moveform="' + esc(m.id) + '" hidden>' +
+              '<input type="text" placeholder="Ссылка или номер главной карточки клиента" ' +
+                'aria-label="Куда перенести дубль">' +
+              '<button class="dup-b primary" data-movego="' + esc(m.id) + '">Перенести</button></div>' +
+            '</div>';
         }).join('') + '</div></div>';
     }
 
@@ -48616,8 +48923,8 @@
 
     html += '<div class="m-sec"><div class="m-sec-h">Похоже, это тот же человек' +
       '<span class="dup-cnt num">' + list.length + '</span></div>' +
-      '<div class="dup-hint">Совпали личные признаки. Система сама ничего не склеивает: ' +
-        'реши сам, одно это дело или разные люди.</div>' +
+      '<div class="dup-hint">Совпали личные признаки. Очевидные дубли сторож склеивает сам, ' +
+        'здесь то, в чем он не уверен: реши, одно это дело или разные люди.</div>' +
       '<div class="dup-list">' + list.map(function (x) {
         var why = (x.matched || []).map(dupMatch).join(' · ');
         return '<div class="dup-row"><div class="dup-nm"><b>' + esc(x.name || 'Без имени') + '</b>' +
@@ -49240,7 +49547,7 @@
       if (e.type === 'anketa_step') {
         var s = (e.payload || {}).step || 0; if (s > maxStep) maxStep = s; return;
       }
-      var label = evText(e);
+      var label = evText(e) + (e.dup ? ' · из дубля' : '');
       var hi = (e.type === 'questionnaire_submitted' || e.type === 'viewed_result' ||
         e.type === 'lead_submitted' || e.type === 'magnet_registered');
       var bucket = (e.type === 'opened_product' || e.type === 'viewed_result') ? 'viewed'
@@ -51144,6 +51451,45 @@
     // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {
       b.addEventListener('click', function () { openDrawer(b.getAttribute('data-dupopen')); });
+    });
+    // вложенный дубль открываем как есть: без этого openDrawer сразу увел бы в главную
+    Array.prototype.forEach.call(host.querySelectorAll('[data-dupview]'), function (b) {
+      b.addEventListener('click', function () {
+        DUP_AS_IS = b.getAttribute('data-dupview');
+        openDrawer(DUP_AS_IS);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-dupmove]'), function (b) {
+      b.addEventListener('click', function () {
+        var f = host.querySelector('[data-moveform="' + b.getAttribute('data-dupmove') + '"]');
+        if (!f) return;
+        f.hidden = !f.hidden;
+        if (!f.hidden) f.querySelector('input').focus();
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-movego]'), function (b) {
+      b.addEventListener('click', function () {
+        var dupId = b.getAttribute('data-movego');
+        var into = cardIdFrom(b.parentNode.querySelector('input').value);
+        if (!into) { showToast('Вставь ссылку на карточку клиента или ее номер'); return; }
+        b.disabled = true;
+        api('/admin/api/leads/' + dupId + '/move', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ into: into }),
+        }).then(function () {
+          delete DUP[id]; delete state.details[id]; delete state.details[dupId];
+          delete state.details[into];
+          showToast('Перенесено — дубль теперь в карточке другого клиента', null, into);
+          refreshDetail(id, function () { if (state.drawerId === id) renderDrawer(true); });
+          loadLeads();
+        }).catch(function (e) {
+          b.disabled = false;
+          showToast(e.message === 'HTTP 409'
+            ? 'Туда нельзя — та карточка сама дубль, перенеси в ее главную'
+            : e.message === 'HTTP 404' ? 'Такой карточки нет — проверь ссылку'
+            : 'Не перенеслось — проверь сеть');
+        });
+      });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-merge]'), function (b) {
       b.addEventListener('click', function () {
