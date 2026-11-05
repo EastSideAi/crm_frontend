@@ -35692,6 +35692,7 @@
     /* у месяца факта нет вовсе: колонку ему не рисуем, а не заполняем прочерками */
     if (srcId === 'month') return {};
     if (srcId === 'vk') return laAdsFact() || {};
+    if (srcId === 'warm') return laWarmFact() || {};
     var f = {}, w = (d.warm || {}).fact || {};
     Object.keys(w).forEach(function (k) { f[k] = w[k]; });
     if (srcId === 'total') {
@@ -35758,6 +35759,40 @@
       revPerReg: div(money, n.reg),
     };
   }
+  /* Факт листа «Тёплая база» — зарегистрировавшиеся на интенсив формой НЕ с
+     рекламы, живьем (владелец, 5.11.2026). Рассылки и соцсети — по метке
+     utm_medium. Лист «Всего» пока на выгрузке сентября: его подтянем отдельно. */
+  function laWarmFact() {
+    var a = state._laWarm;
+    if (!a) {
+      if (!state._laWarmLoading) {
+        state._laWarmLoading = true;
+        api('/admin/api/marketing/launch/warm').then(function (r) {
+          state._laWarm = r || 'none';
+        }).catch(function () { state._laWarm = 'none'; }).then(function () {
+          state._laWarmLoading = false;
+          if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+        });
+      }
+      return null;
+    }
+    if (a === 'none') return null;
+    var div = function (x, y) { return y && x != null ? x / y : null; };
+    var money = (a.uch_rub || 0) + (a.sup_rub || 0);
+    return {
+      regGoal: a.reg, amb: 0, mail: a.mail, social: a.social,
+      ext: a.uch, crExt: div(a.uch, a.reg), extRev: a.uch_rub,
+      clean: a.to_bot, crClean: div(a.to_bot, a.reg),
+      chan: a.chan, crChan: div(a.chan, a.to_bot),
+      e1: a.e1, crE1: div(a.e1, a.to_bot), e2: a.e2, crE2: div(a.e2, a.to_bot),
+      live: a.live, rec: a.rec, crRec: div(a.rec, a.to_bot), watched: a.watched,
+      diagStart: a.anketa, crDiagStart: div(a.anketa, a.to_bot),
+      diagDone: a.diag, crDiagDone: div(a.diag, a.anketa),
+      btn: a.diag_click, req: a.cons, crReq: div(a.cons, a.watched),
+      sales: a.sup, crReg: div(a.sup, a.reg), contracts: a.sup_rub,
+      contractsAll: money, cash: money, revPerReg: div(money, a.reg),
+    };
+  }
   function laFactVal(srcId, id) {
     var f = laFact(srcId);
     return f && f[id] != null ? f[id] : null;
@@ -35804,7 +35839,7 @@
       : { title: d[src].title, note: d[src].note };
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
-      (mon ? '' : '<div class="th r">' + esc(src === 'vk' ? 'факт 28–29.10' : d.factLabel) + '</div>') + '</div>';
+      (mon ? '' : '<div class="th r">' + esc(src === 'vk' || src === 'warm' ? 'факт 28–29.10' : d.factLabel) + '</div>') + '</div>';
     var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
