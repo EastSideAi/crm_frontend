@@ -1238,7 +1238,7 @@
     smenu.id = 'smenu'; smenu.className = 'profmenu mtmore';
     smenu.innerHTML = items.map(function (it) {
       var bd = badgeOf(it);
-      return '<button data-p="' + it.id + '"' + (it.id === state.page ? ' class="cur"' : '') + '>' +
+      return '<button data-p="' + it.id + '"' + (navOn(it.id) ? ' class="cur"' : '') + '>' +
         ic(it.icon, 16) + '<span>' + esc(it.label) + '</span>' +
         (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
     }).join('');
@@ -2509,13 +2509,17 @@
        пункта, а аналитика бота вообще в хвосте меню, за финансовыми разделами, и
        человек искал ее глазами каждый раз. Дальше той же группой идут подарки и
        рассылки — это тот же трафик, только в лицах. */
-    { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing' },
+    /* Соцстатистика, Рассылки и Подарки переехали вкладками в «Маркетинг» (Ольга
+       05.11.2026), там же их и ищут (MK_PAGES). Из меню уходят у того, кому открыт
+       «Маркетинг». Аналитика бота осталась пунктом меню: ее смотрят и роли без
+       маркетинга (диагност, руководитель продукта), решение Ольги в тот же день. */
+    { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing', hideCap: 'marketing' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
     // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
-    { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
+    { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing', hideCap: 'marketing' },
     // Рассылки — журнал отправок бота: кому писали и что ответила площадка.
-    { id: 'broadcasts', label: 'Рассылки', icon: 'send', cap: 'marketing' },
+    { id: 'broadcasts', label: 'Рассылки', icon: 'send', cap: 'marketing', hideCap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     // «Что нового» видят все: cap dash есть у каждой роли. Точка — непрочитанные записи.
     { id: 'news', label: 'Что нового', icon: 'bell', cap: 'dash' },
@@ -2835,7 +2839,7 @@
         else if (it.id === 'news' && state.newsUnread) extra = '<span class="cnt num" title="непрочитано">' + state.newsUnread + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
         return (row.lab ? '<div class="navlab">' + esc(row.lab) + '</div>' : '') +
-          '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
+          '<button class="navi' + (navOn(it.id) ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
       Array.prototype.forEach.call(nav.querySelectorAll('.navi'), function (b) {
@@ -2906,11 +2910,11 @@
       // поэтому считаем их вместе — иначе у владельца лента снова уезжает за край.
       var fits = Math.max(2, 4 - jumps.length), mHead = NAV, mTail = [];
       if (NAV.length > fits + 1) { mHead = NAV.slice(0, fits); mTail = NAV.slice(fits); }
-      var tailOn = mTail.some(function (it) { return it.id === state.page; });
+      var tailOn = mTail.some(function (it) { return navOn(it.id); });
       var tailBadge = mTail.reduce(function (s, it) { return s + mBadge(it); }, 0);
       mt.innerHTML = jump + mHead.map(function (it) {
         var bd = mBadge(it);
-        return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
+        return '<button class="mtab' + (navOn(it.id) ? ' on' : '') + '" data-p="' + it.id + '">' +
           // На вкладке помещается одно слово: длинное имя раздела ломает ленту,
           // поэтому у таких пунктов есть короткая подпись.
           ic(it.icon) + '<span>' + (it.short || it.label) + '</span>' +
@@ -2970,6 +2974,10 @@
     if (CZ.openId) closeCz();   // карточка исполнителя не переезжает в другой раздел
     if (state._lpPeople) launchPeopleClose();   // и список людей ступени тоже
     state.page = p;
+    /* Ушли из «Диалогов» — адрес диалога уходит вместе с ними. Иначе #dialog/<id>
+       висел в строке над любым разделом, и обновление страницы возвращало в
+       переписку вместо того, где человек был (Ольга 05.11.2026, из «Маркетинга»). */
+    if (p !== 'inbox' && hashDialogId()) backToPageHash();
     state.sort = null;
     saveUi();
     renderAll();
@@ -3014,6 +3022,27 @@
     if (t === 'unit') t = 'plan';
     return mkTabKnown(t) ? t : def;
   }
+  /* Вкладки «Маркетинга», которые на деле отдельные страницы: у каждой свои данные,
+     свое состояние и свои ссылки #page/..., поэтому переезжают они только шапкой.
+     Видит их тот, кому открыт весь «Маркетинг», а не подрядчик с одной «Рекламой». */
+  var MK_PAGES = [['social', 'Соцстатистика'], ['broadcasts', 'Рассылки'], ['gifts', 'Подарки']];
+  function mkPagesFor() {
+    if (!can('marketing')) return [];
+    return MK_PAGES.filter(function (o) { return can(pageCap(o[0])); });
+  }
+  function mkPageOn() {
+    return mkPagesFor().some(function (o) { return o[0] === state.page; });
+  }
+  /* Период «Подарков» внутри шапки «Маркетинга»: тот же выбор, что был у раздела
+     вкладками, только кнопками под рядом вкладок, как период у «Рекламы». */
+  function giftPeriodHtml() {
+    var gopts = [[0, 'За все время'], [30, '30 дней'], [7, '7 дней'], [1, 'Сегодня']];
+    return '<div class="dperiod">' + gopts.map(function (o) {
+      return '<button data-gfd="' + o[0] + '" class="' + ((state.gfDays || 0) === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
+    }).join('') + '</div>';
+  }
+  // Пункт меню подсвечен: свой раздел или «Маркетинг», когда открыта его вкладка-страница.
+  function navOn(id) { return state.page === id || (id === 'marketing' && mkPageOn()); }
 
   /* topbar: контекстные табы */
   function renderTopbar() {
@@ -3073,7 +3102,7 @@
           renderTopbar(); renderHead(); renderView();
         });
       });
-    } else if (state.page === 'gifts') {
+    } else if (state.page === 'gifts' && !mkPageOn()) {
       var gopts = [[0, 'За все время'], [30, '30 дней'], [7, '7 дней'], [1, 'Сегодня']];
       tb.innerHTML = '<nav class="tabs">' + gopts.map(function (o) {
         return '<a class="tab' + ((state.gfDays || 0) === o[0] ? ' on' : '') + '" data-gfd="' + o[0] + '">' + o[1] + '</a>';
@@ -3116,20 +3145,25 @@
           renderTopbar(); renderHead(); renderView();
         });
       });
-    } else if (state.page === 'marketing') {
+    } else if (state.page === 'marketing' || mkPageOn()) {
       /* две задачи на одной странице: смотреть цифры и заводить ссылки. Вкладка слева,
          период справа. Период нужен на ОБЕИХ вкладках: на «ссылках» по нему считается
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
       var mkTabs = mkTabsFor();
+      var onMk = state.page === 'marketing';
       state.mkTab = mkTabOk(state.mkTab);
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
-      /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
+      /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта.
+         На вкладках-страницах тоже: у них свои фильтры внутри экрана */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
-        return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
+        return '<a class="tab' + (onMk && state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + mkPagesFor().map(function (o) {
+        return '<a class="tab' + (state.page === o[0] ? ' on' : '') + '" data-mkpage="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>' +
-        (state.mkTab === 'launch' || state.mkTab === 'efir' ||
+        (state.page === 'gifts' ? giftPeriodHtml() :
+         !onMk || state.mkTab === 'launch' || state.mkTab === 'efir' ||
          state.mkTab === 'plan' || state.mkTab === 'cross' ? '' :
         '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
           return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
@@ -3141,6 +3175,17 @@
           if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
           if (state.mkTab === 'efir') state._mkEfir = null;   /* всегда свежие цифры */
           if (state.mkTab === 'ads') state._mkAds = null;    /* всегда свежие цифры */
+          if (!onMk) { setPage('marketing'); return; }
+          saveUi(); renderTopbar(); renderView();
+        });
+      });
+      Array.prototype.forEach.call(tb.querySelectorAll('[data-mkpage]'), function (t) {
+        t.addEventListener('click', function () { setPage(t.getAttribute('data-mkpage')); });
+      });
+      Array.prototype.forEach.call(tb.querySelectorAll('[data-gfd]'), function (b) {
+        b.addEventListener('click', function () {
+          state.gfDays = parseInt(b.getAttribute('data-gfd'), 10);
+          state._gf = null;            // период сменился — цифры старого больше не наши
           saveUi(); renderTopbar(); renderView();
         });
       });
@@ -33240,7 +33285,7 @@
              (sh('rec') ? esc(' · ' + sh('rec')) : '') },
       { key: 'diag_click', label: 'Нажали кнопку диагностики', value: adsNum(n.diag_click),
         step: 'diag_click', sub: esc('в комнате эфира' + (sh('diag_click') ? ' · ' + sh('diag_click') : '')) },
-      { key: 'anketa', label: 'Записались на диагностику', value: adsNum(n.anketa), step: 'anketa',
+      { key: 'anketa', label: 'Зашли на платформу ИстСайд (диагностика)', value: adsNum(n.anketa), step: 'anketa',
         sub: (n.diag != null ? adsStepSpan('diag', 'получили разбор ' + adsNum(n.diag)) + ' · ' : '') +
              esc('анкета на платформе' + (sh('anketa') ? ' · ' + sh('anketa') : '')) },
       { key: 'cons', label: 'Записались на консультацию', value: adsNum(n.cons), step: 'cons',
@@ -33257,7 +33302,7 @@
     var base = f.reg || 0;
     /* Деньги тут целыми рублями, как на экране запусков: копейки в выручке запуска
        ничего не решают, а в плашке съедают кегль у самой цифры. */
-    return adsKpi('Записались на диагностику', adsNum(f.diag_done),
+    return adsKpi('Зашли на платформу ИстСайд (диагностика)', adsNum(f.diag_done),
              'на платформе · зашли в анкету ' + adsNum(f.diag_entered) +
              adsShare(f.diag_done, base)) +
       adsKpi('Записались на консультацию', adsNum(f.cons_booked),
@@ -34165,11 +34210,80 @@
         sub: 'видели' + (p.pages.since ? ' с ' + fmtDay(p.pages.since) : '') +
              ' · Яндекс Метрика' });
     }
+    if (cur.seg_povtor) {
+      tiles = launchSegTiles(cur, cur.seg_povtor, true);
+      if (p.pages && p.pages.users) {
+        tiles.push({ key: 'seen', label: 'Страница повтора', value: fmtMoney(p.pages.users),
+          sub: 'видели' + (p.pages.since ? ' с ' + fmtDay(p.pages.since) : '') +
+               ' · Яндекс Метрика' });
+      }
+    }
     var ordered = launchTiles(tiles).map(function (t) {
       return Object.assign({}, t, { drag: false });
     });
     return '<div class="lt-rh gap">В том числе повтор' + (dni ? ' · ' + dni : '') + '</div>' +
       statBar(ordered, launchBarCls(ordered.length));
+  }
+
+  /* Верхние плашки запуска — только зарегистрировавшиеся на него формой на лендинге
+     (владелец, 5.11.2026: «у нас разные базы и сегменты, учитываем только тех, кто
+     зарегистрировался на мероприятие»). Раньше сюда попадали получатели рассылки
+     бота по всей базе: 322 «регистрации» за десять минут 28.10. Все доли — от этих
+     же регистраций, каждая цифра открывает своих людей. pv — ряд повтора. */
+  function launchSegTiles(cur, g, pv) {
+    var sp = function (step, txt) {
+      return '<span class="go-sub" data-lseg="' + step + '"' + (pv ? ' data-lsegpv="1"' : '') +
+        ' role="button" tabindex="0" title="Показать этих людей поименно">' + txt + '</span>';
+    };
+    var reg = g.reg || 0;
+    var regTxt = pv ? 'от регистраций на повтор' : 'от регистраций';
+    var tile = function (t) { return Object.assign({ segPv: pv }, t); };
+    var pages = pv ? (cur.povtor && cur.povtor.pages) : cur.pages;
+    var efir;
+    /* До эфира зрителей нет — плашка показывает обратный счёт. */
+    if (!g.live_any && !pv && cur.days_to_event >= 0) {
+      efir = launchEfirTile(cur, cur.days_to_event > 0 ? cur.days_to_event : 'идет',
+                            cur.days_to_event, reg);
+    } else {
+      efir = tile({ key: 'efir', label: pv ? 'Были на повторе' : 'Были на эфире',
+        value: pv ? g.live_pv : g.live_any, seg: pv ? 'live_pv' : 'live_any',
+        sub: (pv ? '' : sp('live', 'эфир ' + g.live) + ' · ' + sp('live_pv', 'повтор ' + g.live_pv) + ' · ') +
+             sp('rec', 'запись смотрели ' + g.rec) + ' · ' +
+             sp('rec_only', 'только запись ' + g.rec_only),
+        pct: launchPct(pv ? g.live_pv : g.live_any, reg, regTxt) });
+    }
+    var n = g.sup || 0;
+    return [
+      tile({ key: 'reg', label: 'Регистрации', value: reg, seg: 'reg',
+        sub: (g.ads ? sp('ads', 'из них с рекламы ' + g.ads) + ' · ' : '') +
+             'форма на лендинге',
+        pct: launchPct(reg, pages && pages.users,
+                       pv ? 'от тех, кто видел страницу повтора' : 'от тех, кто видел страницу') }),
+      tile({ key: 'invoice', label: 'Счет на участие', value: g.invoiced, seg: 'invoiced',
+        sub: plural(g.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей',
+        pct: launchPct(g.invoiced, reg, regTxt) }),
+      tile({ key: 'paid', label: 'Оплачено', value: fmtMoney(g.uch_rub || 0) + ' \u20bd',
+        seg: 'uch',
+        sub: g.uch + ' из ' + (g.invoiced || 0) + ' ' +
+             plural(g.invoiced || 0, 'человека', 'человек', 'человек'),
+        pct: launchPct(g.uch, reg, regTxt) }),
+      tile({ key: 'channels', label: 'В закрытых каналах', value: g.chan, seg: 'chan',
+        sub: 'телеграм, ВК и МАКС',
+        pct: launchPct(g.chan, reg, regTxt) }),
+      efir,
+      tile({ key: 'diag', label: 'Записались на диагностику', value: g.anketa, seg: 'anketa',
+        sub: sp('diag', 'получили разбор ' + g.diag) + ' · на платформе ИстСайд',
+        pct: launchPct(g.anketa, reg, regTxt) }),
+      tile({ key: 'cons', label: 'Записались на консультацию', value: g.cons, seg: 'cons',
+        sub: 'выбрали время или попросили записать',
+        pct: [launchPct(g.cons, g.anketa, 'от записавшихся на диагностику'),
+              launchPct(g.cons, reg, regTxt)] }),
+      tile({ key: 'support', label: 'Сопро\u00ADвождение', value: fmtMoney(g.sup_rub || 0) + ' \u20bd',
+        seg: 'sup',
+        sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
+        pct: [launchPct(n, g.cons, 'от записавшихся на консультацию'),
+              launchPct(n, reg, regTxt)] }),
+    ];
   }
 
   function launchSeenTile(cur, reg) {
@@ -34344,6 +34458,11 @@
       return '?' + ['step=' + encodeURIComponent(p.step), 'days=' + (p.days || 366),
                     'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
     }
+    if (p.kind === 'seg') {
+      return '?' + ['slug=' + encodeURIComponent(p.slug), 'step=' + encodeURIComponent(p.step),
+                    'povtor=' + (p.pv ? 'true' : 'false'),
+                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+    }
     if (p.kind === 'efir') {
       /* У эфира нет периода: он сам и есть период. */
       return '?' + ['slug=' + encodeURIComponent(p.slug),
@@ -34402,6 +34521,19 @@
     launchPeopleLoad(false);
   }
 
+  /* Список за верхней плашкой запуска: только зарегистрировавшиеся формой. */
+  function launchSegOpen(slug, step, pv, title, launchTitle, count, node) {
+    state._lpPeople = {
+      kind: 'seg', id: 'seg:' + step + ':' + (pv ? 'pv' : ''),
+      slug: slug, block: '', value: '', step: step, pv: !!pv,
+      title: title, plate: count || 0, launch: launchTitle || '', ownTitle: true,
+      from: '', to: '',
+      rows: [], total: null, loading: true, error: '', fresh: true,
+      back: node || null,
+    };
+    launchPeopleLoad(false);
+  }
+
   /* Список людей за плашкой эфира. Машинерия та же, что у «Запусков»: одно окно,
      одна таблица, одна пагинация — второй, похожий, но свой список читался бы как
      другой продукт. */
@@ -34436,6 +34568,7 @@
     var who = p.id;
     var url = p.kind === 'efir' ? '/admin/api/marketing/efir/people'
             : (p.kind === 'ads') ? '/admin/api/marketing/ads/people'
+            : (p.kind === 'seg') ? '/admin/api/marketing/launch/seg'
             : (p.kind === 'block') ? '/admin/api/marketing/launch/block'
                                    : '/admin/api/marketing/launch/people';
     launchPeopleModal();
@@ -34604,7 +34737,7 @@
     /* Правка доступна только на ступенях пути: у блоков за строкой стоит человек из
        бота, у которого нет карточки регистрации. Считаем до сборки окна — от этого
        зависит и ширина окна, и набор колонок. */
-    var canEdit = p.kind !== 'block' && p.kind !== 'ads';
+    var canEdit = p.kind !== 'block' && p.kind !== 'ads' && p.kind !== 'seg';
     var body;
     if (p.error) {
       body = '<div class="mk-logic-empty">' + esc(p.error) + '</div>';
@@ -36254,7 +36387,9 @@
 
     /* Плитки верхнего ряда держим массивом: от их числа зависит сетка полосы,
        а появляются они не все и не всегда. */
-    var topTiles = launchTiles([
+    var topTiles = cur.seg
+      ? launchTiles(launchSeenTile(cur, { total: cur.seg.reg }).concat(launchSegTiles(cur, cur.seg, false)))
+      : launchTiles([
         /* Период выбран — плитка обязана показывать ТО ЖЕ, что первая плашка пути.
            Раньше плитка всегда считала весь запуск, а плашка слушалась периода: на
            экране рядом стояли 31 и 26, и это читалось как сломанный счётчик (нашла
@@ -36442,6 +36577,26 @@
         var ot = n.getAttribute('data-lfrom') || '';
         launchBlockOpen(cur.slug, n.getAttribute('data-lblk'), '',
           ot ? ttl + ' · повтор' : ttl, cur.title, isNaN(num) ? 0 : num, tile, ot);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(e); }
+      });
+    });
+    /* Верхние плашки по зарегистрировавшимся: плашка и цифра в её подписи → свои
+       люди. Подпись внутри плашки, поэтому клик дальше не всплывает. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lseg]'), function (n) {
+      var openIt = function (e) {
+        e.stopPropagation();
+        var tile = n.closest('.stat') || n;
+        var lbl = n === tile ? (tile.querySelector('.sl') || {}).textContent : n.textContent;
+        var num = n === tile ? parseInt(String((tile.querySelector('.sv') || {}).textContent).replace(/\D+/g, ''), 10)
+                             : parseInt(String(n.textContent).replace(/\D+/g, ''), 10);
+        var ttl = String(lbl || 'Люди').replace(/[\s\d]+$/, '').replace(/\u00ad/g, '');
+        ttl = ttl.charAt(0).toUpperCase() + ttl.slice(1);
+        var pv = n.getAttribute('data-lsegpv') === '1';
+        launchSegOpen(cur.slug, n.getAttribute('data-lseg'), pv,
+          pv ? ttl + ' · повтор' : ttl, cur.title, isNaN(num) ? 0 : num, tile);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
@@ -42746,7 +42901,7 @@
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
       return '<button class="stat' + (s.lead ? ' lead' : '') +
-        (s.go || s.ebl || s.step || s.blk ? ' go' : '') +
+        (s.go || s.ebl || s.step || s.blk || s.seg ? ' go' : '') +
         (s.drag ? ' movable' : '') + '"' +
         /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
            порядок, draggable — чтобы браузер вообще начал её тащить. */
@@ -42768,6 +42923,9 @@
            (диагностика и консультация по меткам, 4.11.2026). */
         (s.blk ? ' data-lblk="' + s.blk + '"' +
                  (s.blkFrom ? ' data-lfrom="' + s.blkFrom + '"' : '') +
+                 ' title="Показать этих людей поименно"' : '') +
+        /* data-lseg — верхняя плашка запуска по зарегистрировавшимся (5.11.2026). */
+        (s.seg ? ' data-lseg="' + s.seg + '"' + (s.segPv ? ' data-lsegpv="1"' : '') +
                  ' title="Показать этих людей поименно"' : '') + '>' +
         '<div class="sl">' + s.label + '</div>' +
         /* Кегль плитки рассчитан на короткое число. Длинное значение («19 320 ₽»)
