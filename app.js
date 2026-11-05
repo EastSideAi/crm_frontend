@@ -35732,9 +35732,9 @@
     var div = function (x, y) { return y && x != null ? x / y : null; };
     var money = (rub.uch || 0) + (rub.sup || 0);
     return {
-      /* Бюджет — сколько реально списал кабинет, с НДС (владелец, 5.11.2026). Цены
-         регистрации и клика остаются без НДС, как на вкладке «Реклама». */
-      budget: t.spend_nds, reg: n.reg, cpl: div(t.spend, n.reg), clicks: t.clicks,
+      /* Бюджет — сколько реально потратили, без НДС, как на вкладке «Реклама»
+         (владелец, 5.11.2026: «напиши без учета ндс»). */
+      budget: t.spend, reg: n.reg, cpl: div(t.spend, n.reg), clicks: t.clicks,
       cpc: div(t.spend, t.clicks), crLand: div(n.reg, t.clicks),
       ext: n.uch, crExt: div(n.uch, n.reg), extRev: rub.uch,
       clean: n.to_bot, crClean: div(n.to_bot, n.reg),
@@ -35745,7 +35745,7 @@
       diagDone: n.diag, crDiagDone: div(n.diag, n.anketa),
       btn: n.diag_click, req: n.cons, crReq: div(n.cons, n.watched),
       sales: n.sup, crReg: div(n.sup, n.reg), contracts: rub.sup,
-      contractsAll: money, cash: money, payback: div(money, t.spend_nds),
+      contractsAll: money, cash: money, payback: div(money, t.spend),
       revPerReg: div(money, n.reg),
     };
   }
@@ -35828,7 +35828,7 @@
                процентов: формат у колонок разный, значение одно и то же */
             (mon ? '' : '<div class="la-c num la-f">' +
               (f == null ? '—' : esc(laFmt(f, r.u === 'pct' ? 'pctv' : r.u)) +
-                (src === 'vk' && r.id === 'budget' ? ' <span class="la-u">с НДС</span>' : '')) +
+                (src === 'vk' && r.id === 'budget' ? ' <span class="la-u">без НДС</span>' : '')) +
               '</div>') + '</div>';
         }).join('') + '</div>';
     }).join('');
