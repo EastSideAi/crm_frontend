@@ -17135,6 +17135,28 @@
   var CSCA_SUBJ_RU = { math: 'Математика', physics: 'Физика', chemistry: 'Химия' };
 
   function cscaHwKey(x) { return x.accountId + ':' + x.hwId; }
+  /* Открыть файл работы. Тот же порядок, что у openDoc: вкладку открываем сразу,
+     иначе блокировщик срежет window.open из промиса, а ссылку подставляем, когда
+     сервер ее подпишет. */
+  function cscaHwOpenFile(ref) {
+    var p = String(ref || '').split('|');
+    var w = window.open('', '_blank');
+    if (w) try { w.opener = null; } catch (e) {}
+    xfetch('/admin/api/csca/homework/file?account_id=' + encodeURIComponent(p[0]) +
+           '&hw_id=' + encodeURIComponent(p[1]) + '&doc=' + encodeURIComponent(p[2]))
+      .then(function (r) {
+        if (!r.ok) return null;
+        var ct = r.headers.get('content-type') || '';
+        if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
+        return r.blob().then(function (b) { return URL.createObjectURL(b); });
+      })
+      .then(function (url) {
+        if (!url) { if (w) w.close(); showToast('Файл не открылся, обнови страницу'); return; }
+        if (w) w.location.replace(url);
+        else window.open(url, '_blank', 'noopener');
+      })
+      .catch(function () { if (w) w.close(); showToast('Файл не открылся, проверь сеть'); });
+  }
   function cscaHwLoad() {
     api('/admin/api/csca/homework/queue?scope=' + CSCA_HW_SCOPE).then(function (r) {
       CSCA_HW = r || { items: [] };
@@ -17180,10 +17202,16 @@
         ((res.wrong && res.wrong.length)
           ? '<span class="csw-wrong num">ошибки: ' + esc(res.wrong.join(', ')) + '</span>' : '') + '</div>'
       : '<div class="csw-ans">' + (x.answer ? esc(x.answer) : 'Текста нет — работа приложена файлами.') + '</div>';
+    // Файл с docId лежит у нас и открывается по клику (cscaHwOpenFile). Без
+    // docId — работы до 05.11.2026: тогда сохранялось только имя файла.
     var files = (x.files || []).map(function (f) {
-      return '<span class="csw-file">' + esc(f.name || '') +
-        (f.size ? ' · ' + cscaHwSize(f.size) : '') + '</span>';
-    }).join('');
+      var label = esc(f.name || '') + (f.size ? ' · ' + cscaHwSize(f.size) : '');
+      return f.docId
+        ? '<a href="#" class="csw-file is-link" data-hwfile="' + esc(x.accountId) + '|' + esc(x.hwId) +
+          '|' + esc(f.docId) + '">' + label + '</a>'
+        : '<span class="csw-file">' + label + '</span>';
+    }).join('') + ((x.files || []).some(function (f) { return !f.docId; })
+      ? '<div class="csw-note">Файл сдан до 05.11.2026, тогда платформа сохраняла только имя. Попросите ученика прислать его еще раз.</div>' : '');
     var note = x.status !== 'sent' && x.comment
       ? '<div class="csw-note"><b>' + esc(x.teacher || 'вы') + ':</b> ' + esc(x.comment) + '</div>' : '';
     // Вернуть можно и уже решенную автопроверкой работу: «12 из 30, перереши 4 и 7».
@@ -17313,6 +17341,9 @@
       });
   }
   function cscaHwBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hwfile]'), function (a) {
+      a.addEventListener('click', function (e) { e.preventDefault(); cscaHwOpenFile(a.getAttribute('data-hwfile')); });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-csw]'), function (b) {
       b.addEventListener('click', function () {
         var what = b.getAttribute('data-csw'), key = b.getAttribute('data-k');
