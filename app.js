@@ -35468,11 +35468,14 @@
     var v = laIn(srcId, plan);
     var o;
     if (srcId === 'vk') {
-      var reg = laNum(v.cpl) ? laR(laNum(v.budget) / laNum(v.cpl)) : 0;
+      /* На рекламу уходит бюджет без НДС: от него и регистрации, и цена клика —
+         как в факте (владелец, 5.11.2026). Окупаемость — от всей суммы с НДС. */
+      var net = laNum(v.budget) / 1.22;
+      var reg = laNum(v.cpl) ? laR(net / laNum(v.cpl)) : 0;
       o = laFunnel(v, reg);
       o.budget = laNum(v.budget);
-      o.budgetNet = o.budget / 1.22;
-      o.cpc = o.clicks ? o.budget / o.clicks : 0;
+      o.budgetNet = net;
+      o.cpc = o.clicks ? net / o.clicks : 0;
       o.cash = o.cashIn + o.extRev;
       o.payback = o.budget ? o.cash / o.budget : 0;
       o.warmSales = laPct(v.crWarm, o.held - o.sales);
