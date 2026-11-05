@@ -2555,6 +2555,9 @@
     // и список пространств собирается по доступным пунктам, поэтому он увидит ровно
     // «Выплаты», а не пустое меню из семи заголовков.
     { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors|cz_pay', space: 'cz' },
+    // Акты, которые ждут подписи компании, по всем людям — подписать прямо из списка
+    // (Роман 05.11.2026: заходить ради подписи в каждое задание неудобно).
+    { id: 'czacts', label: 'Акты', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czrisks', label: 'Риски', icon: 'shield', cap: 'contractors', space: 'cz' },
     { id: 'czreport', label: 'Отчеты', icon: 'chart', cap: 'contractors', space: 'cz' },
@@ -3713,6 +3716,20 @@
       html = '<div><h2>Выплаты</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('wallet', 13) + '</span><span>' + phrase8 + '</span></div></div>';
     }
+    if (state.page === 'czacts') {
+      // Вердикт — то, ради чего сюда заходят: сколько актов ждет нашей подписи.
+      var aw = AC.items ? acWaiting(AC.items) : [];
+      var awSum = aw.reduce(function (t, a) { return t + (a.amount || 0); }, 0);
+      var phraseA;
+      if (!AC.items) phraseA = 'Загружаю акты…';
+      else if (AC.err) phraseA = esc(AC.err);
+      else if (!aw.length) phraseA = 'Нашей подписи сейчас ничего не ждет.';
+      else phraseA = 'Ждут нашей подписи: <b>' + aw.length + ' ' +
+        plural(aw.length, 'акт', 'акта', 'актов') + '</b> на <b>' + ctMoney(awSum) +
+        ' ₽</b>. Пока обе подписи не стоят, выплату провести нельзя.';
+      html = '<div><h2>Акты</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' + phraseA + '</span></div></div>';
+    }
     if (state.page === 'czdocs') {
       /* Вердикт отвечает на вопрос, ради которого сюда заходят: что висит без подписи.
          Неподписанный акт — это незакрытый расход и невозможная выплата. */
@@ -4068,6 +4085,7 @@
     else if (state.page === 'cztasks') renderCzTasks(view);
     else if (state.page === 'czplans') renderCzPlans(view);
     else if (state.page === 'czpay') renderCzPay(view);
+    else if (state.page === 'czacts') renderCzActs(view);
     else if (state.page === 'czdocs') renderCzDocs(view);
     else if (state.page === 'czrisks') renderCzRisks(view);
     else if (state.page === 'czreport') renderCzReport(view);
@@ -19398,8 +19416,11 @@
             '<div class="ct-acts">' +
               '<a class="bp sm ghost" href="' + docUrl + '" target="_blank" rel="noopener">' +
                 'Открыть документ</a>' +
-              (A.signed_co_at ? '' :
-                '<button class="bp sm" id="ct-sign">Подписать со стороны компании</button>') +
+              (A.signed_co_at ? '' : t.own
+                /* Свой акт за компанию подписывает другой руководитель: сервер такую
+                   подпись отклонит, поэтому кнопки нет, а есть ответ «кто». */
+                ? '<span class="ct-frozen">За компанию ваш акт подписывает другой руководитель</span>'
+                : '<button class="bp sm" id="ct-sign">Подписать со стороны компании</button>') +
               (actBack ? '<button class="bp sm ghost" data-cta="approved">' +
                 esc(actBack.label) + '</button>' : '') +
             '</div>' +
@@ -19958,7 +19979,7 @@
       return (i.contractor || '').toLowerCase().indexOf(q) >= 0 ||
         (i.inn || '').indexOf(q) >= 0 ||
         String(i.number).indexOf(q) >= 0 ||
-        String(i.task_number).indexOf(q) >= 0;
+        (i.task_numbers || [i.task_number]).join(' ').indexOf(q) >= 0;
     });
   }
 
@@ -20011,9 +20032,13 @@
     // наезжают на соседние. Клик по самой строке ведет в задание, кнопки — свои действия.
     var head = '<div class="trow dc-grid" data-rcp-task="' + esc(i.task_id) + '">' +
       '<span class="dc-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
-        '<b>Выплата № ' + esc(i.number) + '</b>' +
-        '<span class="rcp-sub">задание № ' + esc(i.task_number) +
-          (i.title ? ' — ' + esc(i.title) : '') + '</span></span>' +
+        /* Платеж — одна сумма за несколько заданий, чек на него один (миграция 289). */
+        (i.kind === 'payment' && (i.task_numbers || []).length > 1
+          ? '<b>Платеж № ' + esc(i.number) + '</b>' +
+            '<span class="rcp-sub">' + esc(i.title) + '</span></span>'
+          : '<b>Выплата № ' + esc(i.number) + '</b>' +
+            '<span class="rcp-sub">задание № ' + esc(i.task_number) +
+              (i.title ? ' — ' + esc(i.title) : '') + '</span></span>') +
       '<span class="dc-who">' + esc(i.contractor || '—') +
         (i.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
         (i.inn ? '<span class="dc-inn">' + esc(i.inn) + '</span>' : '') + '</span>' +
@@ -20124,6 +20149,110 @@
         '<span class="dcf-n">' + total + '</span></button>' +
       (rows || '<div class="dcf-empty">Людей с документами тут пока нет.</div>') +
       '</aside>';
+  }
+
+  /* ── Акты: подпись компании ──────────────────────────────────────────────────
+     Все акты исполнителей, по умолчанию — те, что ждут нашей подписи. Подпись ставится
+     кнопкой в строке. Свой акт руководителя-исполнителя за компанию подписывает другой
+     руководитель: сервер помечает его полем own, и вместо кнопки стоит ответ «кто». */
+  var AC = { items: null, err: '', all: false, busy: '' };
+  function acWaiting(list) {
+    return list.filter(function (a) { return !a.signed_co_at && a.status !== 'void' && a.status !== 'paid'; });
+  }
+  function acLoad() {
+    api('/admin/api/contractor-acts').then(function (r) {
+      AC.items = r.acts || []; AC.err = '';
+      if (state.page === 'czacts') renderAll();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      AC.items = AC.items || [];
+      AC.err = 'Не удалось загрузить акты. Проверьте связь и обновите страницу.';
+      if (state.page === 'czacts') renderAll();
+    });
+  }
+  function acTask(a) {
+    return a.task_id || (a.lines && a.lines.length ? a.lines[0].task_id : '');
+  }
+  function acRow(a) {
+    var title = a.lines
+      ? 'Акт № ' + a.number + ' за ' + a.period_title
+      : 'Акт № ' + a.number + ' — ' + a.service_title;
+    var sub = a.lines
+      ? a.lines.length + ' ' + plural(a.lines.length, 'задание', 'задания', 'заданий') + ': №' +
+        a.lines.map(function (l) { return l.task_number; }).join(', ')
+      : 'задание № ' + a.task_number;
+    var docUrl = API + '/admin/api/contractor-acts/' + encodeURIComponent(a.id) +
+      '/doc?k=' + encodeURIComponent(getKey());
+    var act = '';
+    if (!a.signed_co_at && a.status !== 'void' && a.status !== 'paid') {
+      act = a.own
+        ? '<span class="rcp-why">Ваш акт — за компанию подписывает другой руководитель</span>'
+        : '<button class="bp sm" data-ac-sign="' + esc(a.id) + '"' +
+          (AC.busy ? ' disabled' : '') + '>' +
+          (AC.busy === a.id ? 'Подписываю…' : 'Подписать со стороны компании') + '</button>';
+    }
+    var head = '<div class="trow dc-grid" data-ac-task="' + esc(acTask(a)) + '">' +
+      '<span class="dc-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
+        '<b>' + esc(title) + '</b><span class="rcp-sub">' + esc(sub) + '</span></span>' +
+      '<span class="dc-who">' + esc((a.contractor && a.contractor.full_name) || '—') + '</span>' +
+      '<span class="dc-when">' + esc(a.act_date ? czDate(a.act_date) : '—') + '</span>' +
+      '<span class="dc-sum"><b>' + ctMoney(a.amount) + ' ₽</b></span>' +
+      '<span class="dc-state"><span class="ct-chip ' + (ACT_ST[a.status] || 'ct-wait') + '">' +
+        esc(a.status_title) + '</span></span>' +
+      '</div>';
+    var foot = '<div class="rcp-foot">' + (act || '<span></span>') +
+      '<span class="rcp-act"><a class="bp sm ghost" href="' + docUrl +
+        '" target="_blank" rel="noopener" data-ac-doc="1">Открыть документ</a></span></div>';
+    return '<div class="rcp-item">' + head + foot + '</div>';
+  }
+  function renderCzActs(view) {
+    if (AC.items === null) { view.innerHTML = dashSkeleton(); acLoad(); return; }
+    var waiting = acWaiting(AC.items);
+    var list = AC.all ? AC.items : waiting;
+    var chips =
+      '<button class="qchip' + (!AC.all ? ' on' : '') + '" data-ac-all="">Ждут нашей подписи' +
+        (waiting.length ? ' <span class="qn">' + waiting.length + '</span>' : '') + '</button>' +
+      '<button class="qchip' + (AC.all ? ' on' : '') + '" data-ac-all="1">Все акты</button>';
+    var body = AC.err
+      ? '<div class="empty">' + esc(AC.err) + '</div>'
+      : (!list.length
+        ? '<div class="empty">' + (AC.all
+            ? 'Актов пока нет. Акт появляется, когда по заданию принят результат.'
+            : 'Нашей подписи сейчас ничего не ждет.') + '</div>'
+        : list.map(acRow).join(''));
+    view.innerHTML =
+      '<div class="card listcard">' +
+        '<div class="list-quick">' + chips + '</div>' +
+        '<div class="trow dc-grid thead">' +
+          '<span class="th">Акт</span><span class="th">Исполнитель</span>' +
+          '<span class="th">Дата</span><span class="th">Сумма</span>' +
+          '<span class="th">Состояние</span>' +
+        '</div>' + body +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ac-all]'), function (b) {
+      b.addEventListener('click', function () { AC.all = !!b.getAttribute('data-ac-all'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ac-sign]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (AC.busy) return;
+        AC.busy = b.getAttribute('data-ac-sign'); renderView();
+        czSend('/admin/api/contractor-acts/' + AC.busy + '/sign', 'POST')
+          .then(function () { showToast('Акт подписан со стороны компании'); })
+          .catch(function (err) { showToast(err.message); })
+          .then(function () { AC.busy = ''; acLoad(); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ac-doc]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ac-task]'), function (r) {
+      r.addEventListener('click', function () {
+        var tid = r.getAttribute('data-ac-task');
+        if (tid) openCt(tid);
+      });
+    });
+    pageAnim(view);
   }
 
   function renderCzDocs(view) {
@@ -21597,15 +21726,17 @@
 
   var MW_RCP_ST = { ok: 'ct-ok', awaiting: 'ct-check', debt: 'ct-bad' };
   function mwRcpCard(p) {
+    var mwMany = p.kind === 'payment' && (p.task_numbers || []).length > 1;
     var need = p.state !== 'ok';
     var rec = p.receipt;
     return '<div class="card mw-act">' +
       '<div class="ct-act">' +
-        '<div class="ct-act-h"><b>Выплата № ' + p.number + '</b>' +
+        '<div class="ct-act-h"><b>' + (mwMany ? 'Платеж № ' : 'Выплата № ') + p.number + '</b>' +
           '<span class="ct-chip ' + (MW_RCP_ST[p.state] || 'ct-wait') + '">' +
             esc(p.state_title) + '</span></div>' +
-        '<div class="ct-act-m">от ' + esc(czDate(p.paid_at)) + ' · задание № ' +
-          esc(p.task_number) + (p.title ? ' — ' + esc(p.title) : '') +
+        '<div class="ct-act-m">от ' + esc(czDate(p.paid_at)) + ' · ' +
+          (mwMany ? esc(p.title)
+                  : 'задание № ' + esc(p.task_number) + (p.title ? ' — ' + esc(p.title) : '')) +
           ' · <b>' + ctMoney(p.amount) + ' ₽</b></div>' +
         (need && p.state_why
           ? '<div class="ct-why">' + esc(p.state_why) + '</div>' : '') +
