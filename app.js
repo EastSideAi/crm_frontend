@@ -2779,7 +2779,27 @@
   /* Переключатель показываем, только если человеку доступно больше одного
      пространства: у кого нет доступа к самозанятым, CRM не меняется вообще. */
   function openSpaces() {
-    return SPACES.filter(function (s) { return navItems(s.id).length; });
+    return SPACES.filter(function (s) {
+      if (!navItems(s.id).length) return false;
+      // У того, кто сам раздает задания, «Моя работа» живет внутри «Самозанятых»
+      // кнопкой в меню, а не четвертым пространством (Роман 05.11.2026).
+      if (s.id === 'mw' && mwInsideCz()) return false;
+      return true;
+    });
+  }
+  function mwInsideCz() { return can('mywork') && can('contractors'); }
+  /* Кнопка-переход между «Самозанятыми» и «Моей работой» внизу меню раздела. Нужна
+     только тому, у кого есть обе стороны: остальные видят одну из них целиком. */
+  function czMwSwitch(space) {
+    if (!mwInsideCz()) return '';
+    if (space === 'cz') {
+      var dot = spaceAttention() ? '<i class="sp-dot"></i>' : '';
+      return '<button class="navi mt nav-sw" data-sp="mw">' + ic('task') + 'Моя работа' + dot + '</button>';
+    }
+    if (space === 'mw') {
+      return '<button class="navi mt nav-sw" data-sp="cz">' + ic('badge') + 'Назад к самозанятым</button>';
+    }
+    return '';
   }
   /* Роль без единого доступного раздела (преподаватель, у которого нет ни клиентов, ни
      связи с карточкой исполнителя) не должна падать на дашборд компании: ручки все равно
@@ -2844,9 +2864,10 @@
         return (row.lab ? '<div class="navlab">' + esc(row.lab) + '</div>' : '') +
           '<button class="navi' + (navOn(it.id) ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
-      }).join('');
+      }).join('') + czMwSwitch(space);
       Array.prototype.forEach.call(nav.querySelectorAll('.navi'), function (b) {
-        b.addEventListener('click', function () { setPage(b.getAttribute('data-p')); });
+        var sp = b.getAttribute('data-sp');
+        b.addEventListener('click', function () { if (sp) setSpace(sp); else setPage(b.getAttribute('data-p')); });
       });
     }
     var ws = el('welc-sub');
@@ -2902,6 +2923,8 @@
       // На телефоне левой колонки нет, поэтому переход в другое пространство живет
       // отдельной вкладкой в начале ленты — иначе с телефона туда не попасть.
       var jumps = openSpaces().filter(function (s) { return s.id !== space; });
+      // «Моя работа» руководителя-исполнителя на телефоне — вкладкой из «Самозанятых».
+      if (space === 'cz' && mwInsideCz()) jumps.push({ id: 'mw', label: 'Моя работа' });
       var jump = jumps.map(function (s) {
         var d = (s.id === 'mw' && spaceAttention()) ? '<i class="sp-dot"></i>' : '';
         return '<button class="mtab mtab-sp" data-sp="' + s.id + '">' +

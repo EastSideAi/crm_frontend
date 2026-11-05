@@ -14423,3 +14423,6 @@ video.cs-media { background: #000; }
 .pj-s--min .pj-s-h { cursor: pointer; }
 .pj-s--min .pj-b { display: none; }
 .pj-s--min.open .pj-b { display: block; }
+/* Переход «Самозанятые ⇄ Моя работа» у руководителя-исполнителя: отдельно от пунктов
+   раздела, потому что ведет в другое пространство, а не на экран внутри. */
+.navi.nav-sw { margin-top: 14px; }
