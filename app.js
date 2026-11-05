@@ -22734,8 +22734,8 @@
     var rows = [{ cls: 'in',
                   name: planOn ? 'Плановый доход' : 'Доход к зачислению',
                   why: planOn
-                    ? 'план продаж ' + finNum(plan.sales, 0) + ' + дебиторка ' +
-                      finNum(plan.receivables, 0) + ', что ждем за период'
+                    ? 'уже пришло ' + finNum(plan.fact || 0, 0) + ' + план продаж ' +
+                      finNum(plan.sales, 0) + ' + дебиторка ' + finNum(plan.receivables, 0)
                     : 'все, что пришло за период, за вычетом комиссии эквайринга',
                   v: cc.income }];
     rows.push({ cls: 'out', name: 'Фонд краткосрочки',
@@ -22749,7 +22749,7 @@
                   rule: r });
     });
     rows.push({ cls: 'out', name: 'Прямые расходы',
-                why: planOn ? 'плановые строки: мотивация, сервисы, реклама'
+                why: planOn ? 'оплаченные и плановые: мотивация, сервисы, реклама'
                             : 'факт из расчетных листов: мотивация, сервисы, реклама',
                 v: -cc.direct });
     rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: cc.profit });
