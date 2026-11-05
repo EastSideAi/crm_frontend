@@ -12334,7 +12334,8 @@
             '<span class="brd-n num ts-pct" data-l="План">' + pct + '%</span>' +
             '<span class="brd-n num ' + (f.carried ? 'bad' : 'zero') + '" data-l="Перенос">' + (f.carried || 0) + '</span>' +
             '<div class="rh-c" data-l="Итог">' + (r.late ? '<span class="sev rh-late">поздно</span> ' : '') + '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</div>' +
-            (r.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(r.text) + '</span></div>' : '') +
+            (r.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>' +
+              ((r.period || 'week') === 'week' ? 'Что мешало:' : 'Отчет:') + '</b> ' + esc(r.text) + '</span></div>' : '') +
           '</div>';
         }).join('');
     }).join('');
@@ -13952,7 +13953,8 @@
                 (period === 'week' ? (rep.late ? 'закрыта с опозданием' : 'закрыта') : (rep.late ? 'сдан с опозданием' : 'сдан')) + '</span>' +
               reviewFacts(rep.facts) +
               (rep.text
-                ? '<div class="rv-said"><div class="rv-lbl">Что мешало</div>' + esc(rep.text) + '</div>'
+                ? '<div class="rv-said"><div class="rv-lbl">' +
+                    (period === 'week' ? 'Что мешало' : 'Отчет') + '</div>' + esc(rep.text) + '</div>'
                 : '<div class="rv-said muted">Комментарий не оставлен — числа выше отчет и есть.</div>') +
               (plan && plan.text
                 ? '<div class="rv-said"><div class="rv-lbl">План на период</div>' + esc(plan.text) + '</div>' : '') +
@@ -54177,6 +54179,27 @@
        шапка успевала нарисовать старый раздел и человек по ссылке из бота видел
        хлебную крошку «Фокус недели» вместо вкладок задач. */
     if (pg === 'focus' || pg === 'stuck') { state.teamMode = pg; return ['tasks', 'team']; }
+    /* Срез «Команды» ссылкой: #page/tasks/team/month, …/quarter, …/reports, а
+       числом в конце — сдвиг периода (#page/tasks/team/month/-1 — прошлый месяц).
+       Итоги месяца руководитель показывает команде, а кликами до октября идти
+       три шага (Павел 05.11.2026). */
+    if (pg === 'tasks' && seg.indexOf('team/') === 0) {
+      var tp = seg.split('/'), tmode = tp[1], traw = tp[2] || '';
+      /* Месяц пишем словом даты (…/month/2026-10), а не сдвигом: ссылку на итоги
+         октября пересылают в чате, и в декабре сдвиг «-1» показал бы ноябрь. */
+      var tshift = /^\d{4}-\d{2}$/.test(traw)
+        ? rhShiftFor('month', traw + '-01')
+        : parseInt(traw, 10);
+      if (tmode === 'month' || tmode === 'quarter') {
+        state.teamMode = 'stats';
+        state.teamPeriod = tmode;
+        state.teamShift = Math.max(-12, Math.min(4, tshift || 0));
+        state.teamStats = null; state.teamWho = null; state.teamPerson = null;
+      } else if (['office', 'day', 'week', 'focus', 'stuck', 'reports'].indexOf(tmode) !== -1) {
+        state.teamMode = tmode;
+      }
+      return ['tasks', 'team'];
+    }
     // Встречи из задач и вкладка расписания из EastSide Meeting — теперь раздел
     // «Расписание» (02.11.2026).
     if ((pg === 'tasks' && seg === 'meet') || (pg === 'meetx' && seg === 'sched')) return ['sched', ''];
@@ -54257,7 +54280,26 @@
       get: function () { return PR_SEGS[state.prSeg] ? state.prSeg : ''; },
       set: function (s) { if (!PR_SEGS[s] || s === state.prSeg) return false; state.prSeg = s; return true; },
     },
-    tasks: { get: taskSeg, set: applyTaskSeg },
+    tasks: {
+      /* У «Команды» адрес несет и срез: ссылка на итоги месяца должна открывать
+         именно итоги за этот месяц, а не последний экран того, кто ее открыл.
+         Остальные вкладки — одним словом, как было. */
+      get: function () {
+        var seg = taskSeg();
+        if (seg !== 'team') return seg;
+        var mode = state.teamMode === 'stats' ? (state.teamPeriod || 'month') : state.teamMode;
+        if (!mode || mode === 'office') return seg;
+        var sh = state.teamMode === 'stats' ? (state.teamShift || 0) : 0;
+        if (!sh) return 'team/' + mode;
+        // Месяц — датой, чтобы пересланная ссылка не съехала на следующий месяц.
+        if (mode === 'month') {
+          var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + sh);
+          return 'team/month/' + d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+        }
+        return 'team/' + mode + '/' + sh;
+      },
+      set: applyTaskSeg,
+    },
     inbox: {
       get: function () { return state.inboxMode === 'threads' ? 'threads' : 'bot'; },
       set: function (s) {
