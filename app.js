@@ -2503,7 +2503,9 @@
     /* «Бот эфира» — проверить, что бот сделает с сообщением из чата эфира, не трогая
        сам эфир (Вера 26.10.2026): ни ленты, ни карточки лида, ни сообщения модератору.
        Открыт всем с задачами: вопросы готовят модераторы, спикеры и продажи. */
-    { id: 'efirbot', label: 'Бот эфира', icon: 'dialogs', cap: 'tasks' },
+    /* Из меню убран у всех (Ольга 05.11.2026: «удали у всех»). Экран остался ради
+       старых ссылок #page/efirbot, на работу бота в эфире он не влияет. */
+    { id: 'efirbot', label: 'Бот эфира', icon: 'dialogs', cap: 'tasks', hidden: true },
     /* Цифры лежат подряд (просьба Веры 08.10.2026): «Маркетинг, Соцстатистика,
        Аналитика бота рядом друг с другом». До этого соцсети стояли через два
        пункта, а аналитика бота вообще в хвосте меню, за финансовыми разделами, и
@@ -35682,7 +35684,7 @@
     var d = state._launch;
     /* у месяца факта нет вовсе: колонку ему не рисуем, а не заполняем прочерками */
     if (srcId === 'month') return {};
-    if (srcId === 'vk') return d.vk.fact || {};
+    if (srcId === 'vk') return laAdsFact() || {};
     var f = {}, w = (d.warm || {}).fact || {};
     Object.keys(w).forEach(function (k) { f[k] = w[k]; });
     if (srcId === 'total') {
@@ -35701,6 +35703,49 @@
     f.revPerReg = div(f.contractsAll, reg);
     f.first = w.cash != null && w.extRev != null ? w.cash - w.extRev : null;
     return f;
+  }
+  /* Факт листа «Трафик ВК» — живые цифры вкладки «Реклама» за весь запуск, с
+     19.10 (владелец, 5.11.2026: «мы полностью отработали рекламу, подтяни факт»).
+     Те же люди, что на плашках рекламы: регистрация — форма с меткой vk_ads, дальше
+     что было с ними. Строк, которых реклама не знает (проведено диагностик, счета
+     на грант), нет и в факте — прочерк, а не ноль. */
+  var LA_ADS_FROM = Date.UTC(2026, 9, 18);
+  function laAdsFact() {
+    var a = state._laAds;
+    if (!a) {
+      if (!state._laAdsLoading) {
+        state._laAdsLoading = true;
+        var now = new Date();
+        var days = Math.round((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+                               LA_ADS_FROM) / 864e5);
+        api('/admin/api/marketing/ads?days=' + days).then(function (r) {
+          state._laAds = r || 'none';
+        }).catch(function () { state._laAds = 'none'; }).then(function () {
+          state._laAdsLoading = false;
+          if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+        });
+      }
+      return null;
+    }
+    if (a === 'none') return null;
+    var t = a.total || {}, n = a.people || {}, rub = a.people_rub || {};
+    var div = function (x, y) { return y && x != null ? x / y : null; };
+    var money = (rub.uch || 0) + (rub.sup || 0);
+    return {
+      budget: t.spend, reg: n.reg, cpl: div(t.spend, n.reg), clicks: t.clicks,
+      cpc: div(t.spend, t.clicks), crLand: div(n.reg, t.clicks),
+      ext: n.uch, crExt: div(n.uch, n.reg), extRev: rub.uch,
+      clean: n.to_bot, crClean: div(n.to_bot, n.reg),
+      chan: n.chan, crChan: div(n.chan, n.to_bot),
+      e1: n.e1, crE1: div(n.e1, n.to_bot), e2: n.e2, crE2: div(n.e2, n.to_bot),
+      live: n.live, rec: n.rec, crRec: div(n.rec, n.to_bot), watched: n.watched,
+      diagStart: n.anketa, crDiagStart: div(n.anketa, n.to_bot),
+      diagDone: n.diag, crDiagDone: div(n.diag, n.anketa),
+      btn: n.diag_click, req: n.cons, crReq: div(n.cons, n.watched),
+      sales: n.sup, crReg: div(n.sup, n.reg), contracts: rub.sup,
+      contractsAll: money, cash: money, payback: div(money, t.spend),
+      revPerReg: div(money, n.reg),
+    };
   }
   function laFactVal(srcId, id) {
     var f = laFact(srcId);
@@ -35748,7 +35793,7 @@
       : { title: d[src].title, note: d[src].note };
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
-      (mon ? '' : '<div class="th r">' + esc(d.factLabel) + '</div>') + '</div>';
+      (mon ? '' : '<div class="th r">' + esc(src === 'vk' ? 'факт 28–29.10' : d.factLabel) + '</div>') + '</div>';
     var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
