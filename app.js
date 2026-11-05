@@ -22725,36 +22725,37 @@
     /* Переключатель Факт/План (Роман 20.10.2026): тот же водопад, но от плана продаж —
        видно, сколько отложим на фонды и дивиденды, если план выручки сойдется. План
        считает бэкенд (plan_cascade) по тем же правилам фондов, только с плановыми
-       базами. В режиме «План» строки не редактируются (это прогноз, а не ведомость) и
-       отметок о переводе в фонд нет. */
+       базами. Правило фонда одно на оба режима, поэтому процент меняется и из «Плана»
+       (Роман 05.11.2026: «там нельзя поменять проценты»); отметок о переводе в фонд в
+       плане нет — это прогноз, а не ведомость. */
     var plan = s.plan_cascade || null;
     var planOn = FIN.cascMode === 'план' && plan && s.period.open;
     var cc = planOn ? plan : c;
     var rows = [{ cls: 'in',
                   name: planOn ? 'Плановый доход' : 'Доход к зачислению',
                   why: planOn
-                    ? 'план продаж ' + finNum(plan.sales, 0) + ' + дебиторка ' +
-                      finNum(plan.receivables, 0) + ', что ждем за период'
+                    ? 'уже пришло ' + finNum(plan.fact || 0, 0) + ' + план продаж ' +
+                      finNum(plan.sales, 0) + ' + дебиторка ' + finNum(plan.receivables, 0)
                     : 'все, что пришло за период, за вычетом комиссии эквайринга',
                   v: cc.income }];
     rows.push({ cls: 'out', name: 'Фонд краткосрочки',
                 why: stRule ? stRule.explain : 'вычитается первым, до остальных фондов',
-                v: -cc.shortterm, rule: planOn ? null : stRule });
+                v: -cc.shortterm, rule: stRule });
     rows.push({ cls: 'sum', name: 'База для отчислений',
                 why: 'от нее считаются проценты фондов', v: cc.base });
     funds.forEach(function (r) {
       rows.push({ cls: 'out', name: r.name, why: r.explain,
                   v: -(planOn ? r.plan_amount : r.amount),
-                  rule: planOn ? null : r });
+                  rule: r });
     });
     rows.push({ cls: 'out', name: 'Прямые расходы',
-                why: planOn ? 'плановые строки: мотивация, сервисы, реклама'
+                why: planOn ? 'оплаченные и плановые: мотивация, сервисы, реклама'
                             : 'факт из расчетных листов: мотивация, сервисы, реклама',
                 v: -cc.direct });
     rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: cc.profit });
     rows.push({ cls: 'out', name: 'Флекс-проджекта',
                 why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -cc.flex,
-                rule: planOn ? null : flexRule });
+                rule: flexRule });
     rows.push({ cls: 'total', name: 'Дивиденды',
                 why: planOn ? 'то, что отложим к распределению по плану'
                             : 'то, что остается к распределению',
@@ -22766,9 +22767,9 @@
           '<button class="tab' + (planOn ? ' on' : '') + '" data-cascmode="план">План</button>' +
         '</div>'
       : '';
-    var cascSub = planOn
+    var cascSub = (planOn
       ? 'сколько отложим на фонды и дивиденды, если план продаж сойдется'
-      : 'каждый шаг считается от предыдущего — сверху вниз' +
+      : 'каждый шаг считается от предыдущего — сверху вниз') +
         (editable ? '. Правило фонда меняется по клику на строке' : '');
     var casc = '<div class="card fin-casc">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
@@ -22780,7 +22781,7 @@
            банке посреди периода. Кнопка «Пополнили фонд» записывает этот перевод, и
            строка красится зелёным — видно, по каким фондам деньги уже ушли. Сумма от
            нажатия не меняется: остаток фонда и кэшфлоу считают план и факт одинаково. */
-        var mv = r.rule && (r.rule.moved_plan > 0 || r.rule.moved_done > 0) ? r.rule : null;
+        var mv = !planOn && r.rule && (r.rule.moved_plan > 0 || r.rule.moved_done > 0) ? r.rule : null;
         var filled = mv && mv.moved_done > 0;
         var left = mv ? mv.moved_plan : 0;
         return '<div class="fc-row ' + r.cls + (live ? ' click' : '') +
@@ -29501,17 +29502,19 @@
     var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
     var autoReceiv = r.receivables_auto || [];   // дебиторка из графиков рассрочки и консультаций
     var salesAuto = r.sales_auto || [];          // новые продажи из консультаций (первый взнос)
+    // Убранные из плана строки видны в списке, но в счетчиках сделок и долгов их нет.
+    var inPlan = function (x) { return !x.off; };
     var planFact = t.planned_revenue > 0
       ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
       : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
 
     var bar = statBar([
       { label: 'Ждем с новых продаж', value: finRub(t.sales_expected),
-        sub: (sales.length + salesAuto.length) + ' ' +
-          plural(sales.length + salesAuto.length, 'сделка', 'сделки', 'сделок') },
+        sub: (sales.length + salesAuto.filter(inPlan).length) + ' ' +
+          plural(sales.length + salesAuto.filter(inPlan).length, 'сделка', 'сделки', 'сделок') },
       { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected),
-        sub: (receiv.length + autoReceiv.length) + ' ' +
-          plural(receiv.length + autoReceiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
+        sub: (receiv.length + autoReceiv.filter(inPlan).length) + ' ' +
+          plural(receiv.length + autoReceiv.filter(inPlan).length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
       { label: 'Планируемая выручка', value: finRub(t.planned_revenue),
         sub: 'продажи и дебиторка' },
       { label: 'Факт дохода', value: finRub(t.income_fact), sub: planFact },
@@ -29544,6 +29547,17 @@
         n.addEventListener('click', function () {
           var id = n.getAttribute('data-rp');
           items.forEach(function (x) { if (x.id === id) finRevForm(x, x.kind); });
+        });
+      });
+      // Убрать консультацию из плана или вернуть. Клик не всплывает до строки, иначе
+      // поверх откроется карточка клиента.
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rpoff]'), function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var off = b.getAttribute('data-off') === '1';
+          finDo('/admin/api/fin/revenue-plan/consult', 'POST', {
+            consult_id: +b.getAttribute('data-rpoff'), off: off,
+          }, off ? 'Убрано из плана' : 'Вернули в план');
         });
       });
       // Кружок-галочка: помечаем строку полученной, не открывая форму. Клик по кружку
@@ -29668,11 +29682,19 @@
       }
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
         .filter(Boolean).map(esc).join(' · ');
-      return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' +
+      /* Строку из консультации можно убрать из плана, не трогая саму консультацию
+         (Роман 05.11.2026: прогнозу пока верит не до конца). Убранная остается видна
+         бледной и в сумму не идет — вернуть той же кнопкой. */
+      if (x.off) chip += ' <span class="sev mini cz-off">не в плане</span>';
+      var offBtn = (canFix && x.consult_id)
+        ? '<button class="rp-off" data-rpoff="' + x.consult_id + '" data-off="' + (x.off ? '0' : '1') + '">' +
+          (x.off ? 'Вернуть в план' : 'Убрать из плана') + '</button>'
+        : '';
+      return '<div class="fl-row fl-2 rp-row' + (x.off ? ' muted' : '') + (x.case_id ? ' click' : '') + '"' +
         (x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '') + '>' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || (isSaleCard ? 'ожидаемая продажа' : 'рассрочка')) +
-          '</span></div>' +
+          offBtn + '</span></div>' +
         '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     return '<div class="card listcard">' +
