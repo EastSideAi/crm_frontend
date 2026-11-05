@@ -29501,17 +29501,19 @@
     var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
     var autoReceiv = r.receivables_auto || [];   // дебиторка из графиков рассрочки и консультаций
     var salesAuto = r.sales_auto || [];          // новые продажи из консультаций (первый взнос)
+    // Убранные из плана строки видны в списке, но в счетчиках сделок и долгов их нет.
+    var inPlan = function (x) { return !x.off; };
     var planFact = t.planned_revenue > 0
       ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
       : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
 
     var bar = statBar([
       { label: 'Ждем с новых продаж', value: finRub(t.sales_expected),
-        sub: (sales.length + salesAuto.length) + ' ' +
-          plural(sales.length + salesAuto.length, 'сделка', 'сделки', 'сделок') },
+        sub: (sales.length + salesAuto.filter(inPlan).length) + ' ' +
+          plural(sales.length + salesAuto.filter(inPlan).length, 'сделка', 'сделки', 'сделок') },
       { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected),
-        sub: (receiv.length + autoReceiv.length) + ' ' +
-          plural(receiv.length + autoReceiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
+        sub: (receiv.length + autoReceiv.filter(inPlan).length) + ' ' +
+          plural(receiv.length + autoReceiv.filter(inPlan).length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
       { label: 'Планируемая выручка', value: finRub(t.planned_revenue),
         sub: 'продажи и дебиторка' },
       { label: 'Факт дохода', value: finRub(t.income_fact), sub: planFact },
@@ -29544,6 +29546,17 @@
         n.addEventListener('click', function () {
           var id = n.getAttribute('data-rp');
           items.forEach(function (x) { if (x.id === id) finRevForm(x, x.kind); });
+        });
+      });
+      // Убрать консультацию из плана или вернуть. Клик не всплывает до строки, иначе
+      // поверх откроется карточка клиента.
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rpoff]'), function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var off = b.getAttribute('data-off') === '1';
+          finDo('/admin/api/fin/revenue-plan/consult', 'POST', {
+            consult_id: +b.getAttribute('data-rpoff'), off: off,
+          }, off ? 'Убрано из плана' : 'Вернули в план');
         });
       });
       // Кружок-галочка: помечаем строку полученной, не открывая форму. Клик по кружку
@@ -29668,11 +29681,19 @@
       }
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
         .filter(Boolean).map(esc).join(' · ');
-      return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' +
+      /* Строку из консультации можно убрать из плана, не трогая саму консультацию
+         (Роман 05.11.2026: прогнозу пока верит не до конца). Убранная остается видна
+         бледной и в сумму не идет — вернуть той же кнопкой. */
+      if (x.off) chip += ' <span class="sev mini cz-off">не в плане</span>';
+      var offBtn = (canFix && x.consult_id)
+        ? '<button class="rp-off" data-rpoff="' + x.consult_id + '" data-off="' + (x.off ? '0' : '1') + '">' +
+          (x.off ? 'Вернуть в план' : 'Убрать из плана') + '</button>'
+        : '';
+      return '<div class="fl-row fl-2 rp-row' + (x.off ? ' muted' : '') + (x.case_id ? ' click' : '') + '"' +
         (x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '') + '>' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || (isSaleCard ? 'ожидаемая продажа' : 'рассрочка')) +
-          '</span></div>' +
+          offBtn + '</span></div>' +
         '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     return '<div class="card listcard">' +
