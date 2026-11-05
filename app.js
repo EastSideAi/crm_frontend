@@ -12310,6 +12310,14 @@
       if (state.page === 'tasks') renderView();
     }).catch(function () { state.tasksLoading = false; state.teamReports = 'none'; if (state.page === 'tasks') renderView(); });
   }
+  /* Строка архива — превью, а не сам отчет: месячный текст идет блоками через
+     пустую строку, и в табличной строке он читался простыней (Павел 05.11.2026:
+     «почему отчеты сплошным текстом»). Здесь начало одной строкой, полный текст
+     открывается в карточке. */
+  function rpLead(text) {
+    var one = String(text || '').trim().replace(/\s*\n+\s*/g, ' · ');
+    return one.length > 150 ? one.slice(0, 150).replace(/[\s·]+$/, '') + '…' : one;
+  }
   function renderTeamReports(view) {
     if (state.teamReports === null) { view.innerHTML = dashSkeleton(); loadTeamReports(); return; }
     if (state.teamReports === 'none') {
@@ -12336,7 +12344,9 @@
             '<span class="brd-n num ts-pct" data-l="План">' + pct + '%</span>' +
             '<span class="brd-n num ' + (f.carried ? 'bad' : 'zero') + '" data-l="Перенос">' + (f.carried || 0) + '</span>' +
             '<div class="rh-c" data-l="Итог">' + (r.late ? '<span class="sev rh-late">поздно</span> ' : '') + '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</div>' +
-            (r.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(r.text) + '</span></div>' : '') +
+            (r.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>' +
+              ((r.period || 'week') === 'week' ? 'Что мешало:' : 'Отчет:') + '</b> ' +
+              esc(rpLead(r.text)) + '</span></div>' : '') +
           '</div>';
         }).join('');
     }).join('');
@@ -13925,6 +13935,20 @@
     return '<div class="rv-facts">' + parts.join('') + '</div>';
   }
 
+  /* Отчет за месяц человек пишет блоками: строка-заголовок, под ней пара строк.
+     Без веса все строки равны, и месяц читается сплошняком (Павел 05.11.2026).
+     Поэтому первую строку блока поднимаем в заголовок — но только если она
+     правда заголовок: короткая и без точки на конце. Разметки в поле нет и не
+     заводим: человек пишет обычный текст, а не значки. */
+  function rvSaid(text) {
+    return String(text || '').split(/\n{2,}/).map(function (block) {
+      var lines = block.split('\n'), head = (lines[0] || '').trim();
+      var isHead = lines.length > 1 && head.length <= 48 && !/[.!?,:;]$/.test(head);
+      return isHead
+        ? '<b class="rv-h">' + esc(head) + '</b>' + esc(lines.slice(1).join('\n'))
+        : esc(block);
+    }).join('\n\n');
+  }
   function reviewCard(r, period, starts, after) {
     if (document.querySelector('.al-ov')) return;
     var rep = r.report || null;
@@ -13954,7 +13978,8 @@
                 (period === 'week' ? (rep.late ? 'закрыта с опозданием' : 'закрыта') : (rep.late ? 'сдан с опозданием' : 'сдан')) + '</span>' +
               reviewFacts(rep.facts) +
               (rep.text
-                ? '<div class="rv-said"><div class="rv-lbl">Что мешало</div>' + esc(rep.text) + '</div>'
+                ? '<div class="rv-said"><div class="rv-lbl">' +
+                    (period === 'week' ? 'Что мешало' : 'Отчет') + '</div>' + rvSaid(rep.text) + '</div>'
                 : '<div class="rv-said muted">Комментарий не оставлен — числа выше отчет и есть.</div>') +
               (plan && plan.text
                 ? '<div class="rv-said"><div class="rv-lbl">План на период</div>' + esc(plan.text) + '</div>' : '') +
@@ -46174,6 +46199,8 @@
     { id: 'det',       label: 'Английский',  icon: 'globe' },
     { id: 'course',    label: 'Китайский',   icon: 'play' },
     { id: 'exams',     label: 'Экзамены',    icon: 'award' },
+    // Проектная деятельность — услуга: тема, описание от ученика, реализация, упаковка.
+    { id: 'projects',  label: 'Проект',      icon: 'bolt' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'arrival', label: 'Заезд',      icon: 'flight' },
@@ -47301,7 +47328,7 @@
     var navHtml = MODAL_SECTIONS.filter(function (sct) {
       if (sct.id === 'pay') return can('finance|pay_create');
       // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
-      if (sct.id === 'consult') return can('clients');
+      if (sct.id === 'consult' || sct.id === 'projects') return can('clients');
       // Переписка закрыта тем же правом, что и раздел «Диалоги»: пункт, который
       // открывается только отказом, хуже отсутствующего пункта. У тьютора право
       // своё (`inbox_own`) — он пишет семье, но потока продаж не видит.
@@ -47430,6 +47457,7 @@
     // состояния — уводим на «Главное». Право = finance или pay_create (приём платежа).
     if (s === 'pay' && !can('finance|pay_create')) { s = state.modalSection = 'main'; }
     if (s === 'consult' && !can('clients')) { s = state.modalSection = 'main'; }
+    if (s === 'projects' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'mail' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'points' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
@@ -47451,6 +47479,7 @@
     else if (s === 'det') host.innerHTML = buildDetSection(id);
     else if (s === 'course') host.innerHTML = buildCourseSection(id);
     else if (s === 'exams') host.innerHTML = buildExams(id);
+    else if (s === 'projects') host.innerHTML = buildProjectSection(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // Плашка «это дубль» — над ЛЮБОЙ секцией: работать в дубле нельзя нигде, и
     // человек, пришедший по ссылке сразу в «Оплаты», обязан это увидеть.
@@ -47500,6 +47529,7 @@
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
                  course: ['Китайский', 'Смотрю доступ к курсу'],
+                 projects: ['Проектная деятельность', 'Поднимаю проект ученика'],
                  mail: ['Почта', 'Поднимаю переписку с вузами'],
                  arrival: ['Заезд', 'Поднимаю заезд ученика'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
@@ -48289,6 +48319,158 @@
       '</div>';
 
     return head + access + buildHskBlock(id);
+  }
+
+  /* ════ ПРОЕКТНАЯ ДЕЯТЕЛЬНОСТЬ ════
+     Услуга: ученик с командой делает свой проект. У него в кабинете дорожная карта
+     из шести шагов (#/learn/projects на платформе), здесь — пульт команды: открыть
+     услугу, вписать тему, принять описание или вернуть с обратной связью, ответить
+     по любому шагу. Ученик видит ответы в кабинете и получает уведомление.
+     Бэк: eastside-backend app/routers/projects.py. */
+  var PJ = {}, PJ_BUSY = {};
+  var PJ_ST = { wait: 'впереди', doing: 'в работе', review: 'ждет проверки', done: 'готово', return: 'на доработке' };
+  function loadProject(id, force) {
+    if (PJ_BUSY[id]) return;
+    if (force) delete PJ[id];
+    PJ_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/projects').then(function (r) {
+      PJ_BUSY[id] = false; PJ[id] = r;
+      if (state.drawerId === id && state.modalSection === 'projects') renderModalContent();
+    }).catch(function (e) {
+      PJ_BUSY[id] = false;
+      if (e.message !== '403') { PJ[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function pjStep(st, i, cur) {
+    var files = (st.subs || []).map(function (f) {
+      return f.kind === 'link'
+        ? '<a class="pj-f" href="' + esc(f.src) + '" target="_blank" rel="noopener">' + ic('ext', 12) + esc(f.name) + '</a>'
+        : '<a class="pj-f" href="#" data-pjdoc="' + f.doc_id + '">' + ic('doc', 12) + esc(f.name) + '</a>';
+    }).join('');
+    var msgs = (st.comments || []).map(function (c) {
+      var me = c.by !== 'client';
+      return '<div class="pj-m' + (me ? ' team' : '') + '"><b>' + esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) +
+        '</b> · ' + esc(fmtWhen(c.at)) + '<div>' + esc(c.text) + '</div></div>';
+    }).join('');
+    // Кнопки решения — по смыслу шага: сдачу ученика принимают или возвращают,
+    // шаг команды берут в работу и закрывают.
+    // Тему закрывает поле «Тема проекта» выше, кнопки статуса ей не нужны.
+    var acts = st.key === 'topic' ? ''
+      : st.status === 'review'
+      ? '<button class="bp sm" data-pjst="done" data-k="' + st.key + '">' + ic('check', 13) + 'Принять</button>' +
+        '<button class="bp ghost sm" data-pjst="return" data-k="' + st.key + '">Вернуть на доработку</button>'
+      : st.status === 'done'
+        ? '<button class="bp ghost sm" data-pjst="doing" data-k="' + st.key + '">Открыть заново</button>'
+        : (st.who === 'team' && st.status !== 'doing'
+            ? '<button class="bp ghost sm" data-pjst="doing" data-k="' + st.key + '">Взять в работу</button>' : '') +
+          (st.who === 'team'
+            ? '<button class="bp ghost sm" data-pjst="done" data-k="' + st.key + '">' + ic('check', 13) + 'Готово</button>' : '');
+    // Форма ответа — только у шага, где сейчас идет работа. Остальные свернуты в
+    // строку и раскрываются по клику: шесть одинаковых форм прятали сданный шаг.
+    var live = st.key === cur || st.status === 'review' || st.status === 'return' || st.status === 'doing';
+    return '<div class="pj-s' + (st.status === 'review' ? ' hot' : '') + (live ? '' : ' pj-s--min') + '">' +
+      '<div class="pj-s-h"' + (live ? '' : ' data-pjopen="1"') + '><span class="pj-n num">' + (i + 1) + '</span><b>' + esc(st.title) + '</b>' +
+        '<span class="pj-who">' + (st.who === 'team' ? 'делает команда' : 'делает ученик') + '</span>' +
+        '<span class="sev st-' + st.status + '">' + (PJ_ST[st.status] || st.status) + '</span></div>' +
+      '<div class="pj-b">' +
+      (files ? '<div class="pj-fs">' + files + '</div>' : '') +
+      (msgs ? '<div class="pj-ms">' + msgs + '</div>' : '') +
+      '<div class="pj-reply"><textarea class="al-in" rows="1" data-pjnote="' + st.key + '" ' +
+        'placeholder="Ответ ученику: обратная связь, вопрос, что дальше"></textarea>' +
+        '<div class="pj-acts">' + acts +
+          '<button class="bp ghost sm" data-pjst="" data-k="' + st.key + '">' + ic('send', 13) + 'Ответить</button></div></div>' +
+      '</div></div>';
+  }
+
+  function buildProjectSection(id) {
+    var r = PJ[id];
+    if (!r) { loadProject(id); return skeletonSection('projects'); }
+    var head = '<div class="m-ctitle">Проектная деятельность</div>' +
+      '<div class="m-csub">Услуга: ученик с командой делает свой проект для заявки. В кабинете ' +
+      'у него дорожная карта из шести шагов, здесь вы открываете услугу, даете тему и ' +
+      'отвечаете по шагам. Каждый ответ приходит ученику уведомлением.</div>';
+    if (r === 'none') return head + '<div class="field-empty">Не удалось загрузить проект, обновите страницу.</div>';
+
+    var on = !!r.open, p = r.project;
+    var why = !r.has_account
+      ? (r.account_by === 'unverified'
+          ? 'Кабинет по почте карточки есть, но почта в нем не подтверждена. Пусть ученик войдет и подтвердит ее.'
+          : 'У ученика нет кабинета на платформе. Пусть зарегистрируется по почте из карточки, потом откройте услугу.')
+      : '';
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ' +
+        '<span class="hr" id="pj-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+      (why ? '<div class="field-empty">' + esc(why) + '</div>'
+        : '<div class="det-sw-row"><div class="det-sw-b"><div class="det-sw-t">Раздел в Обучении</div>' +
+            '<div class="det-sw-s">' + (on ? 'ученик видит дорожную карту проекта' : 'закрыт, ученик раздела не видит') + '</div></div>' +
+          '<button type="button" class="pd-sw' + (on ? ' on' : '') + '" id="pj-sw">' +
+            '<span class="pd-sw-l">' + (on ? 'Открыт' : 'Закрыт') + '</span>' +
+            '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+          (on && p && p.granted_by ? '<div class="det-sw-by">открыл ' + esc(p.granted_by) + ' · ' + esc(fmtWhen(p.granted_at)) + '</div>' : '')) +
+      '</div>';
+    if (!on || !p) return head + access;
+
+    var topic = '<div class="m-sec"><div class="m-sec-h">Тема проекта</div>' +
+      (!p.topic && p.topic_requested ? '<div class="m-csub" style="margin:0 0 10px;color:var(--amber-ink)">Ученик запросил тему и ждет ее.</div>' : '') +
+      '<div class="pj-topic"><input class="al-in" id="pj-topic" maxlength="500" value="' + esc(p.topic || '') + '" ' +
+        'placeholder="Например: телеграм-бот для изучения иероглифов">' +
+        '<button class="bp sm" id="pj-topic-save">Сохранить</button></div></div>';
+
+    var steps = '<div class="m-sec"><div class="m-sec-h">Дорожная карта</div>' +
+      p.steps.map(function (st, i) { return pjStep(st, i, p.current); }).join('') + '</div>';
+    return head + access + topic + steps;
+  }
+
+  function wireProject(id, host) {
+    var busy = false;
+    function call(path, method, body, okMsg) {
+      if (busy) return;
+      busy = true;
+      api('/admin/api/leads/' + id + '/projects' + path, {
+        method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        PJ[id] = r;
+        if (okMsg) showToast(okMsg);
+        renderModalContent();
+      }).catch(function (e) {
+        if (e.message === '403') return;
+        showToast((e.body && typeof e.body.detail === 'string') ? e.body.detail : 'Не сохранилось, попробуйте еще раз');
+      }).then(function () { busy = false; });
+    }
+    var rf = el('pj-refresh');
+    if (rf) rf.addEventListener('click', function () { loadProject(id, true); });
+    var sw = el('pj-sw');
+    if (sw) sw.addEventListener('click', function () {
+      var on = !!(PJ[id] || {}).open;
+      if (on && !confirm('Закрыть ученику раздел «Проектная деятельность»? Прогресс сохранится.')) return;
+      call('/access', 'POST', { open: !on }, on ? 'Раздел закрыт' : 'Раздел открыт, ученику ушло уведомление');
+    });
+    var ts = el('pj-topic-save');
+    if (ts) ts.addEventListener('click', function () {
+      call('', 'PATCH', { topic: el('pj-topic').value }, 'Тема сохранена');
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-pjopen]'), function (hd) {
+      hd.addEventListener('click', function () { hd.parentNode.classList.toggle('open'); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-pjdoc]'), function (a) {
+      a.addEventListener('click', function (e) { e.preventDefault(); openDoc(a.getAttribute('data-pjdoc')); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-pjst]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-k'), stt = b.getAttribute('data-pjst');
+        var ta = host.querySelector('[data-pjnote="' + key + '"]');
+        var note = ta ? ta.value.trim() : '';
+        // Вернуть без объяснения нельзя: ученик не поймет, что исправлять.
+        if (stt === 'return' && !note) { showToast('Напишите, что доработать'); if (ta) ta.focus(); return; }
+        if (!stt && !note) { if (ta) ta.focus(); return; }
+        var body = { note: note || null };
+        if (stt) body.status = stt;
+        call('/steps/' + key, 'PATCH', body,
+          stt === 'done' ? 'Готово, ученик получил уведомление'
+            : stt === 'return' ? 'Вернули ученику с комментарием'
+            : stt === 'doing' ? 'Шаг в работе' : 'Ответ отправлен ученику');
+      });
+    });
   }
 
   /* ── HSK-тренажёр в той же вкладке «Китайский» ──
@@ -51658,6 +51840,9 @@
     if (state.modalSection === 'course') wireCourse(id);
     if (state.modalSection === 'mail') wireMail(id, host);
 
+    // ── ПРОЕКТ: доступ, тема, решения по шагам ──
+    if (state.modalSection === 'projects') wireProject(id, host);
+
     // ── ЭКЗАМЕНЫ: переход в свою вкладку и перечитать CSCA ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-exgo]'), function (b) {
       b.addEventListener('click', function () { setModalSection(b.getAttribute('data-exgo')); });
@@ -54569,6 +54754,27 @@
        шапка успевала нарисовать старый раздел и человек по ссылке из бота видел
        хлебную крошку «Фокус недели» вместо вкладок задач. */
     if (pg === 'focus' || pg === 'stuck') { state.teamMode = pg; return ['tasks', 'team']; }
+    /* Срез «Команды» ссылкой: #page/tasks/team/month, …/quarter, …/reports, а
+       числом в конце — сдвиг периода (#page/tasks/team/month/-1 — прошлый месяц).
+       Итоги месяца руководитель показывает команде, а кликами до октября идти
+       три шага (Павел 05.11.2026). */
+    if (pg === 'tasks' && seg.indexOf('team/') === 0) {
+      var tp = seg.split('/'), tmode = tp[1], traw = tp[2] || '';
+      /* Месяц пишем словом даты (…/month/2026-10), а не сдвигом: ссылку на итоги
+         октября пересылают в чате, и в декабре сдвиг «-1» показал бы ноябрь. */
+      var tshift = /^\d{4}-\d{2}$/.test(traw)
+        ? rhShiftFor('month', traw + '-01')
+        : parseInt(traw, 10);
+      if (tmode === 'month' || tmode === 'quarter') {
+        state.teamMode = 'stats';
+        state.teamPeriod = tmode;
+        state.teamShift = Math.max(-12, Math.min(4, tshift || 0));
+        state.teamStats = null; state.teamWho = null; state.teamPerson = null;
+      } else if (['office', 'day', 'week', 'focus', 'stuck', 'reports'].indexOf(tmode) !== -1) {
+        state.teamMode = tmode;
+      }
+      return ['tasks', 'team'];
+    }
     // Встречи из задач и вкладка расписания из EastSide Meeting — теперь раздел
     // «Расписание» (02.11.2026).
     if ((pg === 'tasks' && seg === 'meet') || (pg === 'meetx' && seg === 'sched')) return ['sched', ''];
@@ -54649,7 +54855,26 @@
       get: function () { return PR_SEGS[state.prSeg] ? state.prSeg : ''; },
       set: function (s) { if (!PR_SEGS[s] || s === state.prSeg) return false; state.prSeg = s; return true; },
     },
-    tasks: { get: taskSeg, set: applyTaskSeg },
+    tasks: {
+      /* У «Команды» адрес несет и срез: ссылка на итоги месяца должна открывать
+         именно итоги за этот месяц, а не последний экран того, кто ее открыл.
+         Остальные вкладки — одним словом, как было. */
+      get: function () {
+        var seg = taskSeg();
+        if (seg !== 'team') return seg;
+        var mode = state.teamMode === 'stats' ? (state.teamPeriod || 'month') : state.teamMode;
+        if (!mode || mode === 'office') return seg;
+        var sh = state.teamMode === 'stats' ? (state.teamShift || 0) : 0;
+        if (!sh) return 'team/' + mode;
+        // Месяц — датой, чтобы пересланная ссылка не съехала на следующий месяц.
+        if (mode === 'month') {
+          var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + sh);
+          return 'team/month/' + d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+        }
+        return 'team/' + mode + '/' + sh;
+      },
+      set: applyTaskSeg,
+    },
     inbox: {
       get: function () { return state.inboxMode === 'threads' ? 'threads' : 'bot'; },
       set: function (s) {
