@@ -35741,8 +35741,10 @@
     return {
       /* Бюджет — сколько реально списал кабинет, с НДС; строкой ниже он же без
          НДС, как на вкладке «Реклама» (владелец, 5.11.2026). */
-      budget: t.spend_nds, budgetNet: t.spend, reg: n.reg, cpl: div(t.spend, n.reg), clicks: t.clicks,
-      cpc: div(t.spend, t.clicks), crLand: div(n.reg, t.clicks),
+      /* Переходы на страницу — визиты по Метрике, а не клики кабинета: кликов
+         больше, часть людей до страницы не доходит (владелец, 5.11.2026). */
+      budget: t.spend_nds, budgetNet: t.spend, reg: n.reg, cpl: div(t.spend, n.reg),
+      clicks: t.visits, cpc: div(t.spend, t.visits), crLand: div(n.reg, t.visits),
       ext: n.uch, crExt: div(n.uch, n.reg), extRev: rub.uch,
       clean: n.to_bot, crClean: div(n.to_bot, n.reg),
       chan: n.chan, crChan: div(n.chan, n.to_bot),
@@ -35835,7 +35837,8 @@
                процентов: формат у колонок разный, значение одно и то же */
             (mon ? '' : '<div class="la-c num la-f">' +
               (f == null ? '—' : esc(laFmt(f, r.u === 'pct' ? 'pctv' : r.u)) +
-                (src === 'vk' && r.id === 'budget' ? ' <span class="la-u">с НДС</span>' : '')) +
+                (src === 'vk' && r.id === 'budget' ? ' <span class="la-u">с НДС</span>' : '') +
+                (src === 'vk' && r.id === 'clicks' ? ' <span class="la-u">визиты, Метрика</span>' : '')) +
               '</div>') + '</div>';
         }).join('') + '</div>';
     }).join('');
