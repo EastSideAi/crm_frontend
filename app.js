@@ -22725,8 +22725,9 @@
     /* Переключатель Факт/План (Роман 20.10.2026): тот же водопад, но от плана продаж —
        видно, сколько отложим на фонды и дивиденды, если план выручки сойдется. План
        считает бэкенд (plan_cascade) по тем же правилам фондов, только с плановыми
-       базами. В режиме «План» строки не редактируются (это прогноз, а не ведомость) и
-       отметок о переводе в фонд нет. */
+       базами. Правило фонда одно на оба режима, поэтому процент меняется и из «Плана»
+       (Роман 05.11.2026: «там нельзя поменять проценты»); отметок о переводе в фонд в
+       плане нет — это прогноз, а не ведомость. */
     var plan = s.plan_cascade || null;
     var planOn = FIN.cascMode === 'план' && plan && s.period.open;
     var cc = planOn ? plan : c;
@@ -22739,13 +22740,13 @@
                   v: cc.income }];
     rows.push({ cls: 'out', name: 'Фонд краткосрочки',
                 why: stRule ? stRule.explain : 'вычитается первым, до остальных фондов',
-                v: -cc.shortterm, rule: planOn ? null : stRule });
+                v: -cc.shortterm, rule: stRule });
     rows.push({ cls: 'sum', name: 'База для отчислений',
                 why: 'от нее считаются проценты фондов', v: cc.base });
     funds.forEach(function (r) {
       rows.push({ cls: 'out', name: r.name, why: r.explain,
                   v: -(planOn ? r.plan_amount : r.amount),
-                  rule: planOn ? null : r });
+                  rule: r });
     });
     rows.push({ cls: 'out', name: 'Прямые расходы',
                 why: planOn ? 'плановые строки: мотивация, сервисы, реклама'
@@ -22754,7 +22755,7 @@
     rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: cc.profit });
     rows.push({ cls: 'out', name: 'Флекс-проджекта',
                 why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -cc.flex,
-                rule: planOn ? null : flexRule });
+                rule: flexRule });
     rows.push({ cls: 'total', name: 'Дивиденды',
                 why: planOn ? 'то, что отложим к распределению по плану'
                             : 'то, что остается к распределению',
@@ -22766,9 +22767,9 @@
           '<button class="tab' + (planOn ? ' on' : '') + '" data-cascmode="план">План</button>' +
         '</div>'
       : '';
-    var cascSub = planOn
+    var cascSub = (planOn
       ? 'сколько отложим на фонды и дивиденды, если план продаж сойдется'
-      : 'каждый шаг считается от предыдущего — сверху вниз' +
+      : 'каждый шаг считается от предыдущего — сверху вниз') +
         (editable ? '. Правило фонда меняется по клику на строке' : '');
     var casc = '<div class="card fin-casc">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
@@ -22780,7 +22781,7 @@
            банке посреди периода. Кнопка «Пополнили фонд» записывает этот перевод, и
            строка красится зелёным — видно, по каким фондам деньги уже ушли. Сумма от
            нажатия не меняется: остаток фонда и кэшфлоу считают план и факт одинаково. */
-        var mv = r.rule && (r.rule.moved_plan > 0 || r.rule.moved_done > 0) ? r.rule : null;
+        var mv = !planOn && r.rule && (r.rule.moved_plan > 0 || r.rule.moved_done > 0) ? r.rule : null;
         var filled = mv && mv.moved_done > 0;
         var left = mv ? mv.moved_plan : 0;
         return '<div class="fc-row ' + r.cls + (live ? ' click' : '') +
