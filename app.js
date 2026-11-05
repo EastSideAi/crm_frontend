@@ -12308,6 +12308,14 @@
       if (state.page === 'tasks') renderView();
     }).catch(function () { state.tasksLoading = false; state.teamReports = 'none'; if (state.page === 'tasks') renderView(); });
   }
+  /* Строка архива — превью, а не сам отчет: месячный текст идет блоками через
+     пустую строку, и в табличной строке он читался простыней (Павел 05.11.2026:
+     «почему отчеты сплошным текстом»). Здесь начало одной строкой, полный текст
+     открывается в карточке. */
+  function rpLead(text) {
+    var one = String(text || '').trim().replace(/\s*\n+\s*/g, ' · ');
+    return one.length > 150 ? one.slice(0, 150).replace(/[\s·]+$/, '') + '…' : one;
+  }
   function renderTeamReports(view) {
     if (state.teamReports === null) { view.innerHTML = dashSkeleton(); loadTeamReports(); return; }
     if (state.teamReports === 'none') {
@@ -12335,7 +12343,8 @@
             '<span class="brd-n num ' + (f.carried ? 'bad' : 'zero') + '" data-l="Перенос">' + (f.carried || 0) + '</span>' +
             '<div class="rh-c" data-l="Итог">' + (r.late ? '<span class="sev rh-late">поздно</span> ' : '') + '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</div>' +
             (r.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>' +
-              ((r.period || 'week') === 'week' ? 'Что мешало:' : 'Отчет:') + '</b> ' + esc(r.text) + '</span></div>' : '') +
+              ((r.period || 'week') === 'week' ? 'Что мешало:' : 'Отчет:') + '</b> ' +
+              esc(rpLead(r.text)) + '</span></div>' : '') +
           '</div>';
         }).join('');
     }).join('');
@@ -13924,6 +13933,20 @@
     return '<div class="rv-facts">' + parts.join('') + '</div>';
   }
 
+  /* Отчет за месяц человек пишет блоками: строка-заголовок, под ней пара строк.
+     Без веса все строки равны, и месяц читается сплошняком (Павел 05.11.2026).
+     Поэтому первую строку блока поднимаем в заголовок — но только если она
+     правда заголовок: короткая и без точки на конце. Разметки в поле нет и не
+     заводим: человек пишет обычный текст, а не значки. */
+  function rvSaid(text) {
+    return String(text || '').split(/\n{2,}/).map(function (block) {
+      var lines = block.split('\n'), head = (lines[0] || '').trim();
+      var isHead = lines.length > 1 && head.length <= 48 && !/[.!?,:;]$/.test(head);
+      return isHead
+        ? '<b class="rv-h">' + esc(head) + '</b>' + esc(lines.slice(1).join('\n'))
+        : esc(block);
+    }).join('\n\n');
+  }
   function reviewCard(r, period, starts, after) {
     if (document.querySelector('.al-ov')) return;
     var rep = r.report || null;
@@ -13954,7 +13977,7 @@
               reviewFacts(rep.facts) +
               (rep.text
                 ? '<div class="rv-said"><div class="rv-lbl">' +
-                    (period === 'week' ? 'Что мешало' : 'Отчет') + '</div>' + esc(rep.text) + '</div>'
+                    (period === 'week' ? 'Что мешало' : 'Отчет') + '</div>' + rvSaid(rep.text) + '</div>'
                 : '<div class="rv-said muted">Комментарий не оставлен — числа выше отчет и есть.</div>') +
               (plan && plan.text
                 ? '<div class="rv-said"><div class="rv-lbl">План на период</div>' + esc(plan.text) + '</div>' : '') +

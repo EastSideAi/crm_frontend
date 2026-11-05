@@ -3368,6 +3368,10 @@ button.tr-crumb:hover { color: var(--blue); }
 .rh-note { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px;
   margin-top: 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
 .rh-note svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+/* Превью отчета не растит строку: две строки и обрезка. Целиком текст живет в
+   карточке отчета, где у него есть переносы и воздух. */
+.rh-note span { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; }
 .rh-note b { font-weight: 700; color: var(--ink-3); }
 
 /* ── Приемка отчета ──────────────────────────────────────────────────────────
@@ -3404,6 +3408,10 @@ button.tr-crumb:hover { color: var(--blue); }
   background: var(--fill); font-size: 13.5px; line-height: 1.5; color: var(--ink);
   white-space: pre-wrap; word-break: break-word; }
 .rv-said.muted { color: var(--ink-3); }
+/* Заголовок блока внутри отчета: вес и воздух сверху, чтобы месяц читался
+   блоками, а не полотном. Первый блок без отступа — он идет сразу под меткой. */
+.rv-said .rv-h { display: block; font-weight: 700; margin-top: 4px; }
+.rv-said .rv-h:first-child { margin-top: 0; }
 .rv-lbl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
   text-transform: uppercase; color: var(--ink-3); margin-bottom: 5px; }
 .rv-state { display: flex; align-items: flex-start; gap: 7px; margin-top: 14px;
