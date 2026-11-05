@@ -1238,7 +1238,7 @@
     smenu.id = 'smenu'; smenu.className = 'profmenu mtmore';
     smenu.innerHTML = items.map(function (it) {
       var bd = badgeOf(it);
-      return '<button data-p="' + it.id + '"' + (it.id === state.page ? ' class="cur"' : '') + '>' +
+      return '<button data-p="' + it.id + '"' + (navOn(it.id) ? ' class="cur"' : '') + '>' +
         ic(it.icon, 16) + '<span>' + esc(it.label) + '</span>' +
         (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
     }).join('');
@@ -2509,13 +2509,17 @@
        пункта, а аналитика бота вообще в хвосте меню, за финансовыми разделами, и
        человек искал ее глазами каждый раз. Дальше той же группой идут подарки и
        рассылки — это тот же трафик, только в лицах. */
-    { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing' },
+    /* Соцстатистика, Рассылки и Подарки переехали вкладками в «Маркетинг» (Ольга
+       05.11.2026), там же их и ищут (MK_PAGES). Из меню уходят у того, кому открыт
+       «Маркетинг». Аналитика бота осталась пунктом меню: ее смотрят и роли без
+       маркетинга (диагност, руководитель продукта), решение Ольги в тот же день. */
+    { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing', hideCap: 'marketing' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
     // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
-    { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
+    { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing', hideCap: 'marketing' },
     // Рассылки — журнал отправок бота: кому писали и что ответила площадка.
-    { id: 'broadcasts', label: 'Рассылки', icon: 'send', cap: 'marketing' },
+    { id: 'broadcasts', label: 'Рассылки', icon: 'send', cap: 'marketing', hideCap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     // «Что нового» видят все: cap dash есть у каждой роли. Точка — непрочитанные записи.
     { id: 'news', label: 'Что нового', icon: 'bell', cap: 'dash' },
@@ -2835,7 +2839,7 @@
         else if (it.id === 'news' && state.newsUnread) extra = '<span class="cnt num" title="непрочитано">' + state.newsUnread + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
         return (row.lab ? '<div class="navlab">' + esc(row.lab) + '</div>' : '') +
-          '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
+          '<button class="navi' + (navOn(it.id) ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
       Array.prototype.forEach.call(nav.querySelectorAll('.navi'), function (b) {
@@ -2906,11 +2910,11 @@
       // поэтому считаем их вместе — иначе у владельца лента снова уезжает за край.
       var fits = Math.max(2, 4 - jumps.length), mHead = NAV, mTail = [];
       if (NAV.length > fits + 1) { mHead = NAV.slice(0, fits); mTail = NAV.slice(fits); }
-      var tailOn = mTail.some(function (it) { return it.id === state.page; });
+      var tailOn = mTail.some(function (it) { return navOn(it.id); });
       var tailBadge = mTail.reduce(function (s, it) { return s + mBadge(it); }, 0);
       mt.innerHTML = jump + mHead.map(function (it) {
         var bd = mBadge(it);
-        return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
+        return '<button class="mtab' + (navOn(it.id) ? ' on' : '') + '" data-p="' + it.id + '">' +
           // На вкладке помещается одно слово: длинное имя раздела ломает ленту,
           // поэтому у таких пунктов есть короткая подпись.
           ic(it.icon) + '<span>' + (it.short || it.label) + '</span>' +
@@ -3014,6 +3018,27 @@
     if (t === 'unit') t = 'plan';
     return mkTabKnown(t) ? t : def;
   }
+  /* Вкладки «Маркетинга», которые на деле отдельные страницы: у каждой свои данные,
+     свое состояние и свои ссылки #page/..., поэтому переезжают они только шапкой.
+     Видит их тот, кому открыт весь «Маркетинг», а не подрядчик с одной «Рекламой». */
+  var MK_PAGES = [['social', 'Соцстатистика'], ['broadcasts', 'Рассылки'], ['gifts', 'Подарки']];
+  function mkPagesFor() {
+    if (!can('marketing')) return [];
+    return MK_PAGES.filter(function (o) { return can(pageCap(o[0])); });
+  }
+  function mkPageOn() {
+    return mkPagesFor().some(function (o) { return o[0] === state.page; });
+  }
+  /* Период «Подарков» внутри шапки «Маркетинга»: тот же выбор, что был у раздела
+     вкладками, только кнопками под рядом вкладок, как период у «Рекламы». */
+  function giftPeriodHtml() {
+    var gopts = [[0, 'За все время'], [30, '30 дней'], [7, '7 дней'], [1, 'Сегодня']];
+    return '<div class="dperiod">' + gopts.map(function (o) {
+      return '<button data-gfd="' + o[0] + '" class="' + ((state.gfDays || 0) === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
+    }).join('') + '</div>';
+  }
+  // Пункт меню подсвечен: свой раздел или «Маркетинг», когда открыта его вкладка-страница.
+  function navOn(id) { return state.page === id || (id === 'marketing' && mkPageOn()); }
 
   /* topbar: контекстные табы */
   function renderTopbar() {
@@ -3073,7 +3098,7 @@
           renderTopbar(); renderHead(); renderView();
         });
       });
-    } else if (state.page === 'gifts') {
+    } else if (state.page === 'gifts' && !mkPageOn()) {
       var gopts = [[0, 'За все время'], [30, '30 дней'], [7, '7 дней'], [1, 'Сегодня']];
       tb.innerHTML = '<nav class="tabs">' + gopts.map(function (o) {
         return '<a class="tab' + ((state.gfDays || 0) === o[0] ? ' on' : '') + '" data-gfd="' + o[0] + '">' + o[1] + '</a>';
@@ -3116,20 +3141,25 @@
           renderTopbar(); renderHead(); renderView();
         });
       });
-    } else if (state.page === 'marketing') {
+    } else if (state.page === 'marketing' || mkPageOn()) {
       /* две задачи на одной странице: смотреть цифры и заводить ссылки. Вкладка слева,
          период справа. Период нужен на ОБЕИХ вкладках: на «ссылках» по нему считается
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
       var mkTabs = mkTabsFor();
+      var onMk = state.page === 'marketing';
       state.mkTab = mkTabOk(state.mkTab);
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
-      /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
+      /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта.
+         На вкладках-страницах тоже: у них свои фильтры внутри экрана */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
-        return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
+        return '<a class="tab' + (onMk && state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + mkPagesFor().map(function (o) {
+        return '<a class="tab' + (state.page === o[0] ? ' on' : '') + '" data-mkpage="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>' +
-        (state.mkTab === 'launch' || state.mkTab === 'efir' ||
+        (state.page === 'gifts' ? giftPeriodHtml() :
+         !onMk || state.mkTab === 'launch' || state.mkTab === 'efir' ||
          state.mkTab === 'plan' || state.mkTab === 'cross' ? '' :
         '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
           return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
@@ -3141,6 +3171,17 @@
           if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
           if (state.mkTab === 'efir') state._mkEfir = null;   /* всегда свежие цифры */
           if (state.mkTab === 'ads') state._mkAds = null;    /* всегда свежие цифры */
+          if (!onMk) { setPage('marketing'); return; }
+          saveUi(); renderTopbar(); renderView();
+        });
+      });
+      Array.prototype.forEach.call(tb.querySelectorAll('[data-mkpage]'), function (t) {
+        t.addEventListener('click', function () { setPage(t.getAttribute('data-mkpage')); });
+      });
+      Array.prototype.forEach.call(tb.querySelectorAll('[data-gfd]'), function (b) {
+        b.addEventListener('click', function () {
+          state.gfDays = parseInt(b.getAttribute('data-gfd'), 10);
+          state._gf = null;            // период сменился — цифры старого больше не наши
           saveUi(); renderTopbar(); renderView();
         });
       });
