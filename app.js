@@ -33182,7 +33182,7 @@
              (sh('rec') ? esc(' · ' + sh('rec')) : '') },
       { key: 'diag_click', label: 'Нажали кнопку диагностики', value: adsNum(n.diag_click),
         step: 'diag_click', sub: esc('в комнате эфира' + (sh('diag_click') ? ' · ' + sh('diag_click') : '')) },
-      { key: 'anketa', label: 'Записались на диагностику', value: adsNum(n.anketa), step: 'anketa',
+      { key: 'anketa', label: 'Зашли на платформу ИстСайд (диагностика)', value: adsNum(n.anketa), step: 'anketa',
         sub: (n.diag != null ? adsStepSpan('diag', 'получили разбор ' + adsNum(n.diag)) + ' · ' : '') +
              esc('анкета на платформе' + (sh('anketa') ? ' · ' + sh('anketa') : '')) },
       { key: 'cons', label: 'Записались на консультацию', value: adsNum(n.cons), step: 'cons',
@@ -33199,7 +33199,7 @@
     var base = f.reg || 0;
     /* Деньги тут целыми рублями, как на экране запусков: копейки в выручке запуска
        ничего не решают, а в плашке съедают кегль у самой цифры. */
-    return adsKpi('Записались на диагностику', adsNum(f.diag_done),
+    return adsKpi('Зашли на платформу ИстСайд (диагностика)', adsNum(f.diag_done),
              'на платформе · зашли в анкету ' + adsNum(f.diag_entered) +
              adsShare(f.diag_done, base)) +
       adsKpi('Записались на консультацию', adsNum(f.cons_booked),
