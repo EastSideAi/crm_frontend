@@ -3023,9 +3023,11 @@
     if (noSections()) { tb.innerHTML = ''; return; }
     if (state.page === 'leads' || state.page === 'dupes') {
       var onDup = state.page === 'dupes';
-      // Дубли карточек интенсива — вкладка тут же, рядом с людьми: это те же люди,
-      // просто заведенные дважды. Цифра — сколько групп сервер предлагает свести.
+      // Дубли — вкладка тут же, рядом с людьми: это те же люди, просто заведенные
+      // дважды. Цифра — группы интенсива плюс карточки CRM, которые ждут склейки или решения.
       var dupN = (state._dup && state._dup !== 'none' && state._dup.groups) ? state._dup.groups.length : 0;
+      var cdc = (state._cdup && state._cdup !== 'none' && state._cdup.counts) || {};
+      dupN += (cdc.ask || 0) + (cdc.merge || 0);
       var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
         (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).filter(segAvail).map(function (s) {
@@ -17133,6 +17135,28 @@
   var CSCA_SUBJ_RU = { math: 'Математика', physics: 'Физика', chemistry: 'Химия' };
 
   function cscaHwKey(x) { return x.accountId + ':' + x.hwId; }
+  /* Открыть файл работы. Тот же порядок, что у openDoc: вкладку открываем сразу,
+     иначе блокировщик срежет window.open из промиса, а ссылку подставляем, когда
+     сервер ее подпишет. */
+  function cscaHwOpenFile(ref) {
+    var p = String(ref || '').split('|');
+    var w = window.open('', '_blank');
+    if (w) try { w.opener = null; } catch (e) {}
+    xfetch('/admin/api/csca/homework/file?account_id=' + encodeURIComponent(p[0]) +
+           '&hw_id=' + encodeURIComponent(p[1]) + '&doc=' + encodeURIComponent(p[2]))
+      .then(function (r) {
+        if (!r.ok) return null;
+        var ct = r.headers.get('content-type') || '';
+        if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
+        return r.blob().then(function (b) { return URL.createObjectURL(b); });
+      })
+      .then(function (url) {
+        if (!url) { if (w) w.close(); showToast('Файл не открылся, обнови страницу'); return; }
+        if (w) w.location.replace(url);
+        else window.open(url, '_blank', 'noopener');
+      })
+      .catch(function () { if (w) w.close(); showToast('Файл не открылся, проверь сеть'); });
+  }
   function cscaHwLoad() {
     api('/admin/api/csca/homework/queue?scope=' + CSCA_HW_SCOPE).then(function (r) {
       CSCA_HW = r || { items: [] };
@@ -17178,10 +17202,16 @@
         ((res.wrong && res.wrong.length)
           ? '<span class="csw-wrong num">ошибки: ' + esc(res.wrong.join(', ')) + '</span>' : '') + '</div>'
       : '<div class="csw-ans">' + (x.answer ? esc(x.answer) : 'Текста нет — работа приложена файлами.') + '</div>';
+    // Файл с docId лежит у нас и открывается по клику (cscaHwOpenFile). Без
+    // docId — работы до 05.11.2026: тогда сохранялось только имя файла.
     var files = (x.files || []).map(function (f) {
-      return '<span class="csw-file">' + esc(f.name || '') +
-        (f.size ? ' · ' + cscaHwSize(f.size) : '') + '</span>';
-    }).join('');
+      var label = esc(f.name || '') + (f.size ? ' · ' + cscaHwSize(f.size) : '');
+      return f.docId
+        ? '<a href="#" class="csw-file is-link" data-hwfile="' + esc(x.accountId) + '|' + esc(x.hwId) +
+          '|' + esc(f.docId) + '">' + label + '</a>'
+        : '<span class="csw-file">' + label + '</span>';
+    }).join('') + ((x.files || []).some(function (f) { return !f.docId; })
+      ? '<div class="csw-note">Файл сдан до 05.11.2026, тогда платформа сохраняла только имя. Попросите ученика прислать его еще раз.</div>' : '');
     var note = x.status !== 'sent' && x.comment
       ? '<div class="csw-note"><b>' + esc(x.teacher || 'вы') + ':</b> ' + esc(x.comment) + '</div>' : '';
     // Вернуть можно и уже решенную автопроверкой работу: «12 из 30, перереши 4 и 7».
@@ -17311,6 +17341,9 @@
       });
   }
   function cscaHwBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hwfile]'), function (a) {
+      a.addEventListener('click', function (e) { e.preventDefault(); cscaHwOpenFile(a.getAttribute('data-hwfile')); });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-csw]'), function (b) {
       b.addEventListener('click', function () {
         var what = b.getAttribute('data-csw'), key = b.getAttribute('data-k');
@@ -38428,7 +38461,179 @@
     '</div>';
   }
 
+  /* ── Дубли карточек CRM: журнал сторожа автосклейки ─────────────────────────
+     Вера 04.11.2026: сводка сторожа приходила в телеграм ссылками, а во вкладке
+     «Дубли» было пусто — там жили только карточки интенсива. Теперь журнал сторожа
+     стоит здесь первым: что нужно решить, что сторож склеит сам и где разные дети
+     одной семьи. Решение принимается тут же: «склеить» зовет ту же склейку, что
+     кнопка в карточке, «не дубль» запоминается, и сторож пару больше не предложит.
+     Правила и данные — routers/dupes_journal.py в eastside-backend. */
+  var CDUP_LEAD = {};   // ключ группы → выбранная главная
+  var CDUP_MORE = {};   // раздел → показать все
+  var CDUP_SHOW = 8;
+  var CDUP_SECS = [
+    ['ask', 'Нужно решение', 'сторож не уверен: разные имена, оплата не в главной или слишком много карточек на одном контакте'],
+    ['merge', 'Сторож склеит сам', ''],
+    ['siblings', 'Разные дети одной семьи', 'сторож их не трогает; если это все же один человек — склей руками']
+  ];
+
+  function fetchCDupes() {
+    if (state._cdupWait) return;
+    state._cdupWait = true;
+    api('/admin/api/dupes').then(function (r) {
+      state._cdupWait = false;
+      state._cdup = r || { groups: [], counts: {} };
+      if (state.page === 'dupes') { renderView(); renderTopbar(); }
+    }).catch(function (e) {
+      state._cdupWait = false;
+      if (e.message === '403') return;
+      state._cdup = 'none';
+      if (state.page === 'dupes') renderView();
+    });
+  }
+
+  function cdupLead(g) {
+    return CDUP_LEAD[g.key] || g.lead || null;
+  }
+
+  function cdupCard(c, g) {
+    var isMain = cdupLead(g) === c.id;
+    var tags = [];
+    if (c.paid) tags.push('<span class="idup-t money">есть оплата</span>');
+    if (c.status === 'client') tags.push('<span class="idup-t open">клиент</span>');
+    tags.push('<span class="idup-t">' + (c.anketa ? 'анкета есть' : 'без анкеты') + '</span>');
+    if (c.docs) tags.push('<span class="idup-t">документов ' + c.docs + '</span>');
+    if (c.cabinet) tags.push('<span class="idup-t">есть кабинет</span>');
+    var contact = [c.contact, c.email].filter(Boolean).join(' · ');
+    return '<div class="idup-c' + (isMain ? ' main' : '') + '">' +
+      '<div class="idup-c-t">' + esc(c.name || 'Без имени') +
+        (isMain ? '<span class="idup-main">главная</span>' : '') + '</div>' +
+      (contact ? '<div class="idup-c-s">' + esc(contact) + '</div>' : '') +
+      '<div class="idup-c-s">заведена ' + esc(idupWhen(c.created_at)) +
+        (c.from ? ' · пришла: ' + esc(c.from) : '') + '</div>' +
+      '<div class="idup-c-tags">' + tags.join('') + '</div>' +
+      '<div class="idup-c-b">' +
+        (isMain ? '' : '<button class="bp sm ghost" data-cmain="' + c.id + '" data-ck="' + esc(g.key) + '">Сделать главной</button>') +
+        '<button class="bp sm ghost" data-copen="' + c.id + '">Открыть</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function cdupGroup(g) {
+    var lead = cdupLead(g);
+    return '<div class="card idup-g cdup-g">' +
+      '<div class="idup-h"><b>' + g.cards.length + ' ' + plural(g.cards.length, 'карточка', 'карточки', 'карточек') + '</b>' +
+        '<div class="idup-k">' + esc(g.reason || '') + ' · нашел ' + esc(idupWhen(g.found_at)) + '</div></div>' +
+      '<div class="idup-list">' + g.cards.map(function (c) { return cdupCard(c, g); }).join('') + '</div>' +
+      '<div class="idup-a">' +
+        '<button class="bp" data-cmerge="' + esc(g.key) + '"' + (lead ? '' : ' disabled') + '>' +
+          (lead ? 'Склеить в главную' : 'Выбери главную') + '</button>' +
+        '<button class="bp ghost" data-cnot="' + esc(g.key) + '">Не дубль</button>' +
+      '</div></div>';
+  }
+
+  function renderCdupes(view) {
+    if (!state._cdup) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      fetchCDupes();
+      return;
+    }
+    if (state._cdup === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить дубли карточек — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._cdup, groups = d.groups || [];
+    var dry = d.mode !== 'on';
+    var head = '<div class="cdup-top"><div class="cdup-sec">Дубли карточек</div>' +
+      '<button class="bp sm ghost" data-csweep="1">Проверить</button></div>' +
+      '<div class="idup-note">Карточки одного человека, которые нашел сторож: общая учетка, телефон, почта или мессенджер. ' +
+      (dry ? 'Автосклейка пока в пробном режиме — сам сторож ничего не склеивает.'
+           : 'Сторож склеивает сам раз в час, спорное оставляет человеку.') +
+      (d.last_found ? ' Последняя находка ' + esc(ago(d.last_found)) + ' назад.' : '') + '</div>';
+    var body = groups.length ? CDUP_SECS.map(function (sec) {
+      var mine = groups.filter(function (g) { return g.verdict === sec[0]; });
+      if (!mine.length) return '';
+      var all = CDUP_MORE[sec[0]];
+      var shown = all ? mine : mine.slice(0, CDUP_SHOW);
+      var note = sec[0] === 'merge'
+        ? (dry ? 'склеит, когда включим автосклейку; можно склеить и сейчас' : 'склеит на ближайшем проходе; можно склеить и сейчас')
+        : sec[2];
+      return '<div class="cdup-h"><span>' + sec[1] + '</span><span class="n num">' + mine.length + '</span></div>' +
+        '<div class="idup-k cdup-hn">' + esc(note) + '</div>' +
+        shown.map(cdupGroup).join('') +
+        (mine.length > shown.length
+          ? '<button class="bp ghost cdup-more" data-cmore="' + sec[0] + '">Показать еще ' + (mine.length - shown.length) + '</button>'
+          : '');
+    }).join('') : '<div class="card"><div class="empty">Дублей карточек нет — сторож ничего не нашел.</div></div>';
+    view.innerHTML = head + body;
+
+    function reload() { state._cdup = null; renderCdupes(view); renderTopbar(); }
+    function send(path, payload, okMsg) {
+      return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(payload) })
+        .then(function (r) {
+          var errs = (r && r.errors) || [];
+          showToast(okMsg, errs.length ? 'не все: ' + errs[0] : '');
+          delete CDUP_LEAD[payload.key];
+          reload();
+        })
+        .catch(function (e) {
+          if (e.message === '403acl') return showToast('Склеивать карточки может только руководитель');
+          if (e.message === '403') return;
+          showToast('Не получилось', (e.body && e.body.detail) || 'проверь сеть');
+          if (e.status === 404) reload();
+        });
+    }
+    function find(key) { return groups.filter(function (g) { return g.key === key; })[0]; }
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cmain]'), function (b) {
+      b.addEventListener('click', function () {
+        CDUP_LEAD[b.getAttribute('data-ck')] = b.getAttribute('data-cmain');
+        renderCdupes(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-copen]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-copen')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cmore]'), function (b) {
+      b.addEventListener('click', function () { CDUP_MORE[b.getAttribute('data-cmore')] = true; renderCdupes(view); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cmerge]'), function (b) {
+      b.addEventListener('click', function () {
+        var g = find(b.getAttribute('data-cmerge')), lead = cdupLead(g);
+        if (!g || !lead) return;
+        var main = g.cards.filter(function (c) { return c.id === lead; })[0] || {};
+        var n = g.cards.length - 1;
+        if (!confirm('Склеить ' + n + ' ' + plural(n, 'карточку', 'карточки', 'карточек') + ' в «' +
+                     (main.name || 'главную') + '»? Кабинет, документы и консультации переедут туда, ' +
+                     'расклеить можно из главной карточки.')) return;
+        b.disabled = true;
+        send('/admin/api/dupes/merge', { key: g.key, lead: lead }, 'Склеили').then(function () { b.disabled = false; });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cnot]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        send('/admin/api/dupes/dismiss', { key: b.getAttribute('data-cnot') }, 'Запомнил: не дубль, больше не предложу');
+      });
+    });
+    var sw = view.querySelector('[data-csweep]');
+    if (sw) sw.addEventListener('click', function () {
+      sw.disabled = true;
+      sw.textContent = 'Ищу…';
+      api('/admin/api/dupes/sweep', { method: 'POST' })
+        .then(function () { reload(); })
+        .catch(function () { sw.disabled = false; sw.textContent = 'Проверить'; showToast('Не получилось', 'проверь сеть'); });
+    });
+  }
+
   function renderDupes(view) {
+    view.innerHTML = '<div id="cdup-box"></div><div id="idup-box" class="cdup-gap"></div>';
+    renderCdupes(el('cdup-box'));
+    renderIdupes(el('idup-box'));
+  }
+
+  function renderIdupes(view) {
     if (!state._dup) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
       fetchDupes();
@@ -38439,7 +38644,8 @@
       return;
     }
     var d = state._dup, groups = d.groups || [];
-    var head = '<div class="idup-note">Карточки интенсива, у которых совпал контакт: почта, ' +
+    var head = '<div class="cdup-sec">Дубли интенсива</div>' +
+      '<div class="idup-note">Карточки интенсива, у которых совпал контакт: почта, ' +
       'телефон или телеграм. По имени совпадения не ищем — тезки сюда не попадают. ' +
       'Сама по себе ни одна карточка не склеится.</div>';
 
@@ -38466,7 +38672,7 @@
 
     view.innerHTML = head + body + merges;
 
-    function reload() { state._dup = null; IDUP_PICK = {}; renderDupes(view); }
+    function reload() { state._dup = null; IDUP_PICK = {}; renderIdupes(view); }
     function send(path, payload, okMsg) {
       api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(payload) })
@@ -38482,7 +38688,7 @@
       b.addEventListener('click', function () {
         var gi = +b.getAttribute('data-ig');
         idupPick(gi, groups[gi]).main = b.getAttribute('data-imain');
-        renderDupes(view);
+        renderIdupes(view);
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-iskip]'), function (b) {
@@ -38490,7 +38696,7 @@
         var gi = +b.getAttribute('data-ig'), id = b.getAttribute('data-iskip');
         var pick = idupPick(gi, groups[gi]);
         if (pick.skip[id]) delete pick.skip[id]; else pick.skip[id] = true;
-        renderDupes(view);
+        renderIdupes(view);
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-imerge]'), function (b) {
