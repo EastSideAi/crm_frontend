@@ -35471,6 +35471,7 @@
       var reg = laNum(v.cpl) ? laR(laNum(v.budget) / laNum(v.cpl)) : 0;
       o = laFunnel(v, reg);
       o.budget = laNum(v.budget);
+      o.budgetNds = o.budget * 1.22;
       o.cpc = o.clicks ? o.budget / o.clicks : 0;
       o.cash = o.cashIn + o.extRev;
       o.payback = o.budget ? o.cash / o.budget : 0;
@@ -35592,6 +35593,8 @@
     var start = paid
       ? { t: '1. Бюджет, цена регистрации и сколько людей это даёт', rows: [
           { id: 'budget', l: 'Бюджет на таргет ВК, ₽', k: 'in', u: 'rub', step: 10000 },
+          /* Сколько уходит фактически: кабинет списывает с НДС (владелец, 5.11.2026). */
+          { id: 'budgetNds', l: 'Бюджет с НДС 22%, ₽', u: 'rub' },
           { id: 'cpl', l: 'Цена регистрации с рекламы, ₽', k: 'in', u: 'rub', step: 50 },
           { id: 'reg', l: 'Регистраций с платного трафика, чел' },
           { id: 'crLand', l: 'CR переход на страницу регистрации → регистрация', k: 'in', u: 'pct' },
@@ -35734,7 +35737,7 @@
     return {
       /* Бюджет — сколько реально потратили, без НДС, как на вкладке «Реклама»
          (владелец, 5.11.2026: «напиши без учета ндс»). */
-      budget: t.spend, reg: n.reg, cpl: div(t.spend, n.reg), clicks: t.clicks,
+      budget: t.spend, budgetNds: t.spend_nds, reg: n.reg, cpl: div(t.spend, n.reg), clicks: t.clicks,
       cpc: div(t.spend, t.clicks), crLand: div(n.reg, t.clicks),
       ext: n.uch, crExt: div(n.uch, n.reg), extRev: rub.uch,
       clean: n.to_bot, crClean: div(n.to_bot, n.reg),
