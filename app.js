@@ -4,6 +4,35 @@
 (function () {
   'use strict';
 
+  /* CRM внутри CRM рисоваться не должна. В разделе «Встречи» стоит рамка с
+     офисом, и адрес у нее чужой — бэкенд. Но crm.истсайд.рф/meet отдает саму
+     CRM: рамка, по любой причине уехавшая на свой же домен, показывает вторую
+     копию рабочего стола, со своим меню и своим последним разделом, прямо
+     внутри раздела встреч. Человек видит кашу и не понимает, что лечится она
+     обновлением страницы (айпад Павла 06.11.2026). Ловим только себя в себе:
+     у чужой страницы снаружи адрес не прочитать, попытка бросит ошибку, и
+     проверка тихо уйдет в сторону — встройку в чужой сайт мы не ломаем. */
+  try {
+    if (window.parent !== window && window.parent.location.origin === location.origin) {
+      document.body.innerHTML = '';
+      var vrez = document.createElement('div');
+      // fixed, а не высота в процентах: рамка бывает любой высоты, а у пустой
+      // страницы своей высоты нет — надпись уехала бы в верхний угол.
+      vrez.style.cssText = 'position:fixed;inset:0;display:grid;place-items:center;' +
+        'align-content:center;gap:6px;font:600 14px/1.5 system-ui,sans-serif;' +
+        'color:#5B6478;text-align:center;padding:20px;background:#F4F5F8';
+      var s1 = document.createElement('div');
+      s1.textContent = 'Здесь должен был открыться офис команды.';
+      var s2 = document.createElement('div');
+      s2.style.cssText = 'font-weight:500;color:#8A93A6';
+      s2.textContent = 'Обнови страницу — он вернется.';
+      vrez.appendChild(s1);
+      vrez.appendChild(s2);
+      document.body.appendChild(vrez);
+      return;
+    }
+  } catch (e) { /* снаружи чужой домен — значит это не наш случай */ }
+
   // Боевой бэкенд (self-host Selectel). Punycode домена api.истсайд.рф — чтобы работало
   // из любого браузера. Старый Railway-домен умер при переезде. Переопределяется
   // window.EASTSIDE_API_BASE (напр. на staging/локали).
@@ -4722,7 +4751,13 @@
      конкретный логин: смотреть курс может понадобиться любому руководителю.
      У тьютора все как было: урок за уроком, на вопрос надо ответить. */
   function acReview() { return state.role === 'super_admin' || state.role === 'owner'; }
-  function acMaxUnlocked() { return acReview() ? acLessons().length - 1 : acFirstOpen(); }
+  /* Свободный просмотр: то же, что режим руководителя, но выданное одному человеку
+     лично (право academy_free, ставится на «Академия → Доступ»). Павел 06.11.2026,
+     про кандидата в отдел продаж: «открой все уроки сразу, чтобы он мог все быстро
+     прощелкать». Замки снимает, а итоговую проверку — нет: аттестация по-прежнему
+     ждет пройденных уроков, иначе человек сдавал бы курс, не открыв его. */
+  function acFree() { return acReview() || can('academy_free'); }
+  function acMaxUnlocked() { return acFree() ? acLessons().length - 1 : acFirstOpen(); }
   /* Страницу CRM люди держат открытой сутками, а список уроков приходит вместе с
      ней. Добавили курсу урок — у человека в старой вкладке его нет, и он доходит
      до итоговой проверки, которую сервер уже не примет (4 октября 2026, курс продаж).
@@ -5484,7 +5519,7 @@
     };
     var upd = function () {
       A.lt[sc.id] = ta.value;
-      nx.disabled = acReview() ? false : acTaskBlocked(sc);
+      nx.disabled = acFree() ? false : acTaskBlocked(sc);
       note.textContent = hint(); note.className = 'ac-ans-n';
     };
     ta.addEventListener('input', function () {
@@ -5878,7 +5913,7 @@
     el('ac-steplab').textContent = 'Шаг ' + (A.si + 1) + ' из ' + L.screens.length;
     var nx = el('ac-next');
     nx.textContent = A.si === L.screens.length - 1 ? 'Урок пройден' : 'Дальше';
-    nx.disabled = acReview() ? false : (isQ || (isT && acTaskBlocked(sc)) || (isTrain && !acSolved(sc)));
+    nx.disabled = acFree() ? false : (isQ || (isT && acTaskBlocked(sc)) || (isTrain && !acSolved(sc)));
     if (sc.type === 'order') acBindOrder(sc);
     if (sc.type === 'match') acBindMatch(sc);
     if (sc.type === 'flip') acBindFlip();
@@ -6302,6 +6337,18 @@
       (c.open ? ic('check', 13) : ic('x', 12)) + '</button></td>';
   }
 
+  /* Свободный просмотр — колонка про то, КАК человек смотрит курс, а не какой
+     (Павел 06.11.2026). Стоит последней, после курсов: это исключение из общего
+     порядка, и читать его надо после того, что открыто. */
+  function accFreeCell(u) {
+    var hint = u.free
+      ? 'Все уроки открыты сразу, вопросы не держат кнопку «Дальше»'
+      : 'Уроки открываются по порядку, как у всех';
+    return '<td class="att-c"><button class="acc-cell' + (u.free ? ' on man' : ' off') +
+      '" data-free="' + u.id + '" title="' + esc(hint) + '">' +
+      (u.free ? ic('check', 13) : ic('x', 12)) + '</button></td>';
+  }
+
   /* Поиск и потолок строк. В команде два десятка человек, и список читается
      глазами, но таблица людей обязана выдерживать базу, где их тысячи: на копии
      боевой базы в превью их 16 849, и без потолка страница рисовала 350 тысяч
@@ -6338,6 +6385,7 @@
         (total ? '<div class="att-tablewrap"><table class="att-table acc-table"><thead><tr>' +
         '<th>Исполнитель</th>' +
         cs.map(function (c) { return '<th class="att-c">' + esc(c.title) + '</th>'; }).join('') +
+        '<th class="att-c">Свободный просмотр</th>' +
         '</tr></thead><tbody>' + us.map(function (u) {
           var role = (ROLES[u.role] && ROLES[u.role].label) || u.role || '';
           return '<tr><td><div class="att-who"><span class="att-name">' + esc(u.name || u.login) +
@@ -6346,7 +6394,7 @@
               var cell = null;
               for (var i = 0; i < u.courses.length; i++) if (u.courses[i].id === c.id) cell = u.courses[i];
               return cell ? accCell(u, cell) : '<td class="att-c"></td>';
-            }).join('') + '</tr>';
+            }).join('') + accFreeCell(u) + '</tr>';
         }).join('') + '</tbody></table></div>' : '') +
         (more > 0 ? '<div class="acc-more">Показаны первые ' + ACC_MAX + ' из ' + total +
           '. Найдите человека поиском.</div>' : '') +
@@ -6354,7 +6402,8 @@
           '<span><i class="acc-lg on"></i>открыт</span>' +
           '<span><i class="acc-lg off"></i>закрыт</span>' +
           '<span><i class="acc-lg man"></i>решение руководителя, а не роль</span>' +
-          '<span class="acc-hint">Клик переключает. Вернули как по роли — отметка снимается.</span>' +
+          '<span class="acc-hint">Клик переключает. Вернули как по роли — отметка снимается. ' +
+            'Свободный просмотр открывает все уроки сразу, аттестацию — нет.</span>' +
         '</div>' : '');
     }
     return body;
@@ -6372,7 +6421,7 @@
       });
     }
     if (qx) qx.addEventListener('click', function () { state.accQ = ''; attDraw(view); });
-    Array.prototype.forEach.call(view.querySelectorAll('.acc-cell'), function (b) {
+    Array.prototype.forEach.call(view.querySelectorAll('.acc-cell[data-u]'), function (b) {
       b.addEventListener('click', function () {
         var uid = +b.getAttribute('data-u'), cid = b.getAttribute('data-c');
         var user = null, cell = null, i;
@@ -6390,6 +6439,22 @@
             cell.at = cell.manual == null ? null : new Date().toISOString();
             attDraw(view);
             showToast(cell.open ? 'Курс открыт' : 'Курс закрыт');
+          },
+          function () { b.disabled = false; showToast('Не сохранилось — проверь сеть'); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.acc-cell[data-free]'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = +b.getAttribute('data-free'), user = null, i;
+        for (i = 0; i < ACC.users.length; i++) if (ACC.users[i].id === uid) user = ACC.users[i];
+        if (!user) return;
+        var want = !user.free;
+        b.disabled = true;
+        apiSend('/admin/api/academy/free', 'PUT', { user_id: uid, free: want },
+          function (r) {
+            user.free = !!(r && r.free);
+            attDraw(view);
+            showToast(user.free ? 'Все уроки открыты сразу' : 'Уроки снова по порядку');
           },
           function () { b.disabled = false; showToast('Не сохранилось — проверь сеть'); });
       });
@@ -11233,13 +11298,52 @@
       zhdem.remove();
       d.appendChild(f);
       officeSetSize(officeSize());
+      officeWatch();
     }).catch(function () {
       d.removeAttribute('data-on');
       zhdem.textContent = 'Не вышло открыть офис. Обнови страницу.';
     });
   }
+  /* Сторож открытия. Рамку мы ставим вслепую: что в ней на самом деле, со
+     стороны страницы не видно — чужой домен закрыт от чтения. Офис, открывшись,
+     сам говорит нам «я тут»; молчит дольше двенадцати секунд — значит в рамке
+     либо ничего, либо не он, и человеку надо сказать об этом словами. Саму
+     рамку при этом не убираем: офис мог и открыться, просто быть старой
+     версии, которая еще не умеет здороваться, — тогда полоска окажется лишней,
+     но ничего не сломает. */
+  var officeWaitT = null;
+  function officeWatch() {
+    clearTimeout(officeWaitT);
+    officeWaitT = setTimeout(officeLate, 12000);
+  }
+  function officeWatchStop() {
+    clearTimeout(officeWaitT);
+    officeWaitT = null;
+    var w = officeBox && officeBox.querySelector('.mx-office-warn');
+    if (w) w.remove();
+  }
+  function officeLate() {
+    var d = officeBox;
+    if (!d || d.hidden || d.querySelector('.mx-office-warn')) return;
+    var bar = document.createElement('div');
+    bar.className = 'mx-office-warn';
+    bar.setAttribute('role', 'status');
+    var t = document.createElement('span');
+    t.textContent = 'Офис не отвечает. Если в окне не комната, обнови страницу.';
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Обновить';
+    b.addEventListener('click', function () { location.reload(); });
+    bar.appendChild(t);
+    bar.appendChild(b);
+    var head = d.querySelector('.mx-office-head');
+    if (head && head.nextSibling) d.insertBefore(bar, head.nextSibling);
+    else d.appendChild(bar);
+  }
+
   function officeHide() {
     if (!officeBox) return;
+    officeWatchStop();
     officeBox.hidden = true;
     // Полный экран — состояние ЭТОГО раздела: уходя в задачи, человек не должен
     // оставить за собой страницу без прокрутки. Вернется — окно будет большим,
@@ -11296,6 +11400,8 @@
   window.addEventListener('message', function (e) {
     if (e.origin !== API) return;
     var d = e.data || {};
+    // Офис открылся и это действительно он: сторожа снимаем.
+    if (d.es === 'office-ready') { officeWatchStop(); return; }
     // Escape нажали внутри рамки. Своим обработчиком мы его не видим: фокус в
     // чужом окне, и клавиша до нас не доходит — офис передает ее сам.
     if (d.es === 'office-esc') {
