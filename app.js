@@ -4751,7 +4751,13 @@
      конкретный логин: смотреть курс может понадобиться любому руководителю.
      У тьютора все как было: урок за уроком, на вопрос надо ответить. */
   function acReview() { return state.role === 'super_admin' || state.role === 'owner'; }
-  function acMaxUnlocked() { return acReview() ? acLessons().length - 1 : acFirstOpen(); }
+  /* Свободный просмотр: то же, что режим руководителя, но выданное одному человеку
+     лично (право academy_free, ставится на «Академия → Доступ»). Павел 06.11.2026,
+     про кандидата в отдел продаж: «открой все уроки сразу, чтобы он мог все быстро
+     прощелкать». Замки снимает, а итоговую проверку — нет: аттестация по-прежнему
+     ждет пройденных уроков, иначе человек сдавал бы курс, не открыв его. */
+  function acFree() { return acReview() || can('academy_free'); }
+  function acMaxUnlocked() { return acFree() ? acLessons().length - 1 : acFirstOpen(); }
   /* Страницу CRM люди держат открытой сутками, а список уроков приходит вместе с
      ней. Добавили курсу урок — у человека в старой вкладке его нет, и он доходит
      до итоговой проверки, которую сервер уже не примет (4 октября 2026, курс продаж).
@@ -5513,7 +5519,7 @@
     };
     var upd = function () {
       A.lt[sc.id] = ta.value;
-      nx.disabled = acReview() ? false : acTaskBlocked(sc);
+      nx.disabled = acFree() ? false : acTaskBlocked(sc);
       note.textContent = hint(); note.className = 'ac-ans-n';
     };
     ta.addEventListener('input', function () {
@@ -5907,7 +5913,7 @@
     el('ac-steplab').textContent = 'Шаг ' + (A.si + 1) + ' из ' + L.screens.length;
     var nx = el('ac-next');
     nx.textContent = A.si === L.screens.length - 1 ? 'Урок пройден' : 'Дальше';
-    nx.disabled = acReview() ? false : (isQ || (isT && acTaskBlocked(sc)) || (isTrain && !acSolved(sc)));
+    nx.disabled = acFree() ? false : (isQ || (isT && acTaskBlocked(sc)) || (isTrain && !acSolved(sc)));
     if (sc.type === 'order') acBindOrder(sc);
     if (sc.type === 'match') acBindMatch(sc);
     if (sc.type === 'flip') acBindFlip();
@@ -6331,6 +6337,18 @@
       (c.open ? ic('check', 13) : ic('x', 12)) + '</button></td>';
   }
 
+  /* Свободный просмотр — колонка про то, КАК человек смотрит курс, а не какой
+     (Павел 06.11.2026). Стоит последней, после курсов: это исключение из общего
+     порядка, и читать его надо после того, что открыто. */
+  function accFreeCell(u) {
+    var hint = u.free
+      ? 'Все уроки открыты сразу, вопросы не держат кнопку «Дальше»'
+      : 'Уроки открываются по порядку, как у всех';
+    return '<td class="att-c"><button class="acc-cell' + (u.free ? ' on man' : ' off') +
+      '" data-free="' + u.id + '" title="' + esc(hint) + '">' +
+      (u.free ? ic('check', 13) : ic('x', 12)) + '</button></td>';
+  }
+
   /* Поиск и потолок строк. В команде два десятка человек, и список читается
      глазами, но таблица людей обязана выдерживать базу, где их тысячи: на копии
      боевой базы в превью их 16 849, и без потолка страница рисовала 350 тысяч
@@ -6367,6 +6385,7 @@
         (total ? '<div class="att-tablewrap"><table class="att-table acc-table"><thead><tr>' +
         '<th>Исполнитель</th>' +
         cs.map(function (c) { return '<th class="att-c">' + esc(c.title) + '</th>'; }).join('') +
+        '<th class="att-c">Свободный просмотр</th>' +
         '</tr></thead><tbody>' + us.map(function (u) {
           var role = (ROLES[u.role] && ROLES[u.role].label) || u.role || '';
           return '<tr><td><div class="att-who"><span class="att-name">' + esc(u.name || u.login) +
@@ -6375,7 +6394,7 @@
               var cell = null;
               for (var i = 0; i < u.courses.length; i++) if (u.courses[i].id === c.id) cell = u.courses[i];
               return cell ? accCell(u, cell) : '<td class="att-c"></td>';
-            }).join('') + '</tr>';
+            }).join('') + accFreeCell(u) + '</tr>';
         }).join('') + '</tbody></table></div>' : '') +
         (more > 0 ? '<div class="acc-more">Показаны первые ' + ACC_MAX + ' из ' + total +
           '. Найдите человека поиском.</div>' : '') +
@@ -6383,7 +6402,8 @@
           '<span><i class="acc-lg on"></i>открыт</span>' +
           '<span><i class="acc-lg off"></i>закрыт</span>' +
           '<span><i class="acc-lg man"></i>решение руководителя, а не роль</span>' +
-          '<span class="acc-hint">Клик переключает. Вернули как по роли — отметка снимается.</span>' +
+          '<span class="acc-hint">Клик переключает. Вернули как по роли — отметка снимается. ' +
+            'Свободный просмотр открывает все уроки сразу, аттестацию — нет.</span>' +
         '</div>' : '');
     }
     return body;
@@ -6401,7 +6421,7 @@
       });
     }
     if (qx) qx.addEventListener('click', function () { state.accQ = ''; attDraw(view); });
-    Array.prototype.forEach.call(view.querySelectorAll('.acc-cell'), function (b) {
+    Array.prototype.forEach.call(view.querySelectorAll('.acc-cell[data-u]'), function (b) {
       b.addEventListener('click', function () {
         var uid = +b.getAttribute('data-u'), cid = b.getAttribute('data-c');
         var user = null, cell = null, i;
@@ -6419,6 +6439,22 @@
             cell.at = cell.manual == null ? null : new Date().toISOString();
             attDraw(view);
             showToast(cell.open ? 'Курс открыт' : 'Курс закрыт');
+          },
+          function () { b.disabled = false; showToast('Не сохранилось — проверь сеть'); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.acc-cell[data-free]'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = +b.getAttribute('data-free'), user = null, i;
+        for (i = 0; i < ACC.users.length; i++) if (ACC.users[i].id === uid) user = ACC.users[i];
+        if (!user) return;
+        var want = !user.free;
+        b.disabled = true;
+        apiSend('/admin/api/academy/free', 'PUT', { user_id: uid, free: want },
+          function (r) {
+            user.free = !!(r && r.free);
+            attDraw(view);
+            showToast(user.free ? 'Все уроки открыты сразу' : 'Уроки снова по порядку');
           },
           function () { b.disabled = false; showToast('Не сохранилось — проверь сеть'); });
       });
