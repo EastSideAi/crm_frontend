@@ -36479,7 +36479,12 @@
       ? regStep.people : null;
     /* От чего считаем доли под плитками: от той цифры регистраций, которая СТОИТ
        на экране. Иначе при выбранном периоде проценты объясняли бы чужое число. */
-    var regShown = regInPeriod == null ? reg.total : regInPeriod;
+    /* Без периода плитка берет «Охват запуска» — ту же выборку, что открывается по
+       клику: люди без сотрудников и повторов (владелец, 6.11.2026). Старый бэкенд
+       без этой ступени — общий счет регистраций. */
+    var reachStep = (cur.path || []).filter(function (s) { return s.key === 'reach'; })[0];
+    var regShown = regInPeriod != null ? regInPeriod
+      : (reachStep && reachStep.people != null ? reachStep.people : reg.total);
 
     /* лестница: полосы мерим от самой широкой настоящей ступени — кликов или
        регистраций. От одних регистраций 12 кликов рисовались бы той же полосой,
@@ -36581,8 +36586,8 @@
              запуска, а «Зарегистрировались» — только тех, кто оставил контакт
              (221 из 624), и список спорил бы с цифрой над ним. */
           step: 'reach', stepTitle: 'Регистрации', stepPlate: regShown,
-          sub: (regInPeriod == null || regInPeriod === reg.total)
-            ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
+          sub: regInPeriod == null
+            ? 'бесплатно ' + Math.max(0, regShown - reg.vip) + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total,
           pct: launchPct(regShown, cur.pages && cur.pages.users, 'от тех, кто видел страницу') },
         /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
