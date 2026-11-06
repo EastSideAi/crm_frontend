@@ -34389,80 +34389,11 @@
         sub: 'видели' + (p.pages.since ? ' с ' + fmtDay(p.pages.since) : '') +
              ' · Яндекс Метрика' });
     }
-    if (cur.seg_povtor) {
-      tiles = launchSegTiles(cur, cur.seg_povtor, true);
-      if (p.pages && p.pages.users) {
-        tiles.push({ key: 'seen', label: 'Страница повтора', value: fmtMoney(p.pages.users),
-          sub: 'видели' + (p.pages.since ? ' с ' + fmtDay(p.pages.since) : '') +
-               ' · Яндекс Метрика' });
-      }
-    }
     var ordered = launchTiles(tiles).map(function (t) {
       return Object.assign({}, t, { drag: false });
     });
     return '<div class="lt-rh gap">В том числе повтор' + (dni ? ' · ' + dni : '') + '</div>' +
       statBar(ordered, launchBarCls(ordered.length));
-  }
-
-  /* Верхние плашки запуска — только зарегистрировавшиеся на него формой на лендинге
-     (владелец, 5.11.2026: «у нас разные базы и сегменты, учитываем только тех, кто
-     зарегистрировался на мероприятие»). Раньше сюда попадали получатели рассылки
-     бота по всей базе: 322 «регистрации» за десять минут 28.10. Все доли — от этих
-     же регистраций, каждая цифра открывает своих людей. pv — ряд повтора. */
-  function launchSegTiles(cur, g, pv) {
-    var sp = function (step, txt) {
-      return '<span class="go-sub" data-lseg="' + step + '"' + (pv ? ' data-lsegpv="1"' : '') +
-        ' role="button" tabindex="0" title="Показать этих людей поименно">' + txt + '</span>';
-    };
-    var reg = g.reg || 0;
-    var regTxt = pv ? 'от регистраций на повтор' : 'от регистраций';
-    var tile = function (t) { return Object.assign({ segPv: pv }, t); };
-    var pages = pv ? (cur.povtor && cur.povtor.pages) : cur.pages;
-    var efir;
-    /* До эфира зрителей нет — плашка показывает обратный счёт. */
-    if (!g.live_any && !pv && cur.days_to_event >= 0) {
-      efir = launchEfirTile(cur, cur.days_to_event > 0 ? cur.days_to_event : 'идет',
-                            cur.days_to_event, reg);
-    } else {
-      efir = tile({ key: 'efir', label: pv ? 'Были на повторе' : 'Были на эфире',
-        value: pv ? g.live_pv : g.live_any, seg: pv ? 'live_pv' : 'live_any',
-        sub: (pv ? '' : sp('live', 'эфир ' + g.live) + ' · ' + sp('live_pv', 'повтор ' + g.live_pv) + ' · ') +
-             sp('rec', 'запись смотрели ' + g.rec) + ' · ' +
-             sp('rec_only', 'только запись ' + g.rec_only),
-        pct: launchPct(pv ? g.live_pv : g.live_any, reg, regTxt) });
-    }
-    var n = g.sup || 0;
-    return [
-      tile({ key: 'reg', label: 'Регистрации', value: reg, seg: 'reg',
-        sub: (g.ads ? sp('ads', 'из них с рекламы ' + g.ads) + ' · ' : '') +
-             'форма на лендинге',
-        pct: launchPct(reg, pages && pages.users,
-                       pv ? 'от тех, кто видел страницу повтора' : 'от тех, кто видел страницу') }),
-      tile({ key: 'invoice', label: 'Счет на участие', value: g.invoiced, seg: 'invoiced',
-        sub: plural(g.invoiced, 'человек', 'человека', 'человек') + ' · 690 рублей',
-        pct: launchPct(g.invoiced, reg, regTxt) }),
-      tile({ key: 'paid', label: 'Оплачено', value: fmtMoney(g.uch_rub || 0) + ' \u20bd',
-        seg: 'uch',
-        sub: g.uch + ' из ' + (g.invoiced || 0) + ' ' +
-             plural(g.invoiced || 0, 'человека', 'человек', 'человек'),
-        pct: launchPct(g.uch, reg, regTxt) }),
-      tile({ key: 'channels', label: 'В закрытых каналах', value: g.chan, seg: 'chan',
-        sub: 'телеграм, ВК и МАКС',
-        pct: launchPct(g.chan, reg, regTxt) }),
-      efir,
-      tile({ key: 'diag', label: 'Записались на диагностику', value: g.anketa, seg: 'anketa',
-        sub: sp('diag', 'получили разбор ' + g.diag) + ' · на платформе ИстСайд',
-        pct: launchPct(g.anketa, reg, regTxt) }),
-      tile({ key: 'cons', label: 'Записались на консультацию', value: g.cons, seg: 'cons',
-        sub: 'выбрали время или попросили записать',
-        pct: [launchPct(g.cons, g.anketa, 'от записавшихся на диагностику'),
-              launchPct(g.cons, reg, regTxt)] }),
-      tile({ key: 'support', label: 'Сопро\u00ADвождение', value: fmtMoney(g.sup_rub || 0) + ' \u20bd',
-        seg: 'sup',
-        sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
-        pct: [launchPct(n, g.cons, 'от записавшихся на консультацию'),
-              launchPct(n, reg, regTxt)] }),
-    ];
   }
 
   function launchSeenTile(cur, reg) {
@@ -34637,11 +34568,6 @@
       return '?' + ['step=' + encodeURIComponent(p.step), 'days=' + (p.days || 366),
                     'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
     }
-    if (p.kind === 'seg') {
-      return '?' + ['slug=' + encodeURIComponent(p.slug), 'step=' + encodeURIComponent(p.step),
-                    'povtor=' + (p.pv ? 'true' : 'false'),
-                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
-    }
     if (p.kind === 'efir') {
       /* У эфира нет периода: он сам и есть период. */
       return '?' + ['slug=' + encodeURIComponent(p.slug),
@@ -34700,19 +34626,6 @@
     launchPeopleLoad(false);
   }
 
-  /* Список за верхней плашкой запуска: только зарегистрировавшиеся формой. */
-  function launchSegOpen(slug, step, pv, title, launchTitle, count, node) {
-    state._lpPeople = {
-      kind: 'seg', id: 'seg:' + step + ':' + (pv ? 'pv' : ''),
-      slug: slug, block: '', value: '', step: step, pv: !!pv,
-      title: title, plate: count || 0, launch: launchTitle || '', ownTitle: true,
-      from: '', to: '',
-      rows: [], total: null, loading: true, error: '', fresh: true,
-      back: node || null,
-    };
-    launchPeopleLoad(false);
-  }
-
   /* Список людей за плашкой эфира. Машинерия та же, что у «Запусков»: одно окно,
      одна таблица, одна пагинация — второй, похожий, но свой список читался бы как
      другой продукт. */
@@ -34747,7 +34660,6 @@
     var who = p.id;
     var url = p.kind === 'efir' ? '/admin/api/marketing/efir/people'
             : (p.kind === 'ads') ? '/admin/api/marketing/ads/people'
-            : (p.kind === 'seg') ? '/admin/api/marketing/launch/seg'
             : (p.kind === 'block') ? '/admin/api/marketing/launch/block'
                                    : '/admin/api/marketing/launch/people';
     launchPeopleModal();
@@ -34916,7 +34828,7 @@
     /* Правка доступна только на ступенях пути: у блоков за строкой стоит человек из
        бота, у которого нет карточки регистрации. Считаем до сборки окна — от этого
        зависит и ширина окна, и набор колонок. */
-    var canEdit = p.kind !== 'block' && p.kind !== 'ads' && p.kind !== 'seg';
+    var canEdit = p.kind !== 'block' && p.kind !== 'ads';
     var body;
     if (p.error) {
       body = '<div class="mk-logic-empty">' + esc(p.error) + '</div>';
@@ -35778,7 +35690,7 @@
           { id: 'budgetNet', l: 'Бюджет за вычетом НДС 22%, ₽', u: 'rub' },
           { id: 'cpl', l: 'Цена регистрации с рекламы, ₽', k: 'in', u: 'rub', step: 50 },
           { id: 'reg', l: 'Регистраций с платного трафика, чел' },
-          { id: 'crLand', l: 'CR переход на страницу регистрации → регистрация', k: 'in', u: 'pct' },
+          { id: 'crLand', l: 'Конверсия из просмотра в заявку, %', k: 'in', u: 'pct' },
           { id: 'clicks', l: 'Нужно переходов на страницу (кликов)' },
           { id: 'cpc', l: 'Цена клика, ₽', u: 'rub' },
           { id: 'crExt', l: 'CR регистрация → расширенный доступ', k: 'in', u: 'pct' },
@@ -35869,6 +35781,7 @@
     /* у месяца факта нет вовсе: колонку ему не рисуем, а не заполняем прочерками */
     if (srcId === 'month') return {};
     if (srcId === 'vk') return laAdsFact() || {};
+    if (srcId === 'warm') return laWarmFact() || {};
     var f = {}, w = (d.warm || {}).fact || {};
     Object.keys(w).forEach(function (k) { f[k] = w[k]; });
     if (srcId === 'total') {
@@ -35918,8 +35831,10 @@
     return {
       /* Бюджет — сколько реально списал кабинет, с НДС; строкой ниже он же без
          НДС, как на вкладке «Реклама» (владелец, 5.11.2026). */
-      budget: t.spend_nds, budgetNet: t.spend, reg: n.reg, cpl: div(t.spend, n.reg), clicks: t.clicks,
-      cpc: div(t.spend, t.clicks), crLand: div(n.reg, t.clicks),
+      /* Переходы на страницу — визиты по Метрике, а не клики кабинета: кликов
+         больше, часть людей до страницы не доходит (владелец, 5.11.2026). */
+      budget: t.spend_nds, budgetNet: t.spend, reg: n.reg, cpl: div(t.spend, n.reg),
+      clicks: t.visits, cpc: div(t.spend, t.visits), crLand: div(n.reg, t.visits),
       ext: n.uch, crExt: div(n.uch, n.reg), extRev: rub.uch,
       clean: n.to_bot, crClean: div(n.to_bot, n.reg),
       chan: n.chan, crChan: div(n.chan, n.to_bot),
@@ -35931,6 +35846,40 @@
       sales: n.sup, crReg: div(n.sup, n.reg), contracts: rub.sup,
       contractsAll: money, cash: money, payback: div(money, t.spend_nds),
       revPerReg: div(money, n.reg),
+    };
+  }
+  /* Факт листа «Тёплая база» — зарегистрировавшиеся на интенсив формой НЕ с
+     рекламы, живьем (владелец, 5.11.2026). Рассылки и соцсети — по метке
+     utm_medium. Лист «Всего» пока на выгрузке сентября: его подтянем отдельно. */
+  function laWarmFact() {
+    var a = state._laWarm;
+    if (!a) {
+      if (!state._laWarmLoading) {
+        state._laWarmLoading = true;
+        api('/admin/api/marketing/launch/warm').then(function (r) {
+          state._laWarm = r || 'none';
+        }).catch(function () { state._laWarm = 'none'; }).then(function () {
+          state._laWarmLoading = false;
+          if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+        });
+      }
+      return null;
+    }
+    if (a === 'none') return null;
+    var div = function (x, y) { return y && x != null ? x / y : null; };
+    var money = (a.uch_rub || 0) + (a.sup_rub || 0);
+    return {
+      regGoal: a.reg, amb: 0, mail: a.mail, social: a.social,
+      ext: a.uch, crExt: div(a.uch, a.reg), extRev: a.uch_rub,
+      clean: a.to_bot, crClean: div(a.to_bot, a.reg),
+      chan: a.chan, crChan: div(a.chan, a.to_bot),
+      e1: a.e1, crE1: div(a.e1, a.to_bot), e2: a.e2, crE2: div(a.e2, a.to_bot),
+      live: a.live, rec: a.rec, crRec: div(a.rec, a.to_bot), watched: a.watched,
+      diagStart: a.anketa, crDiagStart: div(a.anketa, a.to_bot),
+      diagDone: a.diag, crDiagDone: div(a.diag, a.anketa),
+      btn: a.diag_click, req: a.cons, crReq: div(a.cons, a.watched),
+      sales: a.sup, crReg: div(a.sup, a.reg), contracts: a.sup_rub,
+      contractsAll: money, cash: money, revPerReg: div(money, a.reg),
     };
   }
   function laFactVal(srcId, id) {
@@ -35979,7 +35928,7 @@
       : { title: d[src].title, note: d[src].note };
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
-      (mon ? '' : '<div class="th r">' + esc(src === 'vk' ? 'факт 28–29.10' : d.factLabel) + '</div>') + '</div>';
+      (mon ? '' : '<div class="th r">' + esc(src === 'vk' || src === 'warm' ? 'факт 28–29.10' : d.factLabel) + '</div>') + '</div>';
     var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
@@ -36012,7 +35961,8 @@
                процентов: формат у колонок разный, значение одно и то же */
             (mon ? '' : '<div class="la-c num la-f">' +
               (f == null ? '—' : esc(laFmt(f, r.u === 'pct' ? 'pctv' : r.u)) +
-                (src === 'vk' && r.id === 'budget' ? ' <span class="la-u">с НДС</span>' : '')) +
+                (src === 'vk' && r.id === 'budget' ? ' <span class="la-u">с НДС</span>' : '') +
+                (src === 'vk' && r.id === 'clicks' ? ' <span class="la-u">визиты, Метрика</span>' : '')) +
               '</div>') + '</div>';
         }).join('') + '</div>';
     }).join('');
@@ -36620,9 +36570,7 @@
 
     /* Плитки верхнего ряда держим массивом: от их числа зависит сетка полосы,
        а появляются они не все и не всегда. */
-    var topTiles = cur.seg
-      ? launchTiles(launchSeenTile(cur, { total: cur.seg.reg }).concat(launchSegTiles(cur, cur.seg, false)))
-      : launchTiles([
+    var topTiles = launchTiles([
         /* Период выбран — плитка обязана показывать ТО ЖЕ, что первая плашка пути.
            Раньше плитка всегда считала весь запуск, а плашка слушалась периода: на
            экране рядом стояли 31 и 26, и это читалось как сломанный счётчик (нашла
@@ -36810,26 +36758,6 @@
         var ot = n.getAttribute('data-lfrom') || '';
         launchBlockOpen(cur.slug, n.getAttribute('data-lblk'), '',
           ot ? ttl + ' · повтор' : ttl, cur.title, isNaN(num) ? 0 : num, tile, ot);
-      };
-      n.addEventListener('click', openIt);
-      n.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(e); }
-      });
-    });
-    /* Верхние плашки по зарегистрировавшимся: плашка и цифра в её подписи → свои
-       люди. Подпись внутри плашки, поэтому клик дальше не всплывает. */
-    Array.prototype.forEach.call(view.querySelectorAll('[data-lseg]'), function (n) {
-      var openIt = function (e) {
-        e.stopPropagation();
-        var tile = n.closest('.stat') || n;
-        var lbl = n === tile ? (tile.querySelector('.sl') || {}).textContent : n.textContent;
-        var num = n === tile ? parseInt(String((tile.querySelector('.sv') || {}).textContent).replace(/\D+/g, ''), 10)
-                             : parseInt(String(n.textContent).replace(/\D+/g, ''), 10);
-        var ttl = String(lbl || 'Люди').replace(/[\s\d]+$/, '').replace(/\u00ad/g, '');
-        ttl = ttl.charAt(0).toUpperCase() + ttl.slice(1);
-        var pv = n.getAttribute('data-lsegpv') === '1';
-        launchSegOpen(cur.slug, n.getAttribute('data-lseg'), pv,
-          pv ? ttl + ' · повтор' : ttl, cur.title, isNaN(num) ? 0 : num, tile);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
@@ -43134,7 +43062,7 @@
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
       return '<button class="stat' + (s.lead ? ' lead' : '') +
-        (s.go || s.ebl || s.step || s.blk || s.seg ? ' go' : '') +
+        (s.go || s.ebl || s.step || s.blk ? ' go' : '') +
         (s.drag ? ' movable' : '') + '"' +
         /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
            порядок, draggable — чтобы браузер вообще начал её тащить. */
@@ -43156,9 +43084,6 @@
            (диагностика и консультация по меткам, 4.11.2026). */
         (s.blk ? ' data-lblk="' + s.blk + '"' +
                  (s.blkFrom ? ' data-lfrom="' + s.blkFrom + '"' : '') +
-                 ' title="Показать этих людей поименно"' : '') +
-        /* data-lseg — верхняя плашка запуска по зарегистрировавшимся (5.11.2026). */
-        (s.seg ? ' data-lseg="' + s.seg + '"' + (s.segPv ? ' data-lsegpv="1"' : '') +
                  ' title="Показать этих людей поименно"' : '') + '>' +
         '<div class="sl">' + s.label + '</div>' +
         /* Кегль плитки рассчитан на короткое число. Длинное значение («19 320 ₽»)
