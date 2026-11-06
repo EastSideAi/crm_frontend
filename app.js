@@ -197,6 +197,7 @@
     new:      { label: 'Новые',         hint: 'написали или зашли, но ничего не оставили — пока с ними говорит бот' },
     queue:    { label: 'В работе',      hint: 'оставили заявку или их взяли в работу — от горячих к спокойным' },
     clients:  { label: 'Клиенты',       hint: 'оплатившие и те, кого отметили клиентом вручную' },
+    support:  { label: 'Сопровождение', hint: 'те, кого мы ведем прямо сейчас: клиент с тарифом сопровождения или проставленным направлением' },
     all:      { label: 'Все',           hint: 'все карточки, кроме архива' },
     rejected: { label: 'Отказы',        hint: 'не сложилось — но контакт остался' },
     archive:  { label: 'Архив',         hint: 'скрытые лиды и тестовые записи — можно вернуть' },
@@ -994,10 +995,31 @@
      ведём как клиентов, включая перенесённых руками (Павел 06.10.2026; расширяет
      решение от 05.09 «только оплата»). */
   function isClient(l) { return !!l.paid || (l.crm && l.crm.status === 'client'); }
+  /* «Сопровождение» — те, с кем мы работаем по поступлению ПРЯМО СЕЙЧАС.
+     Статуса «клиент» для этого мало: им помечены и ученики языковой школы, и
+     старые оплаты теплого приема, и пустые заходы из бота (Мария 05.11.2026:
+     «чтобы там были все наши текущие клиенты, с которыми мы работаем, а не все,
+     кто намешивается»). Поэтому правило двойное: статус клиента И признак работы
+     по поступлению — тариф сопровождения или проставленное направление подачи.
+     Ручная отметка (overrides.support) сильнее правила в обе стороны: правило не
+     поймает того, кому тариф еще не проставили, и не отпустит уехавшего. */
+  var SUPPORT_TARIFFS = ['std', 'plus', 'prem'];
+  function supportByRule(l) {
+    if (!isClient(l)) return false;
+    var o = (l.crm && l.crm.overrides) || {};
+    return SUPPORT_TARIFFS.indexOf(o.tariff || '') !== -1 || !!(o.track || '');
+  }
+  function isSupport(l) {
+    var o = (l.crm && l.crm.overrides) || {};
+    if (o.support === 'off') return false;
+    if (o.support === 'on') return true;
+    return supportByRule(l);
+  }
   function segBase(seg) {
     return state.leads.filter(function (l) {
       if (seg === 'queue') return inQueue(l);
       if (seg === 'clients') return isClient(l);
+      if (seg === 'support') return isSupport(l);
       if (seg === 'rejected') return l.crm.status === 'rejected';
       if (seg === 'new') return isProspect(l);
       // Кому «Новые» не показаны, тому и во «Всех» холодных нет.
@@ -1081,7 +1103,7 @@
   function counts() {
     /* Счетчики вкладок «Контактов» — по тем же правилам, что и списки, иначе цифра
        спорила бы со строками. c.cold — вкладка «Новые», c.all — «Все» вместе с ними. */
-    var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
+    var c = { queue: 0, all: 0, clients: 0, support: 0, rejected: 0, hot: 0, week: 0, today: 0,
               anketa: 0, booked: 0, blank: 0, cold: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
@@ -1092,6 +1114,7 @@
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
       if (isClient(l)) c.clients++;
+      if (isSupport(l)) c.support++;
       if (l.crm.status === 'rejected') c.rejected++;
       if (l.created_at && new Date(l.created_at) > weekAgo) c.week++;
       if (isToday(l.created_at)) c.today++;
@@ -3089,7 +3112,7 @@
       var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
         (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).filter(segAvail).map(function (s) {
-        var n = s === 'new' ? c.cold : s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
+        var n = s === 'new' ? c.cold : s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'support' ? c.support : s === 'rejected' ? c.rejected : 0;
         return '<a class="tab' + (!onDup && state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
       }).join('') + dupTab + '</nav>';
@@ -44386,6 +44409,7 @@
     var map = {
       queue: ['Очередь пуста', 'По всем заявкам есть движение — горячих на связь нет.', 'check'],
       clients: ['Клиентов пока нет', 'Будут — как только первая заявка дойдет до оплаты.', 'card'],
+      support: ['Никого не ведем', 'Сюда попадают клиенты с тарифом или направлением. Если кто-то в работе, а его тут нет — поставь ему в карточке «ведем сейчас».', 'card'],
       rejected: ['Отказов нет', 'Никто пока не закрыт отказом. Так держать.', 'check'],
       all: ['Лидов пока нет', 'Появятся после первых прохождений диагностики на платформе.', 'leads'],
     };
@@ -49358,6 +49382,10 @@
   function buildQual(ctx) {
     var crm = ctx.crm || {};
     var q = crm.qual || {};
+    var sup = (crm.overrides || {}).support || '';
+    /* ctx — обертка (lead/d/crm), а не сама карточка: правилу нужен признак оплаты,
+       иначе оплатившему без статуса «клиент» подпись сказала бы «не ведем». */
+    var supL = { crm: crm, paid: !!((ctx.lead && ctx.lead.paid) || (ctx.base && ctx.base.paid)) };
     var mql = crm.mql || { ok: false, checks: {} };
     var checks = mql.checks || {};
 
@@ -49402,6 +49430,19 @@
       '<label class="ql-f"><span class="ql-l">Направление</span>' +
         '<select class="tm-sel" data-track="1"><option value="">не выбрано</option></select>' +
       '</label>' +
+      /* Ручная отметка для вкладки «Сопровождение». Правило (клиент с тарифом или
+         направлением) ловит не всех: тариф проставляют не сразу, а уехавшего никакое
+         поле само не отпустит. Поэтому отметка перекрывает правило в обе стороны, а
+         пустое значение возвращает карточку правилу — и подпись говорит, что оно
+         сейчас решает. Живет в overrides.support, отдельной колонки под три значения
+         не заводим (как тариф и направление). */
+      '<label class="ql-f"><span class="ql-l">Сопровождение</span>' +
+        '<select class="tm-sel' + (sup ? '' : ' auto') + '" data-support="1">' +
+          '<option value=""' + (sup ? '' : ' selected') + '>по правилу: ' +
+            (supportByRule(supL) ? 'ведем' : 'не ведем') + '</option>' +
+          '<option value="on"' + (sup === 'on' ? ' selected' : '') + '>ведем сейчас</option>' +
+          '<option value="off"' + (sup === 'off' ? ' selected' : '') + '>не ведем</option>' +
+        '</select></label>' +
     '</div>';
 
     var marks = q.sql || {};
@@ -52222,6 +52263,11 @@
           patch(id, { overrides: { track: trSel.value } });
         });
       }
+      // отметка «ведем / не ведем»: пустое значение возвращает карточку правилу
+      var supSel = qlHost.querySelector('select[data-support]');
+      if (supSel) supSel.addEventListener('change', function () {
+        patch(id, { overrides: { support: supSel.value } });
+      });
     }
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
