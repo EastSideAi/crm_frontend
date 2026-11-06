@@ -37970,20 +37970,24 @@
       // Причина живет в колонке условий: там строка идет слева и читается как
       // предложение, а в узкой колонке факта она ломалась на три куска по краю.
       fact = '<span class="rw-dash">—</span>';
+    } else if (r.fact_kind === 'rating' && !closed) {
+      // Оценка видна теми же кнопками и после выбора: повторное нажатие на
+      // выбранную снимает ее, иначе ошибочную оценку было бы нечем убрать.
+      fact = '<span class="rw-rate">' + [0, 50, 100].map(function (v) {
+        var on = r.fact === v;
+        return '<button class="qchip' + (on ? ' on' : '') + '" data-rwrate="' + r.id + ':' + v + '"' +
+          (on ? ' title="Нажми еще раз, чтобы убрать оценку"' : '') + '>' + v + '</button>';
+      }).join('') + '</span>';
     } else if (r.fact == null) {
       // Ждем цифру человека. Пока месяц живой — вводим тут же: отдельная форма
       // ради одного числа означала бы, что ее не заполнят.
       fact = closed ? '<span class="rw-why">цифры не было</span>'
-        : (r.fact_kind === 'rating'
-            ? '<span class="rw-rate">' + [0, 50, 100].map(function (v) {
-                return '<button class="qchip" data-rwrate="' + r.id + ':' + v + '">' + v + '</button>';
-              }).join('') + '</span>'
-            : '<button class="pf-set none" data-rwfact="' + r.id + '">внести</button>');
+        : '<button class="pf-set none" data-rwfact="' + r.id + '">внести</button>';
     } else if (r.fact_kind === 'auto') {
       fact = '<span class="num">' + fmtMoney(r.fact) + '</span>';
     } else {
-      fact = '<button class="pf-set" data-rwfact="' + r.id + '"' + (closed ? ' disabled' : '') +
-        '>' + fmtMoney(r.fact) + '</button>';
+      fact = '<button class="pf-set" data-rwfact="' + r.id + '" data-rwv="' + r.fact + '"' +
+        (closed ? ' disabled' : '') + '>' + fmtMoney(r.fact).replace('.', ',') + '</button>';
     }
 
     return '<div class="rw-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
@@ -38135,7 +38139,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-rwrate]'), function (b) {
       b.addEventListener('click', function () {
         var p = b.getAttribute('data-rwrate').split(':');
-        rwFactSave(parseInt(p[0], 10), parseInt(p[1], 10));
+        rwFactSave(parseInt(p[0], 10), b.classList.contains('on') ? null : parseInt(p[1], 10));
       });
     });
 
@@ -38144,11 +38148,11 @@
       if (b.disabled) return;
       b.addEventListener('click', function () {
         var rowId = parseInt(b.getAttribute('data-rwfact'), 10);
-        var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
+        var was = b.getAttribute('data-rwv') || '';
         var inp = document.createElement('input');
         inp.className = 'ed-input pf-in num';
-        inp.value = was;
-        inp.setAttribute('inputmode', 'numeric');
+        inp.value = was.replace('.', ',');
+        inp.setAttribute('inputmode', 'decimal');
         inp.setAttribute('placeholder', '0');
         b.parentNode.replaceChild(inp, b);
         inp.focus();
@@ -38157,9 +38161,20 @@
         var save = function () {
           if (done) return;
           done = true;
-          var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
-          if (isNaN(n)) { state._rw = null; renderView(); return; }
-          if (String(n) === String(was)) { state._rw = null; renderView(); return; }
+          // Дробь бывает (ER 12,9%), поэтому запятую принимаем как точку. Пустое
+          // поле стирает цифру: строка снова ждет ответа, а не считается нулем.
+          var raw = String(inp.value).replace(/\s/g, '').replace(',', '.');
+          if (raw === '') {
+            if (was === '') { state._rw = null; renderView(); return; }
+            rwFactSave(rowId, null);
+            return;
+          }
+          var n = parseFloat(raw);
+          if (isNaN(n) || n < 0) {
+            showToast('Нужно число, например 12 или 12,9');
+            state._rw = null; renderView(); return;
+          }
+          if (was !== '' && n === parseFloat(was)) { state._rw = null; renderView(); return; }
           rwFactSave(rowId, n);
         };
         inp.addEventListener('keydown', function (e) {
