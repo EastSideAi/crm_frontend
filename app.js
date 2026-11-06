@@ -20159,7 +20159,11 @@
   function acWaiting(list) {
     return list.filter(function (a) { return !a.signed_co_at && a.status !== 'void' && a.status !== 'paid'; });
   }
-  function acLoad() {
+  /* Имя czActsLoad, а не acLoad: в этом же файле живет acLoad Академии (загрузка курса).
+     Объявления функций в одной области видимости перетирают друг друга, и второе имя
+     забирало вызов себе: экран курса уходил в вечную загрузку, а вместо курса
+     грузились акты (поймано 06.11.2026). Префикс cz — как у остального модуля. */
+  function czActsLoad() {
     api('/admin/api/contractor-acts').then(function (r) {
       AC.items = r.acts || []; AC.err = '';
       if (state.page === 'czacts') renderAll();
@@ -20206,7 +20210,7 @@
     return '<div class="rcp-item">' + head + foot + '</div>';
   }
   function renderCzActs(view) {
-    if (AC.items === null) { view.innerHTML = dashSkeleton(); acLoad(); return; }
+    if (AC.items === null) { view.innerHTML = dashSkeleton(); czActsLoad(); return; }
     var waiting = acWaiting(AC.items);
     var list = AC.all ? AC.items : waiting;
     var chips =
@@ -20240,7 +20244,7 @@
         czSend('/admin/api/contractor-acts/' + AC.busy + '/sign', 'POST')
           .then(function () { showToast('Акт подписан со стороны компании'); })
           .catch(function (err) { showToast(err.message); })
-          .then(function () { AC.busy = ''; acLoad(); });
+          .then(function () { AC.busy = ''; czActsLoad(); });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-ac-doc]'), function (b) {
