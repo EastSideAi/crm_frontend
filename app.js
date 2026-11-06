@@ -24561,6 +24561,11 @@
         L.form === 'лист-продаж' && it.sale_amount
           ? finRub(it.sale_amount) + ' × ' + finNum(it.percent, it.percent % 1 ? 2 : 0) + '%'
           : '',
+        // Выплата одна, но видно, из чего она: фикс плюс за показатели (Роман 06.11.2026).
+        it.metrics_amount > 0
+          ? 'фикс ' + finRub(it.amount - it.metrics_amount) + ' + за показатели ' +
+            finRub(it.metrics_amount)
+          : '',
         it.comment || '',
       ].filter(Boolean).map(esc).join(' · ');
       // Имя клиента в строке дохода — ссылка в его карточку (case_id даёт бэкенд только
@@ -25851,6 +25856,9 @@
      открыть, поправить, сохранить или удалить. opts задает форму и предвыбор раздела,
      когда открываем не из экрана листов: прямой расход из блока, выплату со страницы
      фонда. */
+  var METRICS_FORMS = ['лист-маркетинга', 'лист-продукта', 'лист-краткосрочки',
+                       'лист-безопасности'];
+
   function finLineForm(line, opts) {
     if (document.querySelector('.al-ov')) return;
     opts = opts || {};
@@ -25862,6 +25870,7 @@
     var pickedCid = (line && line.contractor_id) || '';
     var s = line || { date: finTodayInPeriod(), status: 'факт', counterparty: '', item: '',
                       comment: '', amount: '', included: true, payout_to: '',
+                      metrics_amount: '',
                       section: preSec,
                       sale_amount: '', percent: '', product: '', payment_id: '' };
     var ov = document.createElement('div');
@@ -25973,12 +25982,20 @@
       // свободным вводом: не всякий тут самозанятый (фикс приходит из реестра занятий школы, сервис —
       // это компания). Пикер во всех листах, где платим людям (Роман 28.09.2026).
       var whoInner = payeeInput('fl-who', v(s.counterparty), 'выберите из списка или впишите');
+      // Листы, где платим людям: сумма строки одна, но из нее видно, сколько за показатели.
+      var metricsField = METRICS_FORMS.indexOf(form) >= 0
+        ? '<div class="al-row">' +
+            f('Из них за показатели, ₽', '<input id="fl-metrics" class="al-in" type="number" ' +
+              'min="0" step="0.01" value="' + (s.metrics_amount > 0 ? num(s.metrics_amount) : '') +
+              '" placeholder="0 — вся сумма фикс">') +
+          '</div>'
+        : '';
       body =
         '<div class="al-row">' +
           f(whoLabel, whoInner) +
           f('Сумма, ₽ <i>*</i>', '<input id="fl-sum" class="al-in" type="number" min="0" ' +
             'step="0.01" value="' + num(s.amount) + '">') +
-        '</div>' +
+        '</div>' + metricsField +
         '<div class="al-row">' + itemField +
           (form === 'прямой'
             ? f('Раздел <i>*</i>', '<select id="fl-sec" class="al-in">' +
@@ -26162,6 +26179,12 @@
         }
       } else {
         payload.amount = val('fl-sum');
+        if (el('fl-metrics')) {
+          payload.metrics_amount = val('fl-metrics') || 0;
+          if (Number(payload.metrics_amount) > Number(payload.amount)) {
+            err.textContent = 'За показатели не может быть больше всей суммы'; return;
+          }
+        }
         if (form === 'прямой' || form === 'фонд') payload.section = el('fl-sec').value;
         if (form === 'фонд' && !payload.section) {
           err.textContent = 'Выберите фонд, с которого платим'; return;
@@ -37947,20 +37970,24 @@
       // Причина живет в колонке условий: там строка идет слева и читается как
       // предложение, а в узкой колонке факта она ломалась на три куска по краю.
       fact = '<span class="rw-dash">—</span>';
+    } else if (r.fact_kind === 'rating' && !closed) {
+      // Оценка видна теми же кнопками и после выбора: повторное нажатие на
+      // выбранную снимает ее, иначе ошибочную оценку было бы нечем убрать.
+      fact = '<span class="rw-rate">' + [0, 50, 100].map(function (v) {
+        var on = r.fact === v;
+        return '<button class="qchip' + (on ? ' on' : '') + '" data-rwrate="' + r.id + ':' + v + '"' +
+          (on ? ' title="Нажми еще раз, чтобы убрать оценку"' : '') + '>' + v + '</button>';
+      }).join('') + '</span>';
     } else if (r.fact == null) {
       // Ждем цифру человека. Пока месяц живой — вводим тут же: отдельная форма
       // ради одного числа означала бы, что ее не заполнят.
       fact = closed ? '<span class="rw-why">цифры не было</span>'
-        : (r.fact_kind === 'rating'
-            ? '<span class="rw-rate">' + [0, 50, 100].map(function (v) {
-                return '<button class="qchip" data-rwrate="' + r.id + ':' + v + '">' + v + '</button>';
-              }).join('') + '</span>'
-            : '<button class="pf-set none" data-rwfact="' + r.id + '">внести</button>');
+        : '<button class="pf-set none" data-rwfact="' + r.id + '">внести</button>';
     } else if (r.fact_kind === 'auto') {
       fact = '<span class="num">' + fmtMoney(r.fact) + '</span>';
     } else {
-      fact = '<button class="pf-set" data-rwfact="' + r.id + '"' + (closed ? ' disabled' : '') +
-        '>' + fmtMoney(r.fact) + '</button>';
+      fact = '<button class="pf-set" data-rwfact="' + r.id + '" data-rwv="' + r.fact + '"' +
+        (closed ? ' disabled' : '') + '>' + fmtMoney(r.fact).replace('.', ',') + '</button>';
     }
 
     return '<div class="rw-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
@@ -38112,7 +38139,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-rwrate]'), function (b) {
       b.addEventListener('click', function () {
         var p = b.getAttribute('data-rwrate').split(':');
-        rwFactSave(parseInt(p[0], 10), parseInt(p[1], 10));
+        rwFactSave(parseInt(p[0], 10), b.classList.contains('on') ? null : parseInt(p[1], 10));
       });
     });
 
@@ -38121,11 +38148,11 @@
       if (b.disabled) return;
       b.addEventListener('click', function () {
         var rowId = parseInt(b.getAttribute('data-rwfact'), 10);
-        var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
+        var was = b.getAttribute('data-rwv') || '';
         var inp = document.createElement('input');
         inp.className = 'ed-input pf-in num';
-        inp.value = was;
-        inp.setAttribute('inputmode', 'numeric');
+        inp.value = was.replace('.', ',');
+        inp.setAttribute('inputmode', 'decimal');
         inp.setAttribute('placeholder', '0');
         b.parentNode.replaceChild(inp, b);
         inp.focus();
@@ -38134,9 +38161,20 @@
         var save = function () {
           if (done) return;
           done = true;
-          var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
-          if (isNaN(n)) { state._rw = null; renderView(); return; }
-          if (String(n) === String(was)) { state._rw = null; renderView(); return; }
+          // Дробь бывает (ER 12,9%), поэтому запятую принимаем как точку. Пустое
+          // поле стирает цифру: строка снова ждет ответа, а не считается нулем.
+          var raw = String(inp.value).replace(/\s/g, '').replace(',', '.');
+          if (raw === '') {
+            if (was === '') { state._rw = null; renderView(); return; }
+            rwFactSave(rowId, null);
+            return;
+          }
+          var n = parseFloat(raw);
+          if (isNaN(n) || n < 0) {
+            showToast('Нужно число, например 12 или 12,9');
+            state._rw = null; renderView(); return;
+          }
+          if (was !== '' && n === parseFloat(was)) { state._rw = null; renderView(); return; }
           rwFactSave(rowId, n);
         };
         inp.addEventListener('keydown', function (e) {
