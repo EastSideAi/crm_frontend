@@ -12942,6 +12942,19 @@ body.office-full { overflow: hidden; }
 .mx-office-f { flex: 1; min-height: 0; width: 100%; border: 0; display: block; }
 .mx-office-wait { flex: 1; display: grid; place-items: center;
   color: var(--ink-3); font-size: 13px; }
+/* Полоса «офис не отозвался». Тонкая и под строкой окна: это подсказка, а не
+   ошибка раздела, и содержимое рамки она не закрывает. */
+.mx-office-warn { flex: none; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; padding: 8px 10px 8px 14px;
+  background: var(--amber-soft); color: var(--amber-ink);
+  font-size: 12.5px; font-weight: 600; }
+.mx-office-warn button { height: 28px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: #fff; color: var(--amber-ink);
+  font-family: inherit; font-weight: 600; font-size: 12.5px; cursor: pointer;
+  flex: none; transition: .15s; }
+.mx-office-warn button:hover { border-color: var(--amber); }
+.mx-office-warn button:focus-visible { outline: none; border-color: var(--amber);
+  box-shadow: inset 0 0 0 1.5px var(--amber); }
 /* На телефоне офис занимает почти экран: колонка каналов там лентой сверху, и
    на половине высоты от нее остается полоска. */
 @media (max-width: 760px) {

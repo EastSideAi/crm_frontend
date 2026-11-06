@@ -4,6 +4,35 @@
 (function () {
   'use strict';
 
+  /* CRM внутри CRM рисоваться не должна. В разделе «Встречи» стоит рамка с
+     офисом, и адрес у нее чужой — бэкенд. Но crm.истсайд.рф/meet отдает саму
+     CRM: рамка, по любой причине уехавшая на свой же домен, показывает вторую
+     копию рабочего стола, со своим меню и своим последним разделом, прямо
+     внутри раздела встреч. Человек видит кашу и не понимает, что лечится она
+     обновлением страницы (айпад Павла 06.11.2026). Ловим только себя в себе:
+     у чужой страницы снаружи адрес не прочитать, попытка бросит ошибку, и
+     проверка тихо уйдет в сторону — встройку в чужой сайт мы не ломаем. */
+  try {
+    if (window.parent !== window && window.parent.location.origin === location.origin) {
+      document.body.innerHTML = '';
+      var vrez = document.createElement('div');
+      // fixed, а не высота в процентах: рамка бывает любой высоты, а у пустой
+      // страницы своей высоты нет — надпись уехала бы в верхний угол.
+      vrez.style.cssText = 'position:fixed;inset:0;display:grid;place-items:center;' +
+        'align-content:center;gap:6px;font:600 14px/1.5 system-ui,sans-serif;' +
+        'color:#5B6478;text-align:center;padding:20px;background:#F4F5F8';
+      var s1 = document.createElement('div');
+      s1.textContent = 'Здесь должен был открыться офис команды.';
+      var s2 = document.createElement('div');
+      s2.style.cssText = 'font-weight:500;color:#8A93A6';
+      s2.textContent = 'Обнови страницу — он вернется.';
+      vrez.appendChild(s1);
+      vrez.appendChild(s2);
+      document.body.appendChild(vrez);
+      return;
+    }
+  } catch (e) { /* снаружи чужой домен — значит это не наш случай */ }
+
   // Боевой бэкенд (self-host Selectel). Punycode домена api.истсайд.рф — чтобы работало
   // из любого браузера. Старый Railway-домен умер при переезде. Переопределяется
   // window.EASTSIDE_API_BASE (напр. на staging/локали).
@@ -11233,13 +11262,52 @@
       zhdem.remove();
       d.appendChild(f);
       officeSetSize(officeSize());
+      officeWatch();
     }).catch(function () {
       d.removeAttribute('data-on');
       zhdem.textContent = 'Не вышло открыть офис. Обнови страницу.';
     });
   }
+  /* Сторож открытия. Рамку мы ставим вслепую: что в ней на самом деле, со
+     стороны страницы не видно — чужой домен закрыт от чтения. Офис, открывшись,
+     сам говорит нам «я тут»; молчит дольше двенадцати секунд — значит в рамке
+     либо ничего, либо не он, и человеку надо сказать об этом словами. Саму
+     рамку при этом не убираем: офис мог и открыться, просто быть старой
+     версии, которая еще не умеет здороваться, — тогда полоска окажется лишней,
+     но ничего не сломает. */
+  var officeWaitT = null;
+  function officeWatch() {
+    clearTimeout(officeWaitT);
+    officeWaitT = setTimeout(officeLate, 12000);
+  }
+  function officeWatchStop() {
+    clearTimeout(officeWaitT);
+    officeWaitT = null;
+    var w = officeBox && officeBox.querySelector('.mx-office-warn');
+    if (w) w.remove();
+  }
+  function officeLate() {
+    var d = officeBox;
+    if (!d || d.hidden || d.querySelector('.mx-office-warn')) return;
+    var bar = document.createElement('div');
+    bar.className = 'mx-office-warn';
+    bar.setAttribute('role', 'status');
+    var t = document.createElement('span');
+    t.textContent = 'Офис не отвечает. Если в окне не комната, обнови страницу.';
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Обновить';
+    b.addEventListener('click', function () { location.reload(); });
+    bar.appendChild(t);
+    bar.appendChild(b);
+    var head = d.querySelector('.mx-office-head');
+    if (head && head.nextSibling) d.insertBefore(bar, head.nextSibling);
+    else d.appendChild(bar);
+  }
+
   function officeHide() {
     if (!officeBox) return;
+    officeWatchStop();
     officeBox.hidden = true;
     // Полный экран — состояние ЭТОГО раздела: уходя в задачи, человек не должен
     // оставить за собой страницу без прокрутки. Вернется — окно будет большим,
@@ -11296,6 +11364,8 @@
   window.addEventListener('message', function (e) {
     if (e.origin !== API) return;
     var d = e.data || {};
+    // Офис открылся и это действительно он: сторожа снимаем.
+    if (d.es === 'office-ready') { officeWatchStop(); return; }
     // Escape нажали внутри рамки. Своим обработчиком мы его не видим: фокус в
     // чужом окне, и клавиша до нас не доходит — офис передает ее сам.
     if (d.es === 'office-esc') {
