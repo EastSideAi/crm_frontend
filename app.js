@@ -2307,9 +2307,10 @@
   // клиентские платежи (cap 'finance'), поэтому cap свой.
   // 'mywork' — «Моя работа»: свои задания коллеги-самозанятого. Роли его не дают
   // вовсе, он приходит с сервера по факту связи учетки с карточкой исполнителя.
-  // В модуле самозанятых две стороны, и они взаимоисключающие: связанному человеку
-  // сервер выдает 'mywork' и снимает 'contractors' — задания раздает один, выполняет
-  // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
+  // В модуле самозанятых две стороны. Исполнителю без права на модуль сервер выдает
+  // 'mywork' и снимает 'contractors' — чужие ИНН с суммами выплат ему не показываются.
+  // Руководитель с модулем по роли после связи держит оба: раздает задания и выполняет
+  // свои, переключаясь между пространствами (Роман 05.11.2026).
   // 'finmodel_edit' — правка ведомости, отдельно от просмотра: по правилу владельца
   // смотреть может каждый, у кого есть раздел, а править остатки — финансист.
   // 'cz_pay' — только деньги подрядчиков: реестр к оплате, счет и акт по нему, отметка
@@ -2554,6 +2555,9 @@
     // и список пространств собирается по доступным пунктам, поэтому он увидит ровно
     // «Выплаты», а не пустое меню из семи заголовков.
     { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors|cz_pay', space: 'cz' },
+    // Акты, которые ждут подписи компании, по всем людям — подписать прямо из списка
+    // (Роман 05.11.2026: заходить ради подписи в каждое задание неудобно).
+    { id: 'czacts', label: 'Акты', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czrisks', label: 'Риски', icon: 'shield', cap: 'contractors', space: 'cz' },
     { id: 'czreport', label: 'Отчеты', icon: 'chart', cap: 'contractors', space: 'cz' },
@@ -2778,7 +2782,27 @@
   /* Переключатель показываем, только если человеку доступно больше одного
      пространства: у кого нет доступа к самозанятым, CRM не меняется вообще. */
   function openSpaces() {
-    return SPACES.filter(function (s) { return navItems(s.id).length; });
+    return SPACES.filter(function (s) {
+      if (!navItems(s.id).length) return false;
+      // У того, кто сам раздает задания, «Моя работа» живет внутри «Самозанятых»
+      // кнопкой в меню, а не четвертым пространством (Роман 05.11.2026).
+      if (s.id === 'mw' && mwInsideCz()) return false;
+      return true;
+    });
+  }
+  function mwInsideCz() { return can('mywork') && can('contractors'); }
+  /* Кнопка-переход между «Самозанятыми» и «Моей работой» внизу меню раздела. Нужна
+     только тому, у кого есть обе стороны: остальные видят одну из них целиком. */
+  function czMwSwitch(space) {
+    if (!mwInsideCz()) return '';
+    if (space === 'cz') {
+      var dot = spaceAttention() ? '<i class="sp-dot"></i>' : '';
+      return '<button class="navi mt nav-sw" data-sp="mw">' + ic('task') + 'Моя работа' + dot + '</button>';
+    }
+    if (space === 'mw') {
+      return '<button class="navi mt nav-sw" data-sp="cz">' + ic('badge') + 'Назад к самозанятым</button>';
+    }
+    return '';
   }
   /* Роль без единого доступного раздела (преподаватель, у которого нет ни клиентов, ни
      связи с карточкой исполнителя) не должна падать на дашборд компании: ручки все равно
@@ -2843,9 +2867,10 @@
         return (row.lab ? '<div class="navlab">' + esc(row.lab) + '</div>' : '') +
           '<button class="navi' + (navOn(it.id) ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
-      }).join('');
+      }).join('') + czMwSwitch(space);
       Array.prototype.forEach.call(nav.querySelectorAll('.navi'), function (b) {
-        b.addEventListener('click', function () { setPage(b.getAttribute('data-p')); });
+        var sp = b.getAttribute('data-sp');
+        b.addEventListener('click', function () { if (sp) setSpace(sp); else setPage(b.getAttribute('data-p')); });
       });
     }
     var ws = el('welc-sub');
@@ -2901,6 +2926,8 @@
       // На телефоне левой колонки нет, поэтому переход в другое пространство живет
       // отдельной вкладкой в начале ленты — иначе с телефона туда не попасть.
       var jumps = openSpaces().filter(function (s) { return s.id !== space; });
+      // «Моя работа» руководителя-исполнителя на телефоне — вкладкой из «Самозанятых».
+      if (space === 'cz' && mwInsideCz()) jumps.push({ id: 'mw', label: 'Моя работа' });
       var jump = jumps.map(function (s) {
         var d = (s.id === 'mw' && spaceAttention()) ? '<i class="sp-dot"></i>' : '';
         return '<button class="mtab mtab-sp" data-sp="' + s.id + '">' +
@@ -3689,6 +3716,20 @@
       html = '<div><h2>Выплаты</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('wallet', 13) + '</span><span>' + phrase8 + '</span></div></div>';
     }
+    if (state.page === 'czacts') {
+      // Вердикт — то, ради чего сюда заходят: сколько актов ждет нашей подписи.
+      var aw = AC.items ? acWaiting(AC.items) : [];
+      var awSum = aw.reduce(function (t, a) { return t + (a.amount || 0); }, 0);
+      var phraseA;
+      if (!AC.items) phraseA = 'Загружаю акты…';
+      else if (AC.err) phraseA = esc(AC.err);
+      else if (!aw.length) phraseA = 'Нашей подписи сейчас ничего не ждет.';
+      else phraseA = 'Ждут нашей подписи: <b>' + aw.length + ' ' +
+        plural(aw.length, 'акт', 'акта', 'актов') + '</b> на <b>' + ctMoney(awSum) +
+        ' ₽</b>. Пока обе подписи не стоят, выплату провести нельзя.';
+      html = '<div><h2>Акты</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' + phraseA + '</span></div></div>';
+    }
     if (state.page === 'czdocs') {
       /* Вердикт отвечает на вопрос, ради которого сюда заходят: что висит без подписи.
          Неподписанный акт — это незакрытый расход и невозможная выплата. */
@@ -4044,6 +4085,7 @@
     else if (state.page === 'cztasks') renderCzTasks(view);
     else if (state.page === 'czplans') renderCzPlans(view);
     else if (state.page === 'czpay') renderCzPay(view);
+    else if (state.page === 'czacts') renderCzActs(view);
     else if (state.page === 'czdocs') renderCzDocs(view);
     else if (state.page === 'czrisks') renderCzRisks(view);
     else if (state.page === 'czreport') renderCzReport(view);
@@ -19374,8 +19416,11 @@
             '<div class="ct-acts">' +
               '<a class="bp sm ghost" href="' + docUrl + '" target="_blank" rel="noopener">' +
                 'Открыть документ</a>' +
-              (A.signed_co_at ? '' :
-                '<button class="bp sm" id="ct-sign">Подписать со стороны компании</button>') +
+              (A.signed_co_at ? '' : t.own
+                /* Свой акт за компанию подписывает другой руководитель: сервер такую
+                   подпись отклонит, поэтому кнопки нет, а есть ответ «кто». */
+                ? '<span class="ct-frozen">За компанию ваш акт подписывает другой руководитель</span>'
+                : '<button class="bp sm" id="ct-sign">Подписать со стороны компании</button>') +
               (actBack ? '<button class="bp sm ghost" data-cta="approved">' +
                 esc(actBack.label) + '</button>' : '') +
             '</div>' +
@@ -19934,7 +19979,7 @@
       return (i.contractor || '').toLowerCase().indexOf(q) >= 0 ||
         (i.inn || '').indexOf(q) >= 0 ||
         String(i.number).indexOf(q) >= 0 ||
-        String(i.task_number).indexOf(q) >= 0;
+        (i.task_numbers || [i.task_number]).join(' ').indexOf(q) >= 0;
     });
   }
 
@@ -19987,9 +20032,13 @@
     // наезжают на соседние. Клик по самой строке ведет в задание, кнопки — свои действия.
     var head = '<div class="trow dc-grid" data-rcp-task="' + esc(i.task_id) + '">' +
       '<span class="dc-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
-        '<b>Выплата № ' + esc(i.number) + '</b>' +
-        '<span class="rcp-sub">задание № ' + esc(i.task_number) +
-          (i.title ? ' — ' + esc(i.title) : '') + '</span></span>' +
+        /* Платеж — одна сумма за несколько заданий, чек на него один (миграция 289). */
+        (i.kind === 'payment' && (i.task_numbers || []).length > 1
+          ? '<b>Платеж № ' + esc(i.number) + '</b>' +
+            '<span class="rcp-sub">' + esc(i.title) + '</span></span>'
+          : '<b>Выплата № ' + esc(i.number) + '</b>' +
+            '<span class="rcp-sub">задание № ' + esc(i.task_number) +
+              (i.title ? ' — ' + esc(i.title) : '') + '</span></span>') +
       '<span class="dc-who">' + esc(i.contractor || '—') +
         (i.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
         (i.inn ? '<span class="dc-inn">' + esc(i.inn) + '</span>' : '') + '</span>' +
@@ -20100,6 +20149,110 @@
         '<span class="dcf-n">' + total + '</span></button>' +
       (rows || '<div class="dcf-empty">Людей с документами тут пока нет.</div>') +
       '</aside>';
+  }
+
+  /* ── Акты: подпись компании ──────────────────────────────────────────────────
+     Все акты исполнителей, по умолчанию — те, что ждут нашей подписи. Подпись ставится
+     кнопкой в строке. Свой акт руководителя-исполнителя за компанию подписывает другой
+     руководитель: сервер помечает его полем own, и вместо кнопки стоит ответ «кто». */
+  var AC = { items: null, err: '', all: false, busy: '' };
+  function acWaiting(list) {
+    return list.filter(function (a) { return !a.signed_co_at && a.status !== 'void' && a.status !== 'paid'; });
+  }
+  function acLoad() {
+    api('/admin/api/contractor-acts').then(function (r) {
+      AC.items = r.acts || []; AC.err = '';
+      if (state.page === 'czacts') renderAll();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      AC.items = AC.items || [];
+      AC.err = 'Не удалось загрузить акты. Проверьте связь и обновите страницу.';
+      if (state.page === 'czacts') renderAll();
+    });
+  }
+  function acTask(a) {
+    return a.task_id || (a.lines && a.lines.length ? a.lines[0].task_id : '');
+  }
+  function acRow(a) {
+    var title = a.lines
+      ? 'Акт № ' + a.number + ' за ' + a.period_title
+      : 'Акт № ' + a.number + ' — ' + a.service_title;
+    var sub = a.lines
+      ? a.lines.length + ' ' + plural(a.lines.length, 'задание', 'задания', 'заданий') + ': №' +
+        a.lines.map(function (l) { return l.task_number; }).join(', ')
+      : 'задание № ' + a.task_number;
+    var docUrl = API + '/admin/api/contractor-acts/' + encodeURIComponent(a.id) +
+      '/doc?k=' + encodeURIComponent(getKey());
+    var act = '';
+    if (!a.signed_co_at && a.status !== 'void' && a.status !== 'paid') {
+      act = a.own
+        ? '<span class="rcp-why">Ваш акт — за компанию подписывает другой руководитель</span>'
+        : '<button class="bp sm" data-ac-sign="' + esc(a.id) + '"' +
+          (AC.busy ? ' disabled' : '') + '>' +
+          (AC.busy === a.id ? 'Подписываю…' : 'Подписать со стороны компании') + '</button>';
+    }
+    var head = '<div class="trow dc-grid" data-ac-task="' + esc(acTask(a)) + '">' +
+      '<span class="dc-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
+        '<b>' + esc(title) + '</b><span class="rcp-sub">' + esc(sub) + '</span></span>' +
+      '<span class="dc-who">' + esc((a.contractor && a.contractor.full_name) || '—') + '</span>' +
+      '<span class="dc-when">' + esc(a.act_date ? czDate(a.act_date) : '—') + '</span>' +
+      '<span class="dc-sum"><b>' + ctMoney(a.amount) + ' ₽</b></span>' +
+      '<span class="dc-state"><span class="ct-chip ' + (ACT_ST[a.status] || 'ct-wait') + '">' +
+        esc(a.status_title) + '</span></span>' +
+      '</div>';
+    var foot = '<div class="rcp-foot">' + (act || '<span></span>') +
+      '<span class="rcp-act"><a class="bp sm ghost" href="' + docUrl +
+        '" target="_blank" rel="noopener" data-ac-doc="1">Открыть документ</a></span></div>';
+    return '<div class="rcp-item">' + head + foot + '</div>';
+  }
+  function renderCzActs(view) {
+    if (AC.items === null) { view.innerHTML = dashSkeleton(); acLoad(); return; }
+    var waiting = acWaiting(AC.items);
+    var list = AC.all ? AC.items : waiting;
+    var chips =
+      '<button class="qchip' + (!AC.all ? ' on' : '') + '" data-ac-all="">Ждут нашей подписи' +
+        (waiting.length ? ' <span class="qn">' + waiting.length + '</span>' : '') + '</button>' +
+      '<button class="qchip' + (AC.all ? ' on' : '') + '" data-ac-all="1">Все акты</button>';
+    var body = AC.err
+      ? '<div class="empty">' + esc(AC.err) + '</div>'
+      : (!list.length
+        ? '<div class="empty">' + (AC.all
+            ? 'Актов пока нет. Акт появляется, когда по заданию принят результат.'
+            : 'Нашей подписи сейчас ничего не ждет.') + '</div>'
+        : list.map(acRow).join(''));
+    view.innerHTML =
+      '<div class="card listcard">' +
+        '<div class="list-quick">' + chips + '</div>' +
+        '<div class="trow dc-grid thead">' +
+          '<span class="th">Акт</span><span class="th">Исполнитель</span>' +
+          '<span class="th">Дата</span><span class="th">Сумма</span>' +
+          '<span class="th">Состояние</span>' +
+        '</div>' + body +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ac-all]'), function (b) {
+      b.addEventListener('click', function () { AC.all = !!b.getAttribute('data-ac-all'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ac-sign]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (AC.busy) return;
+        AC.busy = b.getAttribute('data-ac-sign'); renderView();
+        czSend('/admin/api/contractor-acts/' + AC.busy + '/sign', 'POST')
+          .then(function () { showToast('Акт подписан со стороны компании'); })
+          .catch(function (err) { showToast(err.message); })
+          .then(function () { AC.busy = ''; acLoad(); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ac-doc]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ac-task]'), function (r) {
+      r.addEventListener('click', function () {
+        var tid = r.getAttribute('data-ac-task');
+        if (tid) openCt(tid);
+      });
+    });
+    pageAnim(view);
   }
 
   function renderCzDocs(view) {
@@ -21573,15 +21726,17 @@
 
   var MW_RCP_ST = { ok: 'ct-ok', awaiting: 'ct-check', debt: 'ct-bad' };
   function mwRcpCard(p) {
+    var mwMany = p.kind === 'payment' && (p.task_numbers || []).length > 1;
     var need = p.state !== 'ok';
     var rec = p.receipt;
     return '<div class="card mw-act">' +
       '<div class="ct-act">' +
-        '<div class="ct-act-h"><b>Выплата № ' + p.number + '</b>' +
+        '<div class="ct-act-h"><b>' + (mwMany ? 'Платеж № ' : 'Выплата № ') + p.number + '</b>' +
           '<span class="ct-chip ' + (MW_RCP_ST[p.state] || 'ct-wait') + '">' +
             esc(p.state_title) + '</span></div>' +
-        '<div class="ct-act-m">от ' + esc(czDate(p.paid_at)) + ' · задание № ' +
-          esc(p.task_number) + (p.title ? ' — ' + esc(p.title) : '') +
+        '<div class="ct-act-m">от ' + esc(czDate(p.paid_at)) + ' · ' +
+          (mwMany ? esc(p.title)
+                  : 'задание № ' + esc(p.task_number) + (p.title ? ' — ' + esc(p.title) : '')) +
           ' · <b>' + ctMoney(p.amount) + ' ₽</b></div>' +
         (need && p.state_why
           ? '<div class="ct-why">' + esc(p.state_why) + '</div>' : '') +
@@ -22570,36 +22725,37 @@
     /* Переключатель Факт/План (Роман 20.10.2026): тот же водопад, но от плана продаж —
        видно, сколько отложим на фонды и дивиденды, если план выручки сойдется. План
        считает бэкенд (plan_cascade) по тем же правилам фондов, только с плановыми
-       базами. В режиме «План» строки не редактируются (это прогноз, а не ведомость) и
-       отметок о переводе в фонд нет. */
+       базами. Правило фонда одно на оба режима, поэтому процент меняется и из «Плана»
+       (Роман 05.11.2026: «там нельзя поменять проценты»); отметок о переводе в фонд в
+       плане нет — это прогноз, а не ведомость. */
     var plan = s.plan_cascade || null;
     var planOn = FIN.cascMode === 'план' && plan && s.period.open;
     var cc = planOn ? plan : c;
     var rows = [{ cls: 'in',
                   name: planOn ? 'Плановый доход' : 'Доход к зачислению',
                   why: planOn
-                    ? 'план продаж ' + finNum(plan.sales, 0) + ' + дебиторка ' +
-                      finNum(plan.receivables, 0) + ', что ждем за период'
+                    ? 'уже пришло ' + finNum(plan.fact || 0, 0) + ' + план продаж ' +
+                      finNum(plan.sales, 0) + ' + дебиторка ' + finNum(plan.receivables, 0)
                     : 'все, что пришло за период, за вычетом комиссии эквайринга',
                   v: cc.income }];
     rows.push({ cls: 'out', name: 'Фонд краткосрочки',
                 why: stRule ? stRule.explain : 'вычитается первым, до остальных фондов',
-                v: -cc.shortterm, rule: planOn ? null : stRule });
+                v: -cc.shortterm, rule: stRule });
     rows.push({ cls: 'sum', name: 'База для отчислений',
                 why: 'от нее считаются проценты фондов', v: cc.base });
     funds.forEach(function (r) {
       rows.push({ cls: 'out', name: r.name, why: r.explain,
                   v: -(planOn ? r.plan_amount : r.amount),
-                  rule: planOn ? null : r });
+                  rule: r });
     });
     rows.push({ cls: 'out', name: 'Прямые расходы',
-                why: planOn ? 'плановые строки: мотивация, сервисы, реклама'
+                why: planOn ? 'оплаченные и плановые: мотивация, сервисы, реклама'
                             : 'факт из расчетных листов: мотивация, сервисы, реклама',
                 v: -cc.direct });
     rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: cc.profit });
     rows.push({ cls: 'out', name: 'Флекс-проджекта',
                 why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -cc.flex,
-                rule: planOn ? null : flexRule });
+                rule: flexRule });
     rows.push({ cls: 'total', name: 'Дивиденды',
                 why: planOn ? 'то, что отложим к распределению по плану'
                             : 'то, что остается к распределению',
@@ -22611,9 +22767,9 @@
           '<button class="tab' + (planOn ? ' on' : '') + '" data-cascmode="план">План</button>' +
         '</div>'
       : '';
-    var cascSub = planOn
+    var cascSub = (planOn
       ? 'сколько отложим на фонды и дивиденды, если план продаж сойдется'
-      : 'каждый шаг считается от предыдущего — сверху вниз' +
+      : 'каждый шаг считается от предыдущего — сверху вниз') +
         (editable ? '. Правило фонда меняется по клику на строке' : '');
     var casc = '<div class="card fin-casc">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
@@ -22625,7 +22781,7 @@
            банке посреди периода. Кнопка «Пополнили фонд» записывает этот перевод, и
            строка красится зелёным — видно, по каким фондам деньги уже ушли. Сумма от
            нажатия не меняется: остаток фонда и кэшфлоу считают план и факт одинаково. */
-        var mv = r.rule && (r.rule.moved_plan > 0 || r.rule.moved_done > 0) ? r.rule : null;
+        var mv = !planOn && r.rule && (r.rule.moved_plan > 0 || r.rule.moved_done > 0) ? r.rule : null;
         var filled = mv && mv.moved_done > 0;
         var left = mv ? mv.moved_plan : 0;
         return '<div class="fc-row ' + r.cls + (live ? ' click' : '') +
@@ -29346,17 +29502,19 @@
     var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
     var autoReceiv = r.receivables_auto || [];   // дебиторка из графиков рассрочки и консультаций
     var salesAuto = r.sales_auto || [];          // новые продажи из консультаций (первый взнос)
+    // Убранные из плана строки видны в списке, но в счетчиках сделок и долгов их нет.
+    var inPlan = function (x) { return !x.off; };
     var planFact = t.planned_revenue > 0
       ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
       : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
 
     var bar = statBar([
       { label: 'Ждем с новых продаж', value: finRub(t.sales_expected),
-        sub: (sales.length + salesAuto.length) + ' ' +
-          plural(sales.length + salesAuto.length, 'сделка', 'сделки', 'сделок') },
+        sub: (sales.length + salesAuto.filter(inPlan).length) + ' ' +
+          plural(sales.length + salesAuto.filter(inPlan).length, 'сделка', 'сделки', 'сделок') },
       { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected),
-        sub: (receiv.length + autoReceiv.length) + ' ' +
-          plural(receiv.length + autoReceiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
+        sub: (receiv.length + autoReceiv.filter(inPlan).length) + ' ' +
+          plural(receiv.length + autoReceiv.filter(inPlan).length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
       { label: 'Планируемая выручка', value: finRub(t.planned_revenue),
         sub: 'продажи и дебиторка' },
       { label: 'Факт дохода', value: finRub(t.income_fact), sub: planFact },
@@ -29389,6 +29547,17 @@
         n.addEventListener('click', function () {
           var id = n.getAttribute('data-rp');
           items.forEach(function (x) { if (x.id === id) finRevForm(x, x.kind); });
+        });
+      });
+      // Убрать консультацию из плана или вернуть. Клик не всплывает до строки, иначе
+      // поверх откроется карточка клиента.
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rpoff]'), function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var off = b.getAttribute('data-off') === '1';
+          finDo('/admin/api/fin/revenue-plan/consult', 'POST', {
+            consult_id: +b.getAttribute('data-rpoff'), off: off,
+          }, off ? 'Убрано из плана' : 'Вернули в план');
         });
       });
       // Кружок-галочка: помечаем строку полученной, не открывая форму. Клик по кружку
@@ -29513,11 +29682,19 @@
       }
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
         .filter(Boolean).map(esc).join(' · ');
-      return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' +
+      /* Строку из консультации можно убрать из плана, не трогая саму консультацию
+         (Роман 05.11.2026: прогнозу пока верит не до конца). Убранная остается видна
+         бледной и в сумму не идет — вернуть той же кнопкой. */
+      if (x.off) chip += ' <span class="sev mini cz-off">не в плане</span>';
+      var offBtn = (canFix && x.consult_id)
+        ? '<button class="rp-off" data-rpoff="' + x.consult_id + '" data-off="' + (x.off ? '0' : '1') + '">' +
+          (x.off ? 'Вернуть в план' : 'Убрать из плана') + '</button>'
+        : '';
+      return '<div class="fl-row fl-2 rp-row' + (x.off ? ' muted' : '') + (x.case_id ? ' click' : '') + '"' +
         (x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '') + '>' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || (isSaleCard ? 'ожидаемая продажа' : 'рассрочка')) +
-          '</span></div>' +
+          offBtn + '</span></div>' +
         '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     return '<div class="card listcard">' +
