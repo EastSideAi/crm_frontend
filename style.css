@@ -12417,8 +12417,44 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sb-po { font-size: 12.5px; font-weight: 600; color: var(--ink-2); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .sb-po.none, .sb-po.wait { color: var(--red-ink); }
+.sb-po.calm { color: var(--ink-2); font-weight: 500; }
 .sb-pm { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .sb-pmore { padding: 12px 24px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); }
+
+/* Идем ли в план: одна крупная строка про деньги, под ней остальные строки плана
+   тише. Цвет несет только число отставания: красный — отстаем, зеленый — впереди. */
+.sb-pace .pf-sec, .sb-work .pf-sec { padding: 20px 24px 16px; }
+.sb-pbody { display: grid; grid-template-columns: minmax(280px, 1.1fr) minmax(260px, 1fr);
+  gap: 24px; padding: 0 24px 22px; align-items: start; }
+.sb-pmain { display: flex; flex-direction: column; gap: 6px; }
+.sb-plbl { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.sb-pbig { font-size: 30px; font-weight: 800; letter-spacing: -.025em; line-height: 1.1;
+  color: var(--ink); font-variant-numeric: tabular-nums; }
+.sb-pmain.behind .sb-pbig { color: var(--red-ink); }
+.sb-pmain.ahead .sb-pbig { color: var(--green-ink); }
+.sb-psub { font-size: 13px; color: var(--ink-2); line-height: 1.55; max-width: 520px; text-wrap: pretty; }
+.sb-prest { display: flex; flex-direction: column; border-left: 1px solid var(--line); padding-left: 24px; }
+.sb-prow { display: grid; grid-template-columns: minmax(110px, 1fr) auto minmax(120px, auto);
+  gap: 14px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.sb-prow:last-child { border-bottom: none; }
+.sb-pn2 { font-weight: 600; color: var(--ink); }
+.sb-pf { font-weight: 700; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.sb-pf small { font-weight: 500; color: var(--ink-3); font-size: 12px; }
+.sb-pd { font-size: 12.5px; font-weight: 600; color: var(--ink-3); text-align: right; white-space: nowrap; }
+.sb-pd.behind { color: var(--red-ink); }
+.sb-pd.ahead { color: var(--green-ink); }
+.sb-pnone { padding: 0 24px 22px; font-size: 13px; color: var(--ink-2); line-height: 1.55; max-width: 640px; }
+
+/* В работе сейчас: полоса шагов той же плиткой, что путь месяца, под ней кто сколько
+   держит. Плитки внутри карточки — без своей рамки, карточка уже есть. */
+.sb-wbar { padding: 0 18px 6px; }
+.sb-wbar .statbar { box-shadow: none; border: 0; background: var(--fill); }
+.sb-wbar .stat { cursor: pointer; }
+.sb-wbar .stat.on { background: var(--blue-tint); }
+.sb-work .sb-wgrid { margin-top: 10px; }
+.sb-wgrid .mkd-th, .sb-wgrid .mkd-tr {
+  grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(90px, .7fr)) 76px; }
+.sb-wgrid .mkd-tr { height: 50px; }
 
 /* Телефон: таблица становится карточкой строки — имя целиком сверху, под ним все
    шаги пути сеткой с подписью над числом (подпись берется из data-l ячейки).
@@ -12438,6 +12474,14 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   .sb-grid .sb-cell i { min-width: 0; text-align: left; }
   .sb-pr { grid-template-columns: 1fr auto; padding: 10px 18px; }
   .sb-pm { grid-column: 1 / -1; justify-content: flex-start; }
+  .sb-pace .pf-sec, .sb-work .pf-sec { padding: 18px 18px 14px; }
+  .sb-pbody { grid-template-columns: 1fr; gap: 16px; padding: 0 18px 18px; }
+  .sb-pbig { font-size: 26px; }
+  .sb-prest { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .sb-prow { grid-template-columns: 1fr auto auto; gap: 10px; }
+  .sb-pf small { display: none; }
+  .sb-pnone { padding: 0 18px 18px; }
+  .sb-wbar { padding: 0 10px 6px; }
 }
 
 /* ════ МОЯ СМЕНА (раздел myshift) — рабочий экран менеджера продаж ════

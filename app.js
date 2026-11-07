@@ -38077,9 +38077,43 @@
     return h < 1 ? 'ждет меньше часа' : (h < 48 ? 'ждет ' + h + ' ч' : 'ждет ' + Math.floor(h / 24) + ' дн');
   }
 
+  var SB_WORK_TITLE = { w_free: 'Без хозяина', w_respond: 'Ждут касания', w_follow: 'Дожимаем',
+    w_meet: 'Ждут встречи', w_decide: 'Думают после встречи', w_all: 'В работе' };
+  function sbWorkPeople(d, q) {
+    var rows = ((d.work || {}).rows || []).filter(function (p) {
+      if (q.f !== 'w_all' && 'w_' + p.stage !== q.f) return false;
+      if (q.by === 'wwho' && (p.owner || SB_NOBODY) !== q.val) return false;
+      return true;
+    });
+    // Сверху тот, кто ждет дольше всех; у встреч — ближайшая.
+    rows.sort(function (a, b) { return String(a.since).localeCompare(String(b.since)); });
+    var title = (SB_WORK_TITLE[q.f] || '') + (q.val ? ' · ' + q.val : '');
+    var body = rows.slice(0, 300).map(function (p) {
+      return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
+        '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
+          ' · пришел ' + esc(fmtDay(p.created_at)) + '</small></span>' +
+        (q.by === 'wwho' ? '<span></span>'
+          : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>') +
+        // Красным — только тот, кто ждет нашего первого касания: остальные шаги идут своим ходом.
+        '<span class="sb-pm"><span class="sb-po' + (p.stage === 'free' || p.stage === 'respond' ? ' wait' : ' calm') + '">' +
+          esc(sbWorkWhen(p)) + '</span></span></button>';
+    }).join('');
+    return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
+  }
+  function sbPeopleCard(title, n, body, sub) {
+    return '<div class="card sp12 sb-people" id="sb-people"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
+      '</span><div><div class="t">' + esc(title) + ' · <span class="num">' + fmtMoney(n) + '</span></div>' +
+      '<div class="s">' + esc(sub) + '</div></div>' +
+      '<button class="icobtn sm" id="sb-pclose" title="Закрыть список">' + ic('x', 15) + '</button></div>' +
+      (n ? '<div class="sb-plist">' + body + '</div>' +
+        (n > 300 ? '<div class="sb-pmore">Показаны первые 300</div>' : '')
+        : '<div class="empty">Здесь никого.</div>') + '</div>';
+  }
+
   function sbPeople(d) {
     var q = state._sbQ;
     if (!q) return '';
+    if (q.f.indexOf('w_') === 0) return sbWorkPeople(d, q);
     var rows = (d.people || []).filter(function (p) {
       if (!sbHas(p, q.f, d, q.by)) return false;
       if (q.by === 'ch' && p.ch !== q.val) return false;
@@ -38107,13 +38141,7 @@
           (p.created_at ? ' · пришел ' + esc(fmtDay(p.created_at)) : '') + '</small></span>' +
         who + '<span class="sb-pm">' + marks.join('') + '</span></button>';
     }).join('');
-    return '<div class="card sp12 sb-people" id="sb-people"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
-      '</span><div><div class="t">' + esc(title) + ' · <span class="num">' + fmtMoney(rows.length) + '</span></div>' +
-      '<div class="s">это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка</div></div>' +
-      '<button class="icobtn sm" id="sb-pclose" title="Закрыть список">' + ic('x', 15) + '</button></div>' +
-      (rows.length ? '<div class="sb-plist">' + body + '</div>' +
-        (rows.length > 300 ? '<div class="sb-pmore">Показаны первые 300</div>' : '')
-        : '<div class="empty">Здесь никого.</div>') + '</div>';
+    return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
   }
 
   function sbShift(d) {
@@ -38131,6 +38159,111 @@
       }).join('') + '</div>';
     }
     return line;
+  }
+
+  /* Идем ли в план. Павел 07.11.2026: «важно, чтобы отслеживалось, достигаем мы
+     его или нет, здесь этого не видно». Плашка «идем» у строки плана и риска на шкале
+     ответа не дают: нужно словами — сколько должно быть к сегодня, сколько есть, на
+     сколько отстаем и сколько надо в день, чтобы догнать. Главная строка — деньги:
+     ради них план и ставят; остальные строки тише под ней. */
+  var SB_MON_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
+    'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  // Деньги внутри фразы: знак рубля не должен уезжать на новую строку.
+  function sbMoney(n, money) { return pfNum(n, money).replace(' ₽', '\u00a0₽'); }
+  function sbGap(r) {
+    var money = r.kind === 'money';
+    var gap = (r.fact || 0) - (r.due || 0);
+    var left = Math.max(r.plan - (r.fact || 0), 0);
+    var per = r.days_left ? left / r.days_left : 0;
+    // Темп словами: деньги — в день с округлением до тысячи, штуки — в день, а если
+    // меньше одной в день, то в неделю: «0,4 договора в день» никто не считает.
+    var pace = money ? sbMoney(Math.ceil(per / 1000) * 1000, true) + ' в день'
+      : (per >= 1 ? String(Math.round(per * 10) / 10).replace('.', ',') + ' в день'
+        : String(Math.round(per * 70) / 10).replace('.', ',') + ' в неделю');
+    return { money: money, gap: gap, left: left, behind: gap < 0, pace: pace };
+  }
+  function sbPace(d) {
+    if (!d.current || !(d.days_passed > 0)) return '';
+    var rows = (d.plan || []).filter(function (r) { return r.plan > 0; });
+    var head = '<div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) + '</span>' +
+      '<div><div class="t">Идем ли в план</div><div class="s">к сегодняшнему дню по плану против того, что есть</div></div></div>';
+    if (!rows.length) {
+      return '<div class="card sp12 sb-pace">' + head + '<div class="sb-pnone">План на ' +
+        esc(pfMonthTitle(d.month).toLowerCase()) + ' не задан. Поставь цифры в блоке «План месяца» ниже: ' +
+        'здесь появится, сколько должно быть к сегодня и на сколько отстаем.</div></div>';
+    }
+    var lead = rows.filter(function (r) { return r.key === 'revenue'; })[0] || rows[0];
+    // Дата из того же дня, по которому сервер считает «должно быть к сегодня»: часы
+    // браузера могут жить в другом поясе, и подпись разошлась бы с цифрой.
+    var mm = parseInt(String(d.month).split('-')[1], 10) - 1;
+    var today = d.days_passed + ' ' + SB_MON_GEN[mm];
+    var g = sbGap(lead);
+    var big = lead.state === 'none' ? 'Цифр пока нет'
+      : (g.behind ? 'Отстаем на ' + sbMoney(-g.gap, g.money) : (g.gap > 0
+        ? 'Впереди на ' + sbMoney(g.gap, g.money) : 'Идем ровно по плану'));
+    var need = !g.left ? 'План месяца уже сделан.'
+      : (lead.days_left ? 'Чтобы закрыть план, нужно ' + g.pace + ' до конца месяца.' : '');
+    var main = '<div class="sb-pmain ' + (g.behind ? 'behind' : 'ahead') + '">' +
+      '<div class="sb-plbl">' + esc(lead.label) + '</div>' +
+      '<div class="sb-pbig num">' + esc(big) + '</div>' +
+      '<div class="sb-psub">К ' + esc(today) + ' по плану ' + sbMoney(lead.due, g.money) +
+        ', есть ' + sbMoney(lead.fact, g.money) + ' из ' + sbMoney(lead.plan, g.money) + ' на месяц. ' + esc(need) + '</div>' +
+    '</div>';
+    var rest = rows.filter(function (r) { return r !== lead; }).map(function (r) {
+      var x = sbGap(r);
+      var tail = r.state === 'none' ? '<span class="sb-pd">цифр пока нет</span>'
+        : (x.behind ? '<span class="sb-pd behind">отстаем на ' + pfNum(-x.gap, x.money) + '</span>'
+          : '<span class="sb-pd ahead">' + (x.gap > 0 ? 'впереди на ' + pfNum(x.gap, x.money) : 'по плану') + '</span>');
+      return '<div class="sb-prow"><span class="sb-pn2">' + esc(r.label) + '</span>' +
+        '<span class="sb-pf num">' + pfNum(r.fact, x.money) + ' <small>· по плану ' + pfNum(r.due, x.money) + '</small></span>' +
+        tail + '</div>';
+    }).join('');
+    return '<div class="card sp12 sb-pace">' + head + '<div class="sb-pbody">' + main +
+      (rest ? '<div class="sb-prest">' + rest + '</div>' : '') + '</div></div>';
+  }
+
+  /* В работе сейчас. Павел 07.11.2026: «где мне смотреть, сколько лидов в работе?».
+     Путь месяца выше отвечает «что стало с пришедшими в ноябре», а здесь — что лежит
+     на руках у отдела сегодня, с какого бы месяца человек ни пришел. Шаг считает
+     сервер (sales_board.work_stage), человек стоит ровно на одном. */
+  function sbWork(d) {
+    var w = d.work;
+    if (!w || !d.current) return '';
+    var items = (w.stages || []).map(function (s, i) {
+      return { label: esc(s.label), value: fmtMoney(w.steps[s.key] || 0), sub: esc(s.hint), lead: i === 0 && w.steps.free > 0 };
+    });
+    // Таблица — то, что на руках у менеджеров. «Без хозяина» у них всегда ноль, а
+    // ничейные лиды уже стоят первой плиткой и открываются ею же.
+    var mst = (w.stages || []).filter(function (s) { return s.key !== 'free'; });
+    var rows = (w.managers || []).filter(function (m) { return m.name !== SB_NOBODY; }).map(function (m) {
+      return '<div class="mkd-tr sb-tr sb-wtr">' +
+        '<div class="mkd-nm"><b>' + esc(m.name) + '</b></div>' +
+        mst.map(function (s) {
+          return '<span class="sb-cell" data-l="' + esc(s.label) + '">' +
+            sbBtn(m.steps[s.key] || 0, 'w_' + s.key, 'wwho', m.name, { label: s.label }) + '</span>';
+        }).join('') +
+        '<span class="sb-cell" data-l="Всего">' + sbBtn(m.total, 'w_all', 'wwho', m.name, { label: 'всего' }) + '</span>' +
+      '</div>';
+    }).join('');
+    return '<div class="card sp12 sb-tbl-card sb-work"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
+      '</span><div><div class="t">В работе сейчас · <span class="num">' + fmtMoney(w.total) + '</span></div>' +
+      '<div class="s">все живые лиды на сегодня, с какого бы месяца ни пришли; нажми на цифру, откроются люди</div></div></div>' +
+      '<div class="sb-wbar">' + statBar(items, 'five') + '</div>' +
+      (rows ? '<div class="mkd-tbl sb-grid sb-wgrid"><div class="mkd-th"><span>Кто ведет</span>' +
+        mst.map(function (s) { return '<span>' + esc(s.label) + '</span>'; }).join('') +
+        '<span>Всего</span></div>' + rows + '</div>' : '') + '</div>';
+  }
+
+  function sbWorkWhen(p) {
+    var t = Date.parse(p.since), now = Date.now();
+    var dd = new Date(t);
+    var day = dd.getDate() + ' ' + SB_MON_GEN[dd.getMonth()];
+    var hm = ('0' + dd.getHours()).slice(-2) + ':' + ('0' + dd.getMinutes()).slice(-2);
+    if (p.stage === 'meet') return 'встреча ' + day + ' в ' + hm;
+    if (p.stage === 'decide') return 'встреча была ' + day;
+    var h = Math.floor((now - t) / 3600000);
+    var ago = h < 1 ? 'меньше часа' : (h < 48 ? h + ' ч' : Math.floor(h / 24) + ' дн');
+    return p.stage === 'follow' ? 'первое касание ' + ago + ' назад' : 'ждет ' + ago;
   }
 
   // Вердикт шапки отвечает на вопрос экрана, а не только про план: зеленое «идем к
@@ -38185,8 +38318,12 @@
       '<div class="s">риска на шкале — где должны быть сегодня; план правится нажатием на цифру</div></div></div>' +
       '<div class="pf-tbl">' + (d.plan || []).map(function (r) { return pfRow(r, passed > 0); }).join('') + '</div></div>';
 
-    view.innerHTML = '<div class="dash sb">' + head + sbPathBar(d) + sbIdeas(d) + plan +
-      sbChannels(d) + sbManagers(d) + sbPeople(d) + '</div>';
+    // Список людей встает под тем блоком, где нажали цифру: «В работе» стоит высоко,
+    // и уводить за ним на конец экрана значит потерять таблицу, из которой пришли.
+    var wq = state._sbQ && state._sbQ.f.indexOf('w_') === 0;
+    view.innerHTML = '<div class="dash sb">' + head + sbPathBar(d) + sbPace(d) + sbWork(d) +
+      (wq ? sbPeople(d) : '') + sbIdeas(d) + plan +
+      sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
     sbBind(view, d);
     animBars(view);
   }
@@ -38214,6 +38351,13 @@
       b.setAttribute('data-sbf', steps[i].key);
       b.setAttribute('title', 'Показать этих людей поименно');
       if (sbIsOn(steps[i].key, '', '')) b.classList.add('on');
+    });
+    var wst = (d.work || {}).stages || [];
+    Array.prototype.forEach.call(view.querySelectorAll('.sb-wbar .stat'), function (b, i) {
+      if (!wst[i]) return;
+      b.setAttribute('data-sbf', 'w_' + wst[i].key);
+      b.setAttribute('title', 'Показать этих людей поименно');
+      if (sbIsOn('w_' + wst[i].key, '', '')) b.classList.add('on');
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sbf]'), function (b) {
       b.addEventListener('click', function () {
