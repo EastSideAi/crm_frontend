@@ -38447,7 +38447,10 @@
     }).join('');
 
     view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + msPlan(d, !!open) + msClose(d, open) + stats +
-      (cc ? '' : '<div class="card ms-nocall">Звонилка тебе пока не подключена: номера открываются обычным звонком с телефона. ' +
+      (cc ? '<div class="card ms-dial"><span>' + ic('phone', 15) + 'Звонилка открывается отдельным окном на всю смену: ' +
+        'держи его открытым, туда приходят и входящие.</span>' +
+        '<button class="bp ghost" id="ms-dial">Открыть звонилку</button></div>'
+        : '<div class="card ms-nocall">Звонилка тебе пока не подключена: номера открываются обычным звонком с телефона. ' +
         'Чтобы звонки и записи шли через CRM, попроси доступ у Павла.</div>') +
       msSection('respond', 'Ответить сейчас', 'твои лиды, с которыми еще никто не связался; позвони, не дозвонился — напиши в диалог',
         d.respond.map(function (p) { return msRow(p, 'respond', cc); }).join(''), 'Новых без ответа нет.') +
@@ -38500,6 +38503,8 @@
     var cn = el('ms-close-no');
     if (cn) cn.addEventListener('click', function () { MS.closing = false; renderView(); });
 
+    var dial = el('ms-dial');
+    if (dial) dial.addEventListener('click', function () { window.open(location.origin + '/zvonilka/', 'es-zvonilka'); });
     // Одно окно звонилки на всю смену: следующий номер подставляется в него же.
     Array.prototype.forEach.call(view.querySelectorAll('[data-mscall]'), function (b) {
       b.addEventListener('click', function () {

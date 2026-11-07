@@ -12483,6 +12483,10 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .ms-call { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .ms-nocall { padding: 14px 20px; font-size: 13px; color: var(--amber-ink); background: var(--amber-soft);
   border-color: transparent; line-height: 1.5; }
+.ms-dial { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 12px 14px 12px 20px; font-size: 13px; color: var(--ink-2); }
+.ms-dial span { display: inline-flex; align-items: center; gap: 10px; line-height: 1.45; }
+.ms-dial span svg { color: var(--blue); flex: none; }
 .ms-closebox { padding-bottom: 20px; }
 .ms-closebox > .al-l, .ms-closebox > .ms-note, .ms-closebox > .ms-cbtns { margin: 0 24px; }
 .ms-closebox > .ms-note { width: calc(100% - 48px); display: block; margin-top: 6px; resize: vertical; }
@@ -12504,6 +12508,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   .ms-row { grid-template-columns: 1fr auto; padding: 12px 18px; gap: 8px 10px; }
   .ms-row .ms-acts { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; }
   .ms-crow .ms-acts { display: none; }
+  .ms-dial { flex-direction: column; align-items: stretch; }
   .ms-sum { grid-template-columns: 1fr 1fr; padding: 0 18px 14px; }
   .ms-closebox > .al-l, .ms-closebox > .ms-note, .ms-closebox > .ms-cbtns { margin: 0 18px; }
   .ms-closebox > .ms-note { width: calc(100% - 36px); }
