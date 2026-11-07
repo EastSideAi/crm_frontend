@@ -2450,6 +2450,16 @@
     // решения (Виталий 19.10.2026). Cap выдает сервер по списку людей, а не роль:
     // super_admin у нас семь, а карту сначала обкатывает один человек.
     { id: 'cmap', label: 'Карта компании', icon: 'mindmap', cap: 'company_map' },
+    /* «Моя смена» — рабочий экран менеджера продаж (Павел 07.11.2026): открыть смену,
+       кому ответить, кого дожать, позвонить из CRM, закрыть смену с итогом. Тем, кто
+       не продает, пункт не нужен. */
+    { id: 'myshift', label: 'Моя смена', icon: 'clock', cap: 'clients',
+      hideRole: ['product_lead', 'admin', 'senior_tutor', 'tutor', 'teacher', 'marketer', 'marketing_lead',
+                 'producer', 'partner', 'contractor', 'ads_contractor', 'diagnostician', 'curator',
+                 'grant_admin', 'accountant', 'contractor_payer', 'expense_clerk'] },
+    /* «Продажи» — экран руководителя отдела продаж (Павел 07.11.2026): путь лидов
+       по каналам и менеджерам, план месяца и что делать, если не успеваем. */
+    { id: 'sales', label: 'Продажи', icon: 'chart', cap: 'planfact' },
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
@@ -4089,6 +4099,8 @@
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
+    else if (state.page === 'sales') renderSales(view);
+    else if (state.page === 'myshift') renderMyShift(view);
     else if (state.page === 'planfact') renderPlanFact(view);
     else if (state.page === 'reward') renderReward(view);
     else if (state.page === 'manage') renderManage(view);
@@ -37178,7 +37190,10 @@
 
     var right;
     if (r.plan && r.state !== 'none') {
-      right = '<span class="pf-fc">' + (r.pace_pct != null ? r.pace_pct + '% плана' : '') + '</span>' +
+      // Прогноз числом рядом с процентом: «112% плана» при факте в треть плана
+      // читалось как перевыполнение, а это темп к концу месяца.
+      right = '<span class="pf-fc">' + (r.pace_pct != null
+        ? 'прогноз ' + pfNum(r.forecast, money) + ' · ' + r.pace_pct + '%' : '') + '</span>' +
         '<span class="sev pf-' + esc(r.state) + '">' + esc(words[r.state] || '') + '</span>';
     } else if (r.plan) {
       // План стоит, а состояния нет: месяц еще не начался или расход не внесен.
@@ -37893,6 +37908,621 @@
     });
   }
 
+  /* ── ПРОДАЖИ — экран руководителя отдела продаж ─────────────────────────────
+     Павел 07.11.2026: «как обрабатывают лидов, каким каналом, какие конверсии из
+     контакта в запись... по каждому менеджеру, и что делать, если не достигаем».
+     План-факт отвечает «успеваем ли к цифре», а здесь видно, ГДЕ рвется и КТО.
+
+     Сверху вниз в порядке разговора руководителя: путь лидов месяца (главная
+     полоса), что не так и что делать, план месяца, каналы, менеджеры. Каждая цифра
+     открывает людей за ней: сервер отдает строку на человека, а числа собраны из тех
+     же строк (routers/sales_board.py), поэтому список и цифра не расходятся. */
+  var SB_PATH_SUB = { contact: 'от пришедших', c_booked: 'от связавшихся',
+                      c_held: 'от записанных', c_contract: 'от встреч' };
+  var SB_STEPS = ['contact', 'c_booked', 'c_held', 'c_contract'];
+  var SB_STEP_COL = { contact: 'Связались', c_booked: 'Записались', c_held: 'На встрече',
+                      c_contract: 'Договор' };
+  var SB_NOBODY = 'Никто не взял';
+
+  function sbFetch() {
+    var m = pfMonth();
+    state._sbAt = Date.now();
+    api('/admin/api/sales/board?month=' + m).then(function (r) {
+      if (pfMonth() !== m) return;
+      state._sb = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;            // ключ протух: api уже увел на вход
+      if (pfMonth() !== m) return;
+      state._sb = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+
+  function sbPct(v) { return v == null ? '—' : v + '%'; }
+  // Порог «слабо» один на экран: ниже трети по шагу — красим, это место разговора.
+  function sbCvCls(v) { return v == null ? 'none' : (v < 34 ? 'weak' : (v >= 70 ? 'good' : '')); }
+  function sbIsOn(f, by, val) {
+    var q = state._sbQ;
+    return !!(q && q.f === f && q.by === (by || '') && q.val === (val || ''));
+  }
+
+  /* Кнопка-число: клик открывает людей. f — отметка человека, by/val — срез. */
+  function sbBtn(n, f, by, val, opt) {
+    opt = opt || {};
+    var txt = opt.text != null ? opt.text : fmtMoney(n);
+    return '<button class="sb-n num' + (n ? '' : ' zero') + (sbIsOn(f, by, val) ? ' on' : '') + '"' +
+      ' data-sbf="' + f + '"' + (by ? ' data-sbby="' + by + '" data-sbval="' + esc(val) + '"' : '') +
+      ' aria-label="' + esc((val ? val + ', ' : '') + (opt.label || '') + ': ' + txt) + '"' +
+      (n ? '' : ' disabled') + '>' + txt + '</button>';
+  }
+  function sbStep(n, cv, f, by, val, label) {
+    return '<span class="sb-cell" data-l="' + esc(label) + '">' + sbBtn(n, f, by, val, { label: label }) +
+      '<i class="sb-cv ' + sbCvCls(cv) + '">' + sbPct(cv) + '</i></span>';
+  }
+
+  /* Путь лидов — главная полоса экрана: общий рецепт плиток (statBar) с долей
+     каждого шага от прошлого. Клик по плитке открывает людей шага. */
+  function sbPathBar(d) {
+    var p = d.path, steps = d.path_steps || [];
+    var items = steps.map(function (s, i) {
+      var cv = i ? p.conv[s.key] : p.taken_pct;
+      return { label: esc(s.label), value: fmtMoney(p.steps[s.key] || 0), lead: i === 0,
+               sub: '<b class="sb-cv ' + sbCvCls(cv) + '">' + sbPct(cv) + '</b> ' +
+                    (i ? esc(SB_PATH_SUB[s.key] || '') : 'взяли в работу') };
+    });
+    return '<div class="sb-pathwrap">' + statBar(items, 'five') + '</div>';
+  }
+
+  // Карточка проблемы ведет к людям за ней: какой срез открыть по ее виду.
+  var SB_IDEA_FLAG = { taken: 'unowned', late: 'no_contact', contact: 'x_contact',
+    booked: 'x_booked', held: 'x_held', contract: 'x_contract', seller: 'x_seller', channel: 'lead' };
+
+  function sbIdeas(d) {
+    var list = (d.ideas || []).map(function (it) {
+      var f = SB_IDEA_FLAG[it.kind];
+      var act = f ? '<button class="bp ghost sb-act' + (sbIsOn(f, it.ch ? 'ch' : '', it.ch) ? ' on' : '') +
+        '" data-sbf="' + f + '"' + (it.ch ? ' data-sbby="ch" data-sbval="' + esc(it.ch) + '"' : '') +
+        '>Кто это</button>' : '';
+      return '<div class="sb-idea ' + esc(it.kind) + '">' +
+        '<div class="sb-it">' + esc(it.title) + '</div>' +
+        '<div class="sb-if">' + esc(it.fix) + '</div>' + act + '</div>';
+    });
+    return '<div class="card sb-ideas"><div class="sec-head pf-sec"><span class="ic">' + ic('alert', 14) +
+      '</span><div><div class="t">Что не так и что делать</div>' +
+      '<div class="s">по месту в воронке: сначала то, что раньше рвет путь</div></div></div>' +
+      (list.length ? '<div class="sb-ilist">' + list.join('') + '</div>'
+        : '<div class="empty">Провалов не видно: шаги держат норму, лидов без ответственного нет.</div>') +
+      '</div>';
+  }
+
+  function sbPathRow(name, sub, p, by, paid, cls) {
+    return '<div class="mkd-tr sb-tr' + (cls ? ' ' + cls : '') + '">' +
+      '<div class="mkd-nm"><b>' + esc(name) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' +
+      '<span class="sb-cell" data-l="Пришли">' + sbBtn(p.steps.lead, 'lead', by, name, { label: 'пришли' }) + '</span>' +
+      SB_STEPS.map(function (k) {
+        return sbStep(p.steps[k], p.conv[k], k, by, name, SB_STEP_COL[k]);
+      }).join('') +
+      '<span class="sb-cell" data-l="Деньги">' + sbBtn(paid, 'paid', by, name,
+        { label: 'деньги', text: paid ? fmtMoney(paid) + ' ₽' : '—' }) + '</span>' +
+    '</div>';
+  }
+  function sbHead(first, money) {
+    return '<div class="mkd-th"><span>' + first + '</span><span>Пришли</span>' +
+      SB_STEPS.map(function (k) { return '<span>' + SB_STEP_COL[k] + '</span>'; }).join('') +
+      '<span>' + money + '</span></div>';
+  }
+
+  function sbChannels(d) {
+    var rows = (d.channels || []).map(function (c) {
+      return sbPathRow(c.name, 'взяли в работу <b class="sb-cv ' + sbCvCls(c.taken_pct) + '">' +
+        sbPct(c.taken_pct) + '</b>', c, 'ch', c.paid);
+    }).join('');
+    return '<div class="card sp12 sb-tbl-card"><div class="sec-head pf-sec"><span class="ic">' + ic('funnel', 14) +
+      '</span><div><div class="t">Каналы</div>' +
+      '<div class="s">лиды месяца по шагам; деньги — сколько эти люди уже заплатили</div></div></div>' +
+      (rows ? '<div class="mkd-tbl sb-grid">' + sbHead('Канал', 'Оплатили') + rows + '</div>'
+        : '<div class="empty">Лидов в этом месяце нет.</div>') + '</div>';
+  }
+
+  function sbManagers(d) {
+    var rows = (d.managers || []).map(function (m) {
+      var nobody = m.name === SB_NOBODY;
+      return sbPathRow(m.name, nobody ? 'лиды без ответственного' : '', m.path, 'who', m.paid,
+        nobody ? 'sb-nobody' : '');
+    }).join('');
+    return '<div class="card sp12 sb-tbl-card"><div class="sec-head pf-sec"><span class="ic">' + ic('team', 14) +
+      '</span><div><div class="t">Менеджеры</div>' +
+      '<div class="s">его новые лиды месяца по шагам, тем же счетом, что каналы; деньги — где он продавец</div></div></div>' +
+      (rows ? '<div class="mkd-tbl sb-grid">' + sbHead('Кто ведет', 'Деньги') + rows + '</div>'
+        : '<div class="empty">За месяц никто ничего не вел.</div>') + '</div>';
+  }
+
+  /* Люди за цифрой. Фильтр собирается на клиенте из тех же строк, что и цифры. */
+  var SB_FLAG_TITLE = { lead: 'Пришли', contact: 'Связались', c_booked: 'Записались',
+    c_held: 'Пришли на встречу', c_contract: 'Договор',
+    booked: 'Записи месяца', held: 'Консультации месяца', contract: 'Договоры месяца',
+    paid: 'Заплатили', unowned: 'Никто не взял', no_contact: 'Взяли, но связи нет',
+    x_contact: 'Пришли, связи нет', x_booked: 'Связались, не записались',
+    x_held: 'Записались, не пришли', x_contract: 'Были на встрече, договора нет',
+    x_seller: 'Оплаты без продавца' };
+  var SB_PATH_ORDER = ['lead', 'contact', 'c_booked', 'c_held', 'c_contract'];
+
+  // Шаги пути вложены, как на сервере: дошедший до встречи считается и записанным.
+  function sbReached(p, f) {
+    var i = SB_PATH_ORDER.indexOf(f);
+    if (!p.lead) return false;
+    for (var j = i; j < SB_PATH_ORDER.length; j++) if (p[SB_PATH_ORDER[j]]) return true;
+    return false;
+  }
+  function sbHas(p, f, d, by) {
+    switch (f) {
+      case 'unowned': return (d.attention.unowned_ids || []).indexOf(p.id) >= 0;
+      case 'no_contact': return (d.attention.no_contact_ids || []).indexOf(p.id) >= 0;
+      case 'x_contact': return p.lead && !sbReached(p, 'contact');
+      case 'x_booked': return sbReached(p, 'contact') && !sbReached(p, 'c_booked');
+      case 'x_held': return sbReached(p, 'c_booked') && !sbReached(p, 'c_held');
+      case 'x_contract': return sbReached(p, 'c_held') && !sbReached(p, 'c_contract');
+      case 'x_seller': return p.paid_rub > 0 && !p.seller;
+      // В таблицах «деньги» по каналу — что заплатили лиды месяца, по менеджеру —
+      // оплаты месяца, где он продавец; в плане — все оплаты месяца.
+      case 'paid': return by === 'ch' ? p.lead && p.c_paid_rub > 0 : p.paid_rub > 0;
+    }
+    if (SB_PATH_ORDER.indexOf(f) >= 0) return sbReached(p, f);
+    return !!p[f];
+  }
+
+  function sbWait(p) {
+    var h = Math.floor((Date.now() - Date.parse(p.created_at)) / 3600000);
+    return h < 1 ? 'ждет меньше часа' : (h < 48 ? 'ждет ' + h + ' ч' : 'ждет ' + Math.floor(h / 24) + ' дн');
+  }
+
+  function sbPeople(d) {
+    var q = state._sbQ;
+    if (!q) return '';
+    var rows = (d.people || []).filter(function (p) {
+      if (!sbHas(p, q.f, d, q.by)) return false;
+      if (q.by === 'ch' && p.ch !== q.val) return false;
+      if (q.by === 'who') {
+        var who = q.f === 'paid' ? p.seller : (p.owner || SB_NOBODY);
+        if (who !== q.val) return false;
+      }
+      return true;
+    });
+    rows.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+    var waiting = q.f === 'unowned' || q.f === 'no_contact' || q.f === 'x_contact';
+    var title = (SB_FLAG_TITLE[q.f] || '') + (q.val ? ' · ' + q.val : '');
+    var body = rows.slice(0, 300).map(function (p) {
+      var marks = [];
+      if (p.c_contract || p.contract) marks.push('<em class="sev s-client">договор</em>');
+      else if (p.c_held || p.held) marks.push('<em class="sev s-call_done">была встреча</em>');
+      else if (p.c_booked || p.booked) marks.push('<em class="sev s-call_scheduled">записан</em>');
+      var rub = p.paid_rub || p.c_paid_rub;
+      if (rub) marks.push('<em class="sev s-client">' + fmtMoney(rub) + ' ₽</em>');
+      var who = waiting
+        ? '<span class="sb-po wait">' + esc(sbWait(p)) + '</span>'
+        : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>';
+      return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
+        '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
+          (p.created_at ? ' · пришел ' + esc(fmtDay(p.created_at)) : '') + '</small></span>' +
+        who + '<span class="sb-pm">' + marks.join('') + '</span></button>';
+    }).join('');
+    return '<div class="card sp12 sb-people" id="sb-people"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
+      '</span><div><div class="t">' + esc(title) + ' · <span class="num">' + fmtMoney(rows.length) + '</span></div>' +
+      '<div class="s">это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка</div></div>' +
+      '<button class="icobtn sm" id="sb-pclose" title="Закрыть список">' + ic('x', 15) + '</button></div>' +
+      (rows.length ? '<div class="sb-plist">' + body + '</div>' +
+        (rows.length > 300 ? '<div class="sb-pmore">Показаны первые 300</div>' : '')
+        : '<div class="empty">Здесь никого.</div>') + '</div>';
+  }
+
+  function sbShift(d) {
+    if (!d.current) return '';
+    var all = d.on_shift || [];
+    var on = all.filter(function (s) { return s.open; });
+    var done = all.filter(function (s) { return !s.open; });
+    var line = '<div class="sb-shift' + (on.length ? '' : ' none') + '"><span class="sb-dot"></span>' +
+      (on.length ? 'На смене: ' + on.map(function (s) {
+        return esc(s.name) + (s.consult ? ' (на консультации)' : '');
+      }).join(', ') : 'Сейчас на смене никого') + '</div>';
+    if (done.length) {
+      line += '<div class="sb-done">' + done.map(function (s) {
+        return '<span><b>' + esc(s.name) + '</b> закрыл смену' + (s.note ? ': ' + esc(s.note) : '') + '</span>';
+      }).join('') + '</div>';
+    }
+    return line;
+  }
+
+  // Вердикт шапки отвечает на вопрос экрана, а не только про план: зеленое «идем к
+  // плану» над потерей половины лидов врет. Потеря людей сильнее темпа.
+  function sbVerdict(d) {
+    var lost = (d.ideas || []).filter(function (i) { return i.kind === 'taken'; })[0];
+    if (lost) return { t: 'Теряем лидов', s: lost.title, cls: 'miss' };
+    return pfVerdict({ rows: d.plan, days_passed: d.days_passed, month: d.month });
+  }
+
+  function renderSales(view) {
+    // Экран смотрят по ходу дня: данные старше минуты перезапрашиваем при заходе.
+    if (state._sb && Date.now() - (state._sbAt || 0) > 60000) state._sb = null;
+    if (!state._sb) { view.innerHTML = dashSkeleton(); sbFetch(); return; }
+    if (state._sb === 'none' || state._sb === 'acl') {
+      view.innerHTML = '<div class="card"><div class="empty">' + (state._sb === 'acl'
+        ? 'Раздел «Продажи» открыт руководителям. Нужен доступ — напиши Павлу.'
+        : 'Не удалось загрузить продажи. Проверь интернет.') +
+        (state._sb === 'none' ? '<div><button class="bp ghost sb-retry" id="sb-retry">Попробовать снова</button></div>' : '') +
+        '</div></div>';
+      var rt = el('sb-retry');
+      if (rt) rt.addEventListener('click', function () { state._sb = null; renderView(); });
+      return;
+    }
+    var d = state._sb;
+    var passed = d.days_passed || 0, total = d.days_total || 30;
+    var dayPct = Math.min(100, Math.round(passed / total * 100));
+    var v = sbVerdict(d);
+    var now = new Date();
+    var isNow = d.month === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+
+    var head = '<div class="card pf-head">' +
+      '<div class="brd-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-sbmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(pfMonthTitle(d.month)) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-sbmon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+        (isNow ? '' : '<button class="qchip" data-sbmon="now">Сейчас</button>') +
+      '</div>' +
+      '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '">' +
+        '<div class="pf-vt">' + esc(v.t) + '</div><div class="pf-vs">' + esc(v.s) + '</div></div>' +
+      '<div class="pf-days">' +
+        '<div class="pf-dtrack"><span style="width:' + dayPct + '%"></span></div>' +
+        '<div class="pf-dtx">' + (d.current
+          ? 'прошло ' + passed + ' ' + plural(passed, 'день', 'дня', 'дней') + ' из ' + total
+          : 'месяц закрыт, ' + total + ' ' + plural(total, 'день', 'дня', 'дней')) + '</div>' +
+      '</div>' + sbShift(d) +
+    '</div>';
+
+    var plan = '<div class="card sp12 sb-plan">' +
+      '<div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) + '</span>' +
+      '<div><div class="t">План месяца</div>' +
+      '<div class="s">риска на шкале — где должны быть сегодня; план правится нажатием на цифру</div></div></div>' +
+      '<div class="pf-tbl">' + (d.plan || []).map(function (r) { return pfRow(r, passed > 0); }).join('') + '</div></div>';
+
+    view.innerHTML = '<div class="dash sb">' + head + sbPathBar(d) + sbIdeas(d) + plan +
+      sbChannels(d) + sbManagers(d) + sbPeople(d) + '</div>';
+    sbBind(view, d);
+    animBars(view);
+  }
+
+  function sbBind(view, d) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbmon]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-sbmon');
+        state._sbQ = null;
+        if (v === 'now') { state.pfMonth = ''; }
+        else {
+          var p = pfMonth().split('-');
+          var dt = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + parseInt(v, 10), 1);
+          state.pfMonth = dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2);
+        }
+        // Месяц общий с План-фактом: листаешь здесь — там тот же месяц.
+        state._sb = null; state._pf = null; state._pfAi = null;
+        renderView();
+      });
+    });
+
+    var steps = d.path_steps || [];
+    Array.prototype.forEach.call(view.querySelectorAll('.sb-pathwrap .stat'), function (b, i) {
+      if (!steps[i]) return;
+      b.setAttribute('data-sbf', steps[i].key);
+      b.setAttribute('title', 'Показать этих людей поименно');
+      if (sbIsOn(steps[i].key, '', '')) b.classList.add('on');
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbf]'), function (b) {
+      b.addEventListener('click', function () {
+        var q = { f: b.getAttribute('data-sbf'), by: b.getAttribute('data-sbby') || '',
+                  val: b.getAttribute('data-sbval') || '' };
+        // Повторный клик по той же цифре закрывает список.
+        state._sbQ = sbIsOn(q.f, q.by, q.val) ? null : q;
+        renderView();
+        var box = el('sb-people');
+        if (box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    var close = el('sb-pclose');
+    if (close) close.addEventListener('click', function () { state._sbQ = null; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
+
+    /* План правится на месте, тем же приемом, что в План-факте; пишет в тот же план. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pfset]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-pfset');
+        var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
+        var inp = document.createElement('input');
+        inp.className = 'ed-input pf-in num';
+        inp.value = was;
+        inp.setAttribute('inputmode', 'numeric');
+        inp.setAttribute('placeholder', '0');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus();
+        inp.select();
+        var done = false;
+        var save = function () {
+          if (done) return;
+          done = true;
+          var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+          if (isNaN(n)) n = 0;
+          if (String(n) === String(was || 0)) { renderView(); return; }
+          api('/admin/api/sales/plan', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ month: pfMonth(), metric: key, target: n }),
+          }).then(function () {
+            state._sb = null; state._pf = null;
+            renderView();
+          }).catch(function () { showToast('План не сохранился — проверь сеть'); renderView(); });
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { done = true; renderView(); }
+        });
+        inp.addEventListener('blur', save);
+      });
+    });
+  }
+  /* ── МОЯ СМЕНА — рабочий экран менеджера продаж на день ─────────────────────
+     Павел 07.11.2026: «нужен конкретный план на день: как открыть смену, куда
+     смотреть, как связываться, где вбивать номера и звонить, как закрыть смену,
+     какой отчет сдавать». Экран отвечает на один вопрос: что мне делать сейчас.
+
+     Главное на экране — план смены из шести шагов с числами: открыть смену, ответить
+     новым, встречи, дожать, взять свободных, закрыть. Под ним те же шаги списками
+     людей. Очереди считает сервер (routers/sales_shift.py) в порядке приоритета
+     нулевого этапа. Звонок — наша звонилка в отдельном окне: одно окно на всю смену,
+     каждый следующий номер подставляется в него же, линия не переподключается. */
+  var MS = { d: null, busy: false, at: 0, closing: false };
+
+  function msLoad(force) {
+    if (MS.busy || (MS.d && !force && Date.now() - MS.at < 60000)) return;
+    MS.busy = true;
+    api('/admin/api/sales/my-day').then(function (r) {
+      MS.d = r; MS.busy = false; MS.at = Date.now();
+      if (state.page === 'myshift') renderView();
+    }).catch(function (e) {
+      MS.busy = false;
+      if (e.message === '403') return;
+      MS.d = 'none';
+      if (state.page === 'myshift') renderView();
+    });
+  }
+
+  function msPhone(d) {
+    if (!d) return '';
+    if (/^7\d{10}$/.test(d)) return '+7 ' + d.slice(1, 4) + ' ' + d.slice(4, 7) + '-' + d.slice(7, 9) + '-' + d.slice(9);
+    return '+' + d;
+  }
+  function msAge(min) {
+    if (min < 60) return min + ' мин';
+    if (min < 48 * 60) return Math.floor(min / 60) + ' ч';
+    return Math.floor(min / 1440) + ' дн';
+  }
+  function msWhen(iso) {
+    var d = new Date(iso), now = new Date();
+    var t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    var day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var diff = Math.round((day - today) / 86400000);
+    return (diff === 0 ? 'сегодня' : diff === 1 ? 'завтра' : fmtDay(iso)) + ', ' + t;
+  }
+
+  /* Кнопки строки: позвонить, связался, взять, карточка. Звонок без права на
+     звонилку уходит обычной ссылкой tel: — с телефона менеджера это тоже звонок. */
+  function msActs(p, kind, canCall) {
+    var out = [];
+    // Свободного лида сначала берут, потом звонят: иначе звонок без ответственного.
+    // Синяя кнопка звонка одна на строку и только там, где ждут первого ответа.
+    if (p.phone && kind !== 'pool') {
+      out.push(canCall
+        ? '<button class="bp ms-call' + (kind === 'respond' ? '' : ' ghost') + '" data-mscall="' + esc(p.phone) + '">' +
+          ic('phone', 13) + 'Позвонить</button>'
+        : '<a class="bp ghost ms-call" href="tel:+' + esc(p.phone) + '">' + ic('phone', 13) + msPhone(p.phone) + '</a>');
+    }
+    if (kind === 'respond') out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '">Связался</button>');
+    if (kind === 'pool') out.push('<button class="bp" data-mstake="' + esc(p.id) + '">Взять себе</button>');
+    out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
+    return '<div class="ms-acts">' + out.join('') + '</div>';
+  }
+
+  function msRow(p, kind, canCall) {
+    var meta = [esc(p.ch + (p.sub ? ' · ' + p.sub : ''))];
+    if (p.grade) meta.push(esc(p.grade));
+    if (!p.phone && p.contact) meta.push(esc(p.contact));
+    if (!p.phone && !p.contact) meta.push('номера нет, писать в диалог');
+    var tag = '';
+    if (kind === 'respond' || kind === 'pool') {
+      tag = '<span class="sev ' + (p.age_min > 15 ? 'ms-late' : 'ms-ok') + '">ждет ' + msAge(p.age_min) + '</span>';
+    } else if (kind === 'follow') {
+      tag = '<span class="sev ' + (p.next_in_days != null && p.next_in_days <= 0.5 ? 'ms-late' : 'ms-ok') + '">касание ' +
+        p.touch + ' из 5 · день ' + p.day + '</span>';
+    }
+    return '<div class="ms-row">' +
+      '<div class="ms-nm"><b>' + esc(p.name) + '</b><small>' + meta.join(' · ') + '</small></div>' +
+      tag + msActs(p, kind, canCall) + '</div>';
+  }
+
+  function msSection(id, title, sub, rows, empty) {
+    return '<div class="card sp12 ms-sec" id="ms-' + id + '">' +
+      '<div class="sec-head pf-sec"><div><div class="t">' + title + '</div><div class="s">' + sub + '</div></div></div>' +
+      (rows ? '<div class="ms-list">' + rows + '</div>' : '<div class="empty">' + empty + '</div>') + '</div>';
+  }
+
+  function msPlan(d, open) {
+    var steps = [
+      { n: 1, t: 'Открыть смену', s: open ? 'идет' : 'начни с этого', done: open, go: '' },
+      { n: 2, t: 'Ответить новым', s: d.respond.length ? d.respond.length + ' ждут, норма 15 минут' : 'все отвечены',
+        done: !d.respond.length, go: 'respond', hot: d.respond.length > 0 },
+      { n: 3, t: 'Встречи', s: d.meets.length ? d.meets.length + ' на ближайшие дни' : 'встреч нет', done: false, go: 'meets' },
+      { n: 4, t: 'Дожать до записи', s: d.follow.length ? d.follow.length + ' на связи без записи' : 'никого', done: !d.follow.length, go: 'follow' },
+      { n: 5, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
+      { n: 6, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
+    ];
+    return '<div class="card ms-plan">' + steps.map(function (st) {
+      return '<button class="ms-step' + (st.done ? ' done' : '') + (st.hot ? ' hot' : '') + '"' +
+        (st.go ? ' data-msgo="' + st.go + '"' : ' disabled') + '>' +
+        '<span class="ms-sn">' + (st.done ? ic('check', 13) : st.n) + '</span>' +
+        '<span class="ms-st"><b>' + st.t + '</b><small>' + esc(st.s) + '</small></span></button>';
+    }).join('') + '</div>';
+  }
+
+  function msHead(open, cnt) {
+    if (!open) {
+      return '<div class="card sh-card ms-head"><div class="sh-main"><span class="sh-dot off"></span><div>' +
+        '<div class="sh-t">Смена не открыта</div><div class="sh-s">' + cnt + '</div></div></div>' +
+        '<button class="bp sh-go" id="ms-open">Открыть смену</button></div>';
+    }
+    var consult = open.on_consult
+      ? '<button class="bp ghost" id="ms-consult" data-on="0">Вернулся</button>'
+      : '<button class="bp ghost" id="ms-consult" data-on="1">Ушел на консультацию</button>';
+    return '<div class="card sh-card on ms-head"><div class="sh-main"><span class="sh-dot on"></span><div>' +
+      '<div class="sh-t">Смена идет · <span id="sh-elapsed" class="num">' + shDur(open.elapsed_sec * 1000) + '</span>' +
+      (open.on_consult ? ' <span class="sh-badge">на консультации</span>' : '') + '</div>' +
+      '<div class="sh-s">' + cnt + '</div></div></div>' +
+      '<div class="sh-btns">' + consult + '<button class="bp ghost" id="ms-close" data-msgo="close">Закрыть смену</button></div></div>';
+  }
+
+  /* Закрытие — короткий отчет: цифры CRM уже знает, человек пишет одну строку того,
+     чего в цифрах нет. Строку видит руководитель на экране «Продажи». */
+  function msClose(d, open) {
+    if (!MS.closing || !open) return '';
+    var t = d.today;
+    return '<div class="card sp12 ms-closebox" id="ms-closebox">' +
+      '<div class="sec-head pf-sec"><div><div class="t">Закрыть смену</div>' +
+      '<div class="s">цифры CRM посчитала сама, проверь и допиши итог</div></div></div>' +
+      '<div class="ms-sum">' +
+        '<span><b class="num">' + t.calls + '</b>звонков, из них разговоров ' + t.talks + '</span>' +
+        '<span><b class="num">' + t.touched + '</b>новым ответил</span>' +
+        '<span><b class="num">' + t.booked + '</b>записал на встречу</span>' +
+        '<span><b class="num">' + t.held + '</b>провел встреч</span>' +
+      '</div>' +
+      '<label class="al-l" for="ms-note">Итог смены одной строкой</label>' +
+      '<textarea class="al-in ms-note" id="ms-note" rows="2" maxlength="1000" ' +
+        'placeholder="Например: двое просили перезвонить в понедельник, у Ивановой вопрос по цене к Павлу"></textarea>' +
+      '<div class="ms-cbtns"><button class="bp" id="ms-close-go">Закрыть смену</button>' +
+        '<button class="bp ghost" id="ms-close-no">Еще поработаю</button></div></div>';
+  }
+
+  function renderMyShift(view) {
+    shLoad();
+    msLoad();
+    var d = MS.d, sh = SH.cur;
+    if (!d || !sh) { view.innerHTML = dashSkeleton(); return; }
+    if (d === 'none' || sh.failed) {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить смену. Проверь интернет.' +
+        '<div><button class="bp ghost sb-retry" id="ms-retry">Попробовать снова</button></div></div></div>';
+      el('ms-retry').addEventListener('click', function () { MS.d = null; SH.cur = null; renderView(); });
+      return;
+    }
+    var open = sh.open;
+    var cnt = 'за месяц ' + sh.shifts + ' ' + plural(sh.shifts, 'смена', 'смены', 'смен') +
+      ' · ' + String(sh.hours || 0).replace('.', ',') + ' ч';
+    var t = d.today;
+    var stats = statBar([
+      { label: 'Звонков', value: fmtMoney(t.calls), sub: 'разговоров ' + t.talks },
+      { label: 'Минут разговора', value: fmtMoney(t.talk_min), sub: 'за сегодня' },
+      { label: 'Ответил новым', value: fmtMoney(t.touched), sub: 'первое касание' },
+      { label: 'Записал', value: fmtMoney(t.booked), sub: 'на встречу' },
+      { label: 'Провел встреч', value: fmtMoney(t.held), sub: 'за сегодня' },
+    ], 'five');
+    var cc = d.can_call;
+    var meets = d.meets.map(function (m) {
+      return '<div class="ms-row"><div class="ms-nm"><b>' + esc(m.name) + '</b><small>' +
+        (m.kind === 'slot' ? 'записался сам в окно' : 'консультация') + '</small></div>' +
+        '<span class="sev ms-when">' + esc(msWhen(m.at)) + '</span>' + msActs(m, 'meet', cc) + '</div>';
+    }).join('');
+    var calls = d.calls.map(function (c) {
+      var talk = c.answered ? Math.floor(c.talk_sec / 60) + ':' + ('0' + c.talk_sec % 60).slice(-2) : 'без ответа';
+      return '<div class="ms-row ms-crow"><div class="ms-nm"><b>' + esc(c.lead && c.lead.name || msPhone(c.number)) + '</b>' +
+        '<small>' + (c.direction === 'in' ? 'входящий' : 'исходящий') + ' · ' + esc(msWhen(c.at)) + '</small></div>' +
+        '<span class="sev ' + (c.answered ? 'ms-ok' : 'ms-late') + '">' + talk + '</span>' +
+        (c.lead ? '<div class="ms-acts"><button class="icobtn sm" data-mslead="' + esc(c.lead.id) + '" title="Открыть карточку">' +
+          ic('ext', 14) + '</button></div>' : '<div class="ms-acts"></div>') + '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + msPlan(d, !!open) + msClose(d, open) + stats +
+      (cc ? '' : '<div class="card ms-nocall">Звонилка тебе пока не подключена: номера открываются обычным звонком с телефона. ' +
+        'Чтобы звонки и записи шли через CRM, попроси доступ у Павла.</div>') +
+      msSection('respond', 'Ответить сейчас', 'твои лиды, с которыми еще никто не связался; позвони, не дозвонился — напиши в диалог',
+        d.respond.map(function (p) { return msRow(p, 'respond', cc); }).join(''), 'Новых без ответа нет.') +
+      msSection('meets', 'Встречи', 'консультации твоих лидов на ближайшие дни; за сутки подтверди, за час напомни',
+        meets, 'Встреч пока нет. Записывай в свои окна в «Расписании».') +
+      msSection('follow', 'Дожать до записи', 'на связи, но не записались; пять касаний за 14 дней: +1, +3, +7, +14 день',
+        d.follow.map(function (p) { return msRow(p, 'follow', cc); }).join(''), 'Всех довел до записи или до отказа.') +
+      msSection('pool', 'Свободные лиды', d.pool_total > d.pool.length
+          ? 'никто не взял, показаны ' + d.pool.length + ' самых свежих из ' + d.pool_total : 'никто не взял за неделю; взял — лид твой',
+        d.pool.map(function (p) { return msRow(p, 'pool', cc); }).join(''), 'Свободных нет.') +
+      msSection('calls', 'Звонки сегодня', 'твои звонки через звонилку CRM', calls, 'Сегодня звонков еще не было.') +
+      '</div>';
+    msBind(view);
+    if (open) shStartTimer(Date.parse(open.started_at));
+  }
+
+  function msAfter(p) {
+    return p.then(function () { MS.d = null; msLoad(true); shLoad(true); })
+      .catch(function () { showToast('Не получилось, проверь интернет'); renderView(); });
+  }
+
+  function msBind(view) {
+    var o = el('ms-open');
+    if (o) o.addEventListener('click', function () { o.disabled = true; msAfter(shAct('open')); });
+    var cs = el('ms-consult');
+    if (cs) cs.addEventListener('click', function () {
+      cs.disabled = true; msAfter(shAct('consult', { on: cs.getAttribute('data-on') === '1' }));
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-msgo]'), function (b) {
+      b.addEventListener('click', function () {
+        var go = b.getAttribute('data-msgo');
+        if (go === 'close') {
+          if (!SH.cur || !SH.cur.open) { showToast('Смена еще не открыта'); return; }
+          MS.closing = true; renderView();
+          var box = el('ms-closebox');
+          if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'start' }); el('ms-note').focus(); }
+          return;
+        }
+        var sec = el('ms-' + go);
+        if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    var cg = el('ms-close-go');
+    if (cg) cg.addEventListener('click', function () {
+      cg.disabled = true;
+      var note = (el('ms-note').value || '').trim();
+      MS.closing = false;
+      msAfter(shAct('close', { note: note }).then(function () { showToast('Смена закрыта, итог ушел руководителю'); }));
+    });
+    var cn = el('ms-close-no');
+    if (cn) cn.addEventListener('click', function () { MS.closing = false; renderView(); });
+
+    // Одно окно звонилки на всю смену: следующий номер подставляется в него же.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mscall]'), function (b) {
+      b.addEventListener('click', function () {
+        window.open(location.origin + '/zvonilka/#n=' + encodeURIComponent(b.getAttribute('data-mscall')), 'es-zvonilka');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mslead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-mslead')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mstouch]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        msAfter(api('/admin/api/leads/' + b.getAttribute('data-mstouch') + '/touch', { method: 'POST' }));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mstake]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        msAfter(api('/admin/api/leads/' + b.getAttribute('data-mstake') + '/take', { method: 'POST' })
+          .then(function () { showToast('Лид твой, он в «Ответить сейчас»'); }));
+      });
+    });
+  }
 
   /* ── ВОЗНАГРАЖДЕНИЕ — что человек сделал за месяц и сколько ему причитается ──
      Роман 28.10.2026 дословно: «на конец месяца смотришь, что сделал человек,
@@ -53668,10 +54298,10 @@
     SH.busy = true;
     api('/admin/api/shift/current').then(function (r) {
       SH.cur = r; SH.busy = false;
-      if (state.page === 'dash') renderView();
+      if (state.page === 'dash' || state.page === 'myshift') renderView();
     }).catch(function () {
       SH.cur = { failed: true }; SH.busy = false;
-      if (state.page === 'dash') renderView();
+      if (state.page === 'dash' || state.page === 'myshift') renderView();
     });
   }
   function shAct(path, body) {
