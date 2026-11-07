@@ -1958,7 +1958,7 @@
         body: JSON.stringify({ login: login, password: pass }),
       }).then(function (r) {
         if (r.status === 401) { fail('Неверный логин или пароль'); el('lg-go').textContent = 'Войти'; return null; }
-        if (!r.ok) { fail('Не получилось войти, проверь сеть'); el('lg-go').textContent = 'Войти'; return null; }
+        if (!r.ok) { fail('Сервер не отвечает как надо, это не твоя сеть. Попробуй через пару минут'); el('lg-go').textContent = 'Войти'; return null; }
         return r.json();
       }).then(function (j) {
         if (!j) return;
