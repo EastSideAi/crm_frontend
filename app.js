@@ -38815,12 +38815,18 @@
       return '<div class="sp-part ' + st.cls + '">' +
         '<div class="sp-ph"><span class="sp-pl">' + esc(p.period_label) + '</span>' +
           '<span class="sp-st ' + st.cls + '">' + esc(st.t) + '</span></div>' +
-        '<div class="sp-pp">' + (p.period_exists ? 'открыт в ведомости' : 'в ведомости еще не открыт') + '</div>' +
+        '<div class="sp-pp">' + (p.period_exists ? 'открыт в ведомости, даты меняет Роман'
+          : 'в ведомости еще не открыт' + (p.ended ? '' : ' · <button class="sp-lnk" data-spend="' + esc(p.end_key) +
+            '" data-from="' + esc(p.period_from) + '" data-to="' + esc(p.period_to) + '">сдвинуть конец</button>' +
+            (p.moved ? ' · <button class="sp-lnk" data-spunend="' + esc(p.end_key) + '">как в модели</button>' : ''))) + '</div>' +
         '<div class="sp-pk">план периода</div>' +
-        '<div class="sp-pv num">' + (p.period_plan ? smRub(p.period_plan) : '—') + '</div>' +
+        '<div class="sp-pv num"><button class="sp-set sp-big' + (p.period_plan ? '' : ' none') + '" data-spset="' + esc(p.plan_key) +
+          '" data-money="1" title="Вписать свой план периода">' + (p.period_plan ? smRub(p.period_plan) : 'поставить') + '</button></div>' +
+        (p.period_plan_own ? '<div class="sp-own">вписан руками, по планам месяцев ' + smRub(p.period_plan_auto) +
+          ' · <button class="sp-lnk" data-spunplan="' + esc(p.plan_key) + '">вернуть</button></div>' : '') +
         fore +
         '<div class="sp-mo">' +
-          '<div class="sp-pf">' + (cut ? 'план на ' + esc(p.label) : 'план периода в этом месяце') + ' <b class="num">' + smRub(p.plan) + '</b></div>' +
+          (cut ? '<div class="sp-pf">из плана месяца на ' + esc(p.label) + ' <b class="num">' + smRub(p.plan) + '</b></div>' : '') +
           (cut && p.period_plan - p.plan < 1 ? '<div class="sp-pf">на остальные дни периода плана месяца нет</div>' : '') +
           (set ? '<div class="sp-pf">отложить в фонды <b class="num">' + smRub(set) + '</b></div>' : '') +
         '</div>' +
@@ -38998,6 +39004,32 @@
       }).then(function () { state._sp = null; state._sb = null; state._pf = null; renderView(); })
         .catch(function () { showToast('План не сохранился, проверь сеть'); renderView(); });
     };
+    // Конец неоткрытого периода: дата → длина в днях, следующий период подстроится.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spend]'), function (b) {
+      b.addEventListener('click', function () {
+        var inp = document.createElement('input');
+        inp.type = 'date';
+        inp.className = 'ed-input sp-date';
+        inp.value = b.getAttribute('data-to');
+        inp.min = b.getAttribute('data-from');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus();
+        if (inp.showPicker) { try { inp.showPicker(); } catch (e) { /* не везде можно без жеста */ } }
+        inp.addEventListener('change', function () {
+          if (!inp.value) return;
+          var a = new Date(inp.min + 'T00:00:00'), z = new Date(inp.value + 'T00:00:00');
+          var len = Math.round((z - a) / 86400000) + 1;
+          if (len < 1 || len > 40) { showToast('Период от 1 до 40 дней'); return; }
+          put(b.getAttribute('data-spend'), len);
+        });
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Escape') renderView(); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spunend], [data-spunplan]'), function (b) {
+      b.addEventListener('click', function () {
+        put(b.getAttribute('data-spunend') || b.getAttribute('data-spunplan'), 0);
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-spgo]'), function (b) {
       b.addEventListener('click', function () { finPlanGoSheet(b.getAttribute('data-spgo')); });
     });

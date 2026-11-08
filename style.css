@@ -12605,6 +12605,11 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sp-part.now { border-color: var(--line-2); background: #fff; }
 .sp-part.soon, .sp-part.late { border-color: var(--amber); background: #fff; }
 .sp-ph { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.sp-set.sp-big { font: inherit; letter-spacing: inherit; margin: -2px -8px; padding: 2px 8px; }
+.sp-own { font-size: 11.5px; color: var(--amber-ink); margin: -2px 0 6px; }
+.sp-lnk { font: inherit; color: var(--blue); background: none; border: 0; padding: 0; cursor: pointer; }
+.sp-lnk:hover { text-decoration: underline; }
+.sp-date { width: 150px; height: 28px; font-size: 12px; padding: 0 8px; }
 .sp-mo { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); display: flex;
   flex-direction: column; gap: 3px; }
 .sp-st { font-size: 11.5px; font-weight: 600; color: var(--ink-2); background: #fff; border-radius: 999px;
