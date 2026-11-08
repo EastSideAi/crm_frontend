@@ -12337,6 +12337,430 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   .pf-ai { padding: 4px 18px 20px; }
 }
 
+/* ════ ПРОДАЖИ (раздел sales) — экран руководителя отдела продаж ════
+   Собран из готовых рецептов: шапка месяца и строки плана — План-факта (.pf-*),
+   полоса пути — плитки .statbar, таблицы каналов и менеджеров — .mkd-*. Своего тут
+   только то, чего в них нет: число-кнопка, открывающее людей, карточки «что не
+   так» и список людей за цифрой. */
+.sb .pf-head .sb-shift, .sb .pf-head .sb-done { grid-column: 1 / -1; }
+.sb-shift { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600;
+  color: var(--ink); padding-top: 12px; border-top: 1px solid var(--line); }
+.sb-shift.none { color: var(--amber-ink); }
+.sb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
+.sb-shift.none .sb-dot { background: var(--amber); }
+.sb-done { display: flex; flex-direction: column; gap: 4px; margin-top: -6px; font-size: 12.5px;
+  color: var(--ink-2); line-height: 1.5; }
+.sb-done b { font-weight: 600; color: var(--ink); }
+.sb-cv { font-weight: 700; font-style: normal; }
+.sb-cv.good { color: var(--green-ink); }
+.sb-cv.weak { color: var(--red-ink); }
+.sb-cv.none { color: var(--ink-3); font-weight: 500; }
+
+.sb-ideas .pf-sec, .sb-tbl-card .pf-sec, .sb-plan .pf-sec { padding: 20px 24px 16px; }
+.sb-plan { overflow: hidden; }
+.sb-ilist { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px; padding: 0 24px 22px; }
+/* Карточка проблемы — мини-плашка на заливке, как все мини-карточки CRM. Красное
+   только полоской слева у самого раннего разрыва пути (никто не взял): это
+   потеря людей, остальное — места разговора. */
+.sb-idea { position: relative; background: var(--fill); border-radius: var(--r-lg);
+  padding: 14px 16px 14px 18px; display: flex; flex-direction: column; gap: 6px; }
+.sb-idea::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--amber); }
+.sb-idea.taken::before { background: var(--red); }
+.sb-idea.plan::before { background: var(--navy); }
+.sb-it { font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.4; letter-spacing: -.01em; }
+.sb-if { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+.sb-act { align-self: flex-start; margin-top: auto; background: #fff; }
+.sb-act.on { color: var(--blue); border-color: var(--blue); }
+.sb-retry { margin-top: 12px; }
+
+/* Число-кнопка в таблице: выглядит числом, на ховере синеет — значит, за ним люди. */
+.sb-n { font: 600 14px 'Manrope', sans-serif; color: var(--ink); background: none; border: 0;
+  padding: 4px 6px; margin: -4px -6px; border-radius: 8px; cursor: pointer; text-align: right;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  transition: background .12s var(--ease), color .12s var(--ease); }
+.sb-n:hover, .sb-n.on { background: var(--blue-tint); color: var(--blue); }
+.sb-n:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.sb-n.zero { color: var(--ink-3); font-weight: 500; cursor: default; }
+.sb-n.zero:hover { background: none; color: var(--ink-3); }
+.sb-cell { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; }
+.sb-cell i { min-width: 34px; text-align: right; font-size: 12.5px; }
+.sb-grid .mkd-th, .sb-grid .mkd-tr {
+  grid-template-columns: minmax(150px, 1.5fr) 64px repeat(4, minmax(86px, .75fr)) 116px; }
+.sb-grid .mkd-tr { height: 58px; }
+.sb-nobody .mkd-nm b { color: var(--red-ink); }
+.mkd-nm small .sb-cv { display: inline; font-size: inherit; color: inherit; }
+.mkd-nm small .sb-cv.weak { color: var(--red-ink); }
+.mkd-nm small .sb-cv.good { color: var(--green-ink); }
+.sb-pathwrap .stat { cursor: pointer; }
+.sb-pathwrap .stat.on { background: var(--blue-tint); }
+
+.sb-people .pf-sec { padding: 20px 24px 14px; }
+.sb-people .pf-sec .icobtn { margin-left: auto; }
+.sb-plist { border-top: 1px solid var(--line); max-height: 560px; overflow-y: auto; }
+.sb-pr { display: grid; grid-template-columns: minmax(180px, 1.6fr) minmax(120px, .8fr) minmax(120px, 1fr);
+  gap: 14px; align-items: center; width: 100%; min-height: 54px; padding: 8px 24px; border: 0;
+  border-bottom: 1px solid var(--line); background: #fff; text-align: left; cursor: pointer;
+  position: relative; font: inherit; transition: background .14s var(--ease); }
+.sb-pr:last-child { border-bottom: none; }
+.sb-pr:hover { background: #FBFBFC; }
+.sb-pr::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: opacity .14s var(--ease); }
+.sb-pr:hover::before { opacity: 1; }
+.sb-pr:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.sb-pn { min-width: 0; }
+.sb-pn b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-pn small { display: block; font-size: 11px; color: var(--ink-3); font-weight: 500; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-po { font-size: 12.5px; font-weight: 600; color: var(--ink-2); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.sb-po.none, .sb-po.wait { color: var(--red-ink); }
+.sb-po.calm { color: var(--ink-2); font-weight: 500; }
+.sb-pm { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.sb-pmore { padding: 12px 24px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); }
+
+/* Идем ли в план: одна крупная строка про деньги, под ней остальные строки плана
+   тише. Цвет несет только число отставания: красный — отстаем, зеленый — впереди. */
+.sb-pace .pf-sec, .sb-work .pf-sec { padding: 20px 24px 16px; }
+.sb-pbody { display: grid; grid-template-columns: minmax(280px, 1.1fr) minmax(260px, 1fr);
+  gap: 24px; padding: 0 24px 22px; align-items: start; }
+.sb-pmain { display: flex; flex-direction: column; gap: 6px; }
+.sb-plbl { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.sb-pbig { font-size: 30px; font-weight: 800; letter-spacing: -.025em; line-height: 1.1;
+  color: var(--ink); font-variant-numeric: tabular-nums; }
+.sb-pmain.behind .sb-pbig { color: var(--red-ink); }
+.sb-pmain.ahead .sb-pbig { color: var(--green-ink); }
+.sb-psub { font-size: 13px; color: var(--ink-2); line-height: 1.55; max-width: 520px; text-wrap: pretty; }
+.sb-prest { display: flex; flex-direction: column; border-left: 1px solid var(--line); padding-left: 24px; }
+.sb-prow { display: grid; grid-template-columns: minmax(110px, 1fr) auto minmax(120px, auto);
+  gap: 14px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.sb-prow:last-child { border-bottom: none; }
+.sb-pn2 { font-weight: 600; color: var(--ink); }
+.sb-pf { font-weight: 700; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.sb-pf small { font-weight: 500; color: var(--ink-3); font-size: 12px; }
+.sb-pd { font-size: 12.5px; font-weight: 600; color: var(--ink-3); text-align: right; white-space: nowrap; }
+.sb-pd.behind { color: var(--red-ink); }
+.sb-pd.ahead { color: var(--green-ink); }
+.sb-pnone { padding: 0 24px 22px; font-size: 13px; color: var(--ink-2); line-height: 1.55; max-width: 640px; }
+
+/* В работе сейчас: полоса шагов той же плиткой, что путь месяца, под ней кто сколько
+   держит. Плитки внутри карточки — без своей рамки, карточка уже есть. */
+.sb-wbar { padding: 0 18px 6px; }
+.sb-wbar .statbar { box-shadow: none; border: 0; background: var(--fill); }
+.sb-wbar .stat { cursor: pointer; }
+.sb-wbar .stat.on { background: var(--blue-tint); }
+.sb-wbar .stat .kd { white-space: nowrap; }
+.sb-work .sb-wgrid { margin-top: 10px; }
+.sb-wgrid .mkd-th, .sb-wgrid .mkd-tr {
+  grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(90px, .7fr)) 76px 96px; }
+/* Просрочка: тихая красная цифра рядом с числом шага и своя колонка в конце строки.
+   Одна красная кнопка в шапке ведет ко всем просроченным сразу. */
+.sb-cell i.sb-wl { min-width: 0; font-style: normal; font: 700 11.5px 'Manrope', sans-serif; color: var(--red-ink);
+  background: var(--red-soft); border-radius: var(--r-pill); padding: 1px 7px; margin-left: 4px;
+  font-variant-numeric: tabular-nums; }
+.sb-wlc .sb-n:not(.zero) { color: var(--red-ink); }
+.sb-wlc .sb-n:not(.zero):hover, .sb-wlc .sb-n.on { background: var(--red-soft); color: var(--red-ink); }
+.sec-head > .qchip.sb-wlate { color: var(--red-ink); background: var(--red-soft); border-color: transparent; }
+.sec-head > .qchip.sb-wlate.on { box-shadow: inset 0 0 0 1.5px var(--red-ink); }
+.sb-wok { color: var(--green-ink); }
+.sb-wgrid .mkd-tr { height: 50px; }
+
+/* Вкладки «Воронка и план» / «Деньги и сверка» — первой строкой шапки, на всю ширину. */
+.sb-thead .sb-tabs { grid-column: 1 / -1; margin: -2px 0 -6px; }
+.sb-thead .sb-spans { grid-column: 1 / -1; margin: -6px 0 -4px; }
+.sb-how { grid-column: 1 / -1; margin: -6px 0 -2px; font-size: 12.5px; color: var(--ink-2); }
+.sb-how summary { cursor: pointer; font-weight: 600; color: var(--blue); width: max-content;
+  list-style: none; }
+.sb-how summary::-webkit-details-marker { display: none; }
+.sb-how ol { margin: 10px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px;
+  line-height: 1.55; max-width: 760px; }
+.sb-how b { color: var(--ink); font-weight: 600; }
+
+/* Деньги и сверка. Разбивка тремя колонками: строка — название, сумма и доля периода
+   тонкой полосой; строка-кнопка оставляет в списке поступлений только свои платежи. */
+.sm-nav { margin-left: 0; }
+.sm-open { font-size: 11px; font-weight: 700; color: var(--green-ink); background: var(--green-soft);
+  border-radius: 999px; padding: 3px 9px; margin-left: 4px; }
+.sm-split { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px; }
+.sm-grp { padding-bottom: 10px; }
+.sm-grp .pf-sec { padding: 18px 20px 10px; }
+.sm-g { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; width: 100%;
+  padding: 9px 20px 10px; border: 0; background: none; text-align: left; font: inherit; cursor: pointer;
+  transition: background .14s var(--ease); }
+.sm-g:hover { background: #FBFBFC; }
+.sm-g.on { background: var(--blue-tint); }
+.sm-g:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.sm-gl { min-width: 0; }
+.sm-gl b { display: block; font-size: 13px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-gl small { display: block; font-size: 11px; color: var(--ink-3); font-weight: 500; margin-top: 1px; }
+.sm-gv { font-size: 13.5px; font-weight: 700; color: var(--ink); text-align: right; white-space: nowrap; }
+.sm-gbar { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: var(--fill); overflow: hidden;
+  margin-top: 6px; }
+.sm-gbar i { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--blue);
+  transition: width .6s var(--ease); }
+.sm-g.on .sm-gbar { background: rgba(255,255,255,.7); }
+
+/* Сверка и поступления — одна строка: дата, кто и за что, пояснение, сумма. */
+.sm-check, .sm-lines { overflow: hidden; }
+.sm-check .pf-sec, .sm-lines .pf-sec { padding: 20px 24px 14px; }
+.sm-lines .pf-sec .sm-reset { margin-left: auto; }
+.sm-ch { border-top: 1px solid var(--line); }
+.sm-cht { padding: 12px 24px 8px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.sm-cr, .sm-ln { display: grid; gap: 14px; align-items: center; width: 100%; min-height: 52px;
+  padding: 8px 24px; border: 0; border-top: 1px solid var(--line); background: #fff; text-align: left;
+  font: inherit; position: relative; cursor: pointer; transition: background .14s var(--ease); }
+.sm-cr { grid-template-columns: 48px minmax(160px, 1.3fr) minmax(160px, 1.2fr) 120px; }
+.sm-ln { grid-template-columns: 48px minmax(160px, 1.5fr) minmax(100px, .8fr) minmax(110px, .8fr) 120px; }
+.sm-cr.nolink, .sm-ln.nolink { cursor: default; }
+.sm-cr:not(.nolink):hover, .sm-ln:not(.nolink):hover { background: #FBFBFC; }
+.sm-cr:focus-visible, .sm-ln:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.sm-d { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.sm-v { font-size: 13.5px; font-weight: 700; color: var(--ink); text-align: right; white-space: nowrap; }
+.sm-v small { display: block; font-size: 11px; font-weight: 600; color: var(--red-ink); margin-top: 1px; }
+.sm-lh { display: grid; grid-template-columns: 48px minmax(160px, 1.5fr) minmax(100px, .8fr) minmax(110px, .8fr) 120px;
+  gap: 14px; padding: 0 24px; height: 32px; align-items: center; background: var(--fill);
+  border-top: 1px solid var(--line); }
+.sm-lh span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.sm-lh span:last-child { text-align: right; }
+.sm-list { max-height: 620px; overflow-y: auto; }
+.sm-list .sm-ln:first-child { border-top: 0; }
+
+@media (max-width: 1100px) {
+  .sm-split { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 860px) {
+  .sm-split { grid-template-columns: 1fr; }
+  .sm-check .pf-sec, .sm-lines .pf-sec { padding: 18px 18px 12px; }
+  .sm-cht { padding: 12px 18px 8px; }
+  .sm-lh { display: none; }
+  .sm-cr, .sm-ln { grid-template-columns: 44px minmax(0, 1fr) auto; padding: 10px 18px; gap: 4px 12px; }
+  .sm-cr .sb-po, .sm-ln .sb-po { grid-column: 2 / -1; grid-row: 2; white-space: normal; font-size: 12px; }
+  .sm-ln .sb-po + .sb-po { grid-row: 3; }
+  .sm-cr .sm-v, .sm-ln .sm-v { grid-column: 3; grid-row: 1; }
+}
+
+/* План месяца: таблицы план / факт / выполнено. Цифра плана — кнопка в тексте,
+   пустая читается «поставить» тихим синим. */
+.sp-card .pf-sec { padding: 20px 24px 14px; }
+.sp-card { overflow: hidden; }
+.sp-tbl { border-top: 1px solid var(--line); }
+.sp-tr { display: grid; gap: 14px; align-items: center; min-height: 48px; padding: 6px 24px;
+  border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink); }
+.sp-tr:last-child { border-bottom: 0; }
+.sp-t4 .sp-tr { grid-template-columns: minmax(150px, 1.5fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(120px, 1fr); }
+.sp-tf .sp-tr { grid-template-columns: minmax(190px, 1.6fr) minmax(110px, 1fr) repeat(3, minmax(100px, .9fr)); }
+.sp-th { min-height: 32px; background: var(--fill); }
+.sp-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.sp-tr > span:not(.sp-nm) { text-align: right; }
+.sp-th > span:first-child { text-align: left; }
+.sp-nm { font-weight: 600; min-width: 0; }
+.sp-nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); margin-top: 2px; }
+.sp-total { background: #FBFBFC; font-weight: 700; }
+.sp-set { font: 600 13px 'Manrope', sans-serif; color: var(--ink); background: none; border: 0;
+  border-radius: 7px; padding: 4px 7px; margin: -4px -7px; cursor: pointer;
+  font-variant-numeric: tabular-nums; transition: background .14s var(--ease), color .14s var(--ease); }
+.sp-set:hover { background: var(--blue-tint); color: var(--blue); }
+.sp-set.none { color: var(--blue); font-weight: 500; }
+.sp-set[data-spgo] { display: inline-flex; align-items: center; gap: 4px; }
+.sp-set[data-spgo] svg { opacity: .55; }
+.sp-set:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.sp-in { width: 120px; text-align: right; }
+.sp-pair { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
+.sp-pair b { color: var(--ink); font-weight: 700; font-size: 13px; }
+.sp-prog { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.sp-bar { flex: 1; max-width: 90px; height: 4px; border-radius: 4px; background: var(--fill); overflow: hidden; }
+.sp-bar i { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--blue);
+  transition: width .6s var(--ease); }
+.sp-pct { min-width: 38px; font-size: 12.5px; font-weight: 700; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
+.sp-pct.ok { color: var(--green-ink); }
+.sp-dim { color: var(--ink-3); font-weight: 500; }
+.sp-dim2 { color: var(--ink-2); }
+.sp-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 24px 18px;
+  border-top: 1px solid var(--line); }
+.sp-note { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; max-width: 760px; text-wrap: pretty; }
+.sp-note b { color: var(--ink); }
+.sp-warn { font-size: 12.5px; color: var(--amber-ink); line-height: 1.5; flex: 1 1 320px; }
+.sp-add { margin-left: auto; max-width: 240px; }
+.sp-empty { padding: 0 24px 22px; font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+.sp-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.sp-split .sp-t4 .sp-tr { grid-template-columns: minmax(120px, 1.3fr) minmax(90px, 1fr) minmax(100px, 1fr) minmax(100px, .9fr); }
+.sp-partgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0 24px 22px; }
+.sp-part { background: var(--fill); border-radius: var(--r-lg); padding: 16px 18px; display: flex;
+  flex-direction: column; gap: 4px; }
+.sp-pl { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.sp-pp { font-size: 11.5px; color: var(--ink-3); }
+.sp-pv { font-size: 24px; font-weight: 800; letter-spacing: -.025em; color: var(--ink); margin: 8px 0 4px; }
+.sp-pf { font-size: 12.5px; color: var(--ink-2); }
+.sp-pf b { color: var(--ink); font-weight: 700; }
+/* План периода: плитка периода — якорь экрана. Сильнее всех выделен период, по
+   которому скоро срок внесения плана (амбер рамкой и чипом): туда руководителю идти. */
+.sp-part { border: 1.5px solid transparent; }
+.sp-part.now { border-color: var(--line-2); background: #fff; }
+.sp-part.soon, .sp-part.late { border-color: var(--amber); background: #fff; }
+.sp-ph { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.sp-set.sp-big { font: inherit; letter-spacing: inherit; margin: -2px -8px; padding: 2px 8px; }
+.sp-own { font-size: 11.5px; color: var(--amber-ink); margin: -2px 0 6px; }
+.sp-lnk { font: inherit; color: var(--blue); background: none; border: 0; padding: 0; cursor: pointer; }
+.sp-lnk:hover { text-decoration: underline; }
+.sp-date { width: 150px; height: 28px; font-size: 12px; padding: 0 8px; }
+.sp-mo { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); display: flex;
+  flex-direction: column; gap: 3px; }
+.sp-st { font-size: 11.5px; font-weight: 600; color: var(--ink-2); background: #fff; border-radius: 999px;
+  padding: 3px 9px; white-space: nowrap; }
+.sp-st.now { background: var(--blue-tint); color: var(--blue); }
+.sp-st.soon { background: var(--amber-soft); color: var(--amber-ink); }
+.sp-st.late { background: var(--red-soft); color: var(--red-ink); }
+.sp-pk { font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
+.sp-part .sp-pv { margin: 2px 0 6px; }
+.sp-fc { display: flex; flex-direction: column; gap: 4px; padding: 10px 0 12px; border-top: 1px solid var(--line); }
+.sp-fcv { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px;
+  color: var(--ink-2); }
+.sp-fcv b { font-size: 17px; font-weight: 800; letter-spacing: -.015em; color: var(--ink); }
+.sp-fcl { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--ink-3); }
+.sp-fcl b { color: var(--ink-2); font-weight: 600; letter-spacing: 0; }
+.sp-fcl .sp-cost { padding-left: 10px; }
+.sp-gap { font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+.sp-gap.bad { color: var(--red-ink); }
+.sp-gap.ok { color: var(--green-ink); }
+.sp-owl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 20px; padding: 0 24px 20px; }
+.sp-ow { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 0 10px; align-items: start; padding: 8px 0;
+  border-bottom: 1px solid var(--line); }
+.sp-ok { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line-2);
+  display: grid; place-items: center; margin-top: 1px; color: #fff; }
+.sp-ow.ok .sp-ok { background: var(--green); box-shadow: none; }
+.sp-on { font-size: 13px; font-weight: 600; color: var(--ink); }
+.sp-ob { grid-column: 2; font-size: 11.5px; color: var(--ink-3); }
+.sp-ow.ok .sp-on { color: var(--ink-2); }
+.sp-fr.manual .sp-nm small { color: var(--amber-ink); }
+
+@media (max-width: 1100px) {
+  .sp-split { grid-template-columns: 1fr; }
+}
+@media (max-width: 860px) {
+  .sp-card .pf-sec { padding: 18px 18px 12px; }
+  .sp-tr { padding: 8px 18px; gap: 8px; }
+  .sp-t4 .sp-tr, .sp-split .sp-t4 .sp-tr { grid-template-columns: 1fr auto; }
+  .sp-t4 .sp-th { display: none; }
+  .sp-t4 .sp-tr > span:nth-child(3) { grid-column: 1; grid-row: 2; text-align: left; font-size: 12px; color: var(--ink-2); }
+  .sp-t4:not(.sp-tk) .sp-tr > span:nth-child(3)::before { content: 'факт '; color: var(--ink-3); }
+  .sp-t4 .sp-tr > .sp-prog { grid-column: 2; grid-row: 2; }
+  .sp-tf { overflow-x: auto; }
+  .sp-tf .sp-tr { min-width: 600px; }
+  .sp-partgrid { grid-template-columns: 1fr; padding: 0 18px 18px; }
+  .sp-owl { grid-template-columns: 1fr; padding: 0 18px 16px; }
+  .sp-foot { padding: 12px 18px 16px; }
+  .sp-add { margin-left: 0; max-width: none; width: 100%; }
+}
+
+/* Телефон: таблица становится карточкой строки — имя целиком сверху, под ним все
+   шаги пути сеткой с подписью над числом (подпись берется из data-l ячейки).
+   Прятать шаги нельзя: путь, оборванный на записи, на телефоне ничего не отвечает. */
+@media (max-width: 860px) {
+  .sb-ilist { grid-template-columns: 1fr; padding: 0 18px 18px; }
+  .sb-ideas .pf-sec, .sb-tbl-card .pf-sec, .sb-people .pf-sec, .sb-plan .pf-sec { padding: 18px 18px 14px; }
+  .sb-grid .mkd-th { display: none; }
+  .sb-grid .mkd-tr { grid-template-columns: repeat(3, 1fr); height: auto; gap: 12px 10px;
+    padding: 14px 18px; align-items: start; }
+  .sb-grid .mkd-nm { grid-column: 1 / -1; }
+  .sb-grid .mkd-nm b { white-space: normal; }
+  .sb-grid .sb-cell { flex-direction: column; align-items: flex-start; gap: 2px; justify-content: flex-start; }
+  .sb-grid .sb-cell::before { content: attr(data-l); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 2px; }
+  .sb-grid .sb-cell .sb-n { margin: -4px -6px; text-align: left; }
+  .sb-grid .sb-cell i { min-width: 0; text-align: left; }
+  .sb-pr { grid-template-columns: 1fr auto; padding: 10px 18px; }
+  .sb-pm { grid-column: 1 / -1; justify-content: flex-start; }
+  .sb-pace .pf-sec, .sb-work .pf-sec { padding: 18px 18px 14px; }
+  .sb-pbody { grid-template-columns: 1fr; gap: 16px; padding: 0 18px 18px; }
+  .sb-pbig { font-size: 26px; }
+  .sb-prest { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .sb-prow { grid-template-columns: 1fr auto auto; gap: 10px; }
+  .sb-pf small { display: none; }
+  .sb-pnone { padding: 0 18px 18px; }
+  .sb-wbar { padding: 0 10px 6px; }
+}
+
+/* ════ МОЯ СМЕНА (раздел myshift) — рабочий экран менеджера продаж ════
+   Шапка смены — общий .sh-card из окна менеджера. Якорь экрана — план смены из
+   шести шагов: где ты по дню, видно одним взглядом; шаг с людьми, которые ждут
+   ответа, единственный горит красным. Ниже те же шаги списками людей. */
+.ms .ms-head { margin-bottom: 0; }
+.ms-plan { display: grid; grid-template-columns: repeat(6, 1fr); padding: 6px; gap: 2px; }
+.ms-step { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 14px 14px;
+  border: 0; background: none; border-radius: var(--r-lg); cursor: pointer; font: inherit;
+  transition: background .14s var(--ease); min-width: 0; }
+.ms-step:hover:not(:disabled) { background: var(--fill); }
+.ms-step:disabled { cursor: default; }
+.ms-step:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.ms-sn { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--blue-tint); color: var(--blue); font-size: 12.5px; font-weight: 700; }
+.ms-step.done .ms-sn { background: var(--green-soft); color: var(--green-ink); }
+.ms-step.hot .ms-sn { background: var(--red-soft); color: var(--red-ink); }
+.ms-st { min-width: 0; }
+.ms-st b { display: block; font-size: 13.5px; font-weight: 700; color: var(--ink); line-height: 1.3; }
+.ms-st small { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 500; margin-top: 3px; line-height: 1.35; }
+.ms-step.hot .ms-st small { color: var(--red-ink); font-weight: 600; }
+.ms-sec .pf-sec, .ms-closebox .pf-sec { padding: 20px 24px 14px; }
+.ms-list { border-top: 1px solid var(--line); }
+.ms-row { display: grid; grid-template-columns: minmax(180px, 1fr) 190px 270px; gap: 14px; align-items: center;
+  padding: 10px 24px; min-height: 58px; border-bottom: 1px solid var(--line); position: relative;
+  transition: background .14s var(--ease); }
+.ms-row:last-child { border-bottom: none; }
+.ms-row:hover { background: #FBFBFC; }
+.ms-row::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: opacity .14s var(--ease); }
+.ms-row:hover::before { opacity: 1; }
+.ms-nm { min-width: 0; }
+.ms-nm b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-nm small { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 500; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sev.ms-late { color: var(--red-ink); background: var(--red-soft); }
+.sev.ms-ok { color: var(--ink-2); background: var(--fill); }
+.sev.ms-when { color: var(--blue-d); background: var(--blue-tint); }
+.ms-row > .sev { justify-self: end; }
+.ms-acts { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.ms-call { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.ms-nocall { padding: 14px 20px; font-size: 13px; color: var(--amber-ink); background: var(--amber-soft);
+  border-color: transparent; line-height: 1.5; }
+.ms-dial { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 12px 14px 12px 20px; font-size: 13px; color: var(--ink-2); }
+.ms-dial span { display: inline-flex; align-items: center; gap: 10px; line-height: 1.45; }
+.ms-dial span svg { color: var(--blue); flex: none; }
+.ms-closebox { padding-bottom: 20px; }
+.ms-closebox > .al-l, .ms-closebox > .ms-note, .ms-closebox > .ms-cbtns { margin: 0 24px; }
+.ms-closebox > .ms-note { width: calc(100% - 48px); display: block; margin-top: 6px; resize: vertical; }
+.ms-sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 0 24px 16px; }
+.ms-sum span { background: var(--fill); border-radius: var(--r-lg); padding: 12px 14px; font-size: 12px;
+  color: var(--ink-2); line-height: 1.4; }
+.ms-sum b { display: block; font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+.ms-cbtns { display: flex; gap: 10px; margin-top: 14px !important; }
+
+@media (max-width: 960px) {
+  .ms-plan { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 860px) {
+  .ms .ms-head { flex-wrap: wrap; }
+  .ms .ms-head .sh-btns { width: 100%; }
+  .ms .ms-head .sh-btns .bp { flex: 1; }
+  .ms-plan { grid-template-columns: 1fr 1fr; }
+  .ms-sec .pf-sec, .ms-closebox .pf-sec { padding: 18px 18px 12px; }
+  .ms-row { grid-template-columns: 1fr auto; padding: 12px 18px; gap: 8px 10px; }
+  .ms-row .ms-acts { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; }
+  .ms-crow .ms-acts { display: none; }
+  .ms-dial { flex-direction: column; align-items: stretch; }
+  .ms-sum { grid-template-columns: 1fr 1fr; padding: 0 18px 14px; }
+  .ms-closebox > .al-l, .ms-closebox > .ms-note, .ms-closebox > .ms-cbtns { margin: 0 18px; }
+  .ms-closebox > .ms-note { width: calc(100% - 36px); }
+}
+
 /* ════ ВОЗНАГРАЖДЕНИЕ (раздел reward) ════
    Расчетный лист человека за месяц: что он сделал, что из этого закрыто и
    сколько причитается. Якорь карточки — сумма справа в шапке: экран открывают ради нее.

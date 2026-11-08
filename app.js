@@ -1958,7 +1958,7 @@
         body: JSON.stringify({ login: login, password: pass }),
       }).then(function (r) {
         if (r.status === 401) { fail('Неверный логин или пароль'); el('lg-go').textContent = 'Войти'; return null; }
-        if (!r.ok) { fail('Не получилось войти, проверь сеть'); el('lg-go').textContent = 'Войти'; return null; }
+        if (!r.ok) { fail('Сервер не отвечает как надо, это не твоя сеть. Попробуй через пару минут'); el('lg-go').textContent = 'Войти'; return null; }
         return r.json();
       }).then(function (j) {
         if (!j) return;
@@ -2437,9 +2437,6 @@
   /* сайдбар: нав + промо. Каждый пункт привязан к cap. */
   var NAV_ALL = [
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
-    // «План-факт» — успеваем ли к тому, что задумали на месяц. Рядом с
-    // дашбордом намеренно: тот показывает, что происходит сейчас, этот —
-    // дотянем ли до цели. Cap свой: цели компании ставит руководитель.
     // «Управление» — РНП руководителей и отделов (Виталий 19.10.2026): неделя,
     // гипотезы целями задачника, решения встреч и проверка прошлой недели. Это
     // инструмент руководителя, а не рядового исполнителя, поэтому cap 'tasks_all'
@@ -2450,7 +2447,20 @@
     // решения (Виталий 19.10.2026). Cap выдает сервер по списку людей, а не роль:
     // super_admin у нас семь, а карту сначала обкатывает один человек.
     { id: 'cmap', label: 'Карта компании', icon: 'mindmap', cap: 'company_map' },
-    { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
+    /* «Моя смена» — рабочий экран менеджера продаж (Павел 07.11.2026): открыть смену,
+       кому ответить, кого дожать, позвонить из CRM, закрыть смену с итогом. Тем, кто
+       не продает, пункт не нужен. */
+    { id: 'myshift', label: 'Моя смена', icon: 'clock', cap: 'clients',
+      hideRole: ['product_lead', 'admin', 'senior_tutor', 'tutor', 'teacher', 'marketer', 'marketing_lead',
+                 'producer', 'partner', 'contractor', 'ads_contractor', 'diagnostician', 'curator',
+                 'grant_admin', 'accountant', 'contractor_payer', 'expense_clerk'] },
+    /* «Продажи» — экран руководителя отдела продаж (Павел 07.11.2026): путь лидов
+       по каналам и менеджерам, план месяца и что делать, если не успеваем. */
+    { id: 'sales', label: 'Продажи', icon: 'chart', cap: 'planfact' },
+    /* «План-факт» убран из меню (Павел 08.11.2026: «он не нужен»): планы ставят на
+       «Продажах», вкладка «План периода». Экран живет по старой ссылке, а его данные
+       (месячный план) по-прежнему читают «Продажи» и «Управление». */
+    { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact', hidden: true },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
        Отдельным пунктом под «Задачами» и открыт всем, у кого есть задачи
@@ -4089,6 +4099,8 @@
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
+    else if (state.page === 'sales') renderSales(view);
+    else if (state.page === 'myshift') renderMyShift(view);
     else if (state.page === 'planfact') renderPlanFact(view);
     else if (state.page === 'reward') renderReward(view);
     else if (state.page === 'manage') renderManage(view);
@@ -37178,7 +37190,10 @@
 
     var right;
     if (r.plan && r.state !== 'none') {
-      right = '<span class="pf-fc">' + (r.pace_pct != null ? r.pace_pct + '% плана' : '') + '</span>' +
+      // Прогноз числом рядом с процентом: «112% плана» при факте в треть плана
+      // читалось как перевыполнение, а это темп к концу месяца.
+      right = '<span class="pf-fc">' + (r.pace_pct != null
+        ? 'прогноз ' + pfNum(r.forecast, money) + ' · ' + r.pace_pct + '%' : '') + '</span>' +
         '<span class="sev pf-' + esc(r.state) + '">' + esc(words[r.state] || '') + '</span>';
     } else if (r.plan) {
       // План стоит, а состояния нет: месяц еще не начался или расход не внесен.
@@ -37458,7 +37473,7 @@
       cur: [wk, end], prv: [pw, mgAdd(pw, 6)], plan: mgPlan(wk, end), full: null,
       curLbl: mgDate(wk).getDate() + '–' + mgDate(end).getDate(),
       prvLbl: mgDate(pw).getDate() + '–' + mgDate(mgAdd(pw, 6)).getDate(),
-      note: 'План недели — доля месячного плана из «План-факта» по дням.'
+      note: 'План недели — доля месячного плана по дням.'
     });
   }
 
@@ -37471,7 +37486,7 @@
       sub: 'лестница сквозной, рядом ' + MG_WD[mgDate(p).getDay()] + ' неделей раньше',
       cur: [d, d], prv: [p, p], plan: mgPlan(d, d), full: null, pf: true,
       curLbl: mgSpan(d, d), prvLbl: mgSpan(p, p),
-      note: 'План дня — месячный план из «План-факта», деленный на дни месяца. Поэтому он бывает дробным: две оплаты на месяц это 0,1 в день.'
+      note: 'План дня — месячный план, деленный на дни месяца. Поэтому он бывает дробным: две оплаты на месяц это 0,1 в день.'
     });
   }
 
@@ -37484,7 +37499,7 @@
     var n = mgDate(b).getDate(), pb = going ? (n <= mgDate(pz).getDate() ? pa.slice(0, 8) + ('0' + n).slice(-2) : pz) : pz;
     var future = today < a;
     if (future) {
-      return '<div class="card"><div class="empty">Месяц еще не начался. План на него ставят в «План-факте».</div></div>';
+      return '<div class="card"><div class="empty">Месяц еще не начался. План на него ставят на «Продажах», вкладка «План периода».</div></div>';
     }
     return mgLadder({
       title: going ? MG_MONN[mgDate(a).getMonth()] + ' на сегодня, ' + mgSpan(a, b) : MG_MONN[mgDate(a).getMonth()] + ' целиком',
@@ -37493,7 +37508,7 @@
       planLbl: going ? 'План к дате' : 'План',
       curLbl: mgSpan(a, b), prvLbl: mgSpan(pa, pb),
       note: going ? 'План к дате — сколько месячного плана приходится на прошедшие дни. Процент под фактом считается от него, а процент рядом с целью месяца — от всего плана.'
-        : 'План месяца из «План-факта».'
+        : 'План месяца с «Продаж», вкладка «План периода».'
     });
   }
 
@@ -37893,6 +37908,1428 @@
     });
   }
 
+  /* ── ПРОДАЖИ — экран руководителя отдела продаж ─────────────────────────────
+     Павел 07.11.2026: «как обрабатывают лидов, каким каналом, какие конверсии из
+     контакта в запись... по каждому менеджеру, и что делать, если не достигаем».
+     План-факт отвечает «успеваем ли к цифре», а здесь видно, ГДЕ рвется и КТО.
+
+     Сверху вниз в порядке разговора руководителя: путь лидов месяца (главная
+     полоса), что не так и что делать, план месяца, каналы, менеджеры. Каждая цифра
+     открывает людей за ней: сервер отдает строку на человека, а числа собраны из тех
+     же строк (routers/sales_board.py), поэтому список и цифра не расходятся. */
+  var SB_PATH_SUB = { contact: 'от пришедших', c_booked: 'от связавшихся',
+                      c_held: 'от записанных', c_contract: 'от встреч' };
+  var SB_STEPS = ['contact', 'c_booked', 'c_held', 'c_contract'];
+  var SB_STEP_COL = { contact: 'Связались', c_booked: 'Записались', c_held: 'На встрече',
+                      c_contract: 'Договор' };
+  var SB_NOBODY = 'Никто не взял';
+
+  /* Отрезок воронки. Месяц — с планом и темпом; сегодня, вчера и неделя — для
+     пятиминутки по лидам (Павел 08.11.2026), без плана: план ставится на месяц. */
+  var SB_SPANS = [{ id: 'today', label: 'Сегодня' }, { id: 'yesterday', label: 'Вчера' },
+                  { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }];
+  var SB_MON_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+                    'сентября', 'октября', 'ноября', 'декабря'];
+  function sbSpan() { return state.sbSpan && state.sbSpan !== 'month' ? state.sbSpan : 'month'; }
+  function sbKey() { return sbSpan() === 'month' ? pfMonth() : sbSpan(); }
+
+  function sbFetch() {
+    var m = sbKey();
+    state._sbAt = Date.now();
+    api('/admin/api/sales/board?' + (sbSpan() === 'month' ? 'month=' + m : 'span=' + m)).then(function (r) {
+      if (sbKey() !== m) return;
+      state._sb = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;            // ключ протух: api уже увел на вход
+      if (sbKey() !== m) return;
+      state._sb = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+
+  function sbPct(v) { return v == null ? '—' : v + '%'; }
+  // Порог «слабо» один на экран: ниже трети по шагу — красим, это место разговора.
+  function sbCvCls(v) { return v == null ? 'none' : (v < 34 ? 'weak' : (v >= 70 ? 'good' : '')); }
+  function sbIsOn(f, by, val) {
+    var q = state._sbQ;
+    return !!(q && q.f === f && q.by === (by || '') && q.val === (val || ''));
+  }
+
+  /* Кнопка-число: клик открывает людей. f — отметка человека, by/val — срез. */
+  function sbBtn(n, f, by, val, opt) {
+    opt = opt || {};
+    var txt = opt.text != null ? opt.text : fmtMoney(n);
+    return '<button class="sb-n num' + (n ? '' : ' zero') + (sbIsOn(f, by, val) ? ' on' : '') + '"' +
+      ' data-sbf="' + f + '"' + (by ? ' data-sbby="' + by + '" data-sbval="' + esc(val) + '"' : '') +
+      ' aria-label="' + esc((val ? val + ', ' : '') + (opt.label || '') + ': ' + txt) + '"' +
+      (n ? '' : ' disabled') + '>' + txt + '</button>';
+  }
+  function sbStep(n, cv, f, by, val, label) {
+    return '<span class="sb-cell" data-l="' + esc(label) + '">' + sbBtn(n, f, by, val, { label: label }) +
+      '<i class="sb-cv ' + sbCvCls(cv) + '">' + sbPct(cv) + '</i></span>';
+  }
+
+  /* Путь лидов — главная полоса экрана: общий рецепт плиток (statBar) с долей
+     каждого шага от прошлого. Клик по плитке открывает людей шага. */
+  function sbPathBar(d) {
+    var p = d.path, steps = d.path_steps || [];
+    var items = steps.map(function (s, i) {
+      var cv = i ? p.conv[s.key] : p.taken_pct;
+      return { label: esc(s.label), value: fmtMoney(p.steps[s.key] || 0), lead: i === 0,
+               sub: '<b class="sb-cv ' + sbCvCls(cv) + '">' + sbPct(cv) + '</b> ' +
+                    (i ? esc(SB_PATH_SUB[s.key] || '') : 'взяли в работу') };
+    });
+    return '<div class="sb-pathwrap">' + statBar(items, 'five') + '</div>';
+  }
+
+  // Карточка проблемы ведет к людям за ней: какой срез открыть по ее виду.
+  var SB_IDEA_FLAG = { taken: 'unowned', late: 'no_contact', contact: 'x_contact',
+    booked: 'x_booked', held: 'x_held', contract: 'x_contract', seller: 'x_seller', channel: 'lead' };
+
+  function sbIdeas(d) {
+    var list = (d.ideas || []).map(function (it) {
+      var f = SB_IDEA_FLAG[it.kind];
+      var act = f ? '<button class="bp ghost sb-act' + (sbIsOn(f, it.ch ? 'ch' : '', it.ch) ? ' on' : '') +
+        '" data-sbf="' + f + '"' + (it.ch ? ' data-sbby="ch" data-sbval="' + esc(it.ch) + '"' : '') +
+        '>Кто это</button>' : '';
+      return '<div class="sb-idea ' + esc(it.kind) + '">' +
+        '<div class="sb-it">' + esc(it.title) + '</div>' +
+        '<div class="sb-if">' + esc(it.fix) + '</div>' + act + '</div>';
+    });
+    return '<div class="card sb-ideas"><div class="sec-head pf-sec"><span class="ic">' + ic('alert', 14) +
+      '</span><div><div class="t">Что не так и что делать</div>' +
+      '<div class="s">по месту в воронке: сначала то, что раньше рвет путь</div></div></div>' +
+      (list.length ? '<div class="sb-ilist">' + list.join('') + '</div>'
+        : '<div class="empty">Провалов не видно: шаги держат норму, лидов без ответственного нет.</div>') +
+      '</div>';
+  }
+
+  function sbPathRow(name, sub, p, by, paid, cls) {
+    return '<div class="mkd-tr sb-tr' + (cls ? ' ' + cls : '') + '">' +
+      '<div class="mkd-nm"><b>' + esc(name) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' +
+      '<span class="sb-cell" data-l="Пришли">' + sbBtn(p.steps.lead, 'lead', by, name, { label: 'пришли' }) + '</span>' +
+      SB_STEPS.map(function (k) {
+        return sbStep(p.steps[k], p.conv[k], k, by, name, SB_STEP_COL[k]);
+      }).join('') +
+      '<span class="sb-cell" data-l="Деньги">' + sbBtn(paid, 'paid', by, name,
+        { label: 'деньги', text: paid ? fmtMoney(paid) + ' ₽' : '—' }) + '</span>' +
+    '</div>';
+  }
+  function sbHead(first, money) {
+    return '<div class="mkd-th"><span>' + first + '</span><span>Пришли</span>' +
+      SB_STEPS.map(function (k) { return '<span>' + SB_STEP_COL[k] + '</span>'; }).join('') +
+      '<span>' + money + '</span></div>';
+  }
+
+  function sbChannels(d) {
+    var rows = (d.channels || []).map(function (c) {
+      return sbPathRow(c.name, 'взяли в работу <b class="sb-cv ' + sbCvCls(c.taken_pct) + '">' +
+        sbPct(c.taken_pct) + '</b>', c, 'ch', c.paid);
+    }).join('');
+    return '<div class="card sp12 sb-tbl-card"><div class="sec-head pf-sec"><span class="ic">' + ic('funnel', 14) +
+      '</span><div><div class="t">Каналы</div>' +
+      '<div class="s">лиды месяца по шагам; деньги — сколько эти люди уже заплатили</div></div></div>' +
+      (rows ? '<div class="mkd-tbl sb-grid">' + sbHead('Канал', 'Оплатили') + rows + '</div>'
+        : '<div class="empty">Лидов в этом месяце нет.</div>') + '</div>';
+  }
+
+  function sbManagers(d) {
+    var rows = (d.managers || []).map(function (m) {
+      var nobody = m.name === SB_NOBODY;
+      return sbPathRow(m.name, nobody ? 'лиды без ответственного' : '', m.path, 'who', m.paid,
+        nobody ? 'sb-nobody' : '');
+    }).join('');
+    return '<div class="card sp12 sb-tbl-card"><div class="sec-head pf-sec"><span class="ic">' + ic('team', 14) +
+      '</span><div><div class="t">Менеджеры</div>' +
+      '<div class="s">его новые лиды месяца по шагам, тем же счетом, что каналы; деньги — где он продавец</div></div></div>' +
+      (rows ? '<div class="mkd-tbl sb-grid">' + sbHead('Кто ведет', 'Деньги') + rows + '</div>'
+        : '<div class="empty">За месяц никто ничего не вел.</div>') + '</div>';
+  }
+
+  /* Люди за цифрой. Фильтр собирается на клиенте из тех же строк, что и цифры. */
+  var SB_FLAG_TITLE = { lead: 'Пришли', contact: 'Связались', c_booked: 'Записались',
+    c_held: 'Пришли на встречу', c_contract: 'Договор',
+    booked: 'Записи месяца', held: 'Консультации месяца', contract: 'Договоры месяца',
+    paid: 'Заплатили', unowned: 'Никто не взял', no_contact: 'Взяли, но связи нет',
+    x_contact: 'Пришли, связи нет', x_booked: 'Связались, не записались',
+    x_held: 'Записались, не пришли', x_contract: 'Были на встрече, договора нет',
+    x_seller: 'Оплаты без продавца' };
+  var SB_PATH_ORDER = ['lead', 'contact', 'c_booked', 'c_held', 'c_contract'];
+
+  // Шаги пути вложены, как на сервере: дошедший до встречи считается и записанным.
+  function sbReached(p, f) {
+    var i = SB_PATH_ORDER.indexOf(f);
+    if (!p.lead) return false;
+    for (var j = i; j < SB_PATH_ORDER.length; j++) if (p[SB_PATH_ORDER[j]]) return true;
+    return false;
+  }
+  function sbHas(p, f, d, by) {
+    switch (f) {
+      case 'unowned': return (d.attention.unowned_ids || []).indexOf(p.id) >= 0;
+      case 'no_contact': return (d.attention.no_contact_ids || []).indexOf(p.id) >= 0;
+      case 'x_contact': return p.lead && !sbReached(p, 'contact');
+      case 'x_booked': return sbReached(p, 'contact') && !sbReached(p, 'c_booked');
+      case 'x_held': return sbReached(p, 'c_booked') && !sbReached(p, 'c_held');
+      case 'x_contract': return sbReached(p, 'c_held') && !sbReached(p, 'c_contract');
+      case 'x_seller': return p.paid_rub > 0 && !p.seller;
+      // В таблицах «деньги» по каналу — что заплатили лиды месяца, по менеджеру —
+      // оплаты месяца, где он продавец; в плане — все оплаты месяца.
+      case 'paid': return by === 'ch' ? p.lead && p.c_paid_rub > 0 : p.paid_rub > 0;
+    }
+    if (SB_PATH_ORDER.indexOf(f) >= 0) return sbReached(p, f);
+    return !!p[f];
+  }
+
+  function sbWait(p) {
+    var h = Math.floor((Date.now() - Date.parse(p.created_at)) / 3600000);
+    return h < 1 ? 'ждет меньше часа' : (h < 48 ? 'ждет ' + h + ' ч' : 'ждет ' + Math.floor(h / 24) + ' дн');
+  }
+
+  var SB_WORK_TITLE = { w_free: 'Без менеджера', w_respond: 'Ждут касания', w_follow: 'Дожимаем',
+    w_meet: 'Ждут встречи', w_decide: 'Думают после встречи', w_all: 'В работе', w_late: 'Просрочено' };
+  function sbWorkPeople(d, q) {
+    var rows = ((d.work || {}).rows || []).filter(function (p) {
+      if (q.f === 'w_late' ? !p.late : q.f !== 'w_all' && 'w_' + p.stage !== q.f) return false;
+      if (q.by === 'wwho' && (p.owner || SB_NOBODY) !== q.val) return false;
+      return true;
+    });
+    // Сверху тот, кто ждет дольше всех; у встреч — ближайшая.
+    rows.sort(function (a, b) { return String(a.since).localeCompare(String(b.since)); });
+    var title = (SB_WORK_TITLE[q.f] || '') + (q.val ? ' · ' + q.val : '');
+    var body = rows.slice(0, 300).map(function (p) {
+      return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
+        '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
+          ' · пришел ' + esc(fmtDay(p.created_at)) + '</small></span>' +
+        (q.by === 'wwho' ? '<span></span>'
+          : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>') +
+        // Красным — только просроченный по норме шага (считает сервер, LATE_AFTER).
+        '<span class="sb-pm"><span class="sb-po' + (p.late ? ' wait' : ' calm') + '">' +
+          esc(sbWorkWhen(p)) + '</span></span></button>';
+    }).join('');
+    return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
+  }
+  function sbPeopleCard(title, n, body, sub) {
+    return '<div class="card sp12 sb-people" id="sb-people"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
+      '</span><div><div class="t">' + esc(title) + ' · <span class="num">' + fmtMoney(n) + '</span></div>' +
+      '<div class="s">' + esc(sub) + '</div></div>' +
+      '<button class="icobtn sm" id="sb-pclose" title="Закрыть список">' + ic('x', 15) + '</button></div>' +
+      (n ? '<div class="sb-plist">' + body + '</div>' +
+        (n > 300 ? '<div class="sb-pmore">Показаны первые 300</div>' : '')
+        : '<div class="empty">Здесь никого.</div>') + '</div>';
+  }
+
+  function sbPeople(d) {
+    var q = state._sbQ;
+    if (!q) return '';
+    if (q.f.indexOf('w_') === 0) return sbWorkPeople(d, q);
+    var rows = (d.people || []).filter(function (p) {
+      if (!sbHas(p, q.f, d, q.by)) return false;
+      if (q.by === 'ch' && p.ch !== q.val) return false;
+      if (q.by === 'who') {
+        var who = q.f === 'paid' ? p.seller : (p.owner || SB_NOBODY);
+        if (who !== q.val) return false;
+      }
+      return true;
+    });
+    rows.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+    var waiting = q.f === 'unowned' || q.f === 'no_contact' || q.f === 'x_contact';
+    var title = (SB_FLAG_TITLE[q.f] || '') + (q.val ? ' · ' + q.val : '');
+    var body = rows.slice(0, 300).map(function (p) {
+      var marks = [];
+      if (p.c_contract || p.contract) marks.push('<em class="sev s-client">договор</em>');
+      else if (p.c_held || p.held) marks.push('<em class="sev s-call_done">была встреча</em>');
+      else if (p.c_booked || p.booked) marks.push('<em class="sev s-call_scheduled">записан</em>');
+      var rub = p.paid_rub || p.c_paid_rub;
+      if (rub) marks.push('<em class="sev s-client">' + fmtMoney(rub) + ' ₽</em>');
+      var who = waiting
+        ? '<span class="sb-po wait">' + esc(sbWait(p)) + '</span>'
+        : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>';
+      return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
+        '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
+          (p.created_at ? ' · пришел ' + esc(fmtDay(p.created_at)) : '') + '</small></span>' +
+        who + '<span class="sb-pm">' + marks.join('') + '</span></button>';
+    }).join('');
+    return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
+  }
+
+  function sbShift(d) {
+    if (!d.current) return '';
+    var all = d.on_shift || [];
+    var on = all.filter(function (s) { return s.open; });
+    var done = all.filter(function (s) { return !s.open; });
+    var line = '<div class="sb-shift' + (on.length ? '' : ' none') + '"><span class="sb-dot"></span>' +
+      (on.length ? 'На смене: ' + on.map(function (s) {
+        return esc(s.name) + (s.consult ? ' (на консультации)' : '');
+      }).join(', ') : 'Сейчас на смене никого') + '</div>';
+    if (done.length) {
+      line += '<div class="sb-done">' + done.map(function (s) {
+        return '<span><b>' + esc(s.name) + '</b> закрыл смену' + (s.note ? ': ' + esc(s.note) : '') + '</span>';
+      }).join('') + '</div>';
+    }
+    return line;
+  }
+
+  /* Идем ли в план. Павел 07.11.2026: «важно, чтобы отслеживалось, достигаем мы
+     его или нет, здесь этого не видно». Плашка «идем» у строки плана и риска на шкале
+     ответа не дают: нужно словами — сколько должно быть к сегодня, сколько есть, на
+     сколько отстаем и сколько надо в день, чтобы догнать. Главная строка — деньги:
+     ради них план и ставят; остальные строки тише под ней. */
+  var SB_MON_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
+    'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  // Деньги внутри фразы: знак рубля не должен уезжать на новую строку.
+  function sbMoney(n, money) { return pfNum(n, money).replace(' ₽', '\u00a0₽'); }
+  function sbGap(r) {
+    var money = r.kind === 'money';
+    var gap = (r.fact || 0) - (r.due || 0);
+    var left = Math.max(r.plan - (r.fact || 0), 0);
+    var per = r.days_left ? left / r.days_left : 0;
+    // Темп словами: деньги — в день с округлением до тысячи, штуки — в день, а если
+    // меньше одной в день, то в неделю: «0,4 договора в день» никто не считает.
+    var pace = money ? sbMoney(Math.ceil(per / 1000) * 1000, true) + ' в день'
+      : (per >= 1 ? String(Math.round(per * 10) / 10).replace('.', ',') + ' в день'
+        : String(Math.round(per * 70) / 10).replace('.', ',') + ' в неделю');
+    return { money: money, gap: gap, left: left, behind: gap < 0, pace: pace };
+  }
+  function sbPace(d) {
+    if (!d.current || !(d.days_passed > 0)) return '';
+    var rows = (d.plan || []).filter(function (r) { return r.plan > 0; });
+    var head = '<div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) + '</span>' +
+      '<div><div class="t">Идем ли в план</div><div class="s">к сегодняшнему дню по плану против того, что есть</div></div></div>';
+    if (!rows.length) {
+      return '<div class="card sp12 sb-pace">' + head + '<div class="sb-pnone">План на ' +
+        esc(pfMonthTitle(d.month).toLowerCase()) + ' не задан. Поставь цифры в блоке «План месяца» ниже: ' +
+        'здесь появится, сколько должно быть к сегодня и на сколько отстаем.</div></div>';
+    }
+    var lead = rows.filter(function (r) { return r.key === 'revenue'; })[0] || rows[0];
+    // Дата из того же дня, по которому сервер считает «должно быть к сегодня»: часы
+    // браузера могут жить в другом поясе, и подпись разошлась бы с цифрой.
+    var mm = parseInt(String(d.month).split('-')[1], 10) - 1;
+    var today = d.days_passed + ' ' + SB_MON_GEN[mm];
+    var g = sbGap(lead);
+    var big = lead.state === 'none' ? 'Цифр пока нет'
+      : (g.behind ? 'Отстаем на ' + sbMoney(-g.gap, g.money) : (g.gap > 0
+        ? 'Впереди на ' + sbMoney(g.gap, g.money) : 'Идем ровно по плану'));
+    var need = !g.left ? 'План месяца уже сделан.'
+      : (lead.days_left ? 'Чтобы закрыть план, нужно ' + g.pace + ' до конца месяца.' : '');
+    var main = '<div class="sb-pmain ' + (g.behind ? 'behind' : 'ahead') + '">' +
+      '<div class="sb-plbl">' + esc(lead.label) + '</div>' +
+      '<div class="sb-pbig num">' + esc(big) + '</div>' +
+      '<div class="sb-psub">К ' + esc(today) + ' по плану ' + sbMoney(lead.due, g.money) +
+        ', есть ' + sbMoney(lead.fact, g.money) + ' из ' + sbMoney(lead.plan, g.money) + ' на месяц. ' + esc(need) + '</div>' +
+    '</div>';
+    var rest = rows.filter(function (r) { return r !== lead; }).map(function (r) {
+      var x = sbGap(r);
+      var tail = r.state === 'none' ? '<span class="sb-pd">цифр пока нет</span>'
+        : (x.behind ? '<span class="sb-pd behind">отстаем на ' + pfNum(-x.gap, x.money) + '</span>'
+          : '<span class="sb-pd ahead">' + (x.gap > 0 ? 'впереди на ' + pfNum(x.gap, x.money) : 'по плану') + '</span>');
+      return '<div class="sb-prow"><span class="sb-pn2">' + esc(r.label) + '</span>' +
+        '<span class="sb-pf num">' + pfNum(r.fact, x.money) + ' <small>· по плану ' + pfNum(r.due, x.money) + '</small></span>' +
+        tail + '</div>';
+    }).join('');
+    return '<div class="card sp12 sb-pace">' + head + '<div class="sb-pbody">' + main +
+      (rest ? '<div class="sb-prest">' + rest + '</div>' : '') + '</div></div>';
+  }
+
+  /* Статусы лидов сейчас — дашборд руководителя (Павел и Виталий, 08.11.2026: «смотреть
+     статус по лидам в формате дашборда», «не плодить сущности»). Это тот же блок «в работе»
+     (07.11.2026: «где смотреть, сколько лидов в работе?»), поднятый на верх «Воронки»: что
+     лежит на руках у отдела сегодня, с какого бы месяца человек ни пришел. Шаг и просрочку
+     считает сервер (sales_board.work_stage, LATE_AFTER), человек стоит ровно на одном шаге. */
+  function sbWork(d) {
+    var w = d.work;
+    if (!w || !d.current) return '';
+    var late = w.late || {};
+    var items = (w.stages || []).map(function (s, i) {
+      var n = late[s.key] || 0;
+      return { label: esc(s.label), value: fmtMoney(w.steps[s.key] || 0),
+        sub: esc(s.hint), delta: n ? fmtMoney(n) + ' ' + esc(s.late) : '', deltaCls: 'bad',
+        lead: i === 0 && w.steps.free > 0 };
+    });
+    // Таблица — то, что на руках у менеджеров. «Без менеджера» у них всегда ноль, а
+    // ничейные лиды уже стоят первой плиткой и открываются ею же.
+    var mst = (w.stages || []).filter(function (s) { return s.key !== 'free'; });
+    var rows = (w.managers || []).filter(function (m) { return m.name !== SB_NOBODY; }).map(function (m) {
+      var ml = m.late || {};
+      return '<div class="mkd-tr sb-tr sb-wtr">' +
+        '<div class="mkd-nm"><b>' + esc(m.name) + '</b></div>' +
+        mst.map(function (s) {
+          var n = ml[s.key] || 0;
+          return '<span class="sb-cell" data-l="' + esc(s.label) + '">' +
+            sbBtn(m.steps[s.key] || 0, 'w_' + s.key, 'wwho', m.name, { label: s.label }) +
+            (n ? '<i class="sb-wl" title="' + esc('просрочено: ' + s.late) + '">' + fmtMoney(n) + '</i>' : '') + '</span>';
+        }).join('') +
+        '<span class="sb-cell" data-l="Всего">' + sbBtn(m.total, 'w_all', 'wwho', m.name, { label: 'всего' }) + '</span>' +
+        '<span class="sb-cell sb-wlc" data-l="Просрочено">' +
+          sbBtn(m.late_total || 0, 'w_late', 'wwho', m.name, { label: 'просрочено' }) + '</span>' +
+      '</div>';
+    }).join('');
+    var lt = w.late_total || 0;
+    return '<div class="card sp12 sb-tbl-card sb-work"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
+      '</span><div><div class="t">Статусы лидов сейчас · <span class="num">' + fmtMoney(w.total) + '</span></div>' +
+      '<div class="s">все живые лиды на сегодня, с какого бы месяца ни пришли; нажми на цифру, откроются люди</div></div>' +
+      (lt ? '<button class="qchip sb-wlate' + (sbIsOn('w_late', '', '') ? ' on' : '') + '" data-sbf="w_late">' +
+        'Просрочено <span class="num">' + fmtMoney(lt) + '</span></button>'
+        : '<span class="cnt sb-wok">все в сроках</span>') + '</div>' +
+      '<div class="sb-wbar">' + statBar(items, 'five') + '</div>' +
+      (rows ? '<div class="mkd-tbl sb-grid sb-wgrid"><div class="mkd-th"><span>Кто ведет</span>' +
+        mst.map(function (s) { return '<span>' + esc(s.label) + '</span>'; }).join('') +
+        '<span>Всего</span><span>Просрочено</span></div>' + rows + '</div>' : '') + '</div>';
+  }
+
+  function sbWorkWhen(p) {
+    var t = Date.parse(p.since), now = Date.now();
+    var dd = new Date(t);
+    var day = dd.getDate() + ' ' + SB_MON_GEN[dd.getMonth()];
+    var hm = ('0' + dd.getHours()).slice(-2) + ':' + ('0' + dd.getMinutes()).slice(-2);
+    if (p.stage === 'meet') return 'встреча ' + day + ' в ' + hm;
+    if (p.stage === 'decide') return 'встреча была ' + day;
+    var h = Math.floor((now - t) / 3600000);
+    var ago = h < 1 ? 'меньше часа' : (h < 48 ? h + ' ч' : Math.floor(h / 24) + ' дн');
+    return p.stage === 'follow' ? 'первое касание ' + ago + ' назад' : 'ждет ' + ago;
+  }
+
+  // Вердикт шапки отвечает на вопрос экрана, а не только про план: зеленое «идем к
+  // плану» над потерей половины лидов врет. Потеря людей сильнее темпа.
+  /* Регламент пятиминутки по лидам лежит на самом экране: по нему и идут встречу, а
+     инструкцию в отдельном документе на пятиминутке никто не откроет. Свернут, чтобы
+     не отодвигать цифры. */
+  var SB_HOW = [
+    ['1 минута, маркетинг', 'Сколько лидов пришло и из каких каналов: таблица «Каналы». Канал льет, а записей нет, это вопрос к трафику.'],
+    ['2 минуты, руководитель продаж', '«Статусы лидов сейчас», первым делом кнопка «Просрочено»: без менеджера раздать прямо на встрече, по «ждут касания» спросить, кто взял и почему молчит, затем «дожимаем».'],
+    ['1 минута', 'Таблица под плитками: у кого из менеджеров сколько на руках, на каком шаге и сколько просрочено. Перекос видно сразу.'],
+    ['1 минута, решение', 'Кого раздаем и что меняем в трафике. Решение ставится задачей, иначе завтра его никто не вспомнит.']
+  ];
+  function sbHow() {
+    return '<details class="sb-how"><summary>Как вести пятиминутку по лидам</summary><ol>' +
+      SB_HOW.map(function (x) { return '<li><b>' + esc(x[0]) + '.</b> ' + esc(x[1]) + '</li>'; }).join('') +
+      '</ol></details>';
+  }
+
+  function sbSpanTitle(d) {
+    // Дата берется строкой из ответа: границы стоят по Москве, а часы браузера бывают
+    // в другом поясе, и полночь МСК там превращается во вчерашний вечер.
+    var p = String(d.span_from).slice(0, 10).split('-');
+    var a = { d: parseInt(p[2], 10), m: parseInt(p[1], 10) - 1 };
+    var f = function (x) { return x.d + ' ' + SB_MON_GEN[x.m]; };
+    if (d.span === 'week') return 'неделя с ' + f(a);
+    return (d.span === 'today' ? 'сегодня, ' : 'вчера, ') + f(a);
+  }
+  // Вердикт короткого отрезка: плана нет, поэтому главное — успели ли взять пришедших.
+  function sbSpanVerdict(d) {
+    var s = (d.path || {}).steps || {}, n = s.lead || 0;
+    var taken = (d.path || {}).taken || 0, free = (d.attention || {}).unowned || 0;
+    if (!n) return { t: 'Новых лидов нет', s: 'за этот отрезок карточек не пришло', cls: '' };
+    var t = n + ' ' + plural(n, 'лид', 'лида', 'лидов') + ', взяли ' + taken;
+    if (free) return { t: t, s: 'без менеджера ' + free + ': раздать на пятиминутке, цифры ниже открывают людей', cls: 'risk' };
+    return { t: t, s: 'все пришедшие разобраны, связались с ' + (s.contact || 0), cls: 'ok' };
+  }
+
+  function sbVerdict(d) {
+    var lost = (d.ideas || []).filter(function (i) { return i.kind === 'taken'; })[0];
+    if (lost) return { t: 'Теряем лидов', s: lost.title, cls: 'miss' };
+    return pfVerdict({ rows: d.plan, days_passed: d.days_passed, month: d.month });
+  }
+
+  function renderSales(view) {
+    if (sbTab() === 'money') { renderSalesMoney(view); return; }
+    if (sbTab() === 'plan') { renderSalesPlan(view); return; }
+    // Экран смотрят по ходу дня: данные старше минуты перезапрашиваем при заходе.
+    if (state._sb && Date.now() - (state._sbAt || 0) > 60000) state._sb = null;
+    if (!state._sb) { view.innerHTML = dashSkeleton(); sbFetch(); return; }
+    if (state._sb === 'none' || state._sb === 'acl') {
+      view.innerHTML = '<div class="card"><div class="empty">' + (state._sb === 'acl'
+        ? 'Раздел «Продажи» открыт руководителям. Нужен доступ — напиши Павлу.'
+        : 'Не удалось загрузить продажи. Проверь интернет.') +
+        (state._sb === 'none' ? '<div><button class="bp ghost sb-retry" id="sb-retry">Попробовать снова</button></div>' : '') +
+        '</div></div>';
+      var rt = el('sb-retry');
+      if (rt) rt.addEventListener('click', function () { state._sb = null; renderView(); });
+      return;
+    }
+    var d = state._sb;
+    var short = sbSpan() !== 'month';
+    var passed = d.days_passed || 0, total = d.days_total || 30;
+    var dayPct = Math.min(100, Math.round(passed / total * 100));
+    var v = short ? sbSpanVerdict(d) : sbVerdict(d);
+    var now = new Date();
+    var isNow = d.month === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+
+    var spans = '<div class="list-quick sb-spans">' + SB_SPANS.map(function (x) {
+      return '<button class="qchip' + (x.id === sbSpan() ? ' on' : '') + '" data-sbspan="' + x.id + '">' + esc(x.label) + '</button>';
+    }).join('') + '</div>';
+    var nav = short ? '<div class="brd-nav"><span class="brd-label">' + esc(sbSpanTitle(d)) + '</span></div>' :
+      '<div class="brd-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-sbmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(pfMonthTitle(d.month)) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-sbmon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+        (isNow ? '' : '<button class="qchip" data-sbmon="now">Сейчас</button>') +
+      '</div>';
+    var head = '<div class="card pf-head sb-thead">' + sbTabs() + spans + (short ? sbHow() : '') + nav +
+      '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '">' +
+        '<div class="pf-vt">' + esc(v.t) + '</div><div class="pf-vs">' + esc(v.s) + '</div></div>' +
+      (short ? '' : '<div class="pf-days">' +
+        '<div class="pf-dtrack"><span style="width:' + dayPct + '%"></span></div>' +
+        '<div class="pf-dtx">' + (d.current
+          ? 'прошло ' + passed + ' ' + plural(passed, 'день', 'дня', 'дней') + ' из ' + total
+          : 'месяц закрыт, ' + total + ' ' + plural(total, 'день', 'дня', 'дней')) + '</div>' +
+      '</div>') + sbShift(d) +
+    '</div>';
+
+    var plan = '<div class="card sp12 sb-plan">' +
+      '<div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) + '</span>' +
+      '<div><div class="t">План месяца</div>' +
+      '<div class="s">риска на шкале — где должны быть сегодня; план правится нажатием на цифру</div></div></div>' +
+      '<div class="pf-tbl">' + (d.plan || []).map(function (r) { return pfRow(r, passed > 0); }).join('') + '</div></div>';
+
+    // Список людей встает под тем блоком, где нажали цифру: «В работе» стоит высоко,
+    // и уводить за ним на конец экрана значит потерять таблицу, из которой пришли.
+    var wq = state._sbQ && state._sbQ.f.indexOf('w_') === 0;
+    // Статусы лидов — первым блоком под шапкой: это то, ради чего экран открывают каждый день.
+    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') +
+      sbPathBar(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
+      sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
+    sbTabsBind(view);
+    sbBind(view, d);
+    animBars(view);
+  }
+
+  function sbBind(view, d) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbspan]'), function (b) {
+      b.addEventListener('click', function () {
+        var sp = b.getAttribute('data-sbspan');
+        if (sp === sbSpan()) return;
+        state.sbSpan = sp; state._sbQ = null; state._sb = null;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbmon]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-sbmon');
+        state._sbQ = null;
+        if (v === 'now') { state.pfMonth = ''; }
+        else {
+          var p = pfMonth().split('-');
+          var dt = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + parseInt(v, 10), 1);
+          state.pfMonth = dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2);
+        }
+        // Месяц общий с План-фактом: листаешь здесь — там тот же месяц.
+        state._sb = null; state._pf = null; state._pfAi = null;
+        renderView();
+      });
+    });
+
+    var steps = d.path_steps || [];
+    Array.prototype.forEach.call(view.querySelectorAll('.sb-pathwrap .stat'), function (b, i) {
+      if (!steps[i]) return;
+      b.setAttribute('data-sbf', steps[i].key);
+      b.setAttribute('title', 'Показать этих людей поименно');
+      if (sbIsOn(steps[i].key, '', '')) b.classList.add('on');
+    });
+    var wst = (d.work || {}).stages || [];
+    Array.prototype.forEach.call(view.querySelectorAll('.sb-wbar .stat'), function (b, i) {
+      if (!wst[i]) return;
+      b.setAttribute('data-sbf', 'w_' + wst[i].key);
+      b.setAttribute('title', 'Показать этих людей поименно');
+      if (sbIsOn('w_' + wst[i].key, '', '')) b.classList.add('on');
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbf]'), function (b) {
+      b.addEventListener('click', function () {
+        var q = { f: b.getAttribute('data-sbf'), by: b.getAttribute('data-sbby') || '',
+                  val: b.getAttribute('data-sbval') || '' };
+        // Повторный клик по той же цифре закрывает список.
+        state._sbQ = sbIsOn(q.f, q.by, q.val) ? null : q;
+        renderView();
+        var box = el('sb-people');
+        if (box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    var close = el('sb-pclose');
+    if (close) close.addEventListener('click', function () { state._sbQ = null; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
+
+    /* План правится на месте, тем же приемом, что в План-факте; пишет в тот же план. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pfset]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-pfset');
+        var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
+        var inp = document.createElement('input');
+        inp.className = 'ed-input pf-in num';
+        inp.value = was;
+        inp.setAttribute('inputmode', 'numeric');
+        inp.setAttribute('placeholder', '0');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus();
+        inp.select();
+        var done = false;
+        var save = function () {
+          if (done) return;
+          done = true;
+          var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+          if (isNaN(n)) n = 0;
+          if (String(n) === String(was || 0)) { renderView(); return; }
+          api('/admin/api/sales/plan', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ month: pfMonth(), metric: key, target: n }),
+          }).then(function () {
+            state._sb = null; state._pf = null;
+            renderView();
+          }).catch(function () { showToast('План не сохранился — проверь сеть'); renderView(); });
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { done = true; renderView(); }
+        });
+        inp.addEventListener('blur', save);
+      });
+    });
+  }
+  /* ── ПРОДАЖИ → ДЕНЬГИ И СВЕРКА ───────────────────────────────────────────────
+     Павел 08.11.2026: цифры периода сверяем с Олей «в своих рабочих окнах, а не по
+     документу» и проверяем по ведомости, период — как в «Финансах». Вкладка берет
+     строки дохода ведомости и раскладывает их по продуктам, каналам и продавцам, а
+     рядом ставит оплаты из карточек: чего нет с одной стороны, видно списком.
+     Своих денег экран не считает: сумма — та же, что «доход к зачислению» в каскаде,
+     сервер сверяет это сам (routers/sales_money.py). */
+  var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План периода' },
+                 { id: 'money', label: 'Деньги и сверка' }];
+  var SM_KIND = { new: 'новая продажа', more: 'доплата', renew: 'продление', rest: 'прочее' };
+
+  function smCan() { return can('finance') || can('finmodel'); }
+  function sbTab() {
+    return (state.sbTab === 'money' || state.sbTab === 'plan') && smCan() ? state.sbTab : 'funnel';
+  }
+  function sbTabs() {
+    if (!smCan()) return '';
+    return '<div class="list-quick sb-tabs">' + SB_TABS.map(function (t) {
+      return '<button class="qchip' + (t.id === sbTab() ? ' on' : '') + '" data-sbtab="' + t.id + '">' +
+        esc(t.label) + '</button>';
+    }).join('') + '</div>';
+  }
+  function sbTabsBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbtab]'), function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-sbtab');
+        if (t === sbTab()) return;
+        state.sbTab = t; state._smF = null;
+        renderView();
+      });
+    });
+  }
+
+  function smFetch() {
+    var pid = state.smPeriod || '';
+    state._smAt = Date.now();
+    api('/admin/api/sales/money' + (pid ? '?period=' + encodeURIComponent(pid) : '')).then(function (r) {
+      if ((state.smPeriod || '') !== pid) return;
+      state._sm = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if ((state.smPeriod || '') !== pid) return;
+      state._sm = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+
+  function smRub(n) { return sbMoney(Math.round(n || 0), true); }
+
+  function smVerdict(d) {
+    var c = d.check, n = c.no_crm + c.crm_only.length;
+    if (Math.abs(d.ledger_diff) >= 1) {
+      return { t: 'Не сходится с «Финансами»', cls: 'miss',
+               s: 'сумма строк отличается от каскада на ' + smRub(d.ledger_diff) + ', скажи Павлу' };
+    }
+    if (!n) return { t: 'Все сходится', cls: 'ok',
+                     s: 'каждый платеж ведомости отмечен в карточке клиента, и наоборот' };
+    return { t: n + ' ' + plural(n, 'расхождение', 'расхождения', 'расхождений'), cls: 'risk',
+             s: 'итог совпадает с ведомостью, но не все платежи стоят в карточках; список ниже' };
+  }
+
+  // Разбивка: строка — доля периода полосой; клик оставляет в списке поступлений
+  // только эти строки, повторный клик снимает фильтр.
+  function smGroup(title, icon, key, rows, total) {
+    var f = state._smF || {};
+    var body = rows.map(function (g) {
+      var on = f.by === key && f.val === g.key;
+      var pct = total ? Math.max(2, Math.round(g.amount / total * 100)) : 0;
+      return '<button class="sm-g' + (on ? ' on' : '') + '" data-smf="' + key + '" data-smv="' + esc(g.key) + '">' +
+        '<span class="sm-gl"><b>' + esc(g.label) + '</b><small>' + g.count + ' ' +
+          plural(g.count, 'платеж', 'платежа', 'платежей') + '</small></span>' +
+        '<span class="sm-gv num">' + smRub(g.amount) + '</span>' +
+        '<span class="sm-gbar"><i data-aw="' + pct + '%"></i></span>' +
+      '</button>';
+    }).join('');
+    return '<div class="card sm-grp"><div class="sec-head pf-sec"><span class="ic">' + ic(icon, 14) +
+      '</span><div><div class="t">' + esc(title) + '</div></div></div>' +
+      (body || '<div class="empty">Денег за период нет.</div>') + '</div>';
+  }
+
+  function smLead(id, inner, cls) {
+    return id ? '<button class="' + cls + '" data-sblead="' + esc(id) + '" title="Открыть карточку">' + inner + '</button>'
+      : '<div class="' + cls + ' nolink">' + inner + '</div>';
+  }
+
+  function smCheck(d) {
+    var c = d.check;
+    var noCrm = d.lines.filter(function (l) { return !l.crm; });
+    if (!noCrm.length && !c.crm_only.length) return '';
+    var a = noCrm.map(function (l) {
+      var why = l.case_id ? 'клиент есть, оплата в карточке не отмечена'
+        : 'строка не привязана к клиенту: Финансы → Доходы';
+      return smLead(l.case_id,
+        '<span class="sm-d num">' + fmtDay(l.date).slice(0, 5) + '</span>' +
+        '<span class="sb-pn"><b>' + esc(l.case_id ? l.client : (l.payer || 'Без клиента')) + '</b>' +
+          '<small>' + esc(l.item || 'без статьи') + '</small></span>' +
+        '<span class="sb-po calm">' + esc(why) + '</span>' +
+        '<span class="sm-v num">' + smRub(l.amount) + '</span>', 'sm-cr');
+    }).join('');
+    var b = c.crm_only.map(function (p) {
+      return smLead(p.case_id,
+        '<span class="sm-d num">' + fmtDay(p.date).slice(0, 5) + '</span>' +
+        '<span class="sb-pn"><b>' + esc(p.client) + '</b><small>' + esc(p.title || 'оплата') + '</small></span>' +
+        '<span class="sb-po calm">в ведомости строки нет: дошли ли деньги?</span>' +
+        '<span class="sm-v num">' + smRub(p.amount) + '</span>', 'sm-cr');
+    }).join('');
+    return '<div class="card sp12 sm-check"><div class="sec-head pf-sec"><span class="ic">' + ic('alert', 14) +
+      '</span><div><div class="t">Сверка с карточками</div>' +
+      '<div class="s">экран «Продажи» и мотивация видят деньги по карточкам, поэтому каждая строка тут это недосчитанные деньги отдела</div></div></div>' +
+      (a ? '<div class="sm-ch"><div class="sm-cht">Есть в ведомости, нет в карточке · <span class="num">' + noCrm.length +
+        '</span> на ' + smRub(c.no_crm_rub) + '</div>' + a + '</div>' : '') +
+      (b ? '<div class="sm-ch"><div class="sm-cht">Есть в карточке, нет в ведомости · <span class="num">' + c.crm_only.length +
+        '</span> на ' + smRub(c.crm_only_rub) + '</div>' + b + '</div>' : '') +
+    '</div>';
+  }
+
+  function smLines(d) {
+    var f = state._smF;
+    var lab = { product: {}, kind: {}, ch: {}, seller: {} };
+    d.products.forEach(function (g) { lab.product[g.key] = g.label; });
+    var rows = d.lines.filter(function (l) { return !f || l[f.by] === f.val; });
+    var sum = rows.reduce(function (s, l) { return s + l.amount; }, 0);
+    var body = rows.slice().reverse().map(function (l) {
+      return smLead(l.case_id,
+        '<span class="sm-d num">' + fmtDay(l.date).slice(0, 5) + '</span>' +
+        '<span class="sb-pn"><b>' + esc(l.case_id ? l.client : (l.payer || 'Без клиента')) + '</b>' +
+          '<small>' + esc(lab.product[l.product] || l.product) + ' · ' + esc(SM_KIND[l.kind] || '') + '</small></span>' +
+        '<span class="sb-po calm" data-l="Канал">' + esc(l.ch) + '</span>' +
+        '<span class="sb-po' + (l.seller === 'Не указан' ? ' none' : ' calm') + '" data-l="Продал">' + esc(l.seller) + '</span>' +
+        '<span class="sm-v num">' + smRub(l.amount) +
+          (l.crm ? '' : '<small>нет в карточке</small>') + '</span>', 'sm-ln');
+    }).join('');
+    var title = f ? (f.label || 'Отбор') : 'Все поступления';
+    return '<div class="card sp12 sm-lines" id="sm-lines"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
+      '</span><div><div class="t">' + esc(title) + ' · <span class="num">' + smRub(sum) + '</span></div>' +
+      '<div class="s">строки ведомости периода, свежие сверху; нажми, откроется карточка клиента</div></div>' +
+      (f ? '<button class="qchip sm-reset" id="sm-reset">Показать все</button>' : '') + '</div>' +
+      (body ? '<div class="sm-lh"><span>Дата</span><span>Клиент</span><span>Канал</span><span>Продал</span><span>Сумма</span></div>' +
+        '<div class="sm-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') + '</div>';
+  }
+
+  function renderSalesMoney(view) {
+    if (state._sm && Date.now() - (state._smAt || 0) > 60000) state._sm = null;
+    if (!state._sm) { view.innerHTML = dashSkeleton(); smFetch(); return; }
+    if (state._sm === 'none' || state._sm === 'acl') {
+      view.innerHTML = '<div class="dash sb"><div class="card pf-head sb-thead">' + sbTabs() + '</div>' +
+        '<div class="card"><div class="empty">' + (state._sm === 'acl'
+        ? 'Деньги периода видят те, кому открыты оплаты клиентов или ведомость.'
+        : 'Не удалось загрузить деньги периода. Проверь интернет.') + '</div></div></div>';
+      sbTabsBind(view);
+      return;
+    }
+    var d = state._sm, c = d.check;
+    var v = smVerdict(d);
+    var list = d.periods || [];
+    var at = -1;
+    list.forEach(function (p, i) { if (p.id === d.period.id) at = i; });
+    // Список идет от свежих к старым: «назад» — следующий по списку.
+    var older = list[at + 1], newer = at > 0 ? list[at - 1] : null;
+    var kinds = {};
+    d.kinds.forEach(function (k) { kinds[k.key] = k; });
+    var kAmt = function (k) { return kinds[k] ? kinds[k].amount : 0; };
+    var kCnt = function (k) { return kinds[k] ? kinds[k].count : 0; };
+    var bad = c.no_crm + c.crm_only.length;
+
+    var head = '<div class="card pf-head sb-thead sm-head">' + sbTabs() +
+      '<div class="brd-nav sm-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-smp="' + (older ? esc(older.id) : '') + '"' +
+          (older ? '' : ' disabled') + ' title="Прошлый период">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(d.period.name) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-smp="' + (newer ? esc(newer.id) : '') + '"' +
+          (newer ? '' : ' disabled') + ' title="Следующий период">' + ic('go', 15) + '</button>' +
+        (d.period.open ? '<span class="sm-open">открыт</span>' : '') +
+      '</div>' +
+      '<div class="pf-verdict ' + v.cls + '"><div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
+    '</div>';
+
+    var stats = statBar([
+      { label: 'Пришло за период', value: smRub(d.total), lead: true,
+        sub: 'как в «Финансах»; до эквайринга ' + smRub(d.gross) },
+      { label: 'Новые продажи', value: smRub(kAmt('new')), sub: kCnt('new') + ' ' + plural(kCnt('new'), 'платеж', 'платежа', 'платежей') },
+      { label: 'Доплаты', value: smRub(kAmt('more')), sub: 'по договорам прошлых периодов' },
+      { label: 'Продления и прочее', value: smRub(kAmt('renew') + kAmt('rest')), sub: 'школа, счета без назначения' },
+      { label: 'Не сверено', value: String(bad), sub: bad ? 'платежей, список ниже' : 'все на месте' },
+    ], 'five');
+
+    view.innerHTML = '<div class="dash sb sm">' + head + stats +
+      '<div class="sm-split">' +
+        smGroup('Продукты', 'box', 'product', d.products, d.total) +
+        smGroup('Каналы', 'funnel', 'ch', d.channels, d.total) +
+        smGroup('Кто продал', 'team', 'seller', d.sellers, d.total) +
+      '</div>' + smCheck(d) + smLines(d) + '</div>';
+    sbTabsBind(view);
+    smBind(view, d);
+    animBars(view);
+  }
+
+  function smBind(view, d) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-smp]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-smp');
+        if (!id) return;
+        state.smPeriod = id; state._sm = null; state._smF = null;
+        renderView();
+      });
+    });
+    var label = {};
+    ['products', 'channels', 'sellers'].forEach(function (k) {
+      d[k].forEach(function (g) { label[g.key] = g.label; });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-smf]'), function (b) {
+      b.addEventListener('click', function () {
+        var by = b.getAttribute('data-smf'), val = b.getAttribute('data-smv');
+        var f = state._smF;
+        state._smF = f && f.by === by && f.val === val ? null : { by: by, val: val, label: label[val] || val };
+        renderView();
+        var box = el('sm-lines');
+        if (box && state._smF) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    var rs = el('sm-reset');
+    if (rs) rs.addEventListener('click', function () { state._smF = null; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
+  }
+
+  /* ── ПРОДАЖИ → ПЛАН МЕСЯЦА ───────────────────────────────────────────────────
+     Павел 08.11.2026: KPI продаж, планы по лидам и расходам и какие отложения
+     делать; план ставим на месяц, но смотрим и по периодам ведомости, потому что
+     выплаты идут по ним. Все блоки считаются от одной цифры плана денег; расходы
+     берутся из плана «Финансов», фонды — правилами ведомости (routers/sales_plan.py).
+     Месяц общий с вкладкой «Воронка и план» и с План-фактом (state.pfMonth). */
+  function spFetch() {
+    var m = pfMonth();
+    state._spAt = Date.now();
+    api('/admin/api/sales/month-plan?month=' + m).then(function (r) {
+      if (pfMonth() !== m) return;
+      state._sp = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if (pfMonth() !== m) return;
+      state._sp = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+
+  // Цифра плана — кнопка: нажал, вписал, Enter. Пусто — «поставить».
+  function spSet(metric, v, money) {
+    return '<button class="sp-set num' + (v ? '' : ' none') + '" data-spset="' + esc(metric) + '"' +
+      (money ? ' data-money="1"' : '') + ' title="Изменить план">' + (v ? sbMoney(v, money) : 'поставить') + '</button>';
+  }
+  function spPct(fact, plan) {
+    if (!plan) return '';
+    var p = Math.round(fact / plan * 100);
+    return '<span class="sp-pct' + (p >= 100 ? ' ok' : '') + '">' + p + '%</span>';
+  }
+  function spBar(fact, plan) {
+    if (!plan) return '';
+    var p = plan ? Math.min(100, Math.round(fact / plan * 100)) : 0;
+    return '<span class="sp-bar"><i data-aw="' + p + '%"></i></span>';
+  }
+  function spCard(cls, icon, title, sub, body, foot) {
+    return '<div class="card sp12 sp-card ' + cls + '"><div class="sec-head pf-sec"><span class="ic">' + ic(icon, 14) +
+      '</span><div><div class="t">' + title + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') +
+      '</div></div>' + body + (foot ? '<div class="sp-foot">' + foot + '</div>' : '') + '</div>';
+  }
+  function spHead(cols) {
+    return '<div class="sp-tr sp-th">' + cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>';
+  }
+
+  function spProducts(d) {
+    var rows = d.products.map(function (p) {
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(p.label) + '</span>' +
+        '<span>' + spSet(p.metric, p.plan, true) + '</span>' +
+        '<span class="num">' + smRub(p.fact) + '</span>' +
+        '<span class="sp-prog">' + spBar(p.fact, p.plan) + spPct(p.fact, p.plan) + '</span></div>';
+    }).join('');
+    var total = '<div class="sp-tr sp-total"><span class="sp-nm">Всего</span>' +
+      '<span class="num">' + (d.plan_total ? smRub(d.plan_total) : '—') + '</span>' +
+      '<span class="num">' + smRub(d.fact_total) + '</span>' +
+      '<span class="sp-prog">' + spBar(d.fact_total, d.plan_total) + spPct(d.fact_total, d.plan_total) + '</span></div>';
+    return spCard('sp-prod', 'box', 'Деньги по продуктам',
+      'факт берется из строк ведомости за месяц; план правится нажатием на цифру',
+      '<div class="sp-tbl sp-t4">' + spHead(['Продукт', 'План', 'Факт', 'Выполнено']) + rows + total + '</div>');
+  }
+
+  // Периоды ведомости — якорь экрана: план периода, сколько реально ждем и срок
+  // внесения плана (за два дня до начала). Периоды и прогноз считает сервер.
+  // «в ноябре»: месяц в предложном падеже для подписей.
+  var SP_MON_IN = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе',
+    'сентябре', 'октябре', 'ноябре', 'декабре'];
+  function spMonthIn(m) { return SP_MON_IN[parseInt(String(m).split('-')[1], 10) - 1] || ''; }
+  function spState(p) {
+    if (p.ended) return { t: 'закрыт', cls: '' };
+    if (p.started) return { t: 'идет сейчас', cls: 'now' };
+    if (p.due_in < 0) return { t: 'план вносили до ' + p.due_label, cls: 'late' };
+    if (p.due_in === 0) return { t: 'внести план сегодня', cls: 'soon' };
+    return { t: 'внести план до ' + p.due_label, cls: p.due_in <= 2 ? 'soon' : '' };
+  }
+  function spParts(d) {
+    var fundsBy = (d.funds.rows || []).filter(function (f) { return f.amount; });
+    var tiles = d.parts.map(function (p, i) {
+      var set = fundsBy.reduce(function (s, f) { return s + (f.parts[i] || 0); }, 0);
+      var st = spState(p);
+      var f = p.forecast;
+      var fore = '';
+      if (f) {
+        var gap = (p.period_plan || 0) - f.total;
+        fore = '<div class="sp-fc"><div class="sp-fcv"><span>реально ждем</span><b class="num">' + smRub(f.total) + '</b></div>' +
+          '<div class="sp-fcl">' +
+            (f.fact ? '<span>пришло <b class="num">' + smRub(f.fact) + '</b></span>' : '') +
+            '<span>взносы рассрочки по графикам <b class="num">' + smRub(f.receivables) + '</b></span>' +
+            '<span>новые деньги по темпу ' + d.pace_days + ' дней <b class="num">' + smRub(f.pace) + '</b></span>' +
+            (f.school ? '<span>школа: ' + (f.school.renewals ? f.school.renewals + ' ' + plural(f.school.renewals, 'продление', 'продления', 'продлений') : 'продлений нет') +
+              (f.school.invoices_rub ? ' и счета' : '') + ' <b class="num">' + smRub(f.school.expected) + '</b>' +
+              '</span>' + (f.school.teachers ? '<span class="sp-cost">расход на преподавателей школы <b class="num">' + smRub(f.school.teachers) + '</b></span>' : '') : '') +
+          '</div>' +
+          (p.period_plan ? '<div class="sp-gap ' + (gap > 0 ? 'bad' : 'ok') + '">' + (gap > 0
+            ? 'до плана не хватает <b class="num">' + smRub(gap) + '</b>'
+            : 'план перекрыт на <b class="num">' + smRub(-gap) + '</b>') + '</div>' : '') +
+        '</div>';
+      } else {
+        fore = '<div class="sp-fc"><div class="sp-fcv"><span>пришло</span><b class="num">' + smRub(p.fact) + '</b></div></div>';
+      }
+      var cut = p.period_from !== p.from || p.period_to !== p.to;
+      return '<div class="sp-part ' + st.cls + '">' +
+        '<div class="sp-ph"><span class="sp-pl">' + esc(p.period_label) + '</span>' +
+          '<span class="sp-st ' + st.cls + '">' + esc(st.t) + '</span></div>' +
+        '<div class="sp-pp">' + (p.period_exists ? 'открыт в ведомости, даты меняет Роман'
+          : 'в ведомости еще не открыт' + (p.ended ? '' : ' · <button class="sp-lnk" data-spend="' + esc(p.end_key) +
+            '" data-from="' + esc(p.period_from) + '" data-to="' + esc(p.period_to) + '">сдвинуть конец</button>' +
+            (p.moved ? ' · <button class="sp-lnk" data-spunend="' + esc(p.end_key) + '">как в модели</button>' : ''))) + '</div>' +
+        '<div class="sp-pk">план периода</div>' +
+        '<div class="sp-pv num"><button class="sp-set sp-big' + (p.period_plan ? '' : ' none') + '" data-spset="' + esc(p.plan_key) +
+          '" data-money="1" title="Вписать свой план периода">' + (p.period_plan ? smRub(p.period_plan) : 'поставить') + '</button></div>' +
+        (p.period_plan_own ? '<div class="sp-own">вписан руками, по планам месяцев ' + smRub(p.period_plan_auto) +
+          ' · <button class="sp-lnk" data-spunplan="' + esc(p.plan_key) + '">вернуть</button></div>' : '') +
+        fore +
+        '<div class="sp-mo">' +
+          (cut ? '<div class="sp-pf">из плана месяца на ' + esc(p.label) + ' <b class="num">' + smRub(p.plan) + '</b></div>' : '') +
+          (cut && p.period_plan - p.plan < 1 ? '<div class="sp-pf">на остальные дни периода плана месяца нет</div>' : '') +
+          (set ? '<div class="sp-pf">отложить в фонды <b class="num">' + smRub(set) + '</b></div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+    return spCard('sp-parts', 'cal', 'Периоды',
+      'план периода собран из планов месяцев по дням; «реально ждем» — что уже пришло, взносы рассрочки по графикам, новые деньги в темпе последних ' + d.pace_days + ' дней и продления школы по ее расписанию. Не открытые в ведомости периоды идут по модели 10–20 и 21–9',
+      '<div class="sp-partgrid">' + tiles + '</div>');
+  }
+
+  // Кто что внес к сроку ближайшего периода. Люди — подписи, права режет сервер.
+  function spOwners(d) {
+    var np = d.next_period;
+    if (!np || !d.owners) return '';
+    var left = d.owners.filter(function (o) { return !o.done; }).length;
+    var due = np.due_in < 0 ? 'срок был ' + np.due_label : np.due_in === 0 ? 'срок сегодня' : 'срок ' + np.due_label;
+    var rows = d.owners.map(function (o) {
+      return '<div class="sp-ow' + (o.done ? ' ok' : '') + '"><span class="sp-ok">' + (o.done ? ic('check', 12) : '') + '</span>' +
+        '<span class="sp-on">' + esc(o.label) + '</span><span class="sp-ob">' + esc(o.who || '') + '</span></div>';
+    }).join('');
+    return spCard('sp-owners', 'check', 'Кто что внес к периоду ' + esc(np.period_label),
+      due + ', за два дня до начала. ' + (left ? 'Не внесено: ' + left + ' из ' + d.owners.length : 'Все внесено'),
+      '<div class="sp-owl">' + rows + '</div>');
+  }
+
+  // Бюджет рекламы по каналам. Подсказка — план лидов канала на цену лида прошлого месяца.
+  function spBudget(d) {
+    var rows = (d.budget || []).map(function (r) {
+      var hint = r.hint ? 'нужно ' + smRub(r.hint) + ' на ' + r.leads_plan + ' лидов по ' + smRub(r.cpl)
+        : r.cpl ? 'лид в прошлом месяце стоил ' + smRub(r.cpl) : 'цены лида за прошлый месяц нет: не сошлись расход и лиды канала';
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(r.name) + '<small>' + esc(hint) + '</small></span>' +
+        '<span>' + spSet(r.metric, r.plan, true) + '</span>' +
+        '<span class="num">' + smRub(r.fact) + '</span>' +
+        '<span class="sp-prog">' + spBar(r.fact, r.plan) + spPct(r.fact, r.plan) + '</span></div>';
+    }).join('');
+    var fund = d.marketing_fund;
+    var note = !d.budget_plan ? 'Поставь бюджет каналу, сумма уйдет в план расхода на рекламу.'
+      : fund == null ? 'Бюджет месяца ' + smRub(d.budget_plan) + '.'
+      : d.budget_plan > fund ? 'Бюджет ' + smRub(d.budget_plan) + ' больше фонда маркетинга ' + smRub(fund) + ' на ' + smRub(d.budget_plan - fund) + '.'
+      : 'Бюджет ' + smRub(d.budget_plan) + ' укладывается в фонд маркетинга ' + smRub(fund) + '.';
+    return spCard('sp-bud', 'coins', 'Бюджет рекламы', 'план по каналам на месяц; потрачено — из расхода на рекламу',
+      '<div class="sp-tbl sp-t4">' + spHead(['Канал', 'План', 'Потрачено', 'Освоено']) + rows + '</div>',
+      '<span class="sp-note' + (fund != null && d.budget_plan > fund ? ' sp-warn' : '') + '">' + note + '</span>');
+  }
+
+  function spKpi(d) {
+    var rows = d.kpi.map(function (r) {
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(r.name) + '</span>' +
+        '<span class="sp-pair"><b class="num">' + r.contracts + '</b> из ' + spSet('kpi_c:' + r.id, r.contracts_plan, false) + '</span>' +
+        '<span class="sp-pair"><b class="num">' + smRub(r.money) + '</b> из ' + spSet('kpi_r:' + r.id, r.money_plan, true) + '</span>' +
+        '<span class="sp-prog">' + spBar(r.money, r.money_plan) + spPct(r.money, r.money_plan) + '</span></div>';
+    }).join('');
+    var add = d.kpi_add && d.kpi_add.length ? '<select class="tm-sel sp-add" id="sp-add"><option value="">Добавить человека</option>' +
+      d.kpi_add.map(function (u) { return '<option value="' + u.id + '">' + esc(u.name) + '</option>'; }).join('') +
+      '</select>' : '';
+    var e = d.econ;
+    var ref = e ? '<span class="sp-note">Ориентир из «Экономики»: ' + e.contracts_year + ' договоров в год, около ' +
+      String(e.contracts_month).replace('.', ',') + ' в месяц на ' + smRub(e.money_month) + '. Продавцу ' +
+      String(e.seller_pct).replace('.', ',') + '% с денег, РОПу ' + String(e.rop_pct).replace('.', ',') + '% и ' + smRub(e.rop_fix) + ' в месяц.</span>' : '';
+    var foot = ref + (d.no_seller_rub ? '<span class="sp-warn">' + smRub(d.no_seller_rub) +
+      ' за месяц пришло без продавца у оплаты: их не видно ни в KPI, ни в мотивации. Продавца ставят в оплате карточки.</span>' : '') + add;
+    return spCard('sp-kpi', 'team', 'KPI продающих',
+      'договоры: новые продажи сопровождения, где человек стоит продавцом оплаты; деньги: все его оплаты месяца',
+      rows ? '<div class="sp-tbl sp-t4 sp-tk">' + spHead(['Кто', 'Договоры', 'Деньги', 'Выполнено']) + rows + '</div>'
+        : '<div class="empty">Продающих в этом месяце нет. Добавь человека ниже.</div>', foot);
+  }
+
+  function spLeads(d) {
+    var rows = d.leads.map(function (r) {
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(r.name) + '</span>' +
+        '<span>' + spSet(r.metric, r.plan, false) + '</span>' +
+        '<span class="num">' + r.fact + '</span>' +
+        '<span class="sp-prog">' + spBar(r.fact, r.plan) + spPct(r.fact, r.plan) + '</span></div>';
+    }).join('');
+    var n = d.funnel_norm;
+    var hint = d.leads_need
+      ? 'На ' + d.contracts_plan + ' ' + plural(d.contracts_plan, 'договор', 'договора', 'договоров') +
+        ' нужно около <b class="num">' + d.leads_need + '</b> лидов при норме воронки: связались ' +
+        Math.round(n.contact * 100) + '%, записались ' + Math.round(n.booked * 100) + '%, пришли ' +
+        Math.round(n.held * 100) + '%, купили ' + Math.round(n.contract * 100) + '%. В плане сейчас ' +
+        (d.leads_plan || 0) + ', пришло ' + d.leads_fact + '.'
+      : 'Поставь план договоров на вкладке «Воронка» или KPI людям, и здесь появится, сколько нужно лидов.';
+    return spCard('sp-leads', 'funnel', 'Лиды по каналам', 'новые карточки месяца по каналу прихода',
+      '<div class="sp-tbl sp-t4">' + spHead(['Канал', 'План', 'Пришло', 'Выполнено']) + rows + '</div>',
+      '<span class="sp-note">' + hint + '</span>');
+  }
+
+  function spExpenses(d) {
+    var any = d.expenses.some(function (e) { return e.plan; });
+    var rows = d.expenses.map(function (e) {
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(e.label) + (e.who ? '<small>вносит ' + esc(e.who) + '</small>' : '') + '</span>' +
+        '<span><button class="sp-set' + (e.plan ? '' : ' none') + '" data-spgo="' + esc(e.key) + '" title="Открыть план отдела в Финансах">' +
+          (e.plan ? smRub(e.plan) : 'внести') + ic('go', 11) + '</button></span>' +
+        '<span class="num">' + smRub(e.fact) + '</span>' +
+        '<span class="sp-prog">' + spBar(e.fact, e.plan) + spPct(e.fact, e.plan) + '</span></div>';
+    }).join('');
+    var sub = d.expenses.filter(function (e) { return e.plan; }).length;
+    return spCard('sp-exp', 'coins', 'Расходы месяца',
+      'план отдела вносят в «Финансах»: нажми на цифру, откроется его лист',
+      '<div class="sp-tbl sp-t4">' + spHead(['Отдел', 'План', 'Потрачено', 'Освоено']) + rows + '</div>',
+      '<span class="sp-note">' + (any ? 'План внесли ' + sub + ' из ' + d.expenses.length + ' отделов.' :
+        'План расходов на месяц еще не внесен ни одним отделом, поэтому прибыль ниже посчитана без расходов.') + '</span>');
+  }
+
+  function spFunds(d) {
+    var f = d.funds;
+    if (!d.plan_total) {
+      return spCard('sp-funds', 'wallet', 'Отложения в фонды', '',
+        '<div class="sp-empty">Поставь план денег по продуктам, и здесь появится, сколько отложить в каждый фонд и к какому периоду.</div>');
+    }
+    var parts = d.parts;
+    var rows = f.rows.map(function (r) {
+      var why = r.manual ? 'вписано руками, по правилу было бы ' + smRub(r.auto || 0) : esc(r.rule);
+      return '<div class="sp-tr sp-fr' + (r.manual ? ' manual' : '') + '"><span class="sp-nm">' + esc(r.name) + '<small>' + why + '</small></span>' +
+        '<span>' + (r.id === 'flex' ? '<b class="num">' + smRub(r.amount) + '</b>' : '<button class="sp-set num" data-spset="' + esc(r.metric) + '" data-money="1" title="Вписать сумму руками">' + smRub(r.amount) + '</button>') + '</span>' +
+        r.parts.map(function (v) { return '<span class="num sp-dim2">' + smRub(v) + '</span>'; }).join('') + '</div>';
+    }).join('');
+    var head = spHead(['Фонд', 'За месяц'].concat(parts.map(function (p) { return esc(p.label); })));
+    var foot = '<span class="sp-note">Сумму фонда можно вписать руками, пустое поле вернет правило. Правила фондов из ведомости ' + esc(f.period || '') +
+      '. База ' + smRub(f.base) + ', прямые расходы по плану ' + smRub(f.direct) +
+      ', чистая прибыль ' + smRub(f.profit) + ', дивиденды ' + smRub(f.dividends) + '.</span>';
+    return spCard('sp-funds', 'wallet', 'Отложения в фонды',
+      'сколько отложить при этом плане денег, тем же расчетом, что каскад ведомости',
+      '<div class="sp-tbl sp-tf">' + head + rows + '</div>', foot);
+  }
+
+  function renderSalesPlan(view) {
+    if (state._sp && Date.now() - (state._spAt || 0) > 60000) state._sp = null;
+    if (!state._sp) { view.innerHTML = dashSkeleton(); spFetch(); return; }
+    if (state._sp === 'none' || state._sp === 'acl') {
+      view.innerHTML = '<div class="dash sb"><div class="card pf-head sb-thead">' + sbTabs() + '</div>' +
+        '<div class="card"><div class="empty">' + (state._sp === 'acl'
+        ? 'План периода видят руководители, кому открыты деньги клиентов или ведомость.'
+        : 'Не удалось загрузить план. Проверь интернет.') + '</div></div></div>';
+      sbTabsBind(view);
+      return;
+    }
+    var d = state._sp;
+    var expect = d.plan_total ? Math.round(d.plan_total * d.days_passed / d.days_total) : 0;
+    var v = !d.plan_total
+      ? { t: 'Плана на месяц нет', s: 'поставь деньги по продуктам ниже, от них посчитаются периоды и фонды', cls: '' }
+      : d.fact_total >= expect
+        ? { t: 'Идем в план', s: 'в ' + spMonthIn(d.month) + ' пришло ' + smRub(d.fact_total) + ' из ' + smRub(d.plan_total) + ', к сегодня надо ' + smRub(expect), cls: 'ok' }
+        : { t: 'Отстаем на ' + smRub(expect - d.fact_total), s: 'в ' + spMonthIn(d.month) + ' пришло ' + smRub(d.fact_total) + ' из ' + smRub(d.plan_total) + ', к сегодня надо ' + smRub(expect), cls: 'risk' };
+    var head = '<div class="card pf-head sb-thead sm-head">' + sbTabs() +
+      '<div class="brd-nav sm-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-spmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(pfMonthTitle(d.month)) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-spmon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+      '</div>' +
+      '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '"><div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
+    '</div>';
+    view.innerHTML = '<div class="dash sb sp">' + head + spParts(d) + spOwners(d) + spProducts(d) +
+      '<div class="sp-split">' + spKpi(d) + spLeads(d) + '</div>' + spBudget(d) + spExpenses(d) + spFunds(d) + '</div>';
+    sbTabsBind(view);
+    spBind(view);
+    animBars(view);
+  }
+
+  function spBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spmon]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = pfMonth().split('-');
+        var dt = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + parseInt(b.getAttribute('data-spmon'), 10), 1);
+        state.pfMonth = dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2);
+        state._sp = null; state._sb = null; state._pf = null;
+        renderView();
+      });
+    });
+    var put = function (metric, n) {
+      return api('/admin/api/sales/month-plan', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: pfMonth(), metric: metric, target: n }),
+      }).then(function () { state._sp = null; state._sb = null; state._pf = null; renderView(); })
+        .catch(function () { showToast('План не сохранился, проверь сеть'); renderView(); });
+    };
+    // Конец неоткрытого периода: дата → длина в днях, следующий период подстроится.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spend]'), function (b) {
+      b.addEventListener('click', function () {
+        var inp = document.createElement('input');
+        inp.type = 'date';
+        inp.className = 'ed-input sp-date';
+        inp.value = b.getAttribute('data-to');
+        inp.min = b.getAttribute('data-from');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus();
+        if (inp.showPicker) { try { inp.showPicker(); } catch (e) { /* не везде можно без жеста */ } }
+        inp.addEventListener('change', function () {
+          if (!inp.value) return;
+          var a = new Date(inp.min + 'T00:00:00'), z = new Date(inp.value + 'T00:00:00');
+          var len = Math.round((z - a) / 86400000) + 1;
+          if (len < 1 || len > 40) { showToast('Период от 1 до 40 дней'); return; }
+          put(b.getAttribute('data-spend'), len);
+        });
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Escape') renderView(); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spunend], [data-spunplan]'), function (b) {
+      b.addEventListener('click', function () {
+        put(b.getAttribute('data-spunend') || b.getAttribute('data-spunplan'), 0);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spgo]'), function (b) {
+      b.addEventListener('click', function () { finPlanGoSheet(b.getAttribute('data-spgo')); });
+    });
+    var add = el('sp-add');
+    if (add) add.addEventListener('change', function () {
+      // Человек появляется в таблице, когда у него есть план: ставим договор и правим дальше.
+      if (add.value) put('kpi_c:' + add.value, 1);
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spset]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-spset');
+        var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
+        var inp = document.createElement('input');
+        inp.className = 'ed-input pf-in num sp-in';
+        inp.value = was;
+        inp.setAttribute('inputmode', 'numeric');
+        inp.setAttribute('placeholder', '0');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus(); inp.select();
+        var done = false;
+        var save = function () {
+          if (done) return;
+          done = true;
+          var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+          if (isNaN(n)) n = 0;
+          if (String(n) === String(was || 0)) { renderView(); return; }
+          put(key, n);
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { done = true; renderView(); }
+        });
+        inp.addEventListener('blur', save);
+      });
+    });
+  }
+
+  /* ── МОЯ СМЕНА — рабочий экран менеджера продаж на день ─────────────────────
+     Павел 07.11.2026: «нужен конкретный план на день: как открыть смену, куда
+     смотреть, как связываться, где вбивать номера и звонить, как закрыть смену,
+     какой отчет сдавать». Экран отвечает на один вопрос: что мне делать сейчас.
+
+     Главное на экране — план смены из шести шагов с числами: открыть смену, ответить
+     новым, встречи, дожать, взять свободных, закрыть. Под ним те же шаги списками
+     людей. Очереди считает сервер (routers/sales_shift.py) в порядке приоритета
+     нулевого этапа. Звонок — наша звонилка в отдельном окне: одно окно на всю смену,
+     каждый следующий номер подставляется в него же, линия не переподключается. */
+  var MS = { d: null, busy: false, at: 0, closing: false };
+
+  function msLoad(force) {
+    if (MS.busy || (MS.d && !force && Date.now() - MS.at < 60000)) return;
+    MS.busy = true;
+    api('/admin/api/sales/my-day').then(function (r) {
+      MS.d = r; MS.busy = false; MS.at = Date.now();
+      if (state.page === 'myshift') renderView();
+    }).catch(function (e) {
+      MS.busy = false;
+      if (e.message === '403') return;
+      MS.d = 'none';
+      if (state.page === 'myshift') renderView();
+    });
+  }
+
+  function msPhone(d) {
+    if (!d) return '';
+    if (/^7\d{10}$/.test(d)) return '+7 ' + d.slice(1, 4) + ' ' + d.slice(4, 7) + '-' + d.slice(7, 9) + '-' + d.slice(9);
+    return '+' + d;
+  }
+  function msAge(min) {
+    if (min < 60) return min + ' мин';
+    if (min < 48 * 60) return Math.floor(min / 60) + ' ч';
+    return Math.floor(min / 1440) + ' дн';
+  }
+  function msWhen(iso) {
+    var d = new Date(iso), now = new Date();
+    var t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    var day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var diff = Math.round((day - today) / 86400000);
+    return (diff === 0 ? 'сегодня' : diff === 1 ? 'завтра' : fmtDay(iso)) + ', ' + t;
+  }
+
+  /* Кнопки строки: позвонить, связался, взять, карточка. Звонок без права на
+     звонилку уходит обычной ссылкой tel: — с телефона менеджера это тоже звонок. */
+  function msActs(p, kind, canCall) {
+    var out = [];
+    // Свободного лида сначала берут, потом звонят: иначе звонок без ответственного.
+    // Синяя кнопка звонка одна на строку и только там, где ждут первого ответа.
+    if (p.phone && kind !== 'pool') {
+      out.push(canCall
+        ? '<button class="bp ms-call' + (kind === 'respond' ? '' : ' ghost') + '" data-mscall="' + esc(p.phone) + '">' +
+          ic('phone', 13) + 'Позвонить</button>'
+        : '<a class="bp ghost ms-call" href="tel:+' + esc(p.phone) + '">' + ic('phone', 13) + msPhone(p.phone) + '</a>');
+    }
+    if (kind === 'respond') out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '">Связался</button>');
+    if (kind === 'pool') out.push('<button class="bp" data-mstake="' + esc(p.id) + '">Взять себе</button>');
+    out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
+    return '<div class="ms-acts">' + out.join('') + '</div>';
+  }
+
+  function msRow(p, kind, canCall) {
+    var meta = [esc(p.ch + (p.sub ? ' · ' + p.sub : ''))];
+    if (p.grade) meta.push(esc(p.grade));
+    if (!p.phone && p.contact) meta.push(esc(p.contact));
+    if (!p.phone && !p.contact) meta.push('номера нет, писать в диалог');
+    var tag = '';
+    if (kind === 'respond' || kind === 'pool') {
+      tag = '<span class="sev ' + (p.age_min > 15 ? 'ms-late' : 'ms-ok') + '">ждет ' + msAge(p.age_min) + '</span>';
+    } else if (kind === 'follow') {
+      tag = '<span class="sev ' + (p.next_in_days != null && p.next_in_days <= 0.5 ? 'ms-late' : 'ms-ok') + '">касание ' +
+        p.touch + ' из 5 · день ' + p.day + '</span>';
+    }
+    return '<div class="ms-row">' +
+      '<div class="ms-nm"><b>' + esc(p.name) + '</b><small>' + meta.join(' · ') + '</small></div>' +
+      tag + msActs(p, kind, canCall) + '</div>';
+  }
+
+  function msSection(id, title, sub, rows, empty) {
+    return '<div class="card sp12 ms-sec" id="ms-' + id + '">' +
+      '<div class="sec-head pf-sec"><div><div class="t">' + title + '</div><div class="s">' + sub + '</div></div></div>' +
+      (rows ? '<div class="ms-list">' + rows + '</div>' : '<div class="empty">' + empty + '</div>') + '</div>';
+  }
+
+  function msPlan(d, open) {
+    var steps = [
+      { n: 1, t: 'Открыть смену', s: open ? 'идет' : 'начни с этого', done: open, go: '' },
+      { n: 2, t: 'Ответить новым', s: d.respond.length ? d.respond.length + ' ждут, норма 15 минут' : 'все отвечены',
+        done: !d.respond.length, go: 'respond', hot: d.respond.length > 0 },
+      { n: 3, t: 'Встречи', s: d.meets.length ? d.meets.length + ' на ближайшие дни' : 'встреч нет', done: false, go: 'meets' },
+      { n: 4, t: 'Дожать до записи', s: d.follow.length ? d.follow.length + ' на связи без записи' : 'никого', done: !d.follow.length, go: 'follow' },
+      { n: 5, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
+      { n: 6, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
+    ];
+    return '<div class="card ms-plan">' + steps.map(function (st) {
+      return '<button class="ms-step' + (st.done ? ' done' : '') + (st.hot ? ' hot' : '') + '"' +
+        (st.go ? ' data-msgo="' + st.go + '"' : ' disabled') + '>' +
+        '<span class="ms-sn">' + (st.done ? ic('check', 13) : st.n) + '</span>' +
+        '<span class="ms-st"><b>' + st.t + '</b><small>' + esc(st.s) + '</small></span></button>';
+    }).join('') + '</div>';
+  }
+
+  function msHead(open, cnt) {
+    if (!open) {
+      return '<div class="card sh-card ms-head"><div class="sh-main"><span class="sh-dot off"></span><div>' +
+        '<div class="sh-t">Смена не открыта</div><div class="sh-s">' + cnt + '</div></div></div>' +
+        '<button class="bp sh-go" id="ms-open">Открыть смену</button></div>';
+    }
+    var consult = open.on_consult
+      ? '<button class="bp ghost" id="ms-consult" data-on="0">Вернулся</button>'
+      : '<button class="bp ghost" id="ms-consult" data-on="1">Ушел на консультацию</button>';
+    return '<div class="card sh-card on ms-head"><div class="sh-main"><span class="sh-dot on"></span><div>' +
+      '<div class="sh-t">Смена идет · <span id="sh-elapsed" class="num">' + shDur(open.elapsed_sec * 1000) + '</span>' +
+      (open.on_consult ? ' <span class="sh-badge">на консультации</span>' : '') + '</div>' +
+      '<div class="sh-s">' + cnt + '</div></div></div>' +
+      '<div class="sh-btns">' + consult + '<button class="bp ghost" id="ms-close" data-msgo="close">Закрыть смену</button></div></div>';
+  }
+
+  /* Закрытие — короткий отчет: цифры CRM уже знает, человек пишет одну строку того,
+     чего в цифрах нет. Строку видит руководитель на экране «Продажи». */
+  function msClose(d, open) {
+    if (!MS.closing || !open) return '';
+    var t = d.today;
+    return '<div class="card sp12 ms-closebox" id="ms-closebox">' +
+      '<div class="sec-head pf-sec"><div><div class="t">Закрыть смену</div>' +
+      '<div class="s">цифры CRM посчитала сама, проверь и допиши итог</div></div></div>' +
+      '<div class="ms-sum">' +
+        '<span><b class="num">' + t.calls + '</b>звонков, из них разговоров ' + t.talks + '</span>' +
+        '<span><b class="num">' + t.touched + '</b>новым ответил</span>' +
+        '<span><b class="num">' + t.booked + '</b>записал на встречу</span>' +
+        '<span><b class="num">' + t.held + '</b>провел встреч</span>' +
+      '</div>' +
+      '<label class="al-l" for="ms-note">Итог смены одной строкой</label>' +
+      '<textarea class="al-in ms-note" id="ms-note" rows="2" maxlength="1000" ' +
+        'placeholder="Например: двое просили перезвонить в понедельник, у Ивановой вопрос по цене к Павлу"></textarea>' +
+      '<div class="ms-cbtns"><button class="bp" id="ms-close-go">Закрыть смену</button>' +
+        '<button class="bp ghost" id="ms-close-no">Еще поработаю</button></div></div>';
+  }
+
+  function renderMyShift(view) {
+    shLoad();
+    msLoad();
+    var d = MS.d, sh = SH.cur;
+    if (!d || !sh) { view.innerHTML = dashSkeleton(); return; }
+    if (d === 'none' || sh.failed) {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить смену. Проверь интернет.' +
+        '<div><button class="bp ghost sb-retry" id="ms-retry">Попробовать снова</button></div></div></div>';
+      el('ms-retry').addEventListener('click', function () { MS.d = null; SH.cur = null; renderView(); });
+      return;
+    }
+    var open = sh.open;
+    var cnt = 'за месяц ' + sh.shifts + ' ' + plural(sh.shifts, 'смена', 'смены', 'смен') +
+      ' · ' + String(sh.hours || 0).replace('.', ',') + ' ч';
+    var t = d.today;
+    var stats = statBar([
+      { label: 'Звонков', value: fmtMoney(t.calls), sub: 'разговоров ' + t.talks },
+      { label: 'Минут разговора', value: fmtMoney(t.talk_min), sub: 'за сегодня' },
+      { label: 'Ответил новым', value: fmtMoney(t.touched), sub: 'первое касание' },
+      { label: 'Записал', value: fmtMoney(t.booked), sub: 'на встречу' },
+      { label: 'Провел встреч', value: fmtMoney(t.held), sub: 'за сегодня' },
+    ], 'five');
+    var cc = d.can_call;
+    var meets = d.meets.map(function (m) {
+      return '<div class="ms-row"><div class="ms-nm"><b>' + esc(m.name) + '</b><small>' +
+        (m.kind === 'slot' ? 'записался сам в окно' : 'консультация') + '</small></div>' +
+        '<span class="sev ms-when">' + esc(msWhen(m.at)) + '</span>' + msActs(m, 'meet', cc) + '</div>';
+    }).join('');
+    var calls = d.calls.map(function (c) {
+      var talk = c.answered ? Math.floor(c.talk_sec / 60) + ':' + ('0' + c.talk_sec % 60).slice(-2) : 'без ответа';
+      return '<div class="ms-row ms-crow"><div class="ms-nm"><b>' + esc(c.lead && c.lead.name || msPhone(c.number)) + '</b>' +
+        '<small>' + (c.direction === 'in' ? 'входящий' : 'исходящий') + ' · ' + esc(msWhen(c.at)) + '</small></div>' +
+        '<span class="sev ' + (c.answered ? 'ms-ok' : 'ms-late') + '">' + talk + '</span>' +
+        (c.lead ? '<div class="ms-acts"><button class="icobtn sm" data-mslead="' + esc(c.lead.id) + '" title="Открыть карточку">' +
+          ic('ext', 14) + '</button></div>' : '<div class="ms-acts"></div>') + '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + msPlan(d, !!open) + msClose(d, open) + stats +
+      (cc ? '<div class="card ms-dial"><span>' + ic('phone', 15) + 'Звонилка открывается отдельным окном на всю смену: ' +
+        'держи его открытым, туда приходят и входящие.</span>' +
+        '<button class="bp ghost" id="ms-dial">Открыть звонилку</button></div>'
+        : '<div class="card ms-nocall">Звонилка тебе пока не подключена: номера открываются обычным звонком с телефона. ' +
+        'Чтобы звонки и записи шли через CRM, попроси доступ у Павла.</div>') +
+      msSection('respond', 'Ответить сейчас', 'твои лиды, с которыми еще никто не связался; позвони, не дозвонился — напиши в диалог',
+        d.respond.map(function (p) { return msRow(p, 'respond', cc); }).join(''), 'Новых без ответа нет.') +
+      msSection('meets', 'Встречи', 'консультации твоих лидов на ближайшие дни; за сутки подтверди, за час напомни',
+        meets, 'Встреч пока нет. Записывай в свои окна в «Расписании».') +
+      msSection('follow', 'Дожать до записи', 'на связи, но не записались; пять касаний за 14 дней: +1, +3, +7, +14 день',
+        d.follow.map(function (p) { return msRow(p, 'follow', cc); }).join(''), 'Всех довел до записи или до отказа.') +
+      msSection('pool', 'Свободные лиды', d.pool_total > d.pool.length
+          ? 'никто не взял, показаны ' + d.pool.length + ' самых свежих из ' + d.pool_total : 'никто не взял за неделю; взял — лид твой',
+        d.pool.map(function (p) { return msRow(p, 'pool', cc); }).join(''), 'Свободных нет.') +
+      msSection('calls', 'Звонки сегодня', 'твои звонки через звонилку CRM', calls, 'Сегодня звонков еще не было.') +
+      '</div>';
+    msBind(view);
+    if (open) shStartTimer(Date.parse(open.started_at));
+  }
+
+  function msAfter(p) {
+    return p.then(function () { MS.d = null; msLoad(true); shLoad(true); })
+      .catch(function () { showToast('Не получилось, проверь интернет'); renderView(); });
+  }
+
+  function msBind(view) {
+    var o = el('ms-open');
+    if (o) o.addEventListener('click', function () { o.disabled = true; msAfter(shAct('open')); });
+    var cs = el('ms-consult');
+    if (cs) cs.addEventListener('click', function () {
+      cs.disabled = true; msAfter(shAct('consult', { on: cs.getAttribute('data-on') === '1' }));
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-msgo]'), function (b) {
+      b.addEventListener('click', function () {
+        var go = b.getAttribute('data-msgo');
+        if (go === 'close') {
+          if (!SH.cur || !SH.cur.open) { showToast('Смена еще не открыта'); return; }
+          MS.closing = true; renderView();
+          var box = el('ms-closebox');
+          if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'start' }); el('ms-note').focus(); }
+          return;
+        }
+        var sec = el('ms-' + go);
+        if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    var cg = el('ms-close-go');
+    if (cg) cg.addEventListener('click', function () {
+      cg.disabled = true;
+      var note = (el('ms-note').value || '').trim();
+      MS.closing = false;
+      msAfter(shAct('close', { note: note }).then(function () { showToast('Смена закрыта, итог ушел руководителю'); }));
+    });
+    var cn = el('ms-close-no');
+    if (cn) cn.addEventListener('click', function () { MS.closing = false; renderView(); });
+
+    var dial = el('ms-dial');
+    if (dial) dial.addEventListener('click', function () { window.open(location.origin + '/zvonilka/', 'es-zvonilka'); });
+    // Одно окно звонилки на всю смену: следующий номер подставляется в него же.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mscall]'), function (b) {
+      b.addEventListener('click', function () {
+        window.open(location.origin + '/zvonilka/#n=' + encodeURIComponent(b.getAttribute('data-mscall')), 'es-zvonilka');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mslead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-mslead')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mstouch]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        msAfter(api('/admin/api/leads/' + b.getAttribute('data-mstouch') + '/touch', { method: 'POST' }));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mstake]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        msAfter(api('/admin/api/leads/' + b.getAttribute('data-mstake') + '/take', { method: 'POST' })
+          .then(function () { showToast('Лид твой, он в «Ответить сейчас»'); }));
+      });
+    });
+  }
 
   /* ── ВОЗНАГРАЖДЕНИЕ — что человек сделал за месяц и сколько ему причитается ──
      Роман 28.10.2026 дословно: «на конец месяца смотришь, что сделал человек,
@@ -53668,10 +55105,10 @@
     SH.busy = true;
     api('/admin/api/shift/current').then(function (r) {
       SH.cur = r; SH.busy = false;
-      if (state.page === 'dash') renderView();
+      if (state.page === 'dash' || state.page === 'myshift') renderView();
     }).catch(function () {
       SH.cur = { failed: true }; SH.busy = false;
-      if (state.page === 'dash') renderView();
+      if (state.page === 'dash' || state.page === 'myshift') renderView();
     });
   }
   function shAct(path, body) {
