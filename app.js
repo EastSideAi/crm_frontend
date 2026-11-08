@@ -38493,7 +38493,7 @@
      рядом ставит оплаты из карточек: чего нет с одной стороны, видно списком.
      Своих денег экран не считает: сумма — та же, что «доход к зачислению» в каскаде,
      сервер сверяет это сам (routers/sales_money.py). */
-  var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План месяца' },
+  var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План периода' },
                  { id: 'money', label: 'Деньги и сверка' }];
   var SM_KIND = { new: 'новая продажа', more: 'доплата', renew: 'продление', rest: 'прочее' };
 
@@ -38747,6 +38747,7 @@
     return '<span class="sp-pct' + (p >= 100 ? ' ok' : '') + '">' + p + '%</span>';
   }
   function spBar(fact, plan) {
+    if (!plan) return '';
     var p = plan ? Math.min(100, Math.round(fact / plan * 100)) : 0;
     return '<span class="sp-bar"><i data-aw="' + p + '%"></i></span>';
   }
@@ -38775,21 +38776,94 @@
       '<div class="sp-tbl sp-t4">' + spHead(['Продукт', 'План', 'Факт', 'Выполнено']) + rows + total + '</div>');
   }
 
+  // Периоды ведомости — якорь экрана: план периода, сколько реально ждем и срок
+  // внесения плана (за два дня до начала). Периоды и прогноз считает сервер.
+  // «в ноябре»: месяц в предложном падеже для подписей.
+  var SP_MON_IN = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе',
+    'сентябре', 'октябре', 'ноябре', 'декабре'];
+  function spMonthIn(m) { return SP_MON_IN[parseInt(String(m).split('-')[1], 10) - 1] || ''; }
+  function spState(p) {
+    if (p.ended) return { t: 'закрыт', cls: '' };
+    if (p.started) return { t: 'идет сейчас', cls: 'now' };
+    if (p.due_in < 0) return { t: 'план вносили до ' + p.due_label, cls: 'late' };
+    if (p.due_in === 0) return { t: 'внести план сегодня', cls: 'soon' };
+    return { t: 'внести план до ' + p.due_label, cls: p.due_in <= 2 ? 'soon' : '' };
+  }
   function spParts(d) {
     var fundsBy = (d.funds.rows || []).filter(function (f) { return f.amount; });
     var tiles = d.parts.map(function (p, i) {
       var set = fundsBy.reduce(function (s, f) { return s + (f.parts[i] || 0); }, 0);
-      return '<div class="sp-part">' +
-        '<div class="sp-pl">' + esc(p.label) + '</div>' +
-        '<div class="sp-pp">в период ' + esc(p.period) + (p.period_exists ? '' : ', еще не открыт') + '</div>' +
-        '<div class="sp-pv num">' + (d.plan_total ? smRub(p.plan) : '—') + '</div>' +
-        '<div class="sp-pf">пришло <b class="num">' + smRub(p.fact) + '</b></div>' +
-        (set ? '<div class="sp-pf">отложить в фонды <b class="num">' + smRub(set) + '</b></div>' : '') +
+      var st = spState(p);
+      var f = p.forecast;
+      var fore = '';
+      if (f) {
+        var gap = (p.period_plan || 0) - f.total;
+        fore = '<div class="sp-fc"><div class="sp-fcv"><span>реально ждем</span><b class="num">' + smRub(f.total) + '</b></div>' +
+          '<div class="sp-fcl">' +
+            (f.fact ? '<span>пришло <b class="num">' + smRub(f.fact) + '</b></span>' : '') +
+            '<span>взносы рассрочки по графикам <b class="num">' + smRub(f.receivables) + '</b></span>' +
+            '<span>новые деньги по темпу ' + d.pace_days + ' дней <b class="num">' + smRub(f.pace) + '</b></span>' +
+          '</div>' +
+          (p.period_plan ? '<div class="sp-gap ' + (gap > 0 ? 'bad' : 'ok') + '">' + (gap > 0
+            ? 'до плана не хватает <b class="num">' + smRub(gap) + '</b>'
+            : 'план перекрыт на <b class="num">' + smRub(-gap) + '</b>') + '</div>' : '') +
+        '</div>';
+      } else {
+        fore = '<div class="sp-fc"><div class="sp-fcv"><span>пришло</span><b class="num">' + smRub(p.fact) + '</b></div></div>';
+      }
+      var cut = p.period_from !== p.from || p.period_to !== p.to;
+      return '<div class="sp-part ' + st.cls + '">' +
+        '<div class="sp-ph"><span class="sp-pl">' + esc(p.period_label) + '</span>' +
+          '<span class="sp-st ' + st.cls + '">' + esc(st.t) + '</span></div>' +
+        '<div class="sp-pp">' + (p.period_exists ? 'открыт в ведомости' : 'в ведомости еще не открыт') + '</div>' +
+        '<div class="sp-pk">план периода</div>' +
+        '<div class="sp-pv num">' + (p.period_plan ? smRub(p.period_plan) : '—') + '</div>' +
+        fore +
+        '<div class="sp-mo">' +
+          '<div class="sp-pf">' + (cut ? 'план на ' + esc(p.label) : 'план периода в этом месяце') + ' <b class="num">' + smRub(p.plan) + '</b></div>' +
+          (cut && p.period_plan - p.plan < 1 ? '<div class="sp-pf">на остальные дни периода плана месяца нет</div>' : '') +
+          (set ? '<div class="sp-pf">отложить в фонды <b class="num">' + smRub(set) + '</b></div>' : '') +
+        '</div>' +
       '</div>';
     }).join('');
-    return spCard('sp-parts', 'cal', 'Месяц по периодам ведомости',
-      'выплаты идут по периодам, поэтому план месяца разложен по ним; пока графика прихода по дням нет, делим ровно по дням',
+    return spCard('sp-parts', 'cal', 'Периоды',
+      'план периода собран из планов месяцев по дням; «реально ждем» — что уже пришло, взносы рассрочки по графикам и новые деньги в темпе последних ' + d.pace_days + ' дней. Не открытые в ведомости периоды идут по модели 10–20 и 21–9',
       '<div class="sp-partgrid">' + tiles + '</div>');
+  }
+
+  // Кто что внес к сроку ближайшего периода. Люди — подписи, права режет сервер.
+  function spOwners(d) {
+    var np = d.next_period;
+    if (!np || !d.owners) return '';
+    var left = d.owners.filter(function (o) { return !o.done; }).length;
+    var due = np.due_in < 0 ? 'срок был ' + np.due_label : np.due_in === 0 ? 'срок сегодня' : 'срок ' + np.due_label;
+    var rows = d.owners.map(function (o) {
+      return '<div class="sp-ow' + (o.done ? ' ok' : '') + '"><span class="sp-ok">' + (o.done ? ic('check', 12) : '') + '</span>' +
+        '<span class="sp-on">' + esc(o.label) + '</span><span class="sp-ob">' + esc(o.who || '') + '</span></div>';
+    }).join('');
+    return spCard('sp-owners', 'check', 'Кто что внес к периоду ' + esc(np.period_label),
+      due + ', за два дня до начала. ' + (left ? 'Не внесено: ' + left + ' из ' + d.owners.length : 'Все внесено'),
+      '<div class="sp-owl">' + rows + '</div>');
+  }
+
+  // Бюджет рекламы по каналам. Подсказка — план лидов канала на цену лида прошлого месяца.
+  function spBudget(d) {
+    var rows = (d.budget || []).map(function (r) {
+      var hint = r.hint ? 'нужно ' + smRub(r.hint) + ' на ' + r.leads_plan + ' лидов по ' + smRub(r.cpl)
+        : r.cpl ? 'лид в прошлом месяце стоил ' + smRub(r.cpl) : 'цены лида за прошлый месяц нет: не сошлись расход и лиды канала';
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(r.name) + '<small>' + esc(hint) + '</small></span>' +
+        '<span>' + spSet(r.metric, r.plan, true) + '</span>' +
+        '<span class="num">' + smRub(r.fact) + '</span>' +
+        '<span class="sp-prog">' + spBar(r.fact, r.plan) + spPct(r.fact, r.plan) + '</span></div>';
+    }).join('');
+    var fund = d.marketing_fund;
+    var note = !d.budget_plan ? 'Поставь бюджет каналу, сумма уйдет в «Расход на рекламу» План-факта.'
+      : fund == null ? 'Бюджет месяца ' + smRub(d.budget_plan) + '.'
+      : d.budget_plan > fund ? 'Бюджет ' + smRub(d.budget_plan) + ' больше фонда маркетинга ' + smRub(fund) + ' на ' + smRub(d.budget_plan - fund) + '.'
+      : 'Бюджет ' + smRub(d.budget_plan) + ' укладывается в фонд маркетинга ' + smRub(fund) + '.';
+    return spCard('sp-bud', 'coins', 'Бюджет рекламы', 'план по каналам на месяц; потрачено — из расхода на рекламу',
+      '<div class="sp-tbl sp-t4">' + spHead(['Канал', 'План', 'Потрачено', 'Освоено']) + rows + '</div>',
+      '<span class="sp-note' + (fund != null && d.budget_plan > fund ? ' sp-warn' : '') + '">' + note + '</span>');
   }
 
   function spKpi(d) {
@@ -38802,7 +38876,11 @@
     var add = d.kpi_add && d.kpi_add.length ? '<select class="tm-sel sp-add" id="sp-add"><option value="">Добавить человека</option>' +
       d.kpi_add.map(function (u) { return '<option value="' + u.id + '">' + esc(u.name) + '</option>'; }).join('') +
       '</select>' : '';
-    var foot = (d.no_seller_rub ? '<span class="sp-warn">' + smRub(d.no_seller_rub) +
+    var e = d.econ;
+    var ref = e ? '<span class="sp-note">Ориентир из «Экономики»: ' + e.contracts_year + ' договоров в год, около ' +
+      String(e.contracts_month).replace('.', ',') + ' в месяц на ' + smRub(e.money_month) + '. Продавцу ' +
+      String(e.seller_pct).replace('.', ',') + '% с денег, РОПу ' + String(e.rop_pct).replace('.', ',') + '% и ' + smRub(e.rop_fix) + ' в месяц.</span>' : '';
+    var foot = ref + (d.no_seller_rub ? '<span class="sp-warn">' + smRub(d.no_seller_rub) +
       ' за месяц пришло без продавца у оплаты: их не видно ни в KPI, ни в мотивации. Продавца ставят в оплате карточки.</span>' : '') + add;
     return spCard('sp-kpi', 'team', 'KPI продающих',
       'договоры: новые продажи сопровождения, где человек стоит продавцом оплаты; деньги: все его оплаты месяца',
@@ -38833,14 +38911,15 @@
   function spExpenses(d) {
     var any = d.expenses.some(function (e) { return e.plan; });
     var rows = d.expenses.map(function (e) {
-      return '<div class="sp-tr"><span class="sp-nm">' + esc(e.label) + '</span>' +
-        '<span class="num' + (e.plan ? '' : ' sp-dim') + '">' + (e.plan ? smRub(e.plan) : 'не внесен') + '</span>' +
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(e.label) + (e.who ? '<small>вносит ' + esc(e.who) + '</small>' : '') + '</span>' +
+        '<span><button class="sp-set' + (e.plan ? '' : ' none') + '" data-spgo="' + esc(e.key) + '" title="Открыть план отдела в Финансах">' +
+          (e.plan ? smRub(e.plan) : 'внести') + ic('go', 11) + '</button></span>' +
         '<span class="num">' + smRub(e.fact) + '</span>' +
         '<span class="sp-prog">' + spBar(e.fact, e.plan) + spPct(e.fact, e.plan) + '</span></div>';
     }).join('');
     var sub = d.expenses.filter(function (e) { return e.plan; }).length;
     return spCard('sp-exp', 'coins', 'Расходы месяца',
-      'план вносят руководители отделов в «Финансах», здесь он только показан',
+      'план отдела вносят в «Финансах»: нажми на цифру, откроется его лист',
       '<div class="sp-tbl sp-t4">' + spHead(['Отдел', 'План', 'Потрачено', 'Освоено']) + rows + '</div>',
       '<span class="sp-note">' + (any ? 'План внесли ' + sub + ' из ' + d.expenses.length + ' отделов.' :
         'План расходов на месяц еще не внесен ни одним отделом, поэтому прибыль ниже посчитана без расходов.') + '</span>');
@@ -38854,12 +38933,13 @@
     }
     var parts = d.parts;
     var rows = f.rows.map(function (r) {
-      return '<div class="sp-tr sp-fr"><span class="sp-nm">' + esc(r.name) + '<small>' + esc(r.rule) + '</small></span>' +
-        '<span class="num"><b>' + smRub(r.amount) + '</b></span>' +
+      var why = r.manual ? 'вписано руками, по правилу было бы ' + smRub(r.auto || 0) : esc(r.rule);
+      return '<div class="sp-tr sp-fr' + (r.manual ? ' manual' : '') + '"><span class="sp-nm">' + esc(r.name) + '<small>' + why + '</small></span>' +
+        '<span>' + (r.id === 'flex' ? '<b class="num">' + smRub(r.amount) + '</b>' : '<button class="sp-set num" data-spset="' + esc(r.metric) + '" data-money="1" title="Вписать сумму руками">' + smRub(r.amount) + '</button>') + '</span>' +
         r.parts.map(function (v) { return '<span class="num sp-dim2">' + smRub(v) + '</span>'; }).join('') + '</div>';
     }).join('');
     var head = spHead(['Фонд', 'За месяц'].concat(parts.map(function (p) { return esc(p.label); })));
-    var foot = '<span class="sp-note">Правила фондов из ведомости ' + esc(f.period || '') +
+    var foot = '<span class="sp-note">Сумму фонда можно вписать руками, пустое поле вернет правило. Правила фондов из ведомости ' + esc(f.period || '') +
       '. База ' + smRub(f.base) + ', прямые расходы по плану ' + smRub(f.direct) +
       ', чистая прибыль ' + smRub(f.profit) + ', дивиденды ' + smRub(f.dividends) + '.</span>';
     return spCard('sp-funds', 'wallet', 'Отложения в фонды',
@@ -38873,8 +38953,8 @@
     if (state._sp === 'none' || state._sp === 'acl') {
       view.innerHTML = '<div class="dash sb"><div class="card pf-head sb-thead">' + sbTabs() + '</div>' +
         '<div class="card"><div class="empty">' + (state._sp === 'acl'
-        ? 'План месяца видят руководители, кому открыты деньги клиентов или ведомость.'
-        : 'Не удалось загрузить план месяца. Проверь интернет.') + '</div></div></div>';
+        ? 'План периода видят руководители, кому открыты деньги клиентов или ведомость.'
+        : 'Не удалось загрузить план. Проверь интернет.') + '</div></div></div>';
       sbTabsBind(view);
       return;
     }
@@ -38883,8 +38963,8 @@
     var v = !d.plan_total
       ? { t: 'Плана на месяц нет', s: 'поставь деньги по продуктам ниже, от них посчитаются периоды и фонды', cls: '' }
       : d.fact_total >= expect
-        ? { t: 'Идем в план', s: 'пришло ' + smRub(d.fact_total) + ' из ' + smRub(d.plan_total) + ', к сегодня надо ' + smRub(expect), cls: 'ok' }
-        : { t: 'Отстаем на ' + smRub(expect - d.fact_total), s: 'пришло ' + smRub(d.fact_total) + ' из ' + smRub(d.plan_total) + ', к сегодня надо ' + smRub(expect), cls: 'risk' };
+        ? { t: 'Идем в план', s: 'в ' + spMonthIn(d.month) + ' пришло ' + smRub(d.fact_total) + ' из ' + smRub(d.plan_total) + ', к сегодня надо ' + smRub(expect), cls: 'ok' }
+        : { t: 'Отстаем на ' + smRub(expect - d.fact_total), s: 'в ' + spMonthIn(d.month) + ' пришло ' + smRub(d.fact_total) + ' из ' + smRub(d.plan_total) + ', к сегодня надо ' + smRub(expect), cls: 'risk' };
     var head = '<div class="card pf-head sb-thead sm-head">' + sbTabs() +
       '<div class="brd-nav sm-nav">' +
         '<button class="icobtn sm brd-arrow prev" data-spmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
@@ -38894,8 +38974,8 @@
       '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '"><div class="pf-vt">' + esc(v.t) + '</div>' +
         '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
     '</div>';
-    view.innerHTML = '<div class="dash sb sp">' + head + spProducts(d) + spParts(d) +
-      '<div class="sp-split">' + spKpi(d) + spLeads(d) + '</div>' + spFunds(d) + spExpenses(d) + '</div>';
+    view.innerHTML = '<div class="dash sb sp">' + head + spParts(d) + spOwners(d) + spProducts(d) +
+      '<div class="sp-split">' + spKpi(d) + spLeads(d) + '</div>' + spBudget(d) + spExpenses(d) + spFunds(d) + '</div>';
     sbTabsBind(view);
     spBind(view);
     animBars(view);
@@ -38918,6 +38998,9 @@
       }).then(function () { state._sp = null; state._sb = null; state._pf = null; renderView(); })
         .catch(function () { showToast('План не сохранился, проверь сеть'); renderView(); });
     };
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spgo]'), function (b) {
+      b.addEventListener('click', function () { finPlanGoSheet(b.getAttribute('data-spgo')); });
+    });
     var add = el('sp-add');
     if (add) add.addEventListener('change', function () {
       // Человек появляется в таблице, когда у него есть план: ставим договор и правим дальше.

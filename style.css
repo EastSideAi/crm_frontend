@@ -12567,6 +12567,8 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   font-variant-numeric: tabular-nums; transition: background .14s var(--ease), color .14s var(--ease); }
 .sp-set:hover { background: var(--blue-tint); color: var(--blue); }
 .sp-set.none { color: var(--blue); font-weight: 500; }
+.sp-set[data-spgo] { display: inline-flex; align-items: center; gap: 4px; }
+.sp-set[data-spgo] svg { opacity: .55; }
 .sp-set:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 .sp-in { width: 120px; text-align: right; }
 .sp-pair { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
@@ -12597,6 +12599,40 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sp-pv { font-size: 24px; font-weight: 800; letter-spacing: -.025em; color: var(--ink); margin: 8px 0 4px; }
 .sp-pf { font-size: 12.5px; color: var(--ink-2); }
 .sp-pf b { color: var(--ink); font-weight: 700; }
+/* План периода: плитка периода — якорь экрана. Сильнее всех выделен период, по
+   которому скоро срок внесения плана (амбер рамкой и чипом): туда руководителю идти. */
+.sp-part { border: 1.5px solid transparent; }
+.sp-part.now { border-color: var(--line-2); background: #fff; }
+.sp-part.soon, .sp-part.late { border-color: var(--amber); background: #fff; }
+.sp-ph { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.sp-mo { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); display: flex;
+  flex-direction: column; gap: 3px; }
+.sp-st { font-size: 11.5px; font-weight: 600; color: var(--ink-2); background: #fff; border-radius: 999px;
+  padding: 3px 9px; white-space: nowrap; }
+.sp-st.now { background: var(--blue-tint); color: var(--blue); }
+.sp-st.soon { background: var(--amber-soft); color: var(--amber-ink); }
+.sp-st.late { background: var(--red-soft); color: var(--red-ink); }
+.sp-pk { font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
+.sp-part .sp-pv { margin: 2px 0 6px; }
+.sp-fc { display: flex; flex-direction: column; gap: 4px; padding: 10px 0 12px; border-top: 1px solid var(--line); }
+.sp-fcv { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px;
+  color: var(--ink-2); }
+.sp-fcv b { font-size: 17px; font-weight: 800; letter-spacing: -.015em; color: var(--ink); }
+.sp-fcl { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--ink-3); }
+.sp-fcl b { color: var(--ink-2); font-weight: 600; letter-spacing: 0; }
+.sp-gap { font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+.sp-gap.bad { color: var(--red-ink); }
+.sp-gap.ok { color: var(--green-ink); }
+.sp-owl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 20px; padding: 0 24px 20px; }
+.sp-ow { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 0 10px; align-items: start; padding: 8px 0;
+  border-bottom: 1px solid var(--line); }
+.sp-ok { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line-2);
+  display: grid; place-items: center; margin-top: 1px; color: #fff; }
+.sp-ow.ok .sp-ok { background: var(--green); box-shadow: none; }
+.sp-on { font-size: 13px; font-weight: 600; color: var(--ink); }
+.sp-ob { grid-column: 2; font-size: 11.5px; color: var(--ink-3); }
+.sp-ow.ok .sp-on { color: var(--ink-2); }
+.sp-fr.manual .sp-nm small { color: var(--amber-ink); }
 
 @media (max-width: 1100px) {
   .sp-split { grid-template-columns: 1fr; }
@@ -12612,6 +12648,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   .sp-tf { overflow-x: auto; }
   .sp-tf .sp-tr { min-width: 600px; }
   .sp-partgrid { grid-template-columns: 1fr; padding: 0 18px 18px; }
+  .sp-owl { grid-template-columns: 1fr; padding: 0 18px 16px; }
   .sp-foot { padding: 12px 18px 16px; }
   .sp-add { margin-left: 0; max-width: none; width: 100%; }
 }
