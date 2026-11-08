@@ -38276,6 +38276,7 @@
 
   function renderSales(view) {
     if (sbTab() === 'money') { renderSalesMoney(view); return; }
+    if (sbTab() === 'plan') { renderSalesPlan(view); return; }
     // Экран смотрят по ходу дня: данные старше минуты перезапрашиваем при заходе.
     if (state._sb && Date.now() - (state._sbAt || 0) > 60000) state._sb = null;
     if (!state._sb) { view.innerHTML = dashSkeleton(); sbFetch(); return; }
@@ -38421,11 +38422,14 @@
      рядом ставит оплаты из карточек: чего нет с одной стороны, видно списком.
      Своих денег экран не считает: сумма — та же, что «доход к зачислению» в каскаде,
      сервер сверяет это сам (routers/sales_money.py). */
-  var SB_TABS = [{ id: 'funnel', label: 'Воронка и план' }, { id: 'money', label: 'Деньги и сверка' }];
+  var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План месяца' },
+                 { id: 'money', label: 'Деньги и сверка' }];
   var SM_KIND = { new: 'новая продажа', more: 'доплата', renew: 'продление', rest: 'прочее' };
 
   function smCan() { return can('finance') || can('finmodel'); }
-  function sbTab() { return state.sbTab === 'money' && smCan() ? 'money' : 'funnel'; }
+  function sbTab() {
+    return (state.sbTab === 'money' || state.sbTab === 'plan') && smCan() ? state.sbTab : 'funnel';
+  }
   function sbTabs() {
     if (!smCan()) return '';
     return '<div class="list-quick sb-tabs">' + SB_TABS.map(function (t) {
@@ -38637,6 +38641,243 @@
     if (rs) rs.addEventListener('click', function () { state._smF = null; renderView(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
+  }
+
+  /* ── ПРОДАЖИ → ПЛАН МЕСЯЦА ───────────────────────────────────────────────────
+     Павел 08.11.2026: KPI продаж, планы по лидам и расходам и какие отложения
+     делать; план ставим на месяц, но смотрим и по периодам ведомости, потому что
+     выплаты идут по ним. Все блоки считаются от одной цифры плана денег; расходы
+     берутся из плана «Финансов», фонды — правилами ведомости (routers/sales_plan.py).
+     Месяц общий с вкладкой «Воронка и план» и с План-фактом (state.pfMonth). */
+  function spFetch() {
+    var m = pfMonth();
+    state._spAt = Date.now();
+    api('/admin/api/sales/month-plan?month=' + m).then(function (r) {
+      if (pfMonth() !== m) return;
+      state._sp = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if (pfMonth() !== m) return;
+      state._sp = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+
+  // Цифра плана — кнопка: нажал, вписал, Enter. Пусто — «поставить».
+  function spSet(metric, v, money) {
+    return '<button class="sp-set num' + (v ? '' : ' none') + '" data-spset="' + esc(metric) + '"' +
+      (money ? ' data-money="1"' : '') + ' title="Изменить план">' + (v ? sbMoney(v, money) : 'поставить') + '</button>';
+  }
+  function spPct(fact, plan) {
+    if (!plan) return '';
+    var p = Math.round(fact / plan * 100);
+    return '<span class="sp-pct' + (p >= 100 ? ' ok' : '') + '">' + p + '%</span>';
+  }
+  function spBar(fact, plan) {
+    var p = plan ? Math.min(100, Math.round(fact / plan * 100)) : 0;
+    return '<span class="sp-bar"><i data-aw="' + p + '%"></i></span>';
+  }
+  function spCard(cls, icon, title, sub, body, foot) {
+    return '<div class="card sp12 sp-card ' + cls + '"><div class="sec-head pf-sec"><span class="ic">' + ic(icon, 14) +
+      '</span><div><div class="t">' + title + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') +
+      '</div></div>' + body + (foot ? '<div class="sp-foot">' + foot + '</div>' : '') + '</div>';
+  }
+  function spHead(cols) {
+    return '<div class="sp-tr sp-th">' + cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>';
+  }
+
+  function spProducts(d) {
+    var rows = d.products.map(function (p) {
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(p.label) + '</span>' +
+        '<span>' + spSet(p.metric, p.plan, true) + '</span>' +
+        '<span class="num">' + smRub(p.fact) + '</span>' +
+        '<span class="sp-prog">' + spBar(p.fact, p.plan) + spPct(p.fact, p.plan) + '</span></div>';
+    }).join('');
+    var total = '<div class="sp-tr sp-total"><span class="sp-nm">Всего</span>' +
+      '<span class="num">' + (d.plan_total ? smRub(d.plan_total) : '—') + '</span>' +
+      '<span class="num">' + smRub(d.fact_total) + '</span>' +
+      '<span class="sp-prog">' + spBar(d.fact_total, d.plan_total) + spPct(d.fact_total, d.plan_total) + '</span></div>';
+    return spCard('sp-prod', 'box', 'Деньги по продуктам',
+      'факт берется из строк ведомости за месяц; план правится нажатием на цифру',
+      '<div class="sp-tbl sp-t4">' + spHead(['Продукт', 'План', 'Факт', 'Выполнено']) + rows + total + '</div>');
+  }
+
+  function spParts(d) {
+    var fundsBy = (d.funds.rows || []).filter(function (f) { return f.amount; });
+    var tiles = d.parts.map(function (p, i) {
+      var set = fundsBy.reduce(function (s, f) { return s + (f.parts[i] || 0); }, 0);
+      return '<div class="sp-part">' +
+        '<div class="sp-pl">' + esc(p.label) + '</div>' +
+        '<div class="sp-pp">в период ' + esc(p.period) + (p.period_exists ? '' : ', еще не открыт') + '</div>' +
+        '<div class="sp-pv num">' + (d.plan_total ? smRub(p.plan) : '—') + '</div>' +
+        '<div class="sp-pf">пришло <b class="num">' + smRub(p.fact) + '</b></div>' +
+        (set ? '<div class="sp-pf">отложить в фонды <b class="num">' + smRub(set) + '</b></div>' : '') +
+      '</div>';
+    }).join('');
+    return spCard('sp-parts', 'cal', 'Месяц по периодам ведомости',
+      'выплаты идут по периодам, поэтому план месяца разложен по ним; пока графика прихода по дням нет, делим ровно по дням',
+      '<div class="sp-partgrid">' + tiles + '</div>');
+  }
+
+  function spKpi(d) {
+    var rows = d.kpi.map(function (r) {
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(r.name) + '</span>' +
+        '<span class="sp-pair"><b class="num">' + r.contracts + '</b> из ' + spSet('kpi_c:' + r.id, r.contracts_plan, false) + '</span>' +
+        '<span class="sp-pair"><b class="num">' + smRub(r.money) + '</b> из ' + spSet('kpi_r:' + r.id, r.money_plan, true) + '</span>' +
+        '<span class="sp-prog">' + spBar(r.money, r.money_plan) + spPct(r.money, r.money_plan) + '</span></div>';
+    }).join('');
+    var add = d.kpi_add && d.kpi_add.length ? '<select class="tm-sel sp-add" id="sp-add"><option value="">Добавить человека</option>' +
+      d.kpi_add.map(function (u) { return '<option value="' + u.id + '">' + esc(u.name) + '</option>'; }).join('') +
+      '</select>' : '';
+    var foot = (d.no_seller_rub ? '<span class="sp-warn">' + smRub(d.no_seller_rub) +
+      ' за месяц пришло без продавца у оплаты: их не видно ни в KPI, ни в мотивации. Продавца ставят в оплате карточки.</span>' : '') + add;
+    return spCard('sp-kpi', 'team', 'KPI продающих',
+      'договоры: новые продажи сопровождения, где человек стоит продавцом оплаты; деньги: все его оплаты месяца',
+      rows ? '<div class="sp-tbl sp-t4 sp-tk">' + spHead(['Кто', 'Договоры', 'Деньги', 'Выполнено']) + rows + '</div>'
+        : '<div class="empty">Продающих в этом месяце нет. Добавь человека ниже.</div>', foot);
+  }
+
+  function spLeads(d) {
+    var rows = d.leads.map(function (r) {
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(r.name) + '</span>' +
+        '<span>' + spSet(r.metric, r.plan, false) + '</span>' +
+        '<span class="num">' + r.fact + '</span>' +
+        '<span class="sp-prog">' + spBar(r.fact, r.plan) + spPct(r.fact, r.plan) + '</span></div>';
+    }).join('');
+    var n = d.funnel_norm;
+    var hint = d.leads_need
+      ? 'На ' + d.contracts_plan + ' ' + plural(d.contracts_plan, 'договор', 'договора', 'договоров') +
+        ' нужно около <b class="num">' + d.leads_need + '</b> лидов при норме воронки: связались ' +
+        Math.round(n.contact * 100) + '%, записались ' + Math.round(n.booked * 100) + '%, пришли ' +
+        Math.round(n.held * 100) + '%, купили ' + Math.round(n.contract * 100) + '%. В плане сейчас ' +
+        (d.leads_plan || 0) + ', пришло ' + d.leads_fact + '.'
+      : 'Поставь план договоров на вкладке «Воронка» или KPI людям, и здесь появится, сколько нужно лидов.';
+    return spCard('sp-leads', 'funnel', 'Лиды по каналам', 'новые карточки месяца по каналу прихода',
+      '<div class="sp-tbl sp-t4">' + spHead(['Канал', 'План', 'Пришло', 'Выполнено']) + rows + '</div>',
+      '<span class="sp-note">' + hint + '</span>');
+  }
+
+  function spExpenses(d) {
+    var any = d.expenses.some(function (e) { return e.plan; });
+    var rows = d.expenses.map(function (e) {
+      return '<div class="sp-tr"><span class="sp-nm">' + esc(e.label) + '</span>' +
+        '<span class="num' + (e.plan ? '' : ' sp-dim') + '">' + (e.plan ? smRub(e.plan) : 'не внесен') + '</span>' +
+        '<span class="num">' + smRub(e.fact) + '</span>' +
+        '<span class="sp-prog">' + spBar(e.fact, e.plan) + spPct(e.fact, e.plan) + '</span></div>';
+    }).join('');
+    var sub = d.expenses.filter(function (e) { return e.plan; }).length;
+    return spCard('sp-exp', 'coins', 'Расходы месяца',
+      'план вносят руководители отделов в «Финансах», здесь он только показан',
+      '<div class="sp-tbl sp-t4">' + spHead(['Отдел', 'План', 'Потрачено', 'Освоено']) + rows + '</div>',
+      '<span class="sp-note">' + (any ? 'План внесли ' + sub + ' из ' + d.expenses.length + ' отделов.' :
+        'План расходов на месяц еще не внесен ни одним отделом, поэтому прибыль ниже посчитана без расходов.') + '</span>');
+  }
+
+  function spFunds(d) {
+    var f = d.funds;
+    if (!d.plan_total) {
+      return spCard('sp-funds', 'wallet', 'Отложения в фонды', '',
+        '<div class="sp-empty">Поставь план денег по продуктам, и здесь появится, сколько отложить в каждый фонд и к какому периоду.</div>');
+    }
+    var parts = d.parts;
+    var rows = f.rows.map(function (r) {
+      return '<div class="sp-tr sp-fr"><span class="sp-nm">' + esc(r.name) + '<small>' + esc(r.rule) + '</small></span>' +
+        '<span class="num"><b>' + smRub(r.amount) + '</b></span>' +
+        r.parts.map(function (v) { return '<span class="num sp-dim2">' + smRub(v) + '</span>'; }).join('') + '</div>';
+    }).join('');
+    var head = spHead(['Фонд', 'За месяц'].concat(parts.map(function (p) { return esc(p.label); })));
+    var foot = '<span class="sp-note">Правила фондов из ведомости ' + esc(f.period || '') +
+      '. База ' + smRub(f.base) + ', прямые расходы по плану ' + smRub(f.direct) +
+      ', чистая прибыль ' + smRub(f.profit) + ', дивиденды ' + smRub(f.dividends) + '.</span>';
+    return spCard('sp-funds', 'wallet', 'Отложения в фонды',
+      'сколько отложить при этом плане денег, тем же расчетом, что каскад ведомости',
+      '<div class="sp-tbl sp-tf">' + head + rows + '</div>', foot);
+  }
+
+  function renderSalesPlan(view) {
+    if (state._sp && Date.now() - (state._spAt || 0) > 60000) state._sp = null;
+    if (!state._sp) { view.innerHTML = dashSkeleton(); spFetch(); return; }
+    if (state._sp === 'none' || state._sp === 'acl') {
+      view.innerHTML = '<div class="dash sb"><div class="card pf-head sb-thead">' + sbTabs() + '</div>' +
+        '<div class="card"><div class="empty">' + (state._sp === 'acl'
+        ? 'План месяца видят руководители, кому открыты деньги клиентов или ведомость.'
+        : 'Не удалось загрузить план месяца. Проверь интернет.') + '</div></div></div>';
+      sbTabsBind(view);
+      return;
+    }
+    var d = state._sp;
+    var expect = d.plan_total ? Math.round(d.plan_total * d.days_passed / d.days_total) : 0;
+    var v = !d.plan_total
+      ? { t: 'Плана на месяц нет', s: 'поставь деньги по продуктам ниже, от них посчитаются периоды и фонды', cls: '' }
+      : d.fact_total >= expect
+        ? { t: 'Идем в план', s: 'пришло ' + smRub(d.fact_total) + ' из ' + smRub(d.plan_total) + ', к сегодня надо ' + smRub(expect), cls: 'ok' }
+        : { t: 'Отстаем на ' + smRub(expect - d.fact_total), s: 'пришло ' + smRub(d.fact_total) + ' из ' + smRub(d.plan_total) + ', к сегодня надо ' + smRub(expect), cls: 'risk' };
+    var head = '<div class="card pf-head sb-thead sm-head">' + sbTabs() +
+      '<div class="brd-nav sm-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-spmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(pfMonthTitle(d.month)) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-spmon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+      '</div>' +
+      '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '"><div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
+    '</div>';
+    view.innerHTML = '<div class="dash sb sp">' + head + spProducts(d) + spParts(d) +
+      '<div class="sp-split">' + spKpi(d) + spLeads(d) + '</div>' + spFunds(d) + spExpenses(d) + '</div>';
+    sbTabsBind(view);
+    spBind(view);
+    animBars(view);
+  }
+
+  function spBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spmon]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = pfMonth().split('-');
+        var dt = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + parseInt(b.getAttribute('data-spmon'), 10), 1);
+        state.pfMonth = dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2);
+        state._sp = null; state._sb = null; state._pf = null;
+        renderView();
+      });
+    });
+    var put = function (metric, n) {
+      return api('/admin/api/sales/month-plan', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: pfMonth(), metric: metric, target: n }),
+      }).then(function () { state._sp = null; state._sb = null; state._pf = null; renderView(); })
+        .catch(function () { showToast('План не сохранился, проверь сеть'); renderView(); });
+    };
+    var add = el('sp-add');
+    if (add) add.addEventListener('change', function () {
+      // Человек появляется в таблице, когда у него есть план: ставим договор и правим дальше.
+      if (add.value) put('kpi_c:' + add.value, 1);
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spset]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-spset');
+        var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
+        var inp = document.createElement('input');
+        inp.className = 'ed-input pf-in num sp-in';
+        inp.value = was;
+        inp.setAttribute('inputmode', 'numeric');
+        inp.setAttribute('placeholder', '0');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus(); inp.select();
+        var done = false;
+        var save = function () {
+          if (done) return;
+          done = true;
+          var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+          if (isNaN(n)) n = 0;
+          if (String(n) === String(was || 0)) { renderView(); return; }
+          put(key, n);
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { done = true; renderView(); }
+        });
+        inp.addEventListener('blur', save);
+      });
     });
   }
 
