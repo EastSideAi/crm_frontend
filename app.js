@@ -38275,6 +38275,7 @@
   }
 
   function renderSales(view) {
+    if (sbTab() === 'money') { renderSalesMoney(view); return; }
     // Экран смотрят по ходу дня: данные старше минуты перезапрашиваем при заходе.
     if (state._sb && Date.now() - (state._sbAt || 0) > 60000) state._sb = null;
     if (!state._sb) { view.innerHTML = dashSkeleton(); sbFetch(); return; }
@@ -38295,7 +38296,7 @@
     var now = new Date();
     var isNow = d.month === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
 
-    var head = '<div class="card pf-head">' +
+    var head = '<div class="card pf-head sb-thead">' + sbTabs() +
       '<div class="brd-nav">' +
         '<button class="icobtn sm brd-arrow prev" data-sbmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
         '<span class="brd-label">' + esc(pfMonthTitle(d.month)) + '</span>' +
@@ -38324,6 +38325,7 @@
     view.innerHTML = '<div class="dash sb">' + head + sbPathBar(d) + sbPace(d) + sbWork(d) +
       (wq ? sbPeople(d) : '') + sbIdeas(d) + plan +
       sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
+    sbTabsBind(view);
     sbBind(view, d);
     animBars(view);
   }
@@ -38412,6 +38414,232 @@
       });
     });
   }
+  /* ── ПРОДАЖИ → ДЕНЬГИ И СВЕРКА ───────────────────────────────────────────────
+     Павел 08.11.2026: цифры периода сверяем с Олей «в своих рабочих окнах, а не по
+     документу» и проверяем по ведомости, период — как в «Финансах». Вкладка берет
+     строки дохода ведомости и раскладывает их по продуктам, каналам и продавцам, а
+     рядом ставит оплаты из карточек: чего нет с одной стороны, видно списком.
+     Своих денег экран не считает: сумма — та же, что «доход к зачислению» в каскаде,
+     сервер сверяет это сам (routers/sales_money.py). */
+  var SB_TABS = [{ id: 'funnel', label: 'Воронка и план' }, { id: 'money', label: 'Деньги и сверка' }];
+  var SM_KIND = { new: 'новая продажа', more: 'доплата', renew: 'продление', rest: 'прочее' };
+
+  function smCan() { return can('finance') || can('finmodel'); }
+  function sbTab() { return state.sbTab === 'money' && smCan() ? 'money' : 'funnel'; }
+  function sbTabs() {
+    if (!smCan()) return '';
+    return '<div class="list-quick sb-tabs">' + SB_TABS.map(function (t) {
+      return '<button class="qchip' + (t.id === sbTab() ? ' on' : '') + '" data-sbtab="' + t.id + '">' +
+        esc(t.label) + '</button>';
+    }).join('') + '</div>';
+  }
+  function sbTabsBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbtab]'), function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-sbtab');
+        if (t === sbTab()) return;
+        state.sbTab = t; state._smF = null;
+        renderView();
+      });
+    });
+  }
+
+  function smFetch() {
+    var pid = state.smPeriod || '';
+    state._smAt = Date.now();
+    api('/admin/api/sales/money' + (pid ? '?period=' + encodeURIComponent(pid) : '')).then(function (r) {
+      if ((state.smPeriod || '') !== pid) return;
+      state._sm = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if ((state.smPeriod || '') !== pid) return;
+      state._sm = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+
+  function smRub(n) { return sbMoney(Math.round(n || 0), true); }
+
+  function smVerdict(d) {
+    var c = d.check, n = c.no_crm + c.crm_only.length;
+    if (Math.abs(d.ledger_diff) >= 1) {
+      return { t: 'Не сходится с «Финансами»', cls: 'miss',
+               s: 'сумма строк отличается от каскада на ' + smRub(d.ledger_diff) + ', скажи Павлу' };
+    }
+    if (!n) return { t: 'Все сходится', cls: 'ok',
+                     s: 'каждый платеж ведомости отмечен в карточке клиента, и наоборот' };
+    return { t: n + ' ' + plural(n, 'расхождение', 'расхождения', 'расхождений'), cls: 'risk',
+             s: 'итог совпадает с ведомостью, но не все платежи стоят в карточках; список ниже' };
+  }
+
+  // Разбивка: строка — доля периода полосой; клик оставляет в списке поступлений
+  // только эти строки, повторный клик снимает фильтр.
+  function smGroup(title, icon, key, rows, total) {
+    var f = state._smF || {};
+    var body = rows.map(function (g) {
+      var on = f.by === key && f.val === g.key;
+      var pct = total ? Math.max(2, Math.round(g.amount / total * 100)) : 0;
+      return '<button class="sm-g' + (on ? ' on' : '') + '" data-smf="' + key + '" data-smv="' + esc(g.key) + '">' +
+        '<span class="sm-gl"><b>' + esc(g.label) + '</b><small>' + g.count + ' ' +
+          plural(g.count, 'платеж', 'платежа', 'платежей') + '</small></span>' +
+        '<span class="sm-gv num">' + smRub(g.amount) + '</span>' +
+        '<span class="sm-gbar"><i data-aw="' + pct + '%"></i></span>' +
+      '</button>';
+    }).join('');
+    return '<div class="card sm-grp"><div class="sec-head pf-sec"><span class="ic">' + ic(icon, 14) +
+      '</span><div><div class="t">' + esc(title) + '</div></div></div>' +
+      (body || '<div class="empty">Денег за период нет.</div>') + '</div>';
+  }
+
+  function smLead(id, inner, cls) {
+    return id ? '<button class="' + cls + '" data-sblead="' + esc(id) + '" title="Открыть карточку">' + inner + '</button>'
+      : '<div class="' + cls + ' nolink">' + inner + '</div>';
+  }
+
+  function smCheck(d) {
+    var c = d.check;
+    var noCrm = d.lines.filter(function (l) { return !l.crm; });
+    if (!noCrm.length && !c.crm_only.length) return '';
+    var a = noCrm.map(function (l) {
+      var why = l.case_id ? 'клиент есть, оплата в карточке не отмечена'
+        : 'строка не привязана к клиенту: Финансы → Доходы';
+      return smLead(l.case_id,
+        '<span class="sm-d num">' + fmtDay(l.date).slice(0, 5) + '</span>' +
+        '<span class="sb-pn"><b>' + esc(l.case_id ? l.client : (l.payer || 'Без клиента')) + '</b>' +
+          '<small>' + esc(l.item || 'без статьи') + '</small></span>' +
+        '<span class="sb-po calm">' + esc(why) + '</span>' +
+        '<span class="sm-v num">' + smRub(l.amount) + '</span>', 'sm-cr');
+    }).join('');
+    var b = c.crm_only.map(function (p) {
+      return smLead(p.case_id,
+        '<span class="sm-d num">' + fmtDay(p.date).slice(0, 5) + '</span>' +
+        '<span class="sb-pn"><b>' + esc(p.client) + '</b><small>' + esc(p.title || 'оплата') + '</small></span>' +
+        '<span class="sb-po calm">в ведомости строки нет: дошли ли деньги?</span>' +
+        '<span class="sm-v num">' + smRub(p.amount) + '</span>', 'sm-cr');
+    }).join('');
+    return '<div class="card sp12 sm-check"><div class="sec-head pf-sec"><span class="ic">' + ic('alert', 14) +
+      '</span><div><div class="t">Сверка с карточками</div>' +
+      '<div class="s">экран «Продажи» и мотивация видят деньги по карточкам, поэтому каждая строка тут это недосчитанные деньги отдела</div></div></div>' +
+      (a ? '<div class="sm-ch"><div class="sm-cht">Есть в ведомости, нет в карточке · <span class="num">' + noCrm.length +
+        '</span> на ' + smRub(c.no_crm_rub) + '</div>' + a + '</div>' : '') +
+      (b ? '<div class="sm-ch"><div class="sm-cht">Есть в карточке, нет в ведомости · <span class="num">' + c.crm_only.length +
+        '</span> на ' + smRub(c.crm_only_rub) + '</div>' + b + '</div>' : '') +
+    '</div>';
+  }
+
+  function smLines(d) {
+    var f = state._smF;
+    var lab = { product: {}, kind: {}, ch: {}, seller: {} };
+    d.products.forEach(function (g) { lab.product[g.key] = g.label; });
+    var rows = d.lines.filter(function (l) { return !f || l[f.by] === f.val; });
+    var sum = rows.reduce(function (s, l) { return s + l.amount; }, 0);
+    var body = rows.slice().reverse().map(function (l) {
+      return smLead(l.case_id,
+        '<span class="sm-d num">' + fmtDay(l.date).slice(0, 5) + '</span>' +
+        '<span class="sb-pn"><b>' + esc(l.case_id ? l.client : (l.payer || 'Без клиента')) + '</b>' +
+          '<small>' + esc(lab.product[l.product] || l.product) + ' · ' + esc(SM_KIND[l.kind] || '') + '</small></span>' +
+        '<span class="sb-po calm" data-l="Канал">' + esc(l.ch) + '</span>' +
+        '<span class="sb-po' + (l.seller === 'Не указан' ? ' none' : ' calm') + '" data-l="Продал">' + esc(l.seller) + '</span>' +
+        '<span class="sm-v num">' + smRub(l.amount) +
+          (l.crm ? '' : '<small>нет в карточке</small>') + '</span>', 'sm-ln');
+    }).join('');
+    var title = f ? (f.label || 'Отбор') : 'Все поступления';
+    return '<div class="card sp12 sm-lines" id="sm-lines"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
+      '</span><div><div class="t">' + esc(title) + ' · <span class="num">' + smRub(sum) + '</span></div>' +
+      '<div class="s">строки ведомости периода, свежие сверху; нажми, откроется карточка клиента</div></div>' +
+      (f ? '<button class="qchip sm-reset" id="sm-reset">Показать все</button>' : '') + '</div>' +
+      (body ? '<div class="sm-lh"><span>Дата</span><span>Клиент</span><span>Канал</span><span>Продал</span><span>Сумма</span></div>' +
+        '<div class="sm-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') + '</div>';
+  }
+
+  function renderSalesMoney(view) {
+    if (state._sm && Date.now() - (state._smAt || 0) > 60000) state._sm = null;
+    if (!state._sm) { view.innerHTML = dashSkeleton(); smFetch(); return; }
+    if (state._sm === 'none' || state._sm === 'acl') {
+      view.innerHTML = '<div class="dash sb"><div class="card pf-head sb-thead">' + sbTabs() + '</div>' +
+        '<div class="card"><div class="empty">' + (state._sm === 'acl'
+        ? 'Деньги периода видят те, кому открыты оплаты клиентов или ведомость.'
+        : 'Не удалось загрузить деньги периода. Проверь интернет.') + '</div></div></div>';
+      sbTabsBind(view);
+      return;
+    }
+    var d = state._sm, c = d.check;
+    var v = smVerdict(d);
+    var list = d.periods || [];
+    var at = -1;
+    list.forEach(function (p, i) { if (p.id === d.period.id) at = i; });
+    // Список идет от свежих к старым: «назад» — следующий по списку.
+    var older = list[at + 1], newer = at > 0 ? list[at - 1] : null;
+    var kinds = {};
+    d.kinds.forEach(function (k) { kinds[k.key] = k; });
+    var kAmt = function (k) { return kinds[k] ? kinds[k].amount : 0; };
+    var kCnt = function (k) { return kinds[k] ? kinds[k].count : 0; };
+    var bad = c.no_crm + c.crm_only.length;
+
+    var head = '<div class="card pf-head sb-thead sm-head">' + sbTabs() +
+      '<div class="brd-nav sm-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-smp="' + (older ? esc(older.id) : '') + '"' +
+          (older ? '' : ' disabled') + ' title="Прошлый период">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(d.period.name) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-smp="' + (newer ? esc(newer.id) : '') + '"' +
+          (newer ? '' : ' disabled') + ' title="Следующий период">' + ic('go', 15) + '</button>' +
+        (d.period.open ? '<span class="sm-open">открыт</span>' : '') +
+      '</div>' +
+      '<div class="pf-verdict ' + v.cls + '"><div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
+    '</div>';
+
+    var stats = statBar([
+      { label: 'Пришло за период', value: smRub(d.total), lead: true,
+        sub: 'как в «Финансах»; до эквайринга ' + smRub(d.gross) },
+      { label: 'Новые продажи', value: smRub(kAmt('new')), sub: kCnt('new') + ' ' + plural(kCnt('new'), 'платеж', 'платежа', 'платежей') },
+      { label: 'Доплаты', value: smRub(kAmt('more')), sub: 'по договорам прошлых периодов' },
+      { label: 'Продления и прочее', value: smRub(kAmt('renew') + kAmt('rest')), sub: 'школа, счета без назначения' },
+      { label: 'Не сверено', value: String(bad), sub: bad ? 'платежей, список ниже' : 'все на месте' },
+    ], 'five');
+
+    view.innerHTML = '<div class="dash sb sm">' + head + stats +
+      '<div class="sm-split">' +
+        smGroup('Продукты', 'box', 'product', d.products, d.total) +
+        smGroup('Каналы', 'funnel', 'ch', d.channels, d.total) +
+        smGroup('Кто продал', 'team', 'seller', d.sellers, d.total) +
+      '</div>' + smCheck(d) + smLines(d) + '</div>';
+    sbTabsBind(view);
+    smBind(view, d);
+    animBars(view);
+  }
+
+  function smBind(view, d) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-smp]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-smp');
+        if (!id) return;
+        state.smPeriod = id; state._sm = null; state._smF = null;
+        renderView();
+      });
+    });
+    var label = {};
+    ['products', 'channels', 'sellers'].forEach(function (k) {
+      d[k].forEach(function (g) { label[g.key] = g.label; });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-smf]'), function (b) {
+      b.addEventListener('click', function () {
+        var by = b.getAttribute('data-smf'), val = b.getAttribute('data-smv');
+        var f = state._smF;
+        state._smF = f && f.by === by && f.val === val ? null : { by: by, val: val, label: label[val] || val };
+        renderView();
+        var box = el('sm-lines');
+        if (box && state._smF) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    var rs = el('sm-reset');
+    if (rs) rs.addEventListener('click', function () { state._smF = null; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
+  }
+
   /* ── МОЯ СМЕНА — рабочий экран менеджера продаж на день ─────────────────────
      Павел 07.11.2026: «нужен конкретный план на день: как открыть смену, куда
      смотреть, как связываться, где вбивать номера и звонить, как закрыть смену,

@@ -12456,6 +12456,75 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(90px, .7fr)) 76px; }
 .sb-wgrid .mkd-tr { height: 50px; }
 
+/* Вкладки «Воронка и план» / «Деньги и сверка» — первой строкой шапки, на всю ширину. */
+.sb-thead .sb-tabs { grid-column: 1 / -1; margin: -2px 0 -6px; }
+
+/* Деньги и сверка. Разбивка тремя колонками: строка — название, сумма и доля периода
+   тонкой полосой; строка-кнопка оставляет в списке поступлений только свои платежи. */
+.sm-nav { margin-left: 0; }
+.sm-open { font-size: 11px; font-weight: 700; color: var(--green-ink); background: var(--green-soft);
+  border-radius: 999px; padding: 3px 9px; margin-left: 4px; }
+.sm-split { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px; }
+.sm-grp { padding-bottom: 10px; }
+.sm-grp .pf-sec { padding: 18px 20px 10px; }
+.sm-g { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; width: 100%;
+  padding: 9px 20px 10px; border: 0; background: none; text-align: left; font: inherit; cursor: pointer;
+  transition: background .14s var(--ease); }
+.sm-g:hover { background: #FBFBFC; }
+.sm-g.on { background: var(--blue-tint); }
+.sm-g:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.sm-gl { min-width: 0; }
+.sm-gl b { display: block; font-size: 13px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-gl small { display: block; font-size: 11px; color: var(--ink-3); font-weight: 500; margin-top: 1px; }
+.sm-gv { font-size: 13.5px; font-weight: 700; color: var(--ink); text-align: right; white-space: nowrap; }
+.sm-gbar { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: var(--fill); overflow: hidden;
+  margin-top: 6px; }
+.sm-gbar i { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--blue);
+  transition: width .6s var(--ease); }
+.sm-g.on .sm-gbar { background: rgba(255,255,255,.7); }
+
+/* Сверка и поступления — одна строка: дата, кто и за что, пояснение, сумма. */
+.sm-check, .sm-lines { overflow: hidden; }
+.sm-check .pf-sec, .sm-lines .pf-sec { padding: 20px 24px 14px; }
+.sm-lines .pf-sec .sm-reset { margin-left: auto; }
+.sm-ch { border-top: 1px solid var(--line); }
+.sm-cht { padding: 12px 24px 8px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.sm-cr, .sm-ln { display: grid; gap: 14px; align-items: center; width: 100%; min-height: 52px;
+  padding: 8px 24px; border: 0; border-top: 1px solid var(--line); background: #fff; text-align: left;
+  font: inherit; position: relative; cursor: pointer; transition: background .14s var(--ease); }
+.sm-cr { grid-template-columns: 48px minmax(160px, 1.3fr) minmax(160px, 1.2fr) 120px; }
+.sm-ln { grid-template-columns: 48px minmax(160px, 1.5fr) minmax(100px, .8fr) minmax(110px, .8fr) 120px; }
+.sm-cr.nolink, .sm-ln.nolink { cursor: default; }
+.sm-cr:not(.nolink):hover, .sm-ln:not(.nolink):hover { background: #FBFBFC; }
+.sm-cr:focus-visible, .sm-ln:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.sm-d { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.sm-v { font-size: 13.5px; font-weight: 700; color: var(--ink); text-align: right; white-space: nowrap; }
+.sm-v small { display: block; font-size: 11px; font-weight: 600; color: var(--red-ink); margin-top: 1px; }
+.sm-lh { display: grid; grid-template-columns: 48px minmax(160px, 1.5fr) minmax(100px, .8fr) minmax(110px, .8fr) 120px;
+  gap: 14px; padding: 0 24px; height: 32px; align-items: center; background: var(--fill);
+  border-top: 1px solid var(--line); }
+.sm-lh span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.sm-lh span:last-child { text-align: right; }
+.sm-list { max-height: 620px; overflow-y: auto; }
+.sm-list .sm-ln:first-child { border-top: 0; }
+
+@media (max-width: 1100px) {
+  .sm-split { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 860px) {
+  .sm-split { grid-template-columns: 1fr; }
+  .sm-check .pf-sec, .sm-lines .pf-sec { padding: 18px 18px 12px; }
+  .sm-cht { padding: 12px 18px 8px; }
+  .sm-lh { display: none; }
+  .sm-cr, .sm-ln { grid-template-columns: 44px minmax(0, 1fr) auto; padding: 10px 18px; gap: 4px 12px; }
+  .sm-cr .sb-po, .sm-ln .sb-po { grid-column: 2 / -1; grid-row: 2; white-space: normal; font-size: 12px; }
+  .sm-ln .sb-po + .sb-po { grid-row: 3; }
+  .sm-cr .sm-v, .sm-ln .sm-v { grid-column: 3; grid-row: 1; }
+}
+
 /* Телефон: таблица становится карточкой строки — имя целиком сверху, под ним все
    шаги пути сеткой с подписью над числом (подпись берется из data-l ячейки).
    Прятать шаги нельзя: путь, оборванный на записи, на телефоне ничего не отвечает. */
