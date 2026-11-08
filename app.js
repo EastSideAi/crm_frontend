@@ -37924,16 +37924,25 @@
                       c_contract: 'Договор' };
   var SB_NOBODY = 'Никто не взял';
 
+  /* Отрезок воронки. Месяц — с планом и темпом; сегодня, вчера и неделя — для
+     пятиминутки по лидам (Павел 08.11.2026), без плана: план ставится на месяц. */
+  var SB_SPANS = [{ id: 'today', label: 'Сегодня' }, { id: 'yesterday', label: 'Вчера' },
+                  { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }];
+  var SB_MON_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+                    'сентября', 'октября', 'ноября', 'декабря'];
+  function sbSpan() { return state.sbSpan && state.sbSpan !== 'month' ? state.sbSpan : 'month'; }
+  function sbKey() { return sbSpan() === 'month' ? pfMonth() : sbSpan(); }
+
   function sbFetch() {
-    var m = pfMonth();
+    var m = sbKey();
     state._sbAt = Date.now();
-    api('/admin/api/sales/board?month=' + m).then(function (r) {
-      if (pfMonth() !== m) return;
+    api('/admin/api/sales/board?' + (sbSpan() === 'month' ? 'month=' + m : 'span=' + m)).then(function (r) {
+      if (sbKey() !== m) return;
       state._sb = r || 'none';
       if (state.page === 'sales') renderView();
     }).catch(function (e) {
       if (e.message === '403') return;            // ключ протух: api уже увел на вход
-      if (pfMonth() !== m) return;
+      if (sbKey() !== m) return;
       state._sb = e.message === '403acl' ? 'acl' : 'none';
       if (state.page === 'sales') renderView();
     });
@@ -38268,6 +38277,40 @@
 
   // Вердикт шапки отвечает на вопрос экрана, а не только про план: зеленое «идем к
   // плану» над потерей половины лидов врет. Потеря людей сильнее темпа.
+  /* Регламент пятиминутки по лидам лежит на самом экране: по нему и идут встречу, а
+     инструкцию в отдельном документе на пятиминутке никто не откроет. Свернут, чтобы
+     не отодвигать цифры. */
+  var SB_HOW = [
+    ['1 минута, маркетинг', 'Сколько лидов пришло и из каких каналов: таблица «Каналы». Канал льет, а записей нет, это вопрос к трафику.'],
+    ['2 минуты, руководитель продаж', '«В работе сейчас» сверху вниз: без хозяина раздать прямо на встрече, «ждут касания» спросить, кто взял и почему молчит, затем «дожимаем».'],
+    ['1 минута', 'Таблица под блоком: у кого из менеджеров сколько на руках и на каком шаге. Перекос видно сразу.'],
+    ['1 минута, решение', 'Кого раздаем и что меняем в трафике. Решение ставится задачей, иначе завтра его никто не вспомнит.']
+  ];
+  function sbHow() {
+    return '<details class="sb-how"><summary>Как вести пятиминутку по лидам</summary><ol>' +
+      SB_HOW.map(function (x) { return '<li><b>' + esc(x[0]) + '.</b> ' + esc(x[1]) + '</li>'; }).join('') +
+      '</ol></details>';
+  }
+
+  function sbSpanTitle(d) {
+    // Дата берется строкой из ответа: границы стоят по Москве, а часы браузера бывают
+    // в другом поясе, и полночь МСК там превращается во вчерашний вечер.
+    var p = String(d.span_from).slice(0, 10).split('-');
+    var a = { d: parseInt(p[2], 10), m: parseInt(p[1], 10) - 1 };
+    var f = function (x) { return x.d + ' ' + SB_MON_GEN[x.m]; };
+    if (d.span === 'week') return 'неделя с ' + f(a);
+    return (d.span === 'today' ? 'сегодня, ' : 'вчера, ') + f(a);
+  }
+  // Вердикт короткого отрезка: плана нет, поэтому главное — успели ли взять пришедших.
+  function sbSpanVerdict(d) {
+    var s = (d.path || {}).steps || {}, n = s.lead || 0;
+    var taken = (d.path || {}).taken || 0, free = (d.attention || {}).unowned || 0;
+    if (!n) return { t: 'Новых лидов нет', s: 'за этот отрезок карточек не пришло', cls: '' };
+    var t = n + ' ' + plural(n, 'лид', 'лида', 'лидов') + ', взяли ' + taken;
+    if (free) return { t: t, s: 'без хозяина ' + free + ': раздать на пятиминутке, цифры ниже открывают людей', cls: 'risk' };
+    return { t: t, s: 'все пришедшие разобраны, связались с ' + (s.contact || 0), cls: 'ok' };
+  }
+
   function sbVerdict(d) {
     var lost = (d.ideas || []).filter(function (i) { return i.kind === 'taken'; })[0];
     if (lost) return { t: 'Теряем лидов', s: lost.title, cls: 'miss' };
@@ -38291,27 +38334,32 @@
       return;
     }
     var d = state._sb;
+    var short = sbSpan() !== 'month';
     var passed = d.days_passed || 0, total = d.days_total || 30;
     var dayPct = Math.min(100, Math.round(passed / total * 100));
-    var v = sbVerdict(d);
+    var v = short ? sbSpanVerdict(d) : sbVerdict(d);
     var now = new Date();
     var isNow = d.month === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
 
-    var head = '<div class="card pf-head sb-thead">' + sbTabs() +
+    var spans = '<div class="list-quick sb-spans">' + SB_SPANS.map(function (x) {
+      return '<button class="qchip' + (x.id === sbSpan() ? ' on' : '') + '" data-sbspan="' + x.id + '">' + esc(x.label) + '</button>';
+    }).join('') + '</div>';
+    var nav = short ? '<div class="brd-nav"><span class="brd-label">' + esc(sbSpanTitle(d)) + '</span></div>' :
       '<div class="brd-nav">' +
         '<button class="icobtn sm brd-arrow prev" data-sbmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
         '<span class="brd-label">' + esc(pfMonthTitle(d.month)) + '</span>' +
         '<button class="icobtn sm brd-arrow" data-sbmon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
         (isNow ? '' : '<button class="qchip" data-sbmon="now">Сейчас</button>') +
-      '</div>' +
+      '</div>';
+    var head = '<div class="card pf-head sb-thead">' + sbTabs() + spans + (short ? sbHow() : '') + nav +
       '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '">' +
         '<div class="pf-vt">' + esc(v.t) + '</div><div class="pf-vs">' + esc(v.s) + '</div></div>' +
-      '<div class="pf-days">' +
+      (short ? '' : '<div class="pf-days">' +
         '<div class="pf-dtrack"><span style="width:' + dayPct + '%"></span></div>' +
         '<div class="pf-dtx">' + (d.current
           ? 'прошло ' + passed + ' ' + plural(passed, 'день', 'дня', 'дней') + ' из ' + total
           : 'месяц закрыт, ' + total + ' ' + plural(total, 'день', 'дня', 'дней')) + '</div>' +
-      '</div>' + sbShift(d) +
+      '</div>') + sbShift(d) +
     '</div>';
 
     var plan = '<div class="card sp12 sb-plan">' +
@@ -38323,8 +38371,8 @@
     // Список людей встает под тем блоком, где нажали цифру: «В работе» стоит высоко,
     // и уводить за ним на конец экрана значит потерять таблицу, из которой пришли.
     var wq = state._sbQ && state._sbQ.f.indexOf('w_') === 0;
-    view.innerHTML = '<div class="dash sb">' + head + sbPathBar(d) + sbPace(d) + sbWork(d) +
-      (wq ? sbPeople(d) : '') + sbIdeas(d) + plan +
+    view.innerHTML = '<div class="dash sb">' + head + sbPathBar(d) + (short ? '' : sbPace(d)) + sbWork(d) +
+      (wq ? sbPeople(d) : '') + sbIdeas(d) + (short ? '' : plan) +
       sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
     sbTabsBind(view);
     sbBind(view, d);
@@ -38332,6 +38380,14 @@
   }
 
   function sbBind(view, d) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbspan]'), function (b) {
+      b.addEventListener('click', function () {
+        var sp = b.getAttribute('data-sbspan');
+        if (sp === sbSpan()) return;
+        state.sbSpan = sp; state._sbQ = null; state._sb = null;
+        renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sbmon]'), function (b) {
       b.addEventListener('click', function () {
         var v = b.getAttribute('data-sbmon');

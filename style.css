@@ -12458,6 +12458,14 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 
 /* Вкладки «Воронка и план» / «Деньги и сверка» — первой строкой шапки, на всю ширину. */
 .sb-thead .sb-tabs { grid-column: 1 / -1; margin: -2px 0 -6px; }
+.sb-thead .sb-spans { grid-column: 1 / -1; margin: -6px 0 -4px; }
+.sb-how { grid-column: 1 / -1; margin: -6px 0 -2px; font-size: 12.5px; color: var(--ink-2); }
+.sb-how summary { cursor: pointer; font-weight: 600; color: var(--blue); width: max-content;
+  list-style: none; }
+.sb-how summary::-webkit-details-marker { display: none; }
+.sb-how ol { margin: 10px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px;
+  line-height: 1.55; max-width: 760px; }
+.sb-how b { color: var(--ink); font-weight: 600; }
 
 /* Деньги и сверка. Разбивка тремя колонками: строка — название, сумма и доля периода
    тонкой полосой; строка-кнопка оставляет в списке поступлений только свои платежи. */
