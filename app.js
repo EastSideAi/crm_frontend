@@ -38087,10 +38087,10 @@
   }
 
   var SB_WORK_TITLE = { w_free: 'Без менеджера', w_respond: 'Ждут касания', w_follow: 'Дожимаем',
-    w_meet: 'Ждут встречи', w_decide: 'Думают после встречи', w_all: 'В работе' };
+    w_meet: 'Ждут встречи', w_decide: 'Думают после встречи', w_all: 'В работе', w_late: 'Просрочено' };
   function sbWorkPeople(d, q) {
     var rows = ((d.work || {}).rows || []).filter(function (p) {
-      if (q.f !== 'w_all' && 'w_' + p.stage !== q.f) return false;
+      if (q.f === 'w_late' ? !p.late : q.f !== 'w_all' && 'w_' + p.stage !== q.f) return false;
       if (q.by === 'wwho' && (p.owner || SB_NOBODY) !== q.val) return false;
       return true;
     });
@@ -38103,8 +38103,8 @@
           ' · пришел ' + esc(fmtDay(p.created_at)) + '</small></span>' +
         (q.by === 'wwho' ? '<span></span>'
           : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>') +
-        // Красным — только тот, кто ждет нашего первого касания: остальные шаги идут своим ходом.
-        '<span class="sb-pm"><span class="sb-po' + (p.stage === 'free' || p.stage === 'respond' ? ' wait' : ' calm') + '">' +
+        // Красным — только просроченный по норме шага (считает сервер, LATE_AFTER).
+        '<span class="sb-pm"><span class="sb-po' + (p.late ? ' wait' : ' calm') + '">' +
           esc(sbWorkWhen(p)) + '</span></span></button>';
     }).join('');
     return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
@@ -38231,36 +38231,50 @@
       (rest ? '<div class="sb-prest">' + rest + '</div>' : '') + '</div></div>';
   }
 
-  /* В работе сейчас. Павел 07.11.2026: «где мне смотреть, сколько лидов в работе?».
-     Путь месяца выше отвечает «что стало с пришедшими в ноябре», а здесь — что лежит
-     на руках у отдела сегодня, с какого бы месяца человек ни пришел. Шаг считает
-     сервер (sales_board.work_stage), человек стоит ровно на одном. */
+  /* Статусы лидов сейчас — дашборд руководителя (Павел и Виталий, 08.11.2026: «смотреть
+     статус по лидам в формате дашборда», «не плодить сущности»). Это тот же блок «в работе»
+     (07.11.2026: «где смотреть, сколько лидов в работе?»), поднятый на верх «Воронки»: что
+     лежит на руках у отдела сегодня, с какого бы месяца человек ни пришел. Шаг и просрочку
+     считает сервер (sales_board.work_stage, LATE_AFTER), человек стоит ровно на одном шаге. */
   function sbWork(d) {
     var w = d.work;
     if (!w || !d.current) return '';
+    var late = w.late || {};
     var items = (w.stages || []).map(function (s, i) {
-      return { label: esc(s.label), value: fmtMoney(w.steps[s.key] || 0), sub: esc(s.hint), lead: i === 0 && w.steps.free > 0 };
+      var n = late[s.key] || 0;
+      return { label: esc(s.label), value: fmtMoney(w.steps[s.key] || 0),
+        sub: esc(s.hint), delta: n ? fmtMoney(n) + ' ' + esc(s.late) : '', deltaCls: 'bad',
+        lead: i === 0 && w.steps.free > 0 };
     });
     // Таблица — то, что на руках у менеджеров. «Без менеджера» у них всегда ноль, а
     // ничейные лиды уже стоят первой плиткой и открываются ею же.
     var mst = (w.stages || []).filter(function (s) { return s.key !== 'free'; });
     var rows = (w.managers || []).filter(function (m) { return m.name !== SB_NOBODY; }).map(function (m) {
+      var ml = m.late || {};
       return '<div class="mkd-tr sb-tr sb-wtr">' +
         '<div class="mkd-nm"><b>' + esc(m.name) + '</b></div>' +
         mst.map(function (s) {
+          var n = ml[s.key] || 0;
           return '<span class="sb-cell" data-l="' + esc(s.label) + '">' +
-            sbBtn(m.steps[s.key] || 0, 'w_' + s.key, 'wwho', m.name, { label: s.label }) + '</span>';
+            sbBtn(m.steps[s.key] || 0, 'w_' + s.key, 'wwho', m.name, { label: s.label }) +
+            (n ? '<i class="sb-wl" title="' + esc('просрочено: ' + s.late) + '">' + fmtMoney(n) + '</i>' : '') + '</span>';
         }).join('') +
         '<span class="sb-cell" data-l="Всего">' + sbBtn(m.total, 'w_all', 'wwho', m.name, { label: 'всего' }) + '</span>' +
+        '<span class="sb-cell sb-wlc" data-l="Просрочено">' +
+          sbBtn(m.late_total || 0, 'w_late', 'wwho', m.name, { label: 'просрочено' }) + '</span>' +
       '</div>';
     }).join('');
+    var lt = w.late_total || 0;
     return '<div class="card sp12 sb-tbl-card sb-work"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
-      '</span><div><div class="t">В работе сейчас · <span class="num">' + fmtMoney(w.total) + '</span></div>' +
-      '<div class="s">все живые лиды на сегодня, с какого бы месяца ни пришли; нажми на цифру, откроются люди</div></div></div>' +
+      '</span><div><div class="t">Статусы лидов сейчас · <span class="num">' + fmtMoney(w.total) + '</span></div>' +
+      '<div class="s">все живые лиды на сегодня, с какого бы месяца ни пришли; нажми на цифру, откроются люди</div></div>' +
+      (lt ? '<button class="qchip sb-wlate' + (sbIsOn('w_late', '', '') ? ' on' : '') + '" data-sbf="w_late">' +
+        'Просрочено <span class="num">' + fmtMoney(lt) + '</span></button>'
+        : '<span class="cnt sb-wok">все в сроках</span>') + '</div>' +
       '<div class="sb-wbar">' + statBar(items, 'five') + '</div>' +
       (rows ? '<div class="mkd-tbl sb-grid sb-wgrid"><div class="mkd-th"><span>Кто ведет</span>' +
         mst.map(function (s) { return '<span>' + esc(s.label) + '</span>'; }).join('') +
-        '<span>Всего</span></div>' + rows + '</div>' : '') + '</div>';
+        '<span>Всего</span><span>Просрочено</span></div>' + rows + '</div>' : '') + '</div>';
   }
 
   function sbWorkWhen(p) {
@@ -38371,8 +38385,9 @@
     // Список людей встает под тем блоком, где нажали цифру: «В работе» стоит высоко,
     // и уводить за ним на конец экрана значит потерять таблицу, из которой пришли.
     var wq = state._sbQ && state._sbQ.f.indexOf('w_') === 0;
-    view.innerHTML = '<div class="dash sb">' + head + sbPathBar(d) + (short ? '' : sbPace(d)) + sbWork(d) +
-      (wq ? sbPeople(d) : '') + sbIdeas(d) + (short ? '' : plan) +
+    // Статусы лидов — первым блоком под шапкой: это то, ради чего экран открывают каждый день.
+    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') +
+      sbPathBar(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
       sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
     sbTabsBind(view);
     sbBind(view, d);

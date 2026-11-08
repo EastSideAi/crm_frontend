@@ -12451,9 +12451,20 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sb-wbar .statbar { box-shadow: none; border: 0; background: var(--fill); }
 .sb-wbar .stat { cursor: pointer; }
 .sb-wbar .stat.on { background: var(--blue-tint); }
+.sb-wbar .stat .kd { white-space: nowrap; }
 .sb-work .sb-wgrid { margin-top: 10px; }
 .sb-wgrid .mkd-th, .sb-wgrid .mkd-tr {
-  grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(90px, .7fr)) 76px; }
+  grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(90px, .7fr)) 76px 96px; }
+/* Просрочка: тихая красная цифра рядом с числом шага и своя колонка в конце строки.
+   Одна красная кнопка в шапке ведет ко всем просроченным сразу. */
+.sb-cell i.sb-wl { min-width: 0; font-style: normal; font: 700 11.5px 'Manrope', sans-serif; color: var(--red-ink);
+  background: var(--red-soft); border-radius: var(--r-pill); padding: 1px 7px; margin-left: 4px;
+  font-variant-numeric: tabular-nums; }
+.sb-wlc .sb-n:not(.zero) { color: var(--red-ink); }
+.sb-wlc .sb-n:not(.zero):hover, .sb-wlc .sb-n.on { background: var(--red-soft); color: var(--red-ink); }
+.sec-head > .qchip.sb-wlate { color: var(--red-ink); background: var(--red-soft); border-color: transparent; }
+.sec-head > .qchip.sb-wlate.on { box-shadow: inset 0 0 0 1.5px var(--red-ink); }
+.sb-wok { color: var(--green-ink); }
 .sb-wgrid .mkd-tr { height: 50px; }
 
 /* Вкладки «Воронка и план» / «Деньги и сверка» — первой строкой шапки, на всю ширину. */
