@@ -12625,6 +12625,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sp-fcv b { font-size: 17px; font-weight: 800; letter-spacing: -.015em; color: var(--ink); }
 .sp-fcl { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--ink-3); }
 .sp-fcl b { color: var(--ink-2); font-weight: 600; letter-spacing: 0; }
+.sp-fcl .sp-cost { padding-left: 10px; }
 .sp-gap { font-size: 12.5px; font-weight: 600; margin-top: 2px; }
 .sp-gap.bad { color: var(--red-ink); }
 .sp-gap.ok { color: var(--green-ink); }

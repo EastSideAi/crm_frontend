@@ -38803,6 +38803,9 @@
             (f.fact ? '<span>пришло <b class="num">' + smRub(f.fact) + '</b></span>' : '') +
             '<span>взносы рассрочки по графикам <b class="num">' + smRub(f.receivables) + '</b></span>' +
             '<span>новые деньги по темпу ' + d.pace_days + ' дней <b class="num">' + smRub(f.pace) + '</b></span>' +
+            (f.school ? '<span>школа: ' + (f.school.renewals ? f.school.renewals + ' ' + plural(f.school.renewals, 'продление', 'продления', 'продлений') : 'продлений нет') +
+              (f.school.invoices_rub ? ' и счета' : '') + ' <b class="num">' + smRub(f.school.expected) + '</b>' +
+              '</span>' + (f.school.teachers ? '<span class="sp-cost">расход на преподавателей школы <b class="num">' + smRub(f.school.teachers) + '</b></span>' : '') : '') +
           '</div>' +
           (p.period_plan ? '<div class="sp-gap ' + (gap > 0 ? 'bad' : 'ok') + '">' + (gap > 0
             ? 'до плана не хватает <b class="num">' + smRub(gap) + '</b>'
@@ -38833,7 +38836,7 @@
       '</div>';
     }).join('');
     return spCard('sp-parts', 'cal', 'Периоды',
-      'план периода собран из планов месяцев по дням; «реально ждем» — что уже пришло, взносы рассрочки по графикам и новые деньги в темпе последних ' + d.pace_days + ' дней. Не открытые в ведомости периоды идут по модели 10–20 и 21–9',
+      'план периода собран из планов месяцев по дням; «реально ждем» — что уже пришло, взносы рассрочки по графикам, новые деньги в темпе последних ' + d.pace_days + ' дней и продления школы по ее расписанию. Не открытые в ведомости периоды идут по модели 10–20 и 21–9',
       '<div class="sp-partgrid">' + tiles + '</div>');
   }
 
