@@ -38379,6 +38379,86 @@
         '<span>Всего</span><span>Просрочено</span></div>' + rows + '</div>' : '') + '</div>';
   }
 
+  /* Потенциалы (Павел 09.11.2026: «вывести в продажи и дашборд, чтобы я их не потерял»;
+     «те, с кем провели консультацию, и есть итоги, договоренности»). Список и выжимку
+     конспекта собирает сервер (sales_board.load_potentials), здесь только рисуем. */
+  function potLoad() {
+    if (state._pot && Date.now() - (state._potAt || 0) < 60000) return;
+    if (state._potBusy) return;
+    state._potBusy = true;
+    state._potAt = Date.now();
+    api('/admin/api/sales/potentials').then(function (r) {
+      state._pot = r || { rows: [] };
+    }).catch(function () {
+      state._pot = state._pot || 'none';
+    }).then(function () {
+      state._potBusy = false;
+      if (state.page === 'sales' || state.page === 'dash') renderView();
+      if (state.drawerId && state.modalSection === 'now') renderModalContent();
+    });
+  }
+  function potWhen(r) {
+    if (!r.held_at) return '';
+    var d = new Date(r.held_at);
+    var day = d.getDate() + ' ' + SB_MON_GEN[d.getMonth()];
+    var n = r.days || 0;
+    return 'встреча ' + day + ' · ' + (n ? n + ' ' + plural(n, 'день', 'дня', 'дней') + ' назад' : 'сегодня');
+  }
+  function potList(xs) {
+    return xs.slice(0, 3).map(function (x) { return esc(x); }).join('; ') + (xs.length > 3 ? ' и еще ' + (xs.length - 3) : '');
+  }
+  function potCard(max) {
+    var p = state._pot;
+    if (!p || p === 'none') return '';
+    var rows = p.rows || [];
+    if (!rows.length) return '';
+    var open = !!state._potAll;
+    var shown = open ? rows : rows.slice(0, max);
+    var body = shown.map(function (r) {
+      var facts = [];
+      if (r.offer) facts.push('<span class="pot-f"><i>Предложили</i>' + esc(r.offer) + '</span>');
+      if (r.family && r.family.length) facts.push('<span class="pot-f"><i>Семья обещала</i>' + potList(r.family) + '</span>');
+      if (r.ours && r.ours.length) facts.push('<span class="pot-f"><i>Мы обещали</i>' + potList(r.ours) + '</span>');
+      if (!facts.length) facts.push('<span class="pot-f none">' + (r.about ? esc(r.about) : 'итогов встречи в карточке нет') + '</span>');
+      var st = (CRM[r.status] || {}).label || '';
+      var chat = r.chat_url
+        ? '<a class="pot-chat" href="' + esc(r.chat_url) + '" target="_blank" rel="noopener">' + ic('chat', 12) +
+            'чат' + (r.chat_ch ? ' · ' + esc(r.chat_ch) : '') + '</a>'
+        : (r.bot && r.bot.length ? '<span class="pot-chat bot">' + ic('bot', 12) + 'пишет в бота</span>'
+          : '<span class="pot-chat none">чата нет</span>');
+      var kin = (r.kin || []).length ? '<span class="pot-kin"><i>Семья</i>' + r.kin.map(function (m) {
+        return '<button class="fam-p" data-pot="' + esc(m.id) + '">' + esc(m.name) + '</button>';
+      }).join('') + '</span>' : '';
+      return '<div class="pot-r" role="button" tabindex="0" data-pot="' + esc(r.id) + '" title="Открыть карточку">' +
+        '<span class="pot-who"><b>' + esc(r.name) + '</b>' +
+          '<small>' + esc(r.held_at ? potWhen(r) : 'отмечен вручную') + (st ? ' · ' + esc(st.toLowerCase()) : '') + '</small>' +
+          '<small class="pot-own' + (r.owner === SB_NOBODY ? ' none' : '') + '">' + esc(r.owner === SB_NOBODY ? 'никто не ведет' : 'ведет ' + r.owner) + '</small>' +
+          chat + '</span>' +
+        '<span class="pot-fs">' + facts.join('') + kin + '</span></div>';
+    }).join('');
+    var more = rows.length > max
+      ? '<button class="pot-more" id="pot-more">' + (open ? 'Свернуть' : 'Показать всех · ' + fmtMoney(rows.length)) + '</button>' : '';
+    return '<div class="card sp12 pot"><div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) +
+      '</span><div><div class="t">Потенциалы · <span class="num">' + fmtMoney(rows.length) + '</span></div>' +
+      '<div class="s">провели консультацию или отметили в карточке, еще не купили; нажми, откроется карточка</div></div>' +
+      (p.no_notes ? '<span class="cnt pot-nn">без итогов ' + fmtMoney(p.no_notes) + '</span>' : '') + '</div>' +
+      '<div class="pot-list">' + body + '</div>' + more + '</div>';
+  }
+  function potBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pot]'), function (b) {
+      var go = function (e) { e.stopPropagation(); openLeadTab(b.getAttribute('data-pot')); };
+      b.addEventListener('click', go);
+      if (b.classList.contains('pot-r')) b.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(e); }
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.pot-chat[href]'), function (a) {
+      a.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    var m = view.querySelector('#pot-more');
+    if (m) m.addEventListener('click', function () { state._potAll = !state._potAll; renderView(); });
+  }
+
   function sbWorkWhen(p) {
     var t = Date.parse(p.since), now = Date.now();
     var dd = new Date(t);
@@ -38493,11 +38573,13 @@
     // и уводить за ним на конец экрана значит потерять таблицу, из которой пришли.
     var wq = state._sbQ && state._sbQ.f.indexOf('w_') === 0;
     // Статусы лидов — первым блоком под шапкой: это то, ради чего экран открывают каждый день.
-    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') +
+    potLoad();
+    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + potCard(8) +
       sbPathBar(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
       sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
     sbTabsBind(view);
     sbBind(view, d);
+    potBind(view);
     animBars(view);
   }
 
@@ -44978,7 +45060,7 @@
         { tint: 'green', label: 'Клиенты', value: c.clients, go: 'clients', delta: convClient ? convClient + '% из заявок' : '', deltaCls: 'good' },
       ]) +
       shiftCard() +
-      '<div class="grid">' +
+      '<div class="grid">' + potCard(5) +
         '<div class="sp7 vstack">' + queueCard + '</div>' +
         '<div class="sp5 vstack">' + funCard + navCard + '</div>' +
       '</div></div>';
@@ -45128,6 +45210,8 @@
       '<span class="cnt num">' + convSale + '% в клиента</span></div>' +
       '<div class="cvc-rows" style="margin-top:12px">' + saleRows + '</div></div>';
 
+    var potOn = can('path') || state.role === 'sales_manager' || state.role === 'manager';
+    if (potOn) potLoad();
     if (!can('path')) {
       if (state.role === 'sales_manager' || state.role === 'manager') {
         /* ── рабочее окно менеджера продаж ── */
@@ -45209,7 +45293,7 @@
           { tint: 'green', label: 'Клиенты', value: c.clients, delta: convClient + '% из заявок', deltaCls: convClient > 0 ? 'good' : 'mid' },
           { tint: (cAll.hot + risks.length) ? 'red' : '', label: 'Требуют внимания', value: cAll.hot + risks.length, go: 'queue', sub: (cAll.hot + risks.length) ? 'разобрать' : 'чисто' },
         ]) +
-        '<div class="grid">' +
+        '<div class="grid">' + potCard(5) +
           '<div class="sp7 vstack">' + actCard + '</div>' +
           '<div class="sp5 vstack">' + tasksCard() + '</div>' +
           '<div class="sp7 vstack">' + chartCard + '</div>' +
@@ -45238,6 +45322,7 @@
       n.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     });
     wireShift(view);
+    potBind(view);
     animBars(view);
   }
 
@@ -51032,6 +51117,150 @@
   var SRC_PICKS = ['Реклама ВК', 'Бот', 'Эфир', 'Партнеры', 'Сарафан', 'Соцсети', 'Сайт',
     'Повторный клиент', 'Другое'];
 
+  /* «Семья» (Павел 09.11.2026: лид — тот, кто решает и платит). После консультации на
+     детей заводят свои карточки учеников; привязанная к родителю карточка не считается
+     новым лидом ни в одном отчете (сервер ставит ей «не новый лид» с причиной family).
+     Глубина одна: у ученика своих учеников нет. */
+  var FAM = {}, FAM_BUSY = {};
+  function fetchFam(id, force) {
+    if (FAM_BUSY[id] || (FAM[id] && !force)) return;
+    FAM_BUSY[id] = true;
+    api('/admin/api/rnp/leads/' + id + '/family').then(function (r) {
+      FAM_BUSY[id] = false; FAM[id] = r;
+      if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+    }).catch(function () { FAM_BUSY[id] = false; FAM[id] = { parent: null, kids: [], off: true }; });
+  }
+  function famLink(p) {
+    return '<button class="fam-p" data-famopen="' + esc(p.id) + '">' + esc(p.name) + '</button>';
+  }
+  function buildFamily(ctx) {
+    var id = state.drawerId, f = FAM[id];
+    if (!f) { fetchFam(id); return ''; }
+    if (f.off) return '';
+    var body;
+    if (f.parent) {
+      body = '<span class="fam-t">Ученик в семье ' + famLink(f.parent) + '</span>' +
+        '<span class="fam-t mute">новым лидом не считается</span>' +
+        '<button class="bp ghost sm" data-famset="">Отвязать</button>';
+    } else if (f.kids.length) {
+      body = '<span class="fam-t">Ученики семьи: ' + f.kids.map(famLink).join('') + '</span>';
+    } else {
+      body = '<span class="fam-t mute">Это ребенок из семьи, которая уже есть в базе?</span>' +
+        '<button class="bp ghost sm" data-famopenpick="1">Привязать к родителю</button>' +
+        '<div class="fam-pick" hidden><input type="text" class="ed-input" placeholder="Имя родителя" ' +
+          'aria-label="Найти карточку родителя"><div class="fam-res"></div></div>';
+    }
+    return '<div class="fam"><span class="ql-l">Семья</span>' + body + '</div>';
+  }
+  function wireFamily(host, id) {
+    var box = host.querySelector('.fam');
+    if (!box) return;
+    var save = function (pid) {
+      apiSend('/admin/api/rnp/leads/' + id + '/family', 'POST', { parent_id: pid || null }, function (r) {
+        FAM[id] = r;
+        if (r.parent) FAM[r.parent.id] = null;
+        showToast(r.parent ? 'Привязал к семье ' + r.parent.name + ', из новых лидов убрал' : 'Отвязал, снова считается лидом');
+        if (state.drawerId === id) renderModalContent();
+      }, function (code, e) {
+        var why = e && e.body && e.body.detail;
+        showToast(code === 409 && why ? why : 'Не сохранилось, проверь сеть');
+      });
+    };
+    Array.prototype.forEach.call(box.querySelectorAll('[data-famopen]'), function (b) {
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-famopen')); });
+    });
+    var un = box.querySelector('[data-famset]');
+    if (un) un.addEventListener('click', function () { save(null); });
+    var go = box.querySelector('[data-famopenpick]'), pick = box.querySelector('.fam-pick');
+    if (!go || !pick) return;
+    var inp = pick.querySelector('input'), res = pick.querySelector('.fam-res');
+    go.addEventListener('click', function () { go.hidden = true; pick.hidden = false; inp.focus(); });
+    inp.addEventListener('input', function () {
+      var q = inp.value.trim().toLowerCase();
+      if (q.length < 2) { res.innerHTML = ''; return; }
+      var hits = (state.leads || []).filter(function (l) {
+        return l.id !== id && leadName(l).toLowerCase().indexOf(q) >= 0;
+      }).slice(0, 6);
+      res.innerHTML = hits.length ? hits.map(function (l) {
+        return '<button class="fam-hit" data-fampick="' + esc(l.id) + '"><b>' + esc(leadName(l)) + '</b>' +
+          (l.created_at ? '<small>пришел ' + esc(fmtDay(l.created_at)) + '</small>' : '') + '</button>';
+      }).join('') : '<span class="fam-none">Никого не нашел</span>';
+      Array.prototype.forEach.call(res.querySelectorAll('[data-fampick]'), function (b) {
+        b.addEventListener('click', function () { save(b.getAttribute('data-fampick')); });
+      });
+    });
+  }
+
+  /* Чат с семьей и отметка «потенциал» (Павел 09.11.2026: «обязательно ссылка на чат», и
+     в его список попали семьи, у которых консультация в системе не отмечена). Оба поля
+     живут в overrides карточки; список потенциалов читает их на сервере. Канал — из того
+     же списка, что CHAT_CHANNELS в sales_board.py: чужое значение сервер не примет. */
+  var CHAT_CHS = ['Телеграм', 'Ватсап', 'Макс', 'ВК', 'Другое'];
+  function buildPotChat(ctx) {
+    var ov = (ctx.crm || {}).overrides || {};
+    var url = ov.chat_url || '', pot = ov.potential || '';
+    var chat = url
+      ? '<a class="potc-link" href="' + esc(url) + '" target="_blank" rel="noopener">' + ic('chat', 13) +
+          'Открыть чат' + (ov.chat_ch ? ' · ' + esc(ov.chat_ch) : '') + '</a>' +
+        '<button class="bp ghost sm" data-potc-edit="1">Изменить</button>'
+      : '<button class="bp ghost sm" data-potc-edit="1">Добавить ссылку на чат</button>';
+    var form = '<div class="potc-form" hidden>' +
+      '<select class="tm-sel" data-potc-ch="1" aria-label="Где чат">' +
+        CHAT_CHS.map(function (c) {
+          return '<option' + (c === (ov.chat_ch || 'Телеграм') ? ' selected' : '') + '>' + c + '</option>';
+        }).join('') + '</select>' +
+      '<input type="url" class="ed-input" data-potc-url="1" placeholder="https://t.me/..." value="' + esc(url) + '" aria-label="Ссылка на чат с семьей">' +
+      '<button class="bp sm" data-potc-save="1">Сохранить</button>' +
+      (url ? '<button class="bp ghost sm" data-potc-clear="1">Убрать</button>' : '') + '</div>';
+    // Человек с проведенной консультацией уже в списке сам: это видно из того же ответа,
+    // что рисует список, второй копии правила тут нет.
+    potLoad();
+    var P = state._pot && state._pot.rows ? state._pot.rows : [];
+    var byMeet = pot !== '1' && P.some(function (r) { return r.id === state.drawerId; });
+    var mark = pot === '1'
+      ? '<span class="potc-on">' + ic('check', 11) + 'В потенциалах</span><button class="bp ghost sm" data-potc-mark="">Убрать</button>'
+      : byMeet
+        ? '<span class="potc-on">' + ic('check', 11) + 'В потенциалах, была консультация</span>' +
+          '<button class="bp ghost sm potc-no" data-potc-mark="no" title="Встреча была, но покупать не будут">Не потенциал</button>'
+      : pot === 'no'
+        ? '<span class="fam-t mute">Убран из потенциалов</span><button class="bp ghost sm" data-potc-mark="">Вернуть</button>'
+        : '<button class="bp ghost sm" data-potc-mark="1">В потенциалы</button>' +
+          '<button class="bp ghost sm potc-no" data-potc-mark="no" title="Встреча была, но покупать не будут">Не потенциал</button>';
+    return '<div class="potc"><span class="ql-l">Чат с семьей</span>' + chat + form +
+      '<span class="potc-sep"></span><span class="ql-l">Потенциал</span>' + mark + '</div>';
+  }
+  function wirePotChat(host, id) {
+    var box = host.querySelector('.potc');
+    if (!box) return;
+    var save = function (patchOv, msg) {
+      var ov = Object.assign({}, ((findLead(id) || {}).crm || {}).overrides || {}, patchOv);
+      patch(id, { overrides: ov }, null, function () {
+        showToast(msg);
+        state._pot = null;
+        if (state.drawerId === id) renderModalContent();
+      });
+    };
+    var edit = box.querySelector('[data-potc-edit]'), form = box.querySelector('.potc-form');
+    if (edit) edit.addEventListener('click', function () {
+      form.hidden = false; edit.hidden = true;
+      var inp = form.querySelector('[data-potc-url]'); if (inp) inp.focus();
+    });
+    var sv = box.querySelector('[data-potc-save]');
+    if (sv) sv.addEventListener('click', function () {
+      var u = form.querySelector('[data-potc-url]').value.trim();
+      if (!/^https?:\/\/\S+$/.test(u)) { showToast('Нужна ссылка на чат, начинается с https://'); return; }
+      save({ chat_url: u, chat_ch: form.querySelector('[data-potc-ch]').value }, 'Ссылку на чат сохранил');
+    });
+    var cl = box.querySelector('[data-potc-clear]');
+    if (cl) cl.addEventListener('click', function () { save({ chat_url: '', chat_ch: '' }, 'Ссылку убрал'); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-potc-mark]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-potc-mark');
+        save({ potential: v }, v === '1' ? 'Добавил в потенциалы' : v === 'no' ? 'Убрал из потенциалов' : 'Вернул как было');
+      });
+    });
+  }
+
   function buildQual(ctx) {
     var crm = ctx.crm || {};
     var q = crm.qual || {};
@@ -51255,6 +51484,8 @@
 
     /* 1а. ЧЕЙ ЭТО ЧЕЛОВЕК И УСПЕЛИ ЛИ МЫ ОТВЕТИТЬ */
     html += buildOwn(ctx);
+    html += buildFamily(ctx);
+    html += buildPotChat(ctx);
 
     /* 2. СТАДИЯ — степпер воронки (поднят выше: это главное действие на экране) */
     var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
@@ -53744,6 +53975,9 @@
         if (sel.value) botLink(sel, parts, sel.value);
       });
     });
+
+    wireFamily(host, id);
+    wirePotChat(host, id);
 
     // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {
