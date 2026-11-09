@@ -24607,7 +24607,7 @@
         (RCPS[it.id] ? ' has-rcp' : '') +
         '" data-fline="' + it.id + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
-        '<span class="fo-what">' + nameHtml + linkBtn +
+        '<span class="fo-what">' + nameHtml + linkBtn + brkBtn +
           (sub ? '<i>' + sub + '</i>' : '') +
           finReceiptLine(RCPS[it.id], canRcp) + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
@@ -24615,7 +24615,6 @@
           '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
             esc(it.status) + '</span>' +
           (it.included === false ? '<span class="fst wait">не в доход</span>' : '') +
-          brkBtn +
         '</span>' +
       '</div>';
     }).join('');
@@ -25138,6 +25137,7 @@
         var src = finDirectBadge(it.origin, it.role);
         // Кнопка подбора услуг: у строки, связанной с карточкой самозанятого напрямую
         // или найденной по ФИО. Глушит всплытие, чтобы не открыть правку строки.
+        // Стоит рядом с именем: в колонке статуса (150px) она выдавливала сумму влево.
         var brkBtn = (canBreak && (it.contractor_id || it.smz_id))
           ? '<button class="fin-brk" data-fbrk="' + it.id +
             '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
@@ -25146,11 +25146,10 @@
           (it.status === 'факт' ? ' paid' : '') + '"' +
           (editable ? ' data-dline="' + it.id + '"' : '') + '>' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
-          '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
+          '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' + brkBtn +
             (sub || src ? '<i>' + src + (sub && src ? ' · ' : '') + sub + '</i>' : '') + '</span>' +
           '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
           '<span class="fo-st">' +
-            brkBtn +
             finPaidCell(it.id, it.status, canFix) +
             (editable ? '<button class="fd-del" data-ddel="' + it.id +
               '" title="Удалить строку" aria-label="Удалить">' + ic('x', 12) + '</button>'
@@ -26438,12 +26437,12 @@
     return '<div class="trow fin-grid fe-grid"' +
       (clickable ? ' data-payout="' + it.id + '"' : '') + '>' +
       '<span class="num fo-date">' + finDate(it.date) + '</span>' +
-      '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
+      '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' + brkBtn +
         (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
       '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
       '<span class="fo-st">' +
         '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
-          esc(it.status) + '</span>' + docChip + brkBtn +
+          esc(it.status) + '</span>' + docChip +
       '</span>' +
     '</div>';
   }

@@ -7792,6 +7792,9 @@ a.fin-rcp.off:hover { text-decoration: underline; }
   font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
   cursor: pointer; white-space: nowrap; }
 .fin-brk:hover { background: var(--blue); color: #fff; }
+/* Кнопка стоит в строке за именем, а не в колонке статуса: там она выдавливала сумму. */
+.fo-what:has(> .fin-brk) > b { display: inline; }
+.fo-what > .fin-brk { vertical-align: 1px; }
 /* Пикер клиента: прокручиваемый список карточек с поиском. */
 .pk-list { margin-top: 10px; max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .pk-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%;
