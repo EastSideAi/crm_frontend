@@ -23837,7 +23837,9 @@
           if (ops[i].id !== id) continue;
           var o = ops[i];
           if (isContractors) return finPayoutForm(o, { period_id: o.period_id });
-          return finLineForm(finFundOpToLine(o), { form: 'фонд' });
+          // Строка листа отдела (маркетинг, продукт) правится своей формой листа —
+          // бэкенд говорит какой; форма фонда перезаписала бы ей раздел.
+          return finLineForm(finFundOpToLine(o), { form: o.form || 'фонд' });
         }
       });
     });
@@ -25101,7 +25103,7 @@
     return { id: o.id, date: o.date, status: o.status, counterparty: o.counterparty,
       item: o.item, comment: o.comment, amount: o.amount, section: FIN.fundId,
       included: true, payout_to: '', sale_amount: '', percent: '', product: '',
-      payment_id: '' };
+      payment_id: '', metrics_amount: o.metrics_amount || '' };
   }
 
   function renderFinDirect(view) {
