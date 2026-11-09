@@ -12471,6 +12471,30 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .pot-fs { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
 .pot-f i { font-style: normal; font-weight: 600; color: var(--ink); margin-right: 6px; }
 .pot-f.none { color: var(--ink-3); }
+.pot-chat { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px;
+  font-weight: 600; color: var(--blue); text-decoration: none; }
+.pot-chat:hover { text-decoration: underline; }
+.pot-chat.bot { color: var(--ink-2); font-weight: 500; }
+.pot-chat.none { color: var(--amber-ink); font-weight: 500; }
+.pot-kin { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
+.pot-kin i { font-style: normal; font-weight: 600; color: var(--ink); margin-right: 0; }
+
+/* Чат с семьей и отметка «потенциал» в карточке: строка под «Семьей», тем же рецептом. */
+.potc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px;
+  padding: 10px 14px; border-radius: 13px; background: var(--fill); }
+.potc > .ql-l { flex: none; }
+.potc-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+  color: var(--blue); text-decoration: none; }
+.potc-link:hover { text-decoration: underline; }
+.potc-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.potc-form[hidden], .potc .bp[hidden] { display: none; }
+.potc-form .ed-input { width: 260px; max-width: 100%; }
+.potc-sep { width: 1px; height: 18px; background: var(--line-2); margin: 0 4px; }
+.potc-on { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--green-ink); }
+.potc .potc-no { color: var(--ink-3); }
+.potc .bp.ghost { background: var(--card); }
+@media (max-width: 720px) { .potc-sep { display: none; } }
+
 .pot-more { display: block; width: 100%; padding: 12px 24px; border: 0; border-top: 1px solid var(--line);
   background: #fff; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--blue); cursor: pointer; text-align: left; }
 .pot-more:hover { background: var(--blue-tint); }
