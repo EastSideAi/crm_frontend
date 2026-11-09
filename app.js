@@ -26962,6 +26962,11 @@
           '<button class="qchip fpt-right" id="fpt-rate">изменить</button></div></div>';
 
     var ruleLabel = { percent: 'процент от оплат', fixed: 'фикс за клиента' };
+    // percent и fixed — машинные имена правил, остальное бэкенд присылает уже
+    // человеческим текстом («ниже порога», «не грант»): показываем как есть. Иначе такой
+    // клиент оставался вовсе без подписи, а чип врал «нет оплат» — и оператор шёл искать
+    // оплату, которая на самом деле есть.
+    var ruleText = function (r) { return r ? (ruleLabel[r] || r) : ''; };
     var clientRow = function (c) {
       // Имя клиента — ссылка в его карточку (case_id бэкенд отдаёт только под cap
       // clients, тот же гейт, что у строки дохода). Без case_id — обычный текст.
@@ -26989,7 +26994,7 @@
 
       var sub = c.product_kind === 'other'
         ? 'не грант · партнёрские не платим'
-        : [c.rule ? ruleLabel[c.rule] : '',
+        : [ruleText(c.rule),
            (c.rule === 'percent' && c.gross) ? 'с ' + finRub(c.gross) : '',
            c.suggested ? 'распознано: грант' : '']
           .filter(Boolean).join(' · ');
@@ -27012,7 +27017,8 @@
             : (c.product_kind === 'other'
                 ? '<button class="qchip fpt-pk-min fpt-pk" data-pk="grant" data-sid="' +
                     esc(c.session_id) + '">отметить грантом</button>'
-                : '<span class="fst wait">нет оплат</span>'));
+                : '<span class="fst wait">' +
+                    esc(!c.rule || ruleLabel[c.rule] ? 'нет оплат' : c.rule) + '</span>'));
       return '<div class="trow fpt-crow' +
         ((c.paid || c.product_kind === 'other') ? ' muted' : '') + '">' +
         '<span class="fo-what">' + nm +
