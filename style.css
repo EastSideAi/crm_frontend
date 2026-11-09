@@ -1787,6 +1787,30 @@ a { color: inherit; text-decoration: none; }
   .own-t .own-go { margin-left: auto; }
 }
 
+/* семья: ученик при родителе. Та же тихая строка, что «Ведет», сразу под ней:
+   лид в семье один, и это видно здесь, а не только в отчетах. */
+.fam { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px;
+  padding: 10px 14px; border-radius: 13px; background: var(--fill); }
+.fam > .ql-l { flex: none; }
+.fam-t { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px;
+  font-weight: 500; color: var(--ink-2); min-width: 0; }
+.fam-t.mute { color: var(--ink-3); }
+.fam > .bp { margin-left: auto; }
+.fam > .bp[hidden] { display: none; }
+.fam-p { border: 0; background: var(--card); color: var(--blue); font: 600 13px 'Manrope', sans-serif;
+  padding: 3px 10px; border-radius: var(--r-pill); cursor: pointer; transition: background .15s; }
+.fam-p:hover { background: var(--blue-tint); }
+.fam-p:focus-visible, .fam-hit:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.fam-pick { width: 100%; display: grid; gap: 6px; }
+.fam-pick[hidden] { display: none; }
+.fam-res { display: grid; gap: 4px; }
+.fam-hit { display: flex; align-items: baseline; gap: 10px; border: 0; background: var(--card);
+  border-radius: 10px; padding: 8px 12px; text-align: left; cursor: pointer; font: 500 13px 'Manrope', sans-serif;
+  color: var(--ink); transition: background .15s; }
+.fam-hit:hover { background: var(--blue-tint); }
+.fam-hit small { color: var(--ink-3); font-size: 12px; }
+.fam-none { font-size: 12px; color: var(--ink-3); padding: 4px 2px; }
+
 /* степпер воронки */
 .stage-sec { margin-top: 30px; }
 .dr-rej { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--ink-3);
@@ -12423,6 +12447,63 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sb-pm { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .sb-pmore { padding: 12px 24px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); }
 
+/* Потенциалы: провели консультацию, еще не купили. Слева человек и когда была встреча,
+   справа выжимка договоренностей — по ней и звонят, карточку открывать не обязательно. */
+.pot { overflow: hidden; }
+.pot .pf-sec { padding: 20px 24px 14px; }
+.pot .pot-nn { margin-left: auto; color: var(--amber-ink); }
+.pot-list { border-top: 1px solid var(--line); }
+.pot-r { display: grid; grid-template-columns: minmax(170px, 230px) 1fr; gap: 20px; align-items: start;
+  width: 100%; padding: 12px 24px; border: 0; border-bottom: 1px solid var(--line); background: #fff;
+  text-align: left; cursor: pointer; position: relative; font: inherit; transition: background .14s var(--ease); }
+.pot-r:last-child { border-bottom: none; }
+.pot-r:hover { background: #FBFBFC; }
+.pot-r::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: opacity .14s var(--ease); }
+.pot-r:hover::before { opacity: 1; }
+.pot-r:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.pot-who { min-width: 0; }
+.pot-who b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pot-who small { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 500; margin-top: 2px; }
+.pot-who .pot-own { color: var(--ink-2); font-weight: 600; }
+.pot-who .pot-own.none { color: var(--red-ink); }
+.pot-fs { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.pot-f i { font-style: normal; font-weight: 600; color: var(--ink); margin-right: 6px; }
+.pot-f.none { color: var(--ink-3); }
+.pot-chat { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px;
+  font-weight: 600; color: var(--blue); text-decoration: none; }
+.pot-chat:hover { text-decoration: underline; }
+.pot-chat.bot { color: var(--ink-2); font-weight: 500; }
+.pot-chat.none { color: var(--amber-ink); font-weight: 500; }
+.pot-kin { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
+.pot-kin i { font-style: normal; font-weight: 600; color: var(--ink); margin-right: 0; }
+
+/* Чат с семьей и отметка «потенциал» в карточке: строка под «Семьей», тем же рецептом. */
+.potc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px;
+  padding: 10px 14px; border-radius: 13px; background: var(--fill); }
+.potc > .ql-l { flex: none; }
+.potc-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+  color: var(--blue); text-decoration: none; }
+.potc-link:hover { text-decoration: underline; }
+.potc-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.potc-form[hidden], .potc .bp[hidden] { display: none; }
+.potc-form .ed-input { width: 260px; max-width: 100%; }
+.potc-sep { width: 1px; height: 18px; background: var(--line-2); margin: 0 4px; }
+.potc-on { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--green-ink); }
+.potc .potc-no { color: var(--ink-3); }
+.potc .bp.ghost { background: var(--card); }
+@media (max-width: 720px) { .potc-sep { display: none; } }
+
+.pot-more { display: block; width: 100%; padding: 12px 24px; border: 0; border-top: 1px solid var(--line);
+  background: #fff; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--blue); cursor: pointer; text-align: left; }
+.pot-more:hover { background: var(--blue-tint); }
+.pot-more:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+@media (max-width: 720px) {
+  .pot-r { grid-template-columns: 1fr; gap: 6px; padding: 12px 16px; }
+  .pot .pf-sec { padding: 16px 16px 12px; }
+}
+
 /* Идем ли в план: одна крупная строка про деньги, под ней остальные строки плана
    тише. Цвет несет только число отставания: красный — отстаем, зеленый — впереди. */
 .sb-pace .pf-sec, .sb-work .pf-sec { padding: 20px 24px 16px; }
@@ -12459,9 +12540,11 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(90px, .7fr)) 76px 96px; }
 /* Просрочка: тихая красная цифра рядом с числом шага и своя колонка в конце строки.
    Одна красная кнопка в шапке ведет ко всем просроченным сразу. */
-.sb-cell i.sb-wl { min-width: 0; font-style: normal; font: 700 11.5px 'Manrope', sans-serif; color: var(--red-ink);
+.sb-cell .sb-wl { min-width: 0; border: 0; cursor: pointer; font: 700 11.5px 'Manrope', sans-serif; color: var(--red-ink);
   background: var(--red-soft); border-radius: var(--r-pill); padding: 1px 7px; margin-left: 4px;
-  font-variant-numeric: tabular-nums; }
+  font-variant-numeric: tabular-nums; transition: background .15s, color .15s; }
+.sb-cell .sb-wl:hover, .sb-cell .sb-wl.on { background: var(--red-ink); color: #fff; }
+.sb-cell .sb-wl:focus-visible { outline: 2px solid var(--red-ink); outline-offset: 2px; }
 .sb-wlc .sb-n:not(.zero) { color: var(--red-ink); }
 .sb-wlc .sb-n:not(.zero):hover, .sb-wlc .sb-n.on { background: var(--red-soft); color: var(--red-ink); }
 .sec-head > .qchip.sb-wlate { color: var(--red-ink); background: var(--red-soft); border-color: transparent; }
@@ -12694,7 +12777,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
    шести шагов: где ты по дню, видно одним взглядом; шаг с людьми, которые ждут
    ответа, единственный горит красным. Ниже те же шаги списками людей. */
 .ms .ms-head { margin-bottom: 0; }
-.ms-plan { display: grid; grid-template-columns: repeat(6, 1fr); padding: 6px; gap: 2px; }
+.ms-plan { display: grid; grid-template-columns: repeat(8, 1fr); padding: 6px; gap: 2px; }
 .ms-step { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 14px 14px;
   border: 0; background: none; border-radius: var(--r-lg); cursor: pointer; font: inherit;
   transition: background .14s var(--ease); min-width: 0; }
@@ -12711,7 +12794,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .ms-step.hot .ms-st small { color: var(--red-ink); font-weight: 600; }
 .ms-sec .pf-sec, .ms-closebox .pf-sec { padding: 20px 24px 14px; }
 .ms-list { border-top: 1px solid var(--line); }
-.ms-row { display: grid; grid-template-columns: minmax(180px, 1fr) 190px 270px; gap: 14px; align-items: center;
+.ms-row { display: grid; grid-template-columns: minmax(180px, 1fr) 190px minmax(270px, auto); gap: 14px; align-items: center;
   padding: 10px 24px; min-height: 58px; border-bottom: 1px solid var(--line); position: relative;
   transition: background .14s var(--ease); }
 .ms-row:last-child { border-bottom: none; }
@@ -12727,8 +12810,11 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sev.ms-late { color: var(--red-ink); background: var(--red-soft); }
 .sev.ms-ok { color: var(--ink-2); background: var(--fill); }
 .sev.ms-when { color: var(--blue-d); background: var(--blue-tint); }
+.ms-warm { font-weight: 600; color: var(--ink-2); }
+.ms-warm.w2 { color: var(--blue-d); }
 .ms-row > .sev { justify-self: end; }
 .ms-acts { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.ms-acts .bp { white-space: nowrap; }
 .ms-call { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .ms-nocall { padding: 14px 20px; font-size: 13px; color: var(--amber-ink); background: var(--amber-soft);
   border-color: transparent; line-height: 1.5; }
@@ -12745,6 +12831,9 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .ms-sum b { display: block; font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
 .ms-cbtns { display: flex; gap: 10px; margin-top: 14px !important; }
 
+@media (max-width: 1360px) {
+  .ms-plan { grid-template-columns: repeat(4, 1fr); }
+}
 @media (max-width: 960px) {
   .ms-plan { grid-template-columns: repeat(3, 1fr); }
 }
@@ -14896,3 +14985,10 @@ video.cs-media { background: #000; }
 /* Переход «Самозанятые ⇄ Моя работа» у руководителя-исполнителя: отдельно от пунктов
    раздела, потому что ведет в другое пространство, а не на экран внутри. */
 .navi.nav-sw { margin-top: 14px; }
+
+/* Вердикт отрезка на «Продажах» — кнопка к людям (Павел 09.11.2026). */
+.sb-vbtn { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
+.sb-vbtn:hover, .sb-vbtn.on { text-decoration-color: currentColor; }
+.sb-vbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
