@@ -12932,6 +12932,9 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .rw-st { text-align: right; }
 /* Причина, по которой строки нет в расчете. Это наш долг по сбору данных, и он
    должен читаться, а не прятаться серым в край строки. */
+/* Поправленная цифра системы: тинт, чтобы было видно, что в расчете не посчитанное. */
+.pf-set.rw-fixed { color: var(--amber-ink); background: var(--amber-soft); }
+.rw-nm small.rw-fixnote { color: var(--amber-ink); }
 .rw-why { font-size: 12px; font-weight: 500; color: var(--amber-ink); line-height: 1.45; }
 .rw-dash { color: var(--ink-3); font-weight: 500; }
 .rw-rate { display: inline-flex; gap: 6px; justify-content: flex-end; }
