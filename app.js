@@ -28328,9 +28328,9 @@
         }).catch(function (e) { finFail(e, 'planlines'); }).then(done);
     });
   }
-  /* KPI из «Вознаграждения», который выплачивается в этом периоде (Роман 09.11.2026:
+  /* Вознаграждение за показатели, которое выплачивается в этом периоде (Роман 09.11.2026:
      «надо, чтобы было видно именно тот лист, который используется в этом периоде»).
-     KPI месяца идет во второй период месяца, поэтому сервер сам выбирает месяц и отдает
+     Вознаграждение месяца идет во второй период месяца, поэтому сервер сам выбирает месяц и отдает
      блок только там; здесь только раскладка. Только чтение: цифры вносятся в самом
      «Вознаграждении», вторая дверь для той же цифры однажды разошлась бы с первой. */
   var FIN_RW_MON = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
@@ -28372,13 +28372,13 @@
     }).join('');
     return '<div class="card frw">' +
       '<div class="frw-head">' +
-        '<div><div class="t">KPI за ' + mon + '</div>' +
-          '<div class="s">из «Вознаграждения», выплачивается в этой ведомости. ' +
+        '<div><div class="t">Вознаграждение за ' + mon + '</div>' +
+          '<div class="s">по листам из раздела «Вознаграждение», выплачивается в этой ведомости. ' +
           'Цифры вносятся там.</div></div>' +
         '<div class="rw-total"><b>' + finRub(sum) + '</b><small>за показатели</small></div>' +
         '<button class="bp ghost" data-frwgo="' + esc(R.month) + '">Внести цифры</button>' +
       '</div>' +
-      (people || '<div class="empty">Листов KPI у людей этого отдела нет.</div>') +
+      (people || '<div class="empty">У людей этого отдела нет листов вознаграждения.</div>') +
     '</div>';
   }
 
@@ -39706,6 +39706,12 @@
       // Причина живет в колонке условий: там строка идет слева и читается как
       // предложение, а в узкой колонке факта она ломалась на три куска по краю.
       fact = '<span class="rw-dash">—</span>';
+    } else if (r.fact_kind === 'auto' && !closed) {
+      // Цифру системы можно поправить, но с причиной (Роман 06.11.2026: «а если
+      // система ошибается?»). Поправленная подсвечена, посчитанная видна под именем.
+      fact = '<button class="pf-set' + (r.overridden ? ' rw-fixed' : (r.fact == null ? ' none' : '')) +
+        '" data-rwfix="' + r.id + '" title="Поправить цифру системы">' +
+        (r.fact == null ? 'поправить' : fmtMoney(r.fact).replace('.', ',')) + '</button>';
     } else if (r.fact_kind === 'rating' && !closed) {
       // Оценка видна теми же кнопками и после выбора: повторное нажатие на
       // выбранную снимает ее, иначе ошибочную оценку было бы нечем убрать.
@@ -39728,7 +39734,12 @@
 
     return '<div class="rw-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
       '<div class="rw-nm">' + esc(r.label) +
-        (r.hint ? '<small>' + esc(r.hint) + '</small>' : '') + '</div>' +
+        (r.hint ? '<small>' + esc(r.hint) + '</small>' : '') +
+        (r.overridden
+          ? '<small class="rw-fixnote">система насчитала ' +
+            (r.auto_fact == null ? '—' : fmtMoney(r.auto_fact).replace('.', ',')) +
+            (r.note ? ': ' + esc(r.note) : '') + '</small>'
+          : '') + '</div>' +
       '<div class="rw-cond">' + (r.state === 'blocked'
         ? '<span class="rw-why">' + esc(r.blocked) + '</span>'
         : esc(rwCond(r))) + '</div>' +
@@ -39857,7 +39868,84 @@
     });
   }
 
+  /* Поправка цифры системы. Причина обязательна: без нее через месяц не понять, чья
+     цифра в сумме и почему. «Вернуть цифру системы» снимает поправку. */
+  function rwFixForm(r) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var sys = r.auto_fact == null ? 'данных пока нет' : fmtMoney(r.auto_fact).replace('.', ',');
+    ov.innerHTML =
+      '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Цифра системы</div>' +
+            '<div class="al-title">' + esc(r.label) + '</div></div>' +
+          '<button class="al-x" id="rf-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Система насчитала: ' + esc(sys) + '. Поправленная цифра пойдет ' +
+          'в расчет, посчитанная останется видна рядом.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Правильная цифра <i>*</i></span>' +
+            '<input id="rf-v" class="al-in" inputmode="decimal" value="' +
+            (r.overridden && r.fact != null ? String(r.fact).replace('.', ',') : '') + '"></label>' +
+          '<label class="al-f"><span class="al-l">Почему система ошиблась <i>*</i></span>' +
+            '<input id="rf-n" class="al-in" maxlength="400" placeholder="два рилса не подтянулись из Instagram" value="' +
+            esc(r.overridden ? (r.note || '') : '') + '"></label>' +
+          '<div class="al-err" id="rf-err"></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          (r.overridden ? '<button class="al-cancel" id="rf-back">Вернуть цифру системы</button>' : '') +
+          '<button class="al-cancel" id="rf-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="rf-ok">Сохранить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var shut = false;
+    var close = function () {
+      if (shut) return; shut = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('rf-x').addEventListener('click', close);
+    el('rf-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var send = function (value, note) {
+      api('/admin/api/reward/fact', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ row_id: r.id, period: rwMonth(), value: value, note: note }),
+      }).then(function () {
+        close();
+        state._rw = null;
+        renderView();
+      }).catch(function () { el('rf-err').textContent = 'Не сохранилось — проверь сеть'; });
+    };
+    if (el('rf-back')) el('rf-back').addEventListener('click', function () { send(null, ''); });
+    el('rf-ok').addEventListener('click', function () {
+      var raw = String(el('rf-v').value).replace(/\s/g, '').replace(',', '.');
+      var n = parseFloat(raw);
+      var note = el('rf-n').value.trim();
+      if (raw === '' || isNaN(n) || n < 0) { el('rf-err').textContent = 'Впиши цифру, например 14'; return; }
+      if (note.length < 3) { el('rf-err').textContent = 'Напиши, почему цифра системы неверна'; return; }
+      send(n, note);
+    });
+    setTimeout(function () { el('rf-v').focus(); }, 50);
+  }
+
   function rwBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwfix]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = parseInt(b.getAttribute('data-rwfix'), 10);
+        var all = (state._rw && state._rw.sheets) || [];
+        for (var i = 0; i < all.length; i++) {
+          var rows = all[i].rows || [];
+          for (var j = 0; j < rows.length; j++) if (rows[j].id === id) return rwFixForm(rows[j]);
+        }
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rwmon]'), function (b) {
       b.addEventListener('click', function () {
         var v = b.getAttribute('data-rwmon');
