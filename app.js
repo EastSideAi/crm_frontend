@@ -34740,6 +34740,19 @@
     return '?' + q.join('&');
   }
 
+  /* Двери регистрации под плашкой «Регистрации» (владелец, 9.11.2026): реклама,
+     соцсети, база бота. Каждая цифра открывает своих людей, сумма — плашка. */
+  var LAUNCH_SPLIT = [['ads', 'с рекламы', 'Регистрации с рекламы'],
+                      ['social', 'из соцсетей', 'Регистрации из соцсетей'],
+                      ['base', 'из базы бота', 'Регистрации из базы бота']];
+  function launchSplitSub(sp) {
+    return 'из них ' + LAUNCH_SPLIT.map(function (d) {
+      return '<span class="go-sub" data-lsplit="' + d[0] + '" data-lsplitn="' + (sp[d[0]] || 0) +
+        '" role="button" tabindex="0" title="Показать этих людей поименно">' +
+        d[1] + ' ' + (sp[d[0]] || 0) + '</span>';
+    }).join(' · ');
+  }
+
   function launchPeopleOpen(slug, step, launchTitle, plate, ot, ownTitle) {
     state._lpPeople = {
       kind: 'step', id: 'step:' + step.key + (ot ? ':' + ot : ''),
@@ -35599,6 +35612,25 @@
      на экране живет в localStorage того, кто крутит: это прикидка под разговор,
      а факт запуска считает соседняя вкладка «Запуски». */
   var LA_KEY = 'es_launch_plan_v1';
+  /* Декомпозиция у каждого запуска своя (владелец, 9.11.2026). Первый — октябрь с
+     фактом; следующий начинается копией его плана, факта у него пока нет. Правки
+     каждого запуска хранятся отдельно, у октября — под прежним ключом. */
+  var LA_LAUNCHES = [{ id: '2026-10', label: 'Интенсив 28.10.26', fact: true },
+                     { id: '2026-11', label: 'Ноябрь 2026', fact: false,
+                       title: 'Декомпозиция запуска: ноябрь 2026',
+                       lede: 'План ноябрьского запуска — копия плана интенсива 28–29 октября. Подсвеченные поля — вводные, их правят руками; остальное считается.' }];
+  var LA_LAUNCH_LS = 'es_launch_plan_cur';
+  function laLaunchCur() {
+    if (!state.laLaunch) {
+      try { state.laLaunch = localStorage.getItem(LA_LAUNCH_LS) || ''; } catch (e) {}
+    }
+    var l = LA_LAUNCHES.filter(function (x) { return x.id === state.laLaunch; })[0];
+    return l || LA_LAUNCHES[0];
+  }
+  function laKey() {
+    var l = laLaunchCur();
+    return l === LA_LAUNCHES[0] ? LA_KEY : LA_KEY + ':' + l.id;
+  }
   var LA_FOLD = 'es_launch_fold_v1';
   var LA_PLANS = [['min', 'План min'], ['opt', 'План opt'], ['max', 'План max']];
   /* Четвертый лист стоит рядом, но в «Всего» НЕ входит: там складываются тёплая
@@ -35620,11 +35652,16 @@
   function laEdits() {
     if (state._laEd) return state._laEd;
     var e = {};
-    try { e = JSON.parse(localStorage.getItem(LA_KEY) || '{}') || {}; } catch (err) { e = {}; }
+    try {
+      var raw = localStorage.getItem(laKey());
+      /* новый запуск открывается копией того, что было на экране у октября */
+      if (raw == null && laKey() !== LA_KEY) raw = localStorage.getItem(LA_KEY);
+      e = JSON.parse(raw || '{}') || {};
+    } catch (err) { e = {}; }
     state._laEd = e;
     return e;
   }
-  function laSaveEdits() { try { localStorage.setItem(LA_KEY, JSON.stringify(state._laEd || {})); } catch (e) {} }
+  function laSaveEdits() { try { localStorage.setItem(laKey(), JSON.stringify(state._laEd || {})); } catch (e) {} }
   function laTouched() { return Object.keys(laEdits()).length > 0; }
   /* свернутые этапы — привычка одного человека, а не настройка команды: лист
      длинный, и каждый смотрит свой кусок. Поэтому в браузере, а не на сервере;
@@ -35925,6 +35962,7 @@
     var d = state._launch;
     /* у месяца факта нет вовсе: колонку ему не рисуем, а не заполняем прочерками */
     if (srcId === 'month') return {};
+    if (!laLaunchCur().fact) return {};
     if (srcId === 'vk') return laAdsFact() || {};
     if (srcId === 'warm') return laWarmFact() || {};
     var f = {}, w = (d.warm || {}).fact || {};
@@ -36066,8 +36104,14 @@
     var src = state.laSrc;
     /* у месяца свои заголовок и лид: шапка про интенсив 24–25 октября над листом,
        где интенсива нет по определению, читается как ошибка экрана */
-    var mon = src === 'month', head1 = mon ? (d.month || {}) : d;
-    var top = '<div class="card po-econtop">' +
+    var lch = laLaunchCur();
+    var mon = src === 'month', head1 = mon ? (d.month || {}) : (lch.title ? lch : d);
+    var launchTabs = '<div class="po-tabs po-econsegs la-launches"><div class="dperiod">' +
+      LA_LAUNCHES.map(function (l) {
+        return '<button type="button" data-lalaunch="' + l.id + '"' +
+          (lch === l ? ' class="on"' : '') + '>' + esc(l.label) + '</button>';
+      }).join('') + '</div></div>';
+    var top = launchTabs + '<div class="card po-econtop">' +
       '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span>' +
         '<div><div class="t">' + esc(head1.title) + '</div>' +
         '<div class="s">' + esc(head1.lede) + '</div></div>' +
@@ -36096,7 +36140,7 @@
       : { title: d[src].title, note: d[src].note };
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
-      (mon ? '' : '<div class="th r">' + esc(src === 'vk' || src === 'warm' ? 'факт 28–29.10' : d.factLabel) + '</div>') + '</div>';
+      (mon ? '' : '<div class="th r">' + esc(!lch.fact ? 'факт' : src === 'vk' || src === 'warm' ? 'факт 28–29.10' : d.factLabel) + '</div>') + '</div>';
     var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
@@ -36184,6 +36228,14 @@
         state.laSrc = b.getAttribute('data-lasrc'); saveUi(); renderView();
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lalaunch]'), function (b) {
+      b.addEventListener('click', function () {
+        state.laLaunch = b.getAttribute('data-lalaunch');
+        try { localStorage.setItem(LA_LAUNCH_LS, state.laLaunch); } catch (e) {}
+        state._laEd = null;   /* у каждого запуска свои правки */
+        renderView();
+      });
+    });
     /* сворачивание этапа тоже идет без ререндера: он выбил бы курсор из поля и
        сбросил прокрутку таблицы вбок — человек свернул верхний этап, чтобы
        добраться до нижнего, а не чтобы начать сначала */
@@ -36220,7 +36272,10 @@
       }
       clearTimeout(armed); armed = null;
       state._laEd = {};
-      try { localStorage.removeItem(LA_KEY); } catch (e) {}
+      try {
+        if (laKey() === LA_KEY) localStorage.removeItem(LA_KEY);
+        else localStorage.setItem(laKey(), '{}');   /* план из файла, а не копия октября */
+      } catch (e) {}
       renderView();
     });
   }
@@ -36755,7 +36810,8 @@
              (221 из 624), и список спорил бы с цифрой над ним. */
           step: 'reach', stepTitle: 'Регистрации', stepPlate: regShown,
           sub: regInPeriod == null
-            ? 'бесплатно ' + Math.max(0, regShown - reg.vip) + ' · платно ' + reg.vip
+            ? (cur.reach_split ? launchSplitSub(cur.reach_split) + '<br>' : '') +
+              'бесплатно ' + Math.max(0, regShown - reg.vip) + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total,
           pct: launchPct(regShown, cur.pages && cur.pages.users, 'от тех, кто видел страницу') },
         /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
@@ -36914,6 +36970,19 @@
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lsplit]'), function (n) {
+      var openIt = function (e) {
+        e.stopPropagation();
+        var k = n.getAttribute('data-lsplit');
+        var d = LAUNCH_SPLIT.filter(function (x) { return x[0] === k; })[0];
+        launchPeopleOpen(cur.slug, { key: 'reach_' + k, title: d[2],
+          people: parseInt(n.getAttribute('data-lsplitn'), 10) || 0 }, cur.title, n, '', true);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(e); }
       });
     });
     /* Плашка по меткам и цифра в её подписи → свой список. Подпись лежит внутри

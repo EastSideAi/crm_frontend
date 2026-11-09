@@ -9079,6 +9079,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-econtop .po-board3 { margin-top: 16px; }
 .po-econsegs { margin: 20px 0 2px; }
 .po-econsegs .dperiod { display: inline-flex; }
+/* выбор запуска над декомпозицией: свой отступ до карточки плана */
+.po-econsegs.la-launches { margin: 0 0 14px; }
 .po-sub { margin: 26px 0 0; font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
 .po-sub:first-of-type { margin-top: 20px; }
 .po-sel { width: auto; max-width: 100%; cursor: pointer; }
