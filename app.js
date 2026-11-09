@@ -23837,7 +23837,9 @@
           if (ops[i].id !== id) continue;
           var o = ops[i];
           if (isContractors) return finPayoutForm(o, { period_id: o.period_id });
-          return finLineForm(finFundOpToLine(o), { form: 'фонд' });
+          // Строка листа отдела (маркетинг, продукт) правится своей формой листа —
+          // бэкенд говорит какой; форма фонда перезаписала бы ей раздел.
+          return finLineForm(finFundOpToLine(o), { form: o.form || 'фонд' });
         }
       });
     });
@@ -24642,7 +24644,8 @@
     // листе). Только у трех отделов со своим листом; месяц календарный, не период.
     var planSec = (page === 'finedit') ? FIN_SHEET_SEC[FIN.form] : null;
     var planBlockH = planSec ? finPlanBlock(planSec) : '';
-    view.innerHTML = statBar(statTiles) + planBlockH + finReceiptBar(page, items) +
+    var rwBlockH = (page === 'finedit') ? finRewardBlock(L.reward) : '';
+    view.innerHTML = statBar(statTiles) + planBlockH + rwBlockH + finReceiptBar(page, items) +
       '<div class="card listcard">' +
         '<div class="list-tools">' +
           '<div><div class="t fe-t">' + esc(meta[1]) + '</div>' +
@@ -24666,6 +24669,23 @@
     });
     var add = el('fe-add');
     if (add) add.addEventListener('click', function () { finLineForm(null); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-frw]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-frw');
+        FIN.rwOpen = FIN.rwOpen || {};
+        FIN.rwOpen[id] = !FIN.rwOpen[id];
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-frwgo]'), function (b) {
+      b.addEventListener('click', function () {
+        // Открываем «Вознаграждение» сразу на месяце этой ведомости, а не на текущем.
+        state.rwMonth = b.getAttribute('data-frwgo');
+        state._rw = null;
+        setPage('reward');
+        renderAll();
+      });
+    });
     if (canFix) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-fline]'), function (r) {
         r.addEventListener('click', function () {
@@ -25083,7 +25103,7 @@
     return { id: o.id, date: o.date, status: o.status, counterparty: o.counterparty,
       item: o.item, comment: o.comment, amount: o.amount, section: FIN.fundId,
       included: true, payout_to: '', sale_amount: '', percent: '', product: '',
-      payment_id: '' };
+      payment_id: '', metrics_amount: o.metrics_amount || '' };
   }
 
   function renderFinDirect(view) {
@@ -28302,6 +28322,60 @@
         }).catch(function (e) { finFail(e, 'planlines'); }).then(done);
     });
   }
+  /* KPI из «Вознаграждения», который выплачивается в этом периоде (Роман 09.11.2026:
+     «надо, чтобы было видно именно тот лист, который используется в этом периоде»).
+     KPI месяца идет во второй период месяца, поэтому сервер сам выбирает месяц и отдает
+     блок только там; здесь только раскладка. Только чтение: цифры вносятся в самом
+     «Вознаграждении», вторая дверь для той же цифры однажды разошлась бы с первой. */
+  var FIN_RW_MON = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
+    'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+  function finRewardBlock(R) {
+    if (!R) return '';
+    var sheets = R.sheets || [];
+    var mon = FIN_RW_MON[parseInt(R.month.split('-')[1], 10) - 1] || R.month;
+    var open = FIN.rwOpen || {};
+    var sum = sheets.reduce(function (a, s) { return a + (s.month_rub || 0); }, 0);
+    var people = sheets.map(function (s) {
+      var q = s.questions || 0;
+      var on = !!open[s.sheet_id];
+      var head = '<button class="frw-p' + (on ? ' on' : '') + '" data-frw="' + s.sheet_id + '">' +
+        '<span class="frw-nm"><b>' + esc(s.name) + '</b>' +
+          (s.title ? '<small>' + esc(s.title) + '</small>' : '') + '</span>' +
+        (q ? '<span class="sev rw-wait">' + q + ' ' +
+          plural(q, 'строка ждет цифры', 'строки ждут цифры', 'строк ждут цифры') + '</span>'
+          : '<span class="sev rw-ok">посчитано</span>') +
+        '<span class="frw-sum num">' + finRub(s.month_rub || 0) + '</span>' +
+        '<span class="frw-chev">' + chev() + '</span>' +
+      '</button>';
+      if (!on) return head;
+      var rows = (s.rows || []).map(function (r) {
+        var st = RW_ST[r.state] || RW_ST.wait;
+        var fact = r.fact == null ? '<span class="rw-dash">—</span>'
+          : '<span class="num">' + fmtMoney(r.fact).replace('.', ',') + '</span>';
+        return '<div class="rw-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
+          '<div class="rw-nm">' + esc(r.label) + '</div>' +
+          '<div class="rw-cond">' + (r.state === 'blocked'
+            ? '<span class="rw-why">' + esc(r.blocked) + '</span>' : esc(rwCond(r))) + '</div>' +
+          '<div class="rw-fact">' + fact + '</div>' +
+          '<div class="rw-sum num">' + (r.rub ? fmtMoney(r.rub) + ' ₽' : '—') + '</div>' +
+          '<div class="rw-st"><span class="sev ' + st[0] + '">' + st[1] + '</span></div>' +
+        '</div>';
+      }).join('');
+      return head + '<div class="frw-rows">' + (rows ||
+        '<div class="empty">В листе нет ни одной строки.</div>') + '</div>';
+    }).join('');
+    return '<div class="card frw">' +
+      '<div class="frw-head">' +
+        '<div><div class="t">KPI за ' + mon + '</div>' +
+          '<div class="s">из «Вознаграждения», выплачивается в этой ведомости. ' +
+          'Цифры вносятся там.</div></div>' +
+        '<div class="rw-total"><b>' + finRub(sum) + '</b><small>за показатели</small></div>' +
+        '<button class="bp ghost" data-frwgo="' + esc(R.month) + '">Внести цифры</button>' +
+      '</div>' +
+      (people || '<div class="empty">Листов KPI у людей этого отдела нет.</div>') +
+    '</div>';
+  }
+
   function finPlanBlock(section) {
     var m = finPlanMonth(), ll = (FIN.planlines || {})[section];
     if (!ll) { finLoadPlanLines(section); }
@@ -40659,7 +40733,7 @@
       '<div class="idup-c-tags">' + tags.join('') + '</div>' +
       '<div class="idup-c-b">' +
         (isMain ? '' : '<button class="bp sm ghost" data-cmain="' + c.id + '" data-ck="' + esc(g.key) + '">Сделать главной</button>') +
-        '<button class="bp sm ghost" data-copen="' + c.id + '">Открыть</button>' +
+        '<button class="bp sm ghost" data-copen="' + c.id + '">Внести цифры</button>' +
       '</div>' +
     '</div>';
   }
@@ -51414,7 +51488,7 @@
             '<small>' + esc(mergedWhy(m)) + '</small>' +
             (mergedMoved(m) ? '<small>' + esc(mergedMoved(m)) + '</small>' : '') + '</div>' +
             '<div class="dup-acts">' +
-            '<button class="dup-b" data-dupview="' + esc(m.id) + '">Открыть</button>' +
+            '<button class="dup-b" data-dupview="' + esc(m.id) + '">Внести цифры</button>' +
             '<button class="dup-b" data-dupmove="' + esc(m.id) + '">Перенести</button>' +
             '<button class="dup-b" data-unmerge="' + esc(m.id) + '">Расклеить</button></div>' +
             '<div class="dup-move" data-moveform="' + esc(m.id) + '" hidden>' +
@@ -51440,7 +51514,7 @@
         return '<div class="dup-row"><div class="dup-nm"><b>' + esc(x.name || 'Без имени') + '</b>' +
           '<small>' + esc(why) + ' · ' + esc(fmtWhen(x.created_at)) + '</small></div>' +
           (x.paid ? '<span class="sev s-client">оплата</span>' : '') +
-          '<button class="dup-b" data-dupopen="' + esc(x.id) + '">Открыть</button>' +
+          '<button class="dup-b" data-dupopen="' + esc(x.id) + '">Внести цифры</button>' +
           (x.paid ? '' : '<button class="dup-b primary" data-merge="' + esc(x.id) + '">Это дубль</button>') +
         '</div>';
       }).join('') + '</div></div>';
