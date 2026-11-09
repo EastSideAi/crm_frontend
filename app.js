@@ -38379,6 +38379,68 @@
         '<span>Всего</span><span>Просрочено</span></div>' + rows + '</div>' : '') + '</div>';
   }
 
+  /* Потенциалы (Павел 09.11.2026: «вывести в продажи и дашборд, чтобы я их не потерял»;
+     «те, с кем провели консультацию, и есть итоги, договоренности»). Список и выжимку
+     конспекта собирает сервер (sales_board.load_potentials), здесь только рисуем. */
+  function potLoad() {
+    if (state._pot && Date.now() - (state._potAt || 0) < 60000) return;
+    if (state._potBusy) return;
+    state._potBusy = true;
+    state._potAt = Date.now();
+    api('/admin/api/sales/potentials').then(function (r) {
+      state._pot = r || { rows: [] };
+    }).catch(function () {
+      state._pot = state._pot || 'none';
+    }).then(function () {
+      state._potBusy = false;
+      if (state.page === 'sales' || state.page === 'dash') renderView();
+    });
+  }
+  function potWhen(r) {
+    if (!r.held_at) return '';
+    var d = new Date(r.held_at);
+    var day = d.getDate() + ' ' + SB_MON_GEN[d.getMonth()];
+    var n = r.days || 0;
+    return 'встреча ' + day + ' · ' + (n ? n + ' ' + plural(n, 'день', 'дня', 'дней') + ' назад' : 'сегодня');
+  }
+  function potList(xs) {
+    return xs.slice(0, 3).map(function (x) { return esc(x); }).join('; ') + (xs.length > 3 ? ' и еще ' + (xs.length - 3) : '');
+  }
+  function potCard(max) {
+    var p = state._pot;
+    if (!p || p === 'none') return '';
+    var rows = p.rows || [];
+    if (!rows.length) return '';
+    var open = !!state._potAll;
+    var shown = open ? rows : rows.slice(0, max);
+    var body = shown.map(function (r) {
+      var facts = [];
+      if (r.offer) facts.push('<span class="pot-f"><i>Предложили</i>' + esc(r.offer) + '</span>');
+      if (r.family && r.family.length) facts.push('<span class="pot-f"><i>Семья обещала</i>' + potList(r.family) + '</span>');
+      if (r.ours && r.ours.length) facts.push('<span class="pot-f"><i>Мы обещали</i>' + potList(r.ours) + '</span>');
+      if (!facts.length) facts.push('<span class="pot-f none">' + (r.about ? esc(r.about) : 'итогов встречи в карточке нет') + '</span>');
+      return '<button class="pot-r" data-pot="' + esc(r.id) + '" title="Открыть карточку">' +
+        '<span class="pot-who"><b>' + esc(r.name) + '</b>' +
+          '<small>' + esc(potWhen(r)) + '</small>' +
+          '<small class="pot-own' + (r.owner === SB_NOBODY ? ' none' : '') + '">' + esc(r.owner === SB_NOBODY ? 'никто не ведет' : 'ведет ' + r.owner) + '</small></span>' +
+        '<span class="pot-fs">' + facts.join('') + '</span></button>';
+    }).join('');
+    var more = rows.length > max
+      ? '<button class="pot-more" id="pot-more">' + (open ? 'Свернуть' : 'Показать всех · ' + fmtMoney(rows.length)) + '</button>' : '';
+    return '<div class="card sp12 pot"><div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) +
+      '</span><div><div class="t">Потенциалы · <span class="num">' + fmtMoney(rows.length) + '</span></div>' +
+      '<div class="s">провели консультацию, еще не купили; свежие встречи сверху, нажми, откроется карточка</div></div>' +
+      (p.no_notes ? '<span class="cnt pot-nn">без итогов ' + fmtMoney(p.no_notes) + '</span>' : '') + '</div>' +
+      '<div class="pot-list">' + body + '</div>' + more + '</div>';
+  }
+  function potBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pot]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-pot')); });
+    });
+    var m = view.querySelector('#pot-more');
+    if (m) m.addEventListener('click', function () { state._potAll = !state._potAll; renderView(); });
+  }
+
   function sbWorkWhen(p) {
     var t = Date.parse(p.since), now = Date.now();
     var dd = new Date(t);
@@ -38493,11 +38555,13 @@
     // и уводить за ним на конец экрана значит потерять таблицу, из которой пришли.
     var wq = state._sbQ && state._sbQ.f.indexOf('w_') === 0;
     // Статусы лидов — первым блоком под шапкой: это то, ради чего экран открывают каждый день.
-    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') +
+    potLoad();
+    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + potCard(8) +
       sbPathBar(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
       sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
     sbTabsBind(view);
     sbBind(view, d);
+    potBind(view);
     animBars(view);
   }
 
@@ -44962,7 +45026,7 @@
         { tint: 'green', label: 'Клиенты', value: c.clients, go: 'clients', delta: convClient ? convClient + '% из заявок' : '', deltaCls: 'good' },
       ]) +
       shiftCard() +
-      '<div class="grid">' +
+      '<div class="grid">' + potCard(5) +
         '<div class="sp7 vstack">' + queueCard + '</div>' +
         '<div class="sp5 vstack">' + funCard + navCard + '</div>' +
       '</div></div>';
@@ -45112,6 +45176,8 @@
       '<span class="cnt num">' + convSale + '% в клиента</span></div>' +
       '<div class="cvc-rows" style="margin-top:12px">' + saleRows + '</div></div>';
 
+    var potOn = can('path') || state.role === 'sales_manager' || state.role === 'manager';
+    if (potOn) potLoad();
     if (!can('path')) {
       if (state.role === 'sales_manager' || state.role === 'manager') {
         /* ── рабочее окно менеджера продаж ── */
@@ -45193,7 +45259,7 @@
           { tint: 'green', label: 'Клиенты', value: c.clients, delta: convClient + '% из заявок', deltaCls: convClient > 0 ? 'good' : 'mid' },
           { tint: (cAll.hot + risks.length) ? 'red' : '', label: 'Требуют внимания', value: cAll.hot + risks.length, go: 'queue', sub: (cAll.hot + risks.length) ? 'разобрать' : 'чисто' },
         ]) +
-        '<div class="grid">' +
+        '<div class="grid">' + potCard(5) +
           '<div class="sp7 vstack">' + actCard + '</div>' +
           '<div class="sp5 vstack">' + tasksCard() + '</div>' +
           '<div class="sp7 vstack">' + chartCard + '</div>' +
@@ -45222,6 +45288,7 @@
       n.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     });
     wireShift(view);
+    potBind(view);
     animBars(view);
   }
 
@@ -51016,6 +51083,80 @@
   var SRC_PICKS = ['Реклама ВК', 'Бот', 'Эфир', 'Партнеры', 'Сарафан', 'Соцсети', 'Сайт',
     'Повторный клиент', 'Другое'];
 
+  /* «Семья» (Павел 09.11.2026: лид — тот, кто решает и платит). После консультации на
+     детей заводят свои карточки учеников; привязанная к родителю карточка не считается
+     новым лидом ни в одном отчете (сервер ставит ей «не новый лид» с причиной family).
+     Глубина одна: у ученика своих учеников нет. */
+  var FAM = {}, FAM_BUSY = {};
+  function fetchFam(id, force) {
+    if (FAM_BUSY[id] || (FAM[id] && !force)) return;
+    FAM_BUSY[id] = true;
+    api('/admin/api/rnp/leads/' + id + '/family').then(function (r) {
+      FAM_BUSY[id] = false; FAM[id] = r;
+      if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+    }).catch(function () { FAM_BUSY[id] = false; FAM[id] = { parent: null, kids: [], off: true }; });
+  }
+  function famLink(p) {
+    return '<button class="fam-p" data-famopen="' + esc(p.id) + '">' + esc(p.name) + '</button>';
+  }
+  function buildFamily(ctx) {
+    var id = state.drawerId, f = FAM[id];
+    if (!f) { fetchFam(id); return ''; }
+    if (f.off) return '';
+    var body;
+    if (f.parent) {
+      body = '<span class="fam-t">Ученик в семье ' + famLink(f.parent) + '</span>' +
+        '<span class="fam-t mute">новым лидом не считается</span>' +
+        '<button class="bp ghost sm" data-famset="">Отвязать</button>';
+    } else if (f.kids.length) {
+      body = '<span class="fam-t">Ученики семьи: ' + f.kids.map(famLink).join('') + '</span>';
+    } else {
+      body = '<span class="fam-t mute">Это ребенок из семьи, которая уже есть в базе?</span>' +
+        '<button class="bp ghost sm" data-famopenpick="1">Привязать к родителю</button>' +
+        '<div class="fam-pick" hidden><input type="text" class="ed-input" placeholder="Имя родителя" ' +
+          'aria-label="Найти карточку родителя"><div class="fam-res"></div></div>';
+    }
+    return '<div class="fam"><span class="ql-l">Семья</span>' + body + '</div>';
+  }
+  function wireFamily(host, id) {
+    var box = host.querySelector('.fam');
+    if (!box) return;
+    var save = function (pid) {
+      apiSend('/admin/api/rnp/leads/' + id + '/family', 'POST', { parent_id: pid || null }, function (r) {
+        FAM[id] = r;
+        if (r.parent) FAM[r.parent.id] = null;
+        showToast(r.parent ? 'Привязал к семье ' + r.parent.name + ', из новых лидов убрал' : 'Отвязал, снова считается лидом');
+        if (state.drawerId === id) renderModalContent();
+      }, function (code, e) {
+        var why = e && e.body && e.body.detail;
+        showToast(code === 409 && why ? why : 'Не сохранилось, проверь сеть');
+      });
+    };
+    Array.prototype.forEach.call(box.querySelectorAll('[data-famopen]'), function (b) {
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-famopen')); });
+    });
+    var un = box.querySelector('[data-famset]');
+    if (un) un.addEventListener('click', function () { save(null); });
+    var go = box.querySelector('[data-famopenpick]'), pick = box.querySelector('.fam-pick');
+    if (!go || !pick) return;
+    var inp = pick.querySelector('input'), res = pick.querySelector('.fam-res');
+    go.addEventListener('click', function () { go.hidden = true; pick.hidden = false; inp.focus(); });
+    inp.addEventListener('input', function () {
+      var q = inp.value.trim().toLowerCase();
+      if (q.length < 2) { res.innerHTML = ''; return; }
+      var hits = (state.leads || []).filter(function (l) {
+        return l.id !== id && leadName(l).toLowerCase().indexOf(q) >= 0;
+      }).slice(0, 6);
+      res.innerHTML = hits.length ? hits.map(function (l) {
+        return '<button class="fam-hit" data-fampick="' + esc(l.id) + '"><b>' + esc(leadName(l)) + '</b>' +
+          (l.created_at ? '<small>пришел ' + esc(fmtDay(l.created_at)) + '</small>' : '') + '</button>';
+      }).join('') : '<span class="fam-none">Никого не нашел</span>';
+      Array.prototype.forEach.call(res.querySelectorAll('[data-fampick]'), function (b) {
+        b.addEventListener('click', function () { save(b.getAttribute('data-fampick')); });
+      });
+    });
+  }
+
   function buildQual(ctx) {
     var crm = ctx.crm || {};
     var q = crm.qual || {};
@@ -51239,6 +51380,7 @@
 
     /* 1а. ЧЕЙ ЭТО ЧЕЛОВЕК И УСПЕЛИ ЛИ МЫ ОТВЕТИТЬ */
     html += buildOwn(ctx);
+    html += buildFamily(ctx);
 
     /* 2. СТАДИЯ — степпер воронки (поднят выше: это главное действие на экране) */
     var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
@@ -53728,6 +53870,8 @@
         if (sel.value) botLink(sel, parts, sel.value);
       });
     });
+
+    wireFamily(host, id);
 
     // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {
