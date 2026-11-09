@@ -51016,6 +51016,80 @@
   var SRC_PICKS = ['Реклама ВК', 'Бот', 'Эфир', 'Партнеры', 'Сарафан', 'Соцсети', 'Сайт',
     'Повторный клиент', 'Другое'];
 
+  /* «Семья» (Павел 09.11.2026: лид — тот, кто решает и платит). После консультации на
+     детей заводят свои карточки учеников; привязанная к родителю карточка не считается
+     новым лидом ни в одном отчете (сервер ставит ей «не новый лид» с причиной family).
+     Глубина одна: у ученика своих учеников нет. */
+  var FAM = {}, FAM_BUSY = {};
+  function fetchFam(id, force) {
+    if (FAM_BUSY[id] || (FAM[id] && !force)) return;
+    FAM_BUSY[id] = true;
+    api('/admin/api/rnp/leads/' + id + '/family').then(function (r) {
+      FAM_BUSY[id] = false; FAM[id] = r;
+      if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+    }).catch(function () { FAM_BUSY[id] = false; FAM[id] = { parent: null, kids: [], off: true }; });
+  }
+  function famLink(p) {
+    return '<button class="fam-p" data-famopen="' + esc(p.id) + '">' + esc(p.name) + '</button>';
+  }
+  function buildFamily(ctx) {
+    var id = state.drawerId, f = FAM[id];
+    if (!f) { fetchFam(id); return ''; }
+    if (f.off) return '';
+    var body;
+    if (f.parent) {
+      body = '<span class="fam-t">Ученик в семье ' + famLink(f.parent) + '</span>' +
+        '<span class="fam-t mute">новым лидом не считается</span>' +
+        '<button class="bp ghost sm" data-famset="">Отвязать</button>';
+    } else if (f.kids.length) {
+      body = '<span class="fam-t">Ученики семьи: ' + f.kids.map(famLink).join('') + '</span>';
+    } else {
+      body = '<span class="fam-t mute">Это ребенок из семьи, которая уже есть в базе?</span>' +
+        '<button class="bp ghost sm" data-famopenpick="1">Привязать к родителю</button>' +
+        '<div class="fam-pick" hidden><input type="text" class="ed-input" placeholder="Имя родителя" ' +
+          'aria-label="Найти карточку родителя"><div class="fam-res"></div></div>';
+    }
+    return '<div class="fam"><span class="ql-l">Семья</span>' + body + '</div>';
+  }
+  function wireFamily(host, id) {
+    var box = host.querySelector('.fam');
+    if (!box) return;
+    var save = function (pid) {
+      apiSend('/admin/api/rnp/leads/' + id + '/family', 'POST', { parent_id: pid || null }, function (r) {
+        FAM[id] = r;
+        if (r.parent) FAM[r.parent.id] = null;
+        showToast(r.parent ? 'Привязал к семье ' + r.parent.name + ', из новых лидов убрал' : 'Отвязал, снова считается лидом');
+        if (state.drawerId === id) renderModalContent();
+      }, function (code, e) {
+        var why = e && e.body && e.body.detail;
+        showToast(code === 409 && why ? why : 'Не сохранилось, проверь сеть');
+      });
+    };
+    Array.prototype.forEach.call(box.querySelectorAll('[data-famopen]'), function (b) {
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-famopen')); });
+    });
+    var un = box.querySelector('[data-famset]');
+    if (un) un.addEventListener('click', function () { save(null); });
+    var go = box.querySelector('[data-famopenpick]'), pick = box.querySelector('.fam-pick');
+    if (!go || !pick) return;
+    var inp = pick.querySelector('input'), res = pick.querySelector('.fam-res');
+    go.addEventListener('click', function () { go.hidden = true; pick.hidden = false; inp.focus(); });
+    inp.addEventListener('input', function () {
+      var q = inp.value.trim().toLowerCase();
+      if (q.length < 2) { res.innerHTML = ''; return; }
+      var hits = (state.leads || []).filter(function (l) {
+        return l.id !== id && leadName(l).toLowerCase().indexOf(q) >= 0;
+      }).slice(0, 6);
+      res.innerHTML = hits.length ? hits.map(function (l) {
+        return '<button class="fam-hit" data-fampick="' + esc(l.id) + '"><b>' + esc(leadName(l)) + '</b>' +
+          (l.created_at ? '<small>пришел ' + esc(fmtDay(l.created_at)) + '</small>' : '') + '</button>';
+      }).join('') : '<span class="fam-none">Никого не нашел</span>';
+      Array.prototype.forEach.call(res.querySelectorAll('[data-fampick]'), function (b) {
+        b.addEventListener('click', function () { save(b.getAttribute('data-fampick')); });
+      });
+    });
+  }
+
   function buildQual(ctx) {
     var crm = ctx.crm || {};
     var q = crm.qual || {};
@@ -51239,6 +51313,7 @@
 
     /* 1а. ЧЕЙ ЭТО ЧЕЛОВЕК И УСПЕЛИ ЛИ МЫ ОТВЕТИТЬ */
     html += buildOwn(ctx);
+    html += buildFamily(ctx);
 
     /* 2. СТАДИЯ — степпер воронки (поднят выше: это главное действие на экране) */
     var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
@@ -53728,6 +53803,8 @@
         if (sel.value) botLink(sel, parts, sel.value);
       });
     });
+
+    wireFamily(host, id);
 
     // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {
