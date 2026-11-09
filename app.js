@@ -38024,7 +38024,7 @@
   /* Отрезок воронки. Месяц — с планом и темпом; сегодня, вчера и неделя — для
      пятиминутки по лидам (Павел 08.11.2026), без плана: план ставится на месяц. */
   var SB_SPANS = [{ id: 'today', label: 'Сегодня' }, { id: 'yesterday', label: 'Вчера' },
-                  { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }];
+                  { id: 'week', label: '7 дней' }, { id: 'month', label: 'Месяц' }];
   var SB_MON_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
                     'сентября', 'октября', 'ноября', 'декабря'];
   function sbSpan() { return state.sbSpan && state.sbSpan !== 'month' ? state.sbSpan : 'month'; }
@@ -38126,9 +38126,9 @@
     }).join('');
     return '<div class="card sp12 sb-tbl-card"><div class="sec-head pf-sec"><span class="ic">' + ic('funnel', 14) +
       '</span><div><div class="t">Каналы</div>' +
-      '<div class="s">лиды месяца по шагам; деньги — сколько эти люди уже заплатили</div></div></div>' +
+      '<div class="s">' + (sbSpan() !== 'month' ? 'лиды отрезка' : 'лиды месяца') + ' по шагам; деньги — сколько эти люди уже заплатили</div></div></div>' +
       (rows ? '<div class="mkd-tbl sb-grid">' + sbHead('Канал', 'Оплатили') + rows + '</div>'
-        : '<div class="empty">Лидов в этом месяце нет.</div>') + '</div>';
+        : '<div class="empty">' + (sbSpan() !== 'month' ? 'За этот отрезок лидов нет.' : 'Лидов в этом месяце нет.') + '</div>') + '</div>';
   }
 
   function sbManagers(d) {
@@ -38187,13 +38187,16 @@
     w_meet: 'Ждут встречи', w_decide: 'Думают после встречи', w_all: 'В работе', w_late: 'Просрочено' };
   function sbWorkPeople(d, q) {
     var rows = ((d.work || {}).rows || []).filter(function (p) {
-      if (q.f === 'w_late' ? !p.late : q.f !== 'w_all' && 'w_' + p.stage !== q.f) return false;
+      var lst = q.f.indexOf('w_late:') === 0 ? q.f.slice(7) : '';   // просроченные одного шага
+      if (lst) { if (!p.late || p.stage !== lst) return false; }
+      else if (q.f === 'w_late' ? !p.late : q.f !== 'w_all' && 'w_' + p.stage !== q.f) return false;
       if (q.by === 'wwho' && (p.owner || SB_NOBODY) !== q.val) return false;
       return true;
     });
     // Сверху тот, кто ждет дольше всех; у встреч — ближайшая.
     rows.sort(function (a, b) { return String(a.since).localeCompare(String(b.since)); });
-    var title = (SB_WORK_TITLE[q.f] || '') + (q.val ? ' · ' + q.val : '');
+    var title = (SB_WORK_TITLE[q.f] || (q.f.indexOf('w_late:') === 0 ?
+      (SB_WORK_TITLE['w_' + q.f.slice(7)] || '') + ', просрочено' : '')) + (q.val ? ' · ' + q.val : '');
     var body = rows.slice(0, 300).map(function (p) {
       return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
         '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
@@ -38354,7 +38357,9 @@
           var n = ml[s.key] || 0;
           return '<span class="sb-cell" data-l="' + esc(s.label) + '">' +
             sbBtn(m.steps[s.key] || 0, 'w_' + s.key, 'wwho', m.name, { label: s.label }) +
-            (n ? '<i class="sb-wl" title="' + esc('просрочено: ' + s.late) + '">' + fmtMoney(n) + '</i>' : '') + '</span>';
+            (n ? '<button class="sb-wl' + (sbIsOn('w_late:' + s.key, 'wwho', m.name) ? ' on' : '') +
+              '" data-sbf="w_late:' + s.key + '" data-sbby="wwho" data-sbval="' + esc(m.name) +
+              '" title="' + esc('просрочено: ' + s.late + ', показать кто') + '">' + fmtMoney(n) + '</button>' : '') + '</span>';
         }).join('') +
         '<span class="sb-cell" data-l="Всего">' + sbBtn(m.total, 'w_all', 'wwho', m.name, { label: 'всего' }) + '</span>' +
         '<span class="sb-cell sb-wlc" data-l="Просрочено">' +
@@ -38409,7 +38414,7 @@
     var p = String(d.span_from).slice(0, 10).split('-');
     var a = { d: parseInt(p[2], 10), m: parseInt(p[1], 10) - 1 };
     var f = function (x) { return x.d + ' ' + SB_MON_GEN[x.m]; };
-    if (d.span === 'week') return 'неделя с ' + f(a);
+    if (d.span === 'week') return '7 дней с ' + f(a);
     return (d.span === 'today' ? 'сегодня, ' : 'вчера, ') + f(a);
   }
   // Вердикт короткого отрезка: плана нет, поэтому главное — успели ли взять пришедших.
@@ -38464,7 +38469,12 @@
       '</div>';
     var head = '<div class="card pf-head sb-thead">' + sbTabs() + spans + (short ? sbHow() : '') + nav +
       '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '">' +
-        '<div class="pf-vt">' + esc(v.t) + '</div><div class="pf-vs">' + esc(v.s) + '</div></div>' +
+        // Павел 09.11.2026: «все лиды в цифрах должны быть кликабельные» — вердикт
+        // отрезка открывает тех же людей, что плитка «Пришли».
+        (short && ((d.path || {}).steps || {}).lead
+          ? '<button class="pf-vt sb-vbtn' + (sbIsOn('lead', '', '') ? ' on' : '') + '" data-sbf="lead" title="Показать этих людей поименно">' + esc(v.t) + '</button>'
+          : '<div class="pf-vt">' + esc(v.t) + '</div>') +
+        '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
       (short ? '' : '<div class="pf-days">' +
         '<div class="pf-dtrack"><span style="width:' + dayPct + '%"></span></div>' +
         '<div class="pf-dtx">' + (d.current
@@ -39218,26 +39228,48 @@
     var out = [];
     // Свободного лида сначала берут, потом звонят: иначе звонок без ответственного.
     // Синяя кнопка звонка одна на строку и только там, где ждут первого ответа.
+    if (kind === 'after') {
+      out.push('<button class="bp ghost" data-mslead="' + esc(p.id) + '">Отметить итог</button>');
+      return '<div class="ms-acts">' + out.join('') + '</div>';
+    }
+    if (kind === 'hot' && p.free) out.push('<button class="bp ghost" data-mstake="' + esc(p.id) + '">Взять себе</button>');
     if (p.phone && kind !== 'pool') {
       out.push(canCall
-        ? '<button class="bp ms-call' + (kind === 'respond' ? '' : ' ghost') + '" data-mscall="' + esc(p.phone) + '">' +
+        ? '<button class="bp ms-call' + (kind === 'respond' || kind === 'hot' ? '' : ' ghost') + '" data-mscall="' + esc(p.phone) + '">' +
           ic('phone', 13) + 'Позвонить</button>'
         : '<a class="bp ghost ms-call" href="tel:+' + esc(p.phone) + '">' + ic('phone', 13) + msPhone(p.phone) + '</a>');
     }
-    if (kind === 'respond') out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '">Связался</button>');
+    if (kind === 'respond' || (kind === 'hot' && !p.free)) out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '">Связался</button>');
     if (kind === 'pool') out.push('<button class="bp" data-mstake="' + esc(p.id) + '">Взять себе</button>');
     out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
     return '<div class="ms-acts">' + out.join('') + '</div>';
   }
 
+  /* Насколько теплый лид после эфира (сервер, поле warm): порядок звонков Павла
+     09.11.2026 — нажал «записаться», потом был на эфире, потом не пришел. */
+  function msWarm(p) {
+    var m = p.watch_min ? ', смотрел ' + p.watch_min + ' мин' : '';
+    if (p.warm === 2) return 'нажал «записаться»' + m;
+    if (p.warm === 3) return 'был на эфире' + m;
+    if (p.warm === 4) return 'зарегистрировался, не пришел';
+    return '';
+  }
+
   function msRow(p, kind, canCall) {
     var meta = [esc(p.ch + (p.sub ? ' · ' + p.sub : ''))];
+    var warm = msWarm(p);
+    if (warm) meta.unshift('<span class="ms-warm w' + p.warm + '">' + esc(warm) + '</span>');
+    if ((kind === 'hot' || kind === 'after') && p.free) meta.push('никто не ведет');
     if (p.grade) meta.push(esc(p.grade));
     if (!p.phone && p.contact) meta.push(esc(p.contact));
     if (!p.phone && !p.contact) meta.push('номера нет, писать в диалог');
     var tag = '';
     if (kind === 'respond' || kind === 'pool') {
       tag = '<span class="sev ' + (p.age_min > 15 ? 'ms-late' : 'ms-ok') + '">ждет ' + msAge(p.age_min) + '</span>';
+    } else if (kind === 'hot') {
+      tag = '<span class="sev ms-when">разбор ' + esc(msWhen(p.meet_at)) + '</span>';
+    } else if (kind === 'after') {
+      tag = '<span class="sev ms-ok">встреча ' + esc(fmtDay(p.meet_at)) + '</span>';
     } else if (kind === 'follow') {
       tag = '<span class="sev ' + (p.next_in_days != null && p.next_in_days <= 0.5 ? 'ms-late' : 'ms-ok') + '">касание ' +
         p.touch + ' из 5 · день ' + p.day + '</span>';
@@ -39256,12 +39288,15 @@
   function msPlan(d, open) {
     var steps = [
       { n: 1, t: 'Открыть смену', s: open ? 'идет' : 'начни с этого', done: open, go: '' },
-      { n: 2, t: 'Ответить новым', s: d.respond.length ? d.respond.length + ' ждут, норма 15 минут' : 'все отвечены',
+      { n: 2, t: 'Записались сами', s: d.hot.length ? d.hot.length + ' ждут звонка до разбора' : 'все на связи',
+        done: !d.hot.length, go: 'hot', hot: d.hot.length > 0 },
+      { n: 3, t: 'Ответить новым', s: d.respond.length ? d.respond.length + ' ждут, норма 15 минут' : 'все отвечены',
         done: !d.respond.length, go: 'respond', hot: d.respond.length > 0 },
-      { n: 3, t: 'Встречи', s: d.meets.length ? d.meets.length + ' на ближайшие дни' : 'встреч нет', done: false, go: 'meets' },
-      { n: 4, t: 'Дожать до записи', s: d.follow.length ? d.follow.length + ' на связи без записи' : 'никого', done: !d.follow.length, go: 'follow' },
-      { n: 5, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
-      { n: 6, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
+      { n: 4, t: 'Встречи', s: d.meets.length ? d.meets.length + ' на ближайшие дни' : 'встреч нет', done: false, go: 'meets' },
+      { n: 5, t: 'Отметить итог', s: d.after.length ? d.after.length + ' после встречи' : 'все отмечены', done: !d.after.length, go: 'after' },
+      { n: 6, t: 'Дожать до записи', s: d.follow.length ? d.follow.length + ' на связи без записи' : 'никого', done: !d.follow.length, go: 'follow' },
+      { n: 7, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
+      { n: 8, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
     ];
     return '<div class="card ms-plan">' + steps.map(function (st) {
       return '<button class="ms-step' + (st.done ? ' done' : '') + (st.hot ? ' hot' : '') + '"' +
@@ -39351,14 +39386,19 @@
         '<button class="bp ghost" id="ms-dial">Открыть звонилку</button></div>'
         : '<div class="card ms-nocall">Звонилка тебе пока не подключена: номера открываются обычным звонком с телефона. ' +
         'Чтобы звонки и записи шли через CRM, попроси доступ у Павла.</div>') +
+      msSection('hot', 'Записались сами', 'самые горячие: выбрали время разбора, а с ними еще никто не говорил; позвони до встречи',
+        d.hot.map(function (p) { return msRow(p, 'hot', cc); }).join(''), 'Все, кто записался, уже на связи.') +
       msSection('respond', 'Ответить сейчас', 'твои лиды, с которыми еще никто не связался; позвони, не дозвонился — напиши в диалог',
         d.respond.map(function (p) { return msRow(p, 'respond', cc); }).join(''), 'Новых без ответа нет.') +
       msSection('meets', 'Встречи', 'консультации твоих лидов на ближайшие дни; за сутки подтверди, за час напомни',
         meets, 'Встреч пока нет. Записывай в свои окна в «Расписании».') +
+      msSection('after', 'После встречи: отметить итог', 'разбор прошел, а в карточке итога нет; поставь договор, «думает» или отказ',
+        d.after.map(function (p) { return msRow(p, 'after', cc); }).join(''), 'По всем встречам итог отмечен.') +
       msSection('follow', 'Дожать до записи', 'на связи, но не записались; пять касаний за 14 дней: +1, +3, +7, +14 день',
         d.follow.map(function (p) { return msRow(p, 'follow', cc); }).join(''), 'Всех довел до записи или до отказа.') +
       msSection('pool', 'Свободные лиды', d.pool_total > d.pool.length
-          ? 'никто не взял, показаны ' + d.pool.length + ' самых свежих из ' + d.pool_total : 'никто не взял за неделю; взял — лид твой',
+          ? 'никто не взял; сверху теплые с эфира, показаны ' + d.pool.length + ' из ' + d.pool_total
+          : 'никто не взял; сверху теплые с эфира, взял — лид твой',
         d.pool.map(function (p) { return msRow(p, 'pool', cc); }).join(''), 'Свободных нет.') +
       msSection('calls', 'Звонки сегодня', 'твои звонки через звонилку CRM', calls, 'Сегодня звонков еще не было.') +
       '</div>';
@@ -50953,14 +50993,28 @@
       '</div>';
     }
 
+    var src = (crm.overrides || {}).src || '';
+    var srcOpts = SRC_PICKS.map(function (v) {
+      return '<option value="' + esc(v) + '"' + (v === src ? ' selected' : '') + '>' + esc(v) + '</option>';
+    }).join('');
     return '<div class="own">' +
       '<div class="own-p"><span class="ql-l">Ведет</span>' +
         '<select class="tm-sel" data-owner="1">' +
           '<option value="">не назначен</option>' + opts +
         '</select></div>' +
+      '<div class="own-p"><span class="ql-l">Откуда пришел</span>' +
+        '<select class="tm-sel' + (src ? '' : ' auto') + '" data-src="1" title="Выбранное здесь сильнее метки: так человек считается в «Продажах» и «Деньгах»">' +
+          '<option value="">как в метке</option>' + srcOpts +
+        '</select></div>' +
       right +
     '</div>';
   }
+
+  /* «Откуда пришел» руками (Павел 09.11.2026: оплата «без метки», а поставить ее было
+     негде). Список тот же, что на сервере (SOURCE_PICKS в sales_board.py): чужое значение
+     сервер не примет. */
+  var SRC_PICKS = ['Реклама ВК', 'Бот', 'Эфир', 'Партнеры', 'Сарафан', 'Соцсети', 'Сайт',
+    'Повторный клиент', 'Другое'];
 
   function buildQual(ctx) {
     var crm = ctx.crm || {};
@@ -53770,6 +53824,12 @@
           if (state.drawerId === id) renderDrawer(true);
           renderView();
         }, function () { ownSel.disabled = false; showToast('Не сохранилось — проверь сеть'); });
+      });
+      var srcSel = ownHost.querySelector('select[data-src]');
+      if (srcSel) srcSel.addEventListener('change', function () {
+        var ov = Object.assign({}, ((findLead(id) || {}).crm || {}).overrides || {}, { src: srcSel.value });
+        patch(id, { overrides: ov });
+        showToast(srcSel.value ? 'Канал: ' + srcSel.value : 'Канал снова по метке');
       });
       var touchBtn = ownHost.querySelector('[data-touch]');
       if (touchBtn) touchBtn.addEventListener('click', function () {
