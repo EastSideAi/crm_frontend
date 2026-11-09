@@ -12459,9 +12459,11 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(90px, .7fr)) 76px 96px; }
 /* Просрочка: тихая красная цифра рядом с числом шага и своя колонка в конце строки.
    Одна красная кнопка в шапке ведет ко всем просроченным сразу. */
-.sb-cell i.sb-wl { min-width: 0; font-style: normal; font: 700 11.5px 'Manrope', sans-serif; color: var(--red-ink);
+.sb-cell .sb-wl { min-width: 0; border: 0; cursor: pointer; font: 700 11.5px 'Manrope', sans-serif; color: var(--red-ink);
   background: var(--red-soft); border-radius: var(--r-pill); padding: 1px 7px; margin-left: 4px;
-  font-variant-numeric: tabular-nums; }
+  font-variant-numeric: tabular-nums; transition: background .15s, color .15s; }
+.sb-cell .sb-wl:hover, .sb-cell .sb-wl.on { background: var(--red-ink); color: #fff; }
+.sb-cell .sb-wl:focus-visible { outline: 2px solid var(--red-ink); outline-offset: 2px; }
 .sb-wlc .sb-n:not(.zero) { color: var(--red-ink); }
 .sb-wlc .sb-n:not(.zero):hover, .sb-wlc .sb-n.on { background: var(--red-soft); color: var(--red-ink); }
 .sec-head > .qchip.sb-wlate { color: var(--red-ink); background: var(--red-soft); border-color: transparent; }
@@ -12694,7 +12696,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
    шести шагов: где ты по дню, видно одним взглядом; шаг с людьми, которые ждут
    ответа, единственный горит красным. Ниже те же шаги списками людей. */
 .ms .ms-head { margin-bottom: 0; }
-.ms-plan { display: grid; grid-template-columns: repeat(6, 1fr); padding: 6px; gap: 2px; }
+.ms-plan { display: grid; grid-template-columns: repeat(8, 1fr); padding: 6px; gap: 2px; }
 .ms-step { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 14px 14px;
   border: 0; background: none; border-radius: var(--r-lg); cursor: pointer; font: inherit;
   transition: background .14s var(--ease); min-width: 0; }
@@ -12711,7 +12713,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .ms-step.hot .ms-st small { color: var(--red-ink); font-weight: 600; }
 .ms-sec .pf-sec, .ms-closebox .pf-sec { padding: 20px 24px 14px; }
 .ms-list { border-top: 1px solid var(--line); }
-.ms-row { display: grid; grid-template-columns: minmax(180px, 1fr) 190px 270px; gap: 14px; align-items: center;
+.ms-row { display: grid; grid-template-columns: minmax(180px, 1fr) 190px minmax(270px, auto); gap: 14px; align-items: center;
   padding: 10px 24px; min-height: 58px; border-bottom: 1px solid var(--line); position: relative;
   transition: background .14s var(--ease); }
 .ms-row:last-child { border-bottom: none; }
@@ -12727,8 +12729,11 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sev.ms-late { color: var(--red-ink); background: var(--red-soft); }
 .sev.ms-ok { color: var(--ink-2); background: var(--fill); }
 .sev.ms-when { color: var(--blue-d); background: var(--blue-tint); }
+.ms-warm { font-weight: 600; color: var(--ink-2); }
+.ms-warm.w2 { color: var(--blue-d); }
 .ms-row > .sev { justify-self: end; }
 .ms-acts { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.ms-acts .bp { white-space: nowrap; }
 .ms-call { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .ms-nocall { padding: 14px 20px; font-size: 13px; color: var(--amber-ink); background: var(--amber-soft);
   border-color: transparent; line-height: 1.5; }
@@ -12745,6 +12750,9 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .ms-sum b { display: block; font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
 .ms-cbtns { display: flex; gap: 10px; margin-top: 14px !important; }
 
+@media (max-width: 1360px) {
+  .ms-plan { grid-template-columns: repeat(4, 1fr); }
+}
 @media (max-width: 960px) {
   .ms-plan { grid-template-columns: repeat(3, 1fr); }
 }
@@ -14869,3 +14877,10 @@ video.cs-media { background: #000; }
 /* Переход «Самозанятые ⇄ Моя работа» у руководителя-исполнителя: отдельно от пунктов
    раздела, потому что ведет в другое пространство, а не на экран внутри. */
 .navi.nav-sw { margin-top: 14px; }
+
+/* Вердикт отрезка на «Продажах» — кнопка к людям (Павел 09.11.2026). */
+.sb-vbtn { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
+.sb-vbtn:hover, .sb-vbtn.on { text-decoration-color: currentColor; }
+.sb-vbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
