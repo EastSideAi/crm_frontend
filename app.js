@@ -35965,6 +35965,7 @@
     if (!laLaunchCur().fact) return {};
     if (srcId === 'vk') return laAdsFact() || {};
     if (srcId === 'warm') return laWarmFact() || {};
+    if (srcId === 'total') return laTotalFact();
     var f = {}, w = (d.warm || {}).fact || {};
     Object.keys(w).forEach(function (k) { f[k] = w[k]; });
     if (srcId === 'total') {
@@ -35983,6 +35984,31 @@
     f.revPerReg = div(f.contractsAll, reg);
     f.first = w.cash != null && w.extRev != null ? w.cash - w.extRev : null;
     return f;
+  }
+  /* Факт листа «Всего» = тёплая база + трафик ВК по каждой строке (владелец,
+     9.11.2026). Строка, которой нет хотя бы у одного листа, — прочерк: половина
+     суммы читалась бы как вся. Доли — от сумм, как в плане. */
+  function laTotalFact() {
+    var w = laWarmFact(), k = laAdsFact();
+    if (!w || !k) return {};
+    var add = function (a, b) { return a == null || b == null ? null : a + b; };
+    var div = function (x, y) { return y && x != null ? x / y : null; };
+    var o = {};
+    ['clean', 'chan', 'e1', 'e2', 'live', 'rec', 'watched', 'diagStart', 'diagDone',
+     'req', 'held', 'sales', 'contracts', 'contractsAll', 'cash', 'extRev'
+    ].forEach(function (f) { o[f] = add(w[f], k[f]); });
+    o.reg = add(w.regGoal, k.reg);
+    o.warmReg = w.regGoal;
+    o.paidReg = k.reg;
+    o.budget = k.budget;
+    o.crClean = div(o.clean, o.reg);
+    o.crWatch = div(o.watched, o.clean);
+    o.crReq = div(o.req, o.watched);
+    o.crHeld = div(o.held, o.req);
+    o.crSale = div(o.sales, o.held);
+    o.crReg = div(o.sales, o.reg);
+    o.revPerReg = div(o.contractsAll, o.reg);
+    return o;
   }
   /* Факт листа «Трафик ВК» — живые цифры вкладки «Реклама» за весь запуск, с
      19.10 (владелец, 5.11.2026: «мы полностью отработали рекламу, подтяни факт»).
@@ -36140,7 +36166,7 @@
       : { title: d[src].title, note: d[src].note };
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
-      (mon ? '' : '<div class="th r">' + esc(!lch.fact ? 'факт' : src === 'vk' || src === 'warm' ? 'факт 28–29.10' : d.factLabel) + '</div>') + '</div>';
+      (mon ? '' : '<div class="th r">' + esc(!lch.fact ? 'факт' : 'факт 28–29.10') + '</div>') + '</div>';
     var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
