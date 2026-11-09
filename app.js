@@ -34740,6 +34740,19 @@
     return '?' + q.join('&');
   }
 
+  /* Двери регистрации под плашкой «Регистрации» (владелец, 9.11.2026): реклама,
+     соцсети, база бота. Каждая цифра открывает своих людей, сумма — плашка. */
+  var LAUNCH_SPLIT = [['ads', 'с рекламы', 'Регистрации с рекламы'],
+                      ['social', 'из соцсетей', 'Регистрации из соцсетей'],
+                      ['base', 'из базы бота', 'Регистрации из базы бота']];
+  function launchSplitSub(sp) {
+    return 'из них ' + LAUNCH_SPLIT.map(function (d) {
+      return '<span class="go-sub" data-lsplit="' + d[0] + '" data-lsplitn="' + (sp[d[0]] || 0) +
+        '" role="button" tabindex="0" title="Показать этих людей поименно">' +
+        d[1] + ' ' + (sp[d[0]] || 0) + '</span>';
+    }).join(' · ');
+  }
+
   function launchPeopleOpen(slug, step, launchTitle, plate, ot, ownTitle) {
     state._lpPeople = {
       kind: 'step', id: 'step:' + step.key + (ot ? ':' + ot : ''),
@@ -36755,7 +36768,8 @@
              (221 из 624), и список спорил бы с цифрой над ним. */
           step: 'reach', stepTitle: 'Регистрации', stepPlate: regShown,
           sub: regInPeriod == null
-            ? 'бесплатно ' + Math.max(0, regShown - reg.vip) + ' · платно ' + reg.vip
+            ? (cur.reach_split ? launchSplitSub(cur.reach_split) + '<br>' : '') +
+              'бесплатно ' + Math.max(0, regShown - reg.vip) + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total,
           pct: launchPct(regShown, cur.pages && cur.pages.users, 'от тех, кто видел страницу') },
         /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
@@ -36914,6 +36928,19 @@
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lsplit]'), function (n) {
+      var openIt = function (e) {
+        e.stopPropagation();
+        var k = n.getAttribute('data-lsplit');
+        var d = LAUNCH_SPLIT.filter(function (x) { return x[0] === k; })[0];
+        launchPeopleOpen(cur.slug, { key: 'reach_' + k, title: d[2],
+          people: parseInt(n.getAttribute('data-lsplitn'), 10) || 0 }, cur.title, n, '', true);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(e); }
       });
     });
     /* Плашка по меткам и цифра в её подписи → свой список. Подпись лежит внутри
