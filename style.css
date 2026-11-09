@@ -11889,6 +11889,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
              background: var(--fill); color: var(--ink-2); }
 .cdup-hn { margin: 2px 0 10px; }
 .cdup-more { width: 100%; margin-bottom: 14px; }
+/* Что связало карточки: пара имен и общий признак, признак — главное в строке. */
+.cdup-why { display: flex; flex-direction: column; gap: 4px; margin: 2px 0 12px; padding: 10px 12px;
+  background: var(--blue-tint); border-radius: 10px; }
+.cdup-why-r { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 13px;
+  line-height: 1.4; color: var(--ink-2); min-width: 0; }
+.cdup-why-r b { color: var(--navy); font-weight: 600; overflow-wrap: anywhere; }
 /* Карточки группы рядом, а не столбиком: решение — это сравнение двух-трех карточек,
    и глазу проще, когда они стоят бок о бок. На телефоне сетка сама уходит в столбец. */
 .cdup-g .idup-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }

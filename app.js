@@ -26982,6 +26982,11 @@
           '<button class="qchip fpt-right" id="fpt-rate">изменить</button></div></div>';
 
     var ruleLabel = { percent: 'процент от оплат', fixed: 'фикс за клиента' };
+    // percent и fixed — машинные имена правил, остальное бэкенд присылает уже
+    // человеческим текстом («ниже порога», «не грант»): показываем как есть. Иначе такой
+    // клиент оставался вовсе без подписи, а чип врал «нет оплат» — и оператор шёл искать
+    // оплату, которая на самом деле есть.
+    var ruleText = function (r) { return r ? (ruleLabel[r] || r) : ''; };
     var clientRow = function (c) {
       // Имя клиента — ссылка в его карточку (case_id бэкенд отдаёт только под cap
       // clients, тот же гейт, что у строки дохода). Без case_id — обычный текст.
@@ -27009,7 +27014,7 @@
 
       var sub = c.product_kind === 'other'
         ? 'не грант · партнёрские не платим'
-        : [c.rule ? ruleLabel[c.rule] : '',
+        : [ruleText(c.rule),
            (c.rule === 'percent' && c.gross) ? 'с ' + finRub(c.gross) : '',
            c.suggested ? 'распознано: грант' : '']
           .filter(Boolean).join(' · ');
@@ -27032,7 +27037,8 @@
             : (c.product_kind === 'other'
                 ? '<button class="qchip fpt-pk-min fpt-pk" data-pk="grant" data-sid="' +
                     esc(c.session_id) + '">отметить грантом</button>'
-                : '<span class="fst wait">нет оплат</span>'));
+                : '<span class="fst wait">' +
+                    esc(!c.rule || ruleLabel[c.rule] ? 'нет оплат' : c.rule) + '</span>'));
       return '<div class="trow fpt-crow' +
         ((c.paid || c.product_kind === 'other') ? ' muted' : '') + '">' +
         '<span class="fo-what">' + nm +
@@ -40738,11 +40744,27 @@
     '</div>';
   }
 
+  // Что связало карточки, попарно: группа транзитивная (А с Б по ВК, Б с В по
+  // телеграму), и одна причина на группу не объясняет, как сюда попал третий.
+  function cdupLinks(g) {
+    var links = g.links || [];
+    if (!links.length) return '';
+    var nm = {};
+    g.cards.forEach(function (c, i) { nm[c.id] = c.name || ('карточка ' + (i + 1)); });
+    return '<div class="cdup-why">' + links.map(function (x) {
+      var who = (x.cards || []).map(function (id) { return nm[id] || ''; });
+      return '<div class="cdup-why-r"><b>' + esc(x.what) + '</b><span>' +
+        esc(who.slice(0, -1).join(', ') + (who.length > 1 ? ' и ' : '') + who[who.length - 1]) +
+        '</span></div>';
+    }).join('') + '</div>';
+  }
+
   function cdupGroup(g) {
     var lead = cdupLead(g);
     return '<div class="card idup-g cdup-g">' +
       '<div class="idup-h"><b>' + g.cards.length + ' ' + plural(g.cards.length, 'карточка', 'карточки', 'карточек') + '</b>' +
         '<div class="idup-k">' + esc(g.reason || '') + ' · нашел ' + esc(idupWhen(g.found_at)) + '</div></div>' +
+      cdupLinks(g) +
       '<div class="idup-list">' + g.cards.map(function (c) { return cdupCard(c, g); }).join('') + '</div>' +
       '<div class="idup-a">' +
         '<button class="bp" data-cmerge="' + esc(g.key) + '"' + (lead ? '' : ' disabled') + '>' +
