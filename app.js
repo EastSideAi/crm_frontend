@@ -35852,9 +35852,26 @@
       revPerReg: div(money, n.reg),
     };
   }
-  /* Факт листа «Тёплая база» — зарегистрировавшиеся на интенсив формой НЕ с
-     рекламы, живьем (владелец, 5.11.2026). Рассылки и соцсети — по метке
-     utm_medium. Лист «Всего» пока на выгрузке сентября: его подтянем отдельно. */
+  /* Факт листа «Тёплая база» = цифры «Запусков» минус цифры «Рекламы» (владелец,
+     9.11.2026: «поставь цифры, которые получатся во вкладке запуски»). Строки,
+     которых на «Запусках» нет, — прочерк. Из соцсетей — формы с меткой соцсетей,
+     остальное тёплое — рассылки, в том числе люди по личной ссылке из бота. */
+  function laLaunchNow() {
+    var a = state._laLaunch;
+    if (!a) {
+      if (!state._laLaunchLoading) {
+        state._laLaunchLoading = true;
+        api('/admin/api/marketing/launch').then(function (r) {
+          state._laLaunch = (r && r.launches && r.launches[0]) || 'none';
+        }).catch(function () { state._laLaunch = 'none'; }).then(function () {
+          state._laLaunchLoading = false;
+          if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+        });
+      }
+      return null;
+    }
+    return a === 'none' ? null : a;
+  }
   function laWarmFact() {
     var a = state._laWarm;
     if (!a) {
@@ -35867,23 +35884,29 @@
           if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
         });
       }
-      return null;
     }
-    if (a === 'none') return null;
+    var cur = laLaunchNow(), ads = laAdsFact();
+    if (!a || a === 'none' || !cur || !ads) return null;
+    var minus = function (x, y) { return x == null || y == null ? null : Math.max(0, x - y); };
     var div = function (x, y) { return y && x != null ? x / y : null; };
-    var money = (a.uch_rub || 0) + (a.sup_rub || 0);
+    var reach = ((cur.path || []).filter(function (s) { return s.key === 'reach'; })[0] || {}).people;
+    var v = cur.viewers, pay = cur.payment || {}, tag = (cur.diagcons || {}).tag || {};
+    var pr = pay.product || {}, cr = pay.crm || {}, ld = pay.ledger || {};
+    var supN = (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
+    var supRub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
+    var reg = minus(reach, ads.reg);
+    var ext = minus(pay.paid, ads.ext), extRev = minus(pay.paid_rub, ads.extRev);
+    var sales = minus(supN, ads.sales), contracts = minus(supRub, ads.contracts);
+    var money = (extRev || 0) + (contracts || 0);
     return {
-      regGoal: a.reg, amb: 0, mail: a.mail, social: a.social,
-      ext: a.uch, crExt: div(a.uch, a.reg), extRev: a.uch_rub,
-      clean: a.to_bot, crClean: div(a.to_bot, a.reg),
-      chan: a.chan, crChan: div(a.chan, a.to_bot),
-      e1: a.e1, crE1: div(a.e1, a.to_bot), e2: a.e2, crE2: div(a.e2, a.to_bot),
-      live: a.live, rec: a.rec, crRec: div(a.rec, a.to_bot), watched: a.watched,
-      diagStart: a.anketa, crDiagStart: div(a.anketa, a.to_bot),
-      diagDone: a.diag, crDiagDone: div(a.diag, a.anketa),
-      btn: a.diag_click, req: a.cons, crReq: div(a.cons, a.watched),
-      sales: a.sup, crReg: div(a.sup, a.reg), contracts: a.sup_rub,
-      contractsAll: money, cash: money, revPerReg: div(money, a.reg),
+      regGoal: reg, amb: 0, social: a.social, mail: minus(reg, a.social),
+      ext: ext, crExt: div(ext, reg), extRev: extRev,
+      chan: minus((cur.in_channel || {}).total, ads.chan),
+      live: v ? minus((v.known.viewers || 0) + (v.anon.viewers || 0), ads.live) : null,
+      diagStart: minus(tag.anketa, ads.diagStart),
+      req: minus(tag.cons, ads.req),
+      sales: sales, crReg: div(sales, reg), contracts: contracts,
+      contractsAll: money, cash: money, revPerReg: div(money, reg),
     };
   }
   function laFactVal(srcId, id) {
