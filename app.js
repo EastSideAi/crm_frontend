@@ -37618,17 +37618,20 @@
     }
     var cur = window.CROSSCUT.week(cc, o.cur[0], o.cur[1]), prv = window.CROSSCUT.week(cc, o.prv[0], o.prv[1]);
     var plan = o.plan || {}, full = o.full || {};
+    // Ольга 11.11.2026: квалифицированный лид — прошел разбор шансов на платформе или тест
+    // в боте до окна записи к тьютору. Человек из бота с карточкой пока не связан, поэтому
+    // «всего» это сумма двух дверей: прошедший обе посчитается дважды, и подпись это говорит.
+    [cur, prv].forEach(function (x) { x.qual = (x.diagPlat || 0) + (x.diagDone || 0); });
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
-      ['Регистрации на интенсив', 'любой интенсив, по дате регистрации', 'regs'],
-      ['Разбор на платформе', 'анкета и разбор шансов на сайте', 'diagPlat'],
-      ['Диагностика в боте', 'вошли в воронку теста', 'diagStart'],
-      ['Записались к диагносту', 'выбрали время разбора', 'signed'],
+      ['Квалифицированные лиды', 'платформа плюс бот; прошедший оба пока считается дважды', 'qual'],
+      ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'diagPlat', null, false, true],
+      ['Диагностика в боте', 'из них: прошли тест до окна записи к тьютору', 'diagDone', null, false, true],
+      ['Записались к тьютору', 'выбрали время разбора', 'signed'],
       ['Разбор состоялся', 'встреча прошла', 'meeting'],
       ['Счета', 'выставлено', 'invN'],
       ['Оплатили', 'людей', 'payers', 'payments'],
-      ['Деньги', 'пришло на счет', 'revenue', 'revenue', true],
-      ['Расход на рекламу', 'внесен в CRM', 'spend', null, true]
+      ['Деньги', 'пришло на счет', 'revenue', 'revenue', true]
     ];
     var anyPlan = rows.some(function (r) { return r[3] && plan[r[3]] != null; });
     return box + '<div class="mg-tbl' + (anyPlan ? '' : ' noplan') + (o.pf ? ' pf' : '') + '">' +
@@ -37646,7 +37649,7 @@
         var pl = pv != null && pv > 0 ? (c >= pv ? 'ok' : c >= pv * .7 ? 'risk' : 'miss') : '';
         // Виталий 02.11.2026: «меня интересует отношение к плановым показателям» — процент рядом с цифрой.
         var pct = function (v) { return Math.round(c / v * 100) + '%'; };
-        return '<div class="mg-tr"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
+        return '<div class="mg-tr' + (r[5] ? ' sub' : '') + '"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
           (anyPlan ? '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
             (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + (fv > 0 ? ' · ' + pct(fv) : '') + '</small>' : '') : '') + '</span>' : '') +
           '<span class="r num big ' + pl + '">' + f(c) +
