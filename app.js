@@ -35776,11 +35776,14 @@
       var key = srcId + '.' + plan + '.' + k;
       out[k] = ed[key] != null ? ed[key] : base[k];
     });
-    /* соцсети в тёплой базе вводят руками; пока не трогали — остаток от цели */
+    /* Ольга 11.11.2026: цель по регистрациям тёплой базы — сумма каналов
+       (амбассадоры + рассылки + соцсети), руками ее не вводят. Соцсети, пока их
+       не трогали, — остаток от цели файла, поэтому без правок цифры прежние */
     if (srcId === 'warm') {
       var sk = srcId + '.' + plan + '.social';
       out.social = ed[sk] != null ? ed[sk] : base.social != null ? base.social :
-        laNum(out.regGoal) - laNum(out.amb) - laNum(out.mail);
+        laNum(base.regGoal) - laNum(base.amb) - laNum(base.mail);
+      out.regGoal = laNum(out.amb) + laNum(out.mail) + laNum(out.social);
     }
     return out;
   }
@@ -35865,6 +35868,7 @@
       o.payback34 = o.budget ? o.cash34 / o.budget : 0;
     } else {
       o = laFunnel(v, laNum(v.regGoal));
+      o.regGoal = o.reg;
       o.amb = laNum(v.amb);
       o.mail = laNum(v.mail);
       o.social = laNum(v.social);
@@ -35983,7 +35987,7 @@
           { id: 'ext', l: 'Взяли расширенный доступ 690 ₽, шт' },
           { id: 'extRev', l: 'Выручка с расширенных доступов, ₽', u: 'rub' } ] }
       : { t: '1. Регистрации: цель, каналы и трафик на страницу', rows: [
-          { id: 'regGoal', l: 'Регистраций, цель', k: 'in', step: 10 },
+          { id: 'regGoal', l: 'Регистраций, цель' },
           { id: 'amb', l: 'Амбассадоры и партнёры, регистраций', k: 'in', step: 5 },
           { id: 'mail', l: 'Регистраций из рассылок по базе', k: 'in' },
           { id: 'social', l: 'Регистраций из соцсетей', k: 'in' },
