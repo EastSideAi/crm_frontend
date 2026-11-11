@@ -11864,6 +11864,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .idup-list { display: grid; gap: 10px; margin-top: 14px; }
 .idup-c { border: 1px solid var(--line-2); border-radius: var(--r-lg); padding: 12px 14px; }
 .idup-c.main { border-color: var(--blue); background: var(--blue-tint); }
+.idup-main.par { color: var(--amber-ink); }
 .idup-c.off { opacity: .5; }
 .idup-c-t { display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
            font-size: 15px; font-weight: 700; }
