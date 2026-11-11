@@ -395,6 +395,7 @@
       leads: '<path d="M13 4.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/><path d="M3.5 16.5c0-3 2.9-5 6.5-5s6.5 2 6.5 5"/>',
       path: '<path d="M3 16.5c4.5 0 4-5.5 7-6.5s3.5-4.5 7-4.5"/><circle cx="3" cy="16.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17" cy="5.5" r="1.5" fill="currentColor" stroke="none"/>',
       csv: '<path d="M10 3v9M6 9l4 4 4-4"/><path d="M3.5 16.5h13"/>',
+      chev: '<path d="M6 8l4 4 4-4"/>',
       exit: '<path d="M12 3.5H6a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h6"/><path d="M9 10h8M14.5 7l3 3-3 3"/>',
       refresh: '<path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6"/><path d="M16.5 2.5v3.5h-3.5"/>',
       go: '<path d="M7.5 5l5 5-5 5"/>',
@@ -3742,14 +3743,16 @@
          оператора, а не для банка. */
       var pr = PY.reg;
       var stuck = pr ? pyRows('waiting').length : 0;
+      // Считаем платежи, а не задания: задания месячного акта уходят одним платежом.
+      var pyN = pr ? pyRows('ready').filter(function (g) { return g.ok; }).length : 0;
       var phrase8;
       if (!pr) phrase8 = 'Считаю реестр…';
       else if (PY.err) phrase8 = esc(PY.err);
       else if (!pr.ready_count) phrase8 = 'К выплате сейчас ничего нет. Задание попадает в реестр, ' +
         'когда работа принята и акт подписан обеими сторонами.' +
         (stuck ? ' Ждут документов: <b>' + stuck + '</b>.' : '');
-      else phrase8 = 'Готово к выплате <b>' + pr.ready_count + ' ' +
-        plural(pr.ready_count, 'задание', 'задания', 'заданий') + '</b> на <b>' +
+      else phrase8 = 'Готово к выплате <b>' + pyN + ' ' +
+        plural(pyN, 'платеж', 'платежа', 'платежей') + '</b> на <b>' +
         ctMoney(pr.ready_amount) + ' ₽</b>.' +
         (stuck ? ' Еще <b>' + stuck + '</b> ждут документов.' : '');
       html = '<div><h2>Выплаты</h2>' +
@@ -20549,7 +20552,7 @@
      (шесть условий ТЗ 12 плюс блокировка человека) — экран их только показывает.
      Считать проверки здесь нельзя: посчитанное дважды правило разъезжается, и всегда в
      сторону «на экране зеленое». */
-  var PY = { reg: null, hist: null, err: '', tab: 'ready', busy: false };
+  var PY = { reg: null, hist: null, err: '', tab: 'ready', busy: false, open: {} };
   var PY_TABS = [['ready', 'К оплате'], ['waiting', 'Ждут документов'], ['hist', 'История']];
 
   function pyLoad(cb) {
@@ -20579,9 +20582,53 @@
        по счету). По имени статуса делить тут нельзя — это была бы вторая копия правила,
        и «результат принят» у предпринимателя висел бы во «Ждут документов» навсегда. */
     var rows = (PY.reg && PY.reg.rows) || [];
-    return rows.filter(function (r) {
+    return pyGroup(rows.filter(function (r) {
       return tab === 'ready' ? !!r.ready_stage : !r.ready_stage;
+    }));
+  }
+  /* Задания одного месячного акта — одна строка реестра. Платят акт целиком одним
+     платежом и одним чеком (сервер проводит все его строки разом), поэтому три строки
+     по 19 500, 4 000 и 1 500 вместо одной на 25 000 читались как три выплаты. Строка
+     акта готова к оплате, только когда готовы все его задания: так же решает и сервер. */
+  function pyGroup(rows) {
+    var out = [], byMonth = {};
+    rows.forEach(function (r) {
+      if (!r.month) { out.push(r); return; }
+      var g = byMonth[r.month.id];
+      if (!g) {
+        g = byMonth[r.month.id] = {
+          group: true, key: 'm' + r.month.id, month: r.month, contractor: r.contractor,
+          rows: [], ok: true, blockers: [], task_id: r.task_id, status_title: r.status_title,
+          ready_stage: r.ready_stage, amount: r.month.amount,
+          act: { number: r.month.number, label: r.month.label },
+        };
+        out.push(g);
+      }
+      g.rows.push(r);
+      if (!r.ok) {
+        g.ok = false;
+        g.status_title = r.status_title;
+        r.blockers.forEach(function (b) { if (g.blockers.indexOf(b) === -1) g.blockers.push(b); });
+      }
     });
+    return out;
+  }
+  /* История — так же, по платежу: выплаты одного акта ушли одной платежкой. */
+  function pyHistGroup(list) {
+    var out = [], byPay = {};
+    list.forEach(function (p) {
+      if (!p.payment_id) { out.push(p); return; }
+      var g = byPay[p.payment_id];
+      if (!g) {
+        g = byPay[p.payment_id] = { group: true, key: 'p' + p.payment_id, rows: [],
+                                    amount: 0, ct_name: p.ct_name, paid_at: p.paid_at,
+                                    reference: p.reference, created_by: p.created_by };
+        out.push(g);
+      }
+      g.rows.push(p);
+      if (p.status !== 'cancelled') g.amount += p.amount || 0;
+    });
+    return out.map(function (g) { return g.group && g.rows.length === 1 ? g.rows[0] : g; });
   }
   /* Проверки в строке: пройденные молчат, непройденные объясняют себя. Семь зеленых
      галочек в каждой строке — это шум, из которого не видно единственную красную. */
@@ -20621,6 +20668,52 @@
         ? '<button class="bp sm" data-pypay="' + esc(r.task_id) + '">Провести выплату</button>'
         : '<span class="cz-fine">' + esc(r.status_title) + '</span>') + '</span>' +
       '</div>';
+  }
+  /* Строка месячного акта: одна сумма, одна кнопка. Задания раскрываются по клику —
+     в реестре они нужны, только когда что-то не сходится. */
+  function pyRegGroupRow(g) {
+    var c = g.contractor || {}, open = !!PY.open[g.key], n = g.rows.length;
+    return '<div class="trow py-grid py-grp' + (open ? ' on' : '') + '" data-pyg="' + esc(g.key) + '">' +
+      '<span class="py-who"><b>' + esc(c.full_name || '—') + '</b>' +
+        (c.job ? '<span class="py-job">' + esc(c.job) + '</span>' : '') + '</span>' +
+      '<span class="py-task"><span>Акт № ' + g.month.number + ' за ' + esc(g.month.label) + '</span>' +
+        '<span class="py-act py-tog">' + n + ' ' + plural(n, 'задание', 'задания', 'заданий') +
+          ' ' + ic('chev', 11) + '</span></span>' +
+      '<span class="py-sum"><b>' + ctMoney(g.amount) + ' ₽</b>' +
+        (c.pay_account ? '<span class="py-acc num">' + esc(c.pay_account) + '</span>' : '') +
+        '</span>' +
+      '<span class="py-check">' + pyChecks(g) + '</span>' +
+      '<span class="py-do">' + (g.ok
+        ? '<button class="bp sm" data-pypay="' + esc(g.task_id) + '">Провести выплату</button>'
+        : '<span class="cz-fine">' + esc(g.status_title) + '</span>') + '</span>' +
+      '</div>' +
+      (open ? g.rows.map(function (r) {
+        return '<div class="trow py-grid py-sub" data-pyt="' + esc(r.task_id) + '">' +
+          '<span></span>' +
+          '<span class="py-task"><span class="ct-no">№' + r.task_number + '</span>' + esc(r.title) + '</span>' +
+          '<span class="py-sum"><span class="num">' + ctMoney(r.amount) + ' ₽</span></span>' +
+          '<span></span><span></span></div>';
+      }).join('') : '');
+  }
+  function pyHistGroupRow(g) {
+    var open = !!PY.open[g.key], live = g.rows.filter(function (p) { return p.status !== 'cancelled'; });
+    var n = g.rows.length, off = !live.length;
+    return '<div class="trow py-grid py-hist py-grp' + (off ? ' py-off' : '') + (open ? ' on' : '') +
+        '" data-pyg="' + esc(g.key) + '">' +
+      '<span class="py-who"><b>' + esc(g.ct_name || '—') + '</b>' +
+        '<span class="py-job">Одним платежом за ' + n + ' ' + plural(n, 'задание', 'задания', 'заданий') + '</span></span>' +
+      '<span class="py-task"><span class="py-act py-tog">' + (open ? 'Свернуть' : 'Показать задания') + ' ' +
+          ic('chev', 11) + '</span>' +
+        (g.reference ? '<span class="py-act">Платежка ' + esc(g.reference) + '</span>' : '') +
+        '</span>' +
+      '<span class="py-sum"><b>' + ctMoney(g.amount) + ' ₽</b>' +
+        '<span class="py-acc">' + esc(czDate(g.paid_at)) + '</span></span>' +
+      '<span class="py-check">' + (off
+        ? '<span class="py-bad"><span class="py-b1">Отменена</span></span>'
+        : '<span class="py-ok">' + ic('check', 12) + 'Проведена' +
+          (g.created_by ? ' · ' + esc(g.created_by) : '') + '</span>') + '</span>' +
+      '<span class="py-do"></span></div>' +
+      (open ? g.rows.map(function (p) { return pyHistRow(p).replace('trow py-grid py-hist', 'trow py-grid py-hist py-sub'); }).join('') : '');
   }
   function pyHistRow(p) {
     var t = p.task || {};
@@ -20891,7 +20984,7 @@
     if (PY.tab === 'hist' && PY.hist === null) { pyHist(); }
     var reg = PY.reg;
     var counts = { ready: pyRows('ready').length, waiting: pyRows('waiting').length,
-                   hist: PY.hist ? PY.hist.length : undefined };
+                   hist: PY.hist ? pyHistGroup(PY.hist).length : undefined };
     var tabs = PY_TABS.map(function (t) {
       var n = counts[t[0]];
       return '<button class="qchip' + (PY.tab === t[0] ? ' on' : '') + '" data-pytab="' +
@@ -20906,7 +20999,7 @@
         '<span class="th">Сумма и дата</span><span class="th">Состояние</span><span class="th"></span>';
       body = !h.length
         ? '<div class="empty">Выплат пока не было. Первая появится здесь сразу после того, как проведете ее по подписанному акту.</div>'
-        : h.map(pyHistRow).join('');
+        : pyHistGroup(h).map(function (p) { return p.group ? pyHistGroupRow(p) : pyHistRow(p); }).join('');
     } else {
       var rows = pyRows(PY.tab);
       head = '<span class="th">Исполнитель</span><span class="th">За что</span>' +
@@ -20917,7 +21010,7 @@
           ? '<div class="empty">' + (PY.tab === 'ready'
               ? 'Платить пока нечего. Задание попадает сюда, когда работа принята и акт подписан обеими сторонами.'
               : 'Все принятые работы дошли до акта — ничего не застряло.') + '</div>'
-          : rows.map(pyRegRow).join(''));
+          : rows.map(function (r) { return r.group ? pyRegGroupRow(r) : pyRegRow(r); }).join(''));
     }
 
     view.innerHTML =
@@ -20943,6 +21036,14 @@
         openCt(r.getAttribute('data-pyt'));
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pyg]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('button')) return;
+        var k = r.getAttribute('data-pyg');
+        PY.open[k] = !PY.open[k];
+        renderAll();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-pypay]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -20965,7 +21066,10 @@
     var c = row.contractor || {};
     openSheet('Провести выплату',
       esc(c.full_name) + ' · ' + ctMoney(row.amount) + ' ₽ по акту № ' +
-        (row.act ? row.act.number : '—') + '. Полные реквизиты — в карточке исполнителя.', [
+        (row.act ? row.act.number + (row.act.label ? ' за ' + esc(row.act.label) : '') : '—') +
+        (row.group ? ', одним платежом за ' + row.rows.length + ' ' +
+          plural(row.rows.length, 'задание', 'задания', 'заданий') : '') +
+        '. Полные реквизиты — в карточке исполнителя.', [
       ['date', 'date', 'Дата платежа', new Date().toISOString().slice(0, 10)],
       ['ref', 'line', 'Номер платежного поручения', ''],
       ['note', 'text', 'Заметка (необязательно)', ''],

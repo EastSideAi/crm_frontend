@@ -8636,6 +8636,17 @@ button.fsp-via { cursor: pointer; }
 /* Отмененная выплата остается в истории, но гаснет: это уже не движение денег. */
 .py-off { opacity: .62; }
 .py-off .py-sum b { text-decoration: line-through; text-decoration-thickness: 1px; }
+/* Месячный акт: одна строка на платеж, задания под ней — тише и с отступом, чтобы
+   не читались как отдельные выплаты. */
+.py-grp { cursor: pointer; }
+.py-tog { display: inline-flex; align-items: center; gap: 4px; }
+.trow.py-grid.py-sub { min-height: 40px; padding-top: 6px; padding-bottom: 6px;
+  background: var(--fill); }
+.py-tog svg { transition: transform .18s ease; }
+.py-grp.on .py-tog svg { transform: rotate(180deg); }
+.py-sub .py-task { font-size: 12px; }
+.py-hist.py-sub .py-who b { display: none; }
+.py-sub .py-sum span { font-size: 12px; color: var(--ink-2); }
 
 @media (max-width: 1180px) {
   .trow.py-grid { grid-template-columns: 1fr 1.3fr 124px 160px !important; }
