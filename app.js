@@ -3124,7 +3124,7 @@
       // дважды. Цифра — группы интенсива плюс карточки CRM, которые ждут склейки или решения.
       var dupN = (state._dup && state._dup !== 'none' && state._dup.groups) ? state._dup.groups.length : 0;
       var cdc = (state._cdup && state._cdup !== 'none' && state._cdup.counts) || {};
-      dupN += (cdc.ask || 0) + (cdc.merge || 0);
+      dupN += (cdc.ask || 0) + (cdc.merge || 0) + (cdc.family || 0);
       var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
         (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).filter(segAvail).map(function (s) {
@@ -40808,9 +40808,11 @@
      Правила и данные — routers/dupes_journal.py в eastside-backend. */
   var CDUP_LEAD = {};   // ключ группы → выбранная главная
   var CDUP_MORE = {};   // раздел → показать все
+  var CDUP_PAR = {};    // ключ группы → карточка, которую выбрали родителем
   var CDUP_SHOW = 8;
   var CDUP_SECS = [
     ['ask', 'Нужно решение', 'сторож не уверен: разные имена, оплата не в главной или слишком много карточек на одном контакте'],
+    ['family', 'Родитель и ребенок', 'это разные люди на одном телефоне или почте: не склеиваем, а связываем карточки семьей, как кнопкой «Семья» в карточке'],
     ['merge', 'Сторож склеит сам', ''],
     ['siblings', 'Разные дети одной семьи', 'сторож их не трогает; если это все же один человек — склей руками']
   ];
@@ -40834,8 +40836,36 @@
     return CDUP_LEAD[g.key] || g.lead || null;
   }
 
+  // Кто в семейной группе родитель: выбор человека сильнее догадки сторожа. Отдает
+  // номер родителя в kin.people или null, если сторож не понял, а выбора еще нет.
+  function cdupParSide(g) {
+    var ppl = (g.kin && g.kin.people) || [];
+    var pick = CDUP_PAR[g.key];
+    if (pick) {
+      for (var i = 0; i < ppl.length; i++) if (ppl[i].indexOf(pick) >= 0) return i;
+    }
+    return g.kin && g.kin.parent != null ? g.kin.parent : null;
+  }
+
+  function cdupFamRole(c, g) {
+    var ppl = (g.kin && g.kin.people) || [], side = cdupParSide(g);
+    for (var i = 0; i < ppl.length; i++) {
+      if (ppl[i].indexOf(c.id) < 0) continue;
+      return { top: ppl[i][0] === c.id,
+               role: side == null ? '' : (i === side ? 'par' : 'kid') };
+    }
+    return { top: false, role: '' };
+  }
+
   function cdupCard(c, g) {
-    var isMain = cdupLead(g) === c.id;
+    var fam = g.verdict === 'family' ? cdupFamRole(c, g) : null;
+    var isMain = fam ? fam.role === 'kid' && fam.top : cdupLead(g) === c.id;
+    var mark = fam ? (fam.role === 'kid' ? '<span class="idup-main">ребенок</span>'
+                      : fam.role === 'par' ? '<span class="idup-main par">родитель</span>' : '')
+                   : (isMain ? '<span class="idup-main">главная</span>' : '');
+    var btn = fam ? (fam.top && fam.role !== 'par'
+                      ? '<button class="bp sm ghost" data-cpar="' + c.id + '" data-ck="' + esc(g.key) + '">Это родитель</button>' : '')
+                  : (isMain ? '' : '<button class="bp sm ghost" data-cmain="' + c.id + '" data-ck="' + esc(g.key) + '">Сделать главной</button>');
     var tags = [];
     if (c.paid) tags.push('<span class="idup-t money">есть оплата</span>');
     if (c.status === 'client') tags.push('<span class="idup-t open">клиент</span>');
@@ -40844,14 +40874,13 @@
     if (c.cabinet) tags.push('<span class="idup-t">есть кабинет</span>');
     var contact = [c.contact, c.email].filter(Boolean).join(' · ');
     return '<div class="idup-c' + (isMain ? ' main' : '') + '">' +
-      '<div class="idup-c-t">' + esc(c.name || 'Без имени') +
-        (isMain ? '<span class="idup-main">главная</span>' : '') + '</div>' +
+      '<div class="idup-c-t">' + esc(c.name || 'Без имени') + mark + '</div>' +
       (contact ? '<div class="idup-c-s">' + esc(contact) + '</div>' : '') +
       '<div class="idup-c-s">заведена ' + esc(idupWhen(c.created_at)) +
         (c.from ? ' · пришла: ' + esc(c.from) : '') + '</div>' +
       '<div class="idup-c-tags">' + tags.join('') + '</div>' +
       '<div class="idup-c-b">' +
-        (isMain ? '' : '<button class="bp sm ghost" data-cmain="' + c.id + '" data-ck="' + esc(g.key) + '">Сделать главной</button>') +
+        btn +
         '<button class="bp sm ghost" data-copen="' + c.id + '">Внести цифры</button>' +
       '</div>' +
     '</div>';
@@ -40874,14 +40903,18 @@
 
   function cdupGroup(g) {
     var lead = cdupLead(g);
+    var act = g.verdict === 'family'
+      ? (cdupParSide(g) == null
+          ? '<button class="bp" disabled>Выбери, кто родитель</button>'
+          : '<button class="bp" data-cfam="' + esc(g.key) + '">Связать семьей</button>')
+      : '<button class="bp" data-cmerge="' + esc(g.key) + '"' + (lead ? '' : ' disabled') + '>' +
+          (lead ? 'Склеить в главную' : 'Выбери главную') + '</button>';
     return '<div class="card idup-g cdup-g">' +
       '<div class="idup-h"><b>' + g.cards.length + ' ' + plural(g.cards.length, 'карточка', 'карточки', 'карточек') + '</b>' +
         '<div class="idup-k">' + esc(g.reason || '') + ' · нашел ' + esc(idupWhen(g.found_at)) + '</div></div>' +
       cdupLinks(g) +
       '<div class="idup-list">' + g.cards.map(function (c) { return cdupCard(c, g); }).join('') + '</div>' +
-      '<div class="idup-a">' +
-        '<button class="bp" data-cmerge="' + esc(g.key) + '"' + (lead ? '' : ' disabled') + '>' +
-          (lead ? 'Склеить в главную' : 'Выбери главную') + '</button>' +
+      '<div class="idup-a">' + act +
         '<button class="bp ghost" data-cnot="' + esc(g.key) + '">Не дубль</button>' +
       '</div></div>';
   }
@@ -40929,6 +40962,7 @@
           var errs = (r && r.errors) || [];
           showToast(okMsg, errs.length ? 'не все: ' + errs[0] : '');
           delete CDUP_LEAD[payload.key];
+          delete CDUP_PAR[payload.key];
           reload();
         })
         .catch(function (e) {
@@ -40944,6 +40978,25 @@
       b.addEventListener('click', function () {
         CDUP_LEAD[b.getAttribute('data-ck')] = b.getAttribute('data-cmain');
         renderCdupes(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cpar]'), function (b) {
+      b.addEventListener('click', function () {
+        CDUP_PAR[b.getAttribute('data-ck')] = b.getAttribute('data-cpar');
+        renderCdupes(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cfam]'), function (b) {
+      b.addEventListener('click', function () {
+        var g = find(b.getAttribute('data-cfam')), side = g ? cdupParSide(g) : null;
+        if (!g || side == null) return;
+        var ppl = g.kin.people, nm = {};
+        g.cards.forEach(function (c) { nm[c.id] = c.name || 'без имени'; });
+        var par = ppl[side][0], kid = ppl[1 - side][0];
+        if (!confirm('Связать семьей: «' + nm[kid] + '» ребенок, «' + nm[par] + '» родитель? ' +
+                     'Карточки останутся разными, ребенок перестанет считаться новым лидом.')) return;
+        b.disabled = true;
+        send('/admin/api/dupes/family', { key: g.key, parent: par }, 'Связал семьей').then(function () { b.disabled = false; });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-copen]'), function (b) {
