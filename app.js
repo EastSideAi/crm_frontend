@@ -37722,26 +37722,36 @@
     // таких 6 из 8). Человек — склейка карточек сквозной (l.g), бот без карточки — сам по себе.
     var grp = {};
     (cc.leads || []).forEach(function (l) { if (l.i) grp[l.i] = l.g ? 'g' + l.g : 's' + l.i; });
+    // Ольга 11.11.2026 (второй заход): квалифицированные считаются только среди лидов
+    // периода — людей с контактом, чья карточка заведена в этом же отрезке, — чтобы
+    // лестница сужалась сверху вниз. Строки «из них» (платформа, бот) — те же люди.
     var qualOf = function (x, a, b) {
-      var who = {}, n = 0;
+      var key = function (l) { return l.g ? 'g' + l.g : 's' + l.i; };
+      var lead = {}, plat = {}, bot = {};
       (cc.leads || []).forEach(function (l) {
-        if (l.dg && l.dg >= a && l.dg <= b) who[l.g ? 'g' + l.g : 's' + l.i] = 1;
+        if (l.c && !l.nl && l.d >= a && l.d <= b) lead[key(l)] = 1;
       });
-      (cc.cons || []).forEach(function (c, i) {
+      (cc.leads || []).forEach(function (l) {
+        if (l.dg && l.dg >= a && l.dg <= b && lead[key(l)]) plat[key(l)] = 1;
+      });
+      (cc.cons || []).forEach(function (c) {
         var d = Array.isArray(c) ? c[0] : c, sid = Array.isArray(c) ? c[1] : null;
-        if (!d || d < a || d > b) return;
-        n++;
-        who[sid ? (grp[sid] || 's' + sid) : 'b' + i] = 1;
+        if (!d || d < a || d > b || !sid) return;
+        var k = grp[sid] || 's' + sid;
+        if (lead[k]) bot[k] = 1;
       });
-      x.consBook = n;
-      x.qual = Object.keys(who).length;
+      var all = {};
+      Object.keys(plat).concat(Object.keys(bot)).forEach(function (k) { all[k] = 1; });
+      x.platQ = Object.keys(plat).length;
+      x.consBook = Object.keys(bot).length;
+      x.qual = Object.keys(all).length;
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
-      ['Квалифицированные лиды', 'людей: платформа или бот, прошедший оба — один раз', 'qual', null, false, false, 'leads', 'от лидов'],
-      ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'diagPlat', null, false, true, 'qual', 'от квалифицированных'],
+      ['Квалифицированные лиды', 'лиды периода с разбором на платформе или консультацией в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
+      ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
       ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
       ['Записались к тьютору', 'выбрали время разбора', 'signed', null, false, false, 'qual', 'от квалифицированных'],
       ['Разбор состоялся', 'встреча прошла', 'meeting', null, false, false, 'signed', 'от записавшихся'],
