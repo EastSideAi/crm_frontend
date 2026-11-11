@@ -14767,6 +14767,10 @@ video.cs-media { background: #000; }
 .mg-l { font-size: 14px; font-weight: 600; letter-spacing: -.01em; min-width: 0; }
 .mg-l small { display: block; font-size: 12px; font-weight: 500; color: var(--ink-3); margin-top: 2px; letter-spacing: 0; }
 .mg-tr .num.big { font-size: 20px; font-weight: 700; letter-spacing: -.03em; }
+/* «из них»: слагаемые строки выше, отступом и тише, чтобы не читались отдельной ступенью */
+.mg-tr.sub { border-top-style: dashed; padding-top: 8px; padding-bottom: 8px; }
+.mg-tr.sub .mg-l { padding-left: 18px; font-weight: 500; color: var(--ink-2); }
+.mg-tr.sub .num.big { font-size: 16px; font-weight: 600; }
 .mg-tr .mute { color: var(--ink-3); font-weight: 600; }
 .mg-tr .ok { color: var(--green-ink); } .mg-tr .risk { color: var(--amber-ink); } .mg-tr .miss { color: var(--red-ink); }
 .mg-d { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 7px;
