@@ -35694,7 +35694,16 @@
   /* Декомпозиция у каждого запуска своя (владелец, 9.11.2026). Первый — октябрь с
      фактом; следующий начинается копией его плана, факта у него пока нет. Правки
      каждого запуска хранятся отдельно, у октября — под прежним ключом. */
-  var LA_LAUNCHES = [{ id: '2026-10', label: 'Интенсив 28.10.26', fact: true },
+  /* Сентябрь (Ольга 11.11.2026): тот же план, что у октября, факт сентябрьского
+     интенсива. Рекламы в сентябре не было — листов «Трафик ВК» и «Всего» нет. */
+  var LA_LAUNCHES = [{ id: '2026-09', label: 'Интенсив 23.09.26', fact: true, noAds: true,
+                       slug: 'intensive-2026-09', srcs: ['warm', 'month'],
+                       days: ['23 сентября', '24 сентября'], factLabel: 'факт 23–24.09',
+                       title: 'Декомпозиция запуска: интенсив 23–24 сентября 2026',
+                       lede: 'План — копия плана интенсива 28–29 октября, факт — живые цифры сентябрьского интенсива. Подсвеченные поля — вводные, их правят руками; остальное считается.' },
+                     { id: '2026-10', label: 'Интенсив 28.10.26', fact: true,
+                       slug: 'intensive-2026-10', days: ['28 октября', '29 октября'],
+                       factLabel: 'факт 28–29.10' },
                      { id: '2026-11', label: 'Ноябрь 2026', fact: false,
                        title: 'Декомпозиция запуска: ноябрь 2026',
                        lede: 'План ноябрьского запуска — копия плана интенсива 28–29 октября. Подсвеченные поля — вводные, их правят руками; остальное считается.' }];
@@ -35704,11 +35713,18 @@
       try { state.laLaunch = localStorage.getItem(LA_LAUNCH_LS) || ''; } catch (e) {}
     }
     var l = LA_LAUNCHES.filter(function (x) { return x.id === state.laLaunch; })[0];
-    return l || LA_LAUNCHES[0];
+    return l || laLaunchById('2026-10');
   }
+  function laLaunchById(id) { return LA_LAUNCHES.filter(function (x) { return x.id === id; })[0]; }
+  /* у октября правки под прежним ключом — они живут в браузерах с 9.11 */
   function laKey() {
     var l = laLaunchCur();
-    return l === LA_LAUNCHES[0] ? LA_KEY : LA_KEY + ':' + l.id;
+    return l.id === '2026-10' ? LA_KEY : LA_KEY + ':' + l.id;
+  }
+  function laDay(i) { return (laLaunchCur().days || [])[i] || ''; }
+  function laSrcs() {
+    var only = laLaunchCur().srcs;
+    return only ? LA_SRC.filter(function (x) { return only.indexOf(x.id) !== -1; }) : LA_SRC;
   }
   var LA_FOLD = 'es_launch_fold_v1';
   var LA_PLANS = [['min', 'План min'], ['opt', 'План opt'], ['max', 'План max']];
@@ -35923,8 +35939,8 @@
         { id: 'chanMax', l: 'из них МАКС' },
         { id: 'chanVk', l: 'ВК, дата вступления неизвестна' } ] },
       { t: '2. Эфиры', rows: [
-        { id: 'e1', l: 'Зрителей эфира 1, 28 октября' },
-        { id: 'e2', l: 'Зрителей эфира 2, 29 октября' },
+        { id: 'e1', l: 'Зрителей эфира 1, ' + laDay(0) },
+        { id: 'e2', l: 'Зрителей эфира 2, ' + laDay(1) },
         { id: 'live', l: 'Зрителей живого эфира, уникальных' },
         { id: 'rec', l: 'Смотрели запись, уникальных' },
         { id: 'watched', l: 'Посмотрели интенсив хотя бы раз' },
@@ -35984,9 +36000,9 @@
         { id: 'chan', l: 'Вступили в закрытый канал' } ] },
       { t: '3. Эфиры: кто смотрел, уникальные люди', rows: [
         { id: 'crE1', l: 'CR чистая регистрация → зритель эфира 1', k: 'in', u: 'pct' },
-        { id: 'e1', l: 'Зрителей эфира 1, 28 октября' },
+        { id: 'e1', l: 'Зрителей эфира 1, ' + laDay(0) },
         { id: 'crE2', l: 'CR чистая регистрация → зритель эфира 2', k: 'in', u: 'pct' },
-        { id: 'e2', l: 'Зрителей эфира 2, 29 октября' },
+        { id: 'e2', l: 'Зрителей эфира 2, ' + laDay(1) },
         { id: 'live', l: 'Зрителей живого эфира всего, уникальных' },
         { id: 'crRec', l: 'CR чистая регистрация → смотрел запись', k: 'in', u: 'pct' },
         { id: 'rec', l: 'Смотрели запись, уникальных' },
@@ -36154,20 +36170,24 @@
      которых на «Запусках» нет, — прочерк. Из соцсетей — формы с меткой соцсетей,
      остальное тёплое — рассылки, в том числе люди по личной ссылке из бота. */
   function laLaunchNow() {
-    var a = state._laLaunch;
+    var a = state._laLaunchAll;
     if (!a) {
       if (!state._laLaunchLoading) {
         state._laLaunchLoading = true;
         api('/admin/api/marketing/launch').then(function (r) {
-          state._laLaunch = (r && r.launches && r.launches[0]) || 'none';
-        }).catch(function () { state._laLaunch = 'none'; }).then(function () {
+          state._laLaunchAll = (r && r.launches) || 'none';
+        }).catch(function () { state._laLaunchAll = 'none'; }).then(function () {
           state._laLaunchLoading = false;
           if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
         });
       }
       return null;
     }
-    return a === 'none' ? null : a;
+    return a === 'none' ? null : laOfSlug(a);
+  }
+  function laOfSlug(list) {
+    var slug = laLaunchCur().slug;
+    return (list || []).filter(function (x) { return x.slug === slug; })[0] || null;
   }
   /* зрители по дням эфира — тот же ответ «Запусков» с ?day=, как на плашке дня */
   function laLaunchDay(day) {
@@ -36175,27 +36195,29 @@
     if (c[day] === undefined) {
       c[day] = null;
       api('/admin/api/marketing/launch?day=' + day).then(function (r) {
-        c[day] = (r && r.launches && r.launches[0]) || 'none';
+        c[day] = (r && r.launches) || 'none';
       }).catch(function () { c[day] = 'none'; }).then(function () {
         if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
       });
     }
-    return c[day] && c[day] !== 'none' ? c[day] : null;
+    return c[day] && c[day] !== 'none' ? laOfSlug(c[day]) : null;
   }
+  /* без рекламы вычитать нечего: тёплая база — это весь запуск */
+  var LA_NO_ADS = {};
+  ['reg', 'ext', 'extRev', 'sales', 'contracts', 'clean', 'chan', 'e1', 'e2', 'live', 'rec',
+   'watched', 'diagStart', 'diagDone', 'btn', 'req', 'held', 'bills'
+  ].forEach(function (k) { LA_NO_ADS[k] = 0; });
   function laWarmFact() {
-    var a = state._laWarm;
-    if (!a) {
-      if (!state._laWarmLoading) {
-        state._laWarmLoading = true;
-        api('/admin/api/marketing/launch/warm').then(function (r) {
-          state._laWarm = r || 'none';
-        }).catch(function () { state._laWarm = 'none'; }).then(function () {
-          state._laWarmLoading = false;
-          if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
-        });
-      }
+    var lch = laLaunchCur(), wc = state._laWarm = state._laWarm || {}, a = wc[lch.slug];
+    if (a === undefined) {
+      wc[lch.slug] = null;
+      api('/admin/api/marketing/launch/warm?slug=' + encodeURIComponent(lch.slug)).then(function (r) {
+        wc[lch.slug] = r || 'none';
+      }).catch(function () { wc[lch.slug] = 'none'; }).then(function () {
+        if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+      });
     }
-    var cur = laLaunchNow(), ads = laAdsFact();
+    var cur = laLaunchNow(), ads = lch.noAds ? LA_NO_ADS : laAdsFact();
     if (!a || a === 'none' || !cur || !ads) return null;
     var minus = function (x, y) { return x == null || y == null ? null : Math.max(0, x - y); };
     var div = function (x, y) { return y && x != null ? x / y : null; };
@@ -36223,8 +36245,9 @@
     /* эфир или запись, человек один раз; зрители эфира без регистрации — как в «живом» */
     var watched = cur.watched == null || !v ? null :
       minus(cur.watched + (v.anon.viewers || 0), ads.watched);
-    var req = minus(tag.cons, ads.req);
-    var held = minus(step('call_done'), ads.held), bills = minus(cr.invoiced, ads.bills);
+    /* у сентября меток консультаций ещё не было — запись к тьютору из пути */
+    var req = minus(tag.cons != null ? tag.cons : step('tutor'), ads.req);
+    var held = minus(step('call_done'), ads.held), bills = minus((pr.invoiced || 0) + (cr.invoiced || 0) + (ld.paid || 0), ads.bills);
     var diagStart = minus(tag.anketa, ads.diagStart), diagDone = minus(tag.diag, ads.diagDone);
     return {
       clean: clean, crClean: div(clean, reg),
@@ -36233,7 +36256,8 @@
       crDiagStart: div(diagStart, clean), diagDone: diagDone, crDiagDone: div(diagDone, diagStart),
       btn: minus(step('offer'), ads.btn),
       /* проведено и счета — как на «Продажах» (Ольга 11.11.2026): разбор — встреча
-         или консультация «проведена»; счёт на грант — договор в CRM */
+         или консультация «проведена»; счёт на грант — договор в CRM или оплата,
+         проведённая в карточке без счёта (без неё оплат больше, чем счетов) */
       held: held, crHeld: div(held, req), bills: bills, crBill: div(bills, held),
       crPaid: div(sales, bills), crSale: div(sales, held),
       regGoal: reg, amb: 0, social: a.social, mail: minus(reg, a.social),
@@ -36259,8 +36283,9 @@
       return;
     }
     var d = state._launch;
-    if (!LA_SRC.some(function (s) { return s.id === state.laSrc; })) state.laSrc = 'total';
-    var src = state.laSrc;
+    var srcs = laSrcs();
+    var src = srcs.some(function (s) { return s.id === state.laSrc; }) ? state.laSrc
+      : srcs.some(function (s) { return s.id === 'total'; }) ? 'total' : srcs[0].id;
     /* у месяца свои заголовок и лид: шапка про интенсив 24–25 октября над листом,
        где интенсива нет по определению, читается как ошибка экрана */
     var lch = laLaunchCur();
@@ -36288,7 +36313,7 @@
         }).join('') +
       '</div>' +
       '<div class="po-tabs po-econsegs"><div class="dperiod">' +
-        LA_SRC.map(function (s) {
+        srcs.map(function (s) {
           return '<button type="button" data-lasrc="' + s.id + '"' +
             (src === s.id ? ' class="on"' : '') + '>' + esc(s.label) + '</button>';
         }).join('') +
@@ -36299,7 +36324,7 @@
       : { title: d[src].title, note: d[src].note };
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
-      (mon ? '' : '<div class="th r">' + esc(!lch.fact ? 'факт' : 'факт 28–29.10') + '</div>') + '</div>';
+      (mon ? '' : '<div class="th r">' + esc(lch.factLabel || 'факт') + '</div>') + '</div>';
     var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
@@ -36373,7 +36398,7 @@
           ' · первый платёж ' + laFmt(m.first, 'rub');
         return;
       }
-      var tot = laCalc('total', p[0]);
+      var tot = laCalc(laLaunchCur().noAds ? 'warm' : 'total', p[0]);
       if (v) v.textContent = laFmt(tot.cash, 'rub');
       if (s) s.textContent = fmtMoney(tot.reg) + ' ' + plural(tot.reg, 'регистрация', 'регистрации', 'регистраций') +
         ' · ' + fmtMoney(tot.sales) + ' ' + plural(tot.sales, 'грант', 'гранта', 'грантов') +
