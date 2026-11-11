@@ -36103,8 +36103,8 @@
   /* Факт листа «Трафик ВК» — живые цифры вкладки «Реклама» за весь запуск, с
      19.10 (владелец, 5.11.2026: «мы полностью отработали рекламу, подтяни факт»).
      Те же люди, что на плашках рекламы: регистрация — форма с меткой vk_ads, дальше
-     что было с ними. Строк, которых реклама не знает (проведено диагностик, счета
-     на грант), нет и в факте — прочерк, а не ноль. */
+     что было с ними. Строк, которых реклама не знает, нет и в факте — прочерк,
+     а не ноль. */
   var LA_ADS_FROM = Date.UTC(2026, 9, 18);
   function laAdsFact() {
     var a = state._laAds;
@@ -36142,6 +36142,8 @@
       diagStart: n.anketa, crDiagStart: div(n.anketa, n.to_bot),
       diagDone: n.diag, crDiagDone: div(n.diag, n.anketa),
       btn: n.diag_click, req: n.cons, crReq: div(n.cons, n.watched),
+      held: n.held, crHeld: div(n.held, n.cons), bills: n.billed, crBill: div(n.billed, n.held),
+      crPaid: div(n.sup, n.billed), crSale: div(n.sup, n.held),
       sales: n.sup, crReg: div(n.sup, n.reg), contracts: rub.sup,
       contractsAll: money, cash: money, payback: div(money, t.spend_nds),
       revPerReg: div(money, n.reg),
@@ -36218,20 +36220,29 @@
     };
     var e1 = minus(dayView(0), ads.e1), e2 = minus(dayView(1), ads.e2);
     var rec = minus(step('rec_any'), ads.rec);
+    /* эфир или запись, человек один раз; зрители эфира без регистрации — как в «живом» */
+    var watched = cur.watched == null || !v ? null :
+      minus(cur.watched + (v.anon.viewers || 0), ads.watched);
+    var req = minus(tag.cons, ads.req);
+    var held = minus(step('call_done'), ads.held), bills = minus(cr.invoiced, ads.bills);
     var diagStart = minus(tag.anketa, ads.diagStart), diagDone = minus(tag.diag, ads.diagDone);
     return {
       clean: clean, crClean: div(clean, reg),
       e1: e1, crE1: div(e1, clean), e2: e2, crE2: div(e2, clean),
-      rec: rec, crRec: div(rec, clean),
+      rec: rec, crRec: div(rec, clean), watched: watched, crReq: div(req, watched),
       crDiagStart: div(diagStart, clean), diagDone: diagDone, crDiagDone: div(diagDone, diagStart),
       btn: minus(step('offer'), ads.btn),
+      /* проведено и счета — как на «Продажах» (Ольга 11.11.2026): разбор — встреча
+         или консультация «проведена»; счёт на грант — договор в CRM */
+      held: held, crHeld: div(held, req), bills: bills, crBill: div(bills, held),
+      crPaid: div(sales, bills), crSale: div(sales, held),
       regGoal: reg, amb: 0, social: a.social, mail: minus(reg, a.social),
       ext: ext, crExt: div(ext, reg), extRev: extRev,
       chan: minus((cur.in_channel || {}).total, ads.chan),
       crChan: div(minus((cur.in_channel || {}).total, ads.chan), clean),
       live: v ? minus((v.known.viewers || 0) + (v.anon.viewers || 0), ads.live) : null,
       diagStart: diagStart,
-      req: minus(tag.cons, ads.req),
+      req: req,
       sales: sales, crReg: div(sales, reg), contracts: contracts,
       contractsAll: money, cash: money, revPerReg: div(money, reg),
     };
