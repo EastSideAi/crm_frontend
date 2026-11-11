@@ -37806,9 +37806,10 @@
     return mgLadder({
       title: (state.mgDayShift ? 'Цифры за ' : 'Вчера, ') + mgSpan(d, d),
       sub: 'лестница сквозной, рядом ' + MG_WD[mgDate(p).getDay()] + ' неделей раньше',
-      cur: [d, d], prv: [p, p], plan: mgPlan(d, d), full: null, pf: true,
-      curLbl: mgSpan(d, d), prvLbl: mgSpan(p, p),
-      note: 'План дня — месячный план, деленный на дни месяца. Поэтому он бывает дробным: две оплаты на месяц это 0,1 в день.'
+      // Ольга 11.11.2026: долю месячного плана на день не показываем, плана дня никто
+      // не ставит — в столбце прочерк
+      cur: [d, d], prv: [p, p], plan: {}, full: null, pf: true,
+      curLbl: mgSpan(d, d), prvLbl: mgSpan(p, p), note: ''
     });
   }
 
