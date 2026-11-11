@@ -35918,7 +35918,10 @@
         { id: 'paidReg', l: 'Из них с платного трафика' },
         { id: 'clean', l: 'Чистые регистрации: перешли в чат-бота' },
         { id: 'crClean', l: 'CR регистрация → чистая регистрация', u: 'pctv' },
-        { id: 'chan', l: 'Вступили в закрытый канал' } ] },
+        { id: 'chan', l: 'Вступили в закрытый канал' },
+        { id: 'chanTg', l: 'из них Телеграм' },
+        { id: 'chanMax', l: 'из них МАКС' },
+        { id: 'chanVk', l: 'ВК, дата вступления неизвестна' } ] },
       { t: '2. Эфиры', rows: [
         { id: 'e1', l: 'Зрителей эфира 1, 28 октября' },
         { id: 'e2', l: 'Зрителей эфира 2, 29 октября' },
@@ -36083,6 +36086,8 @@
      'req', 'held', 'sales', 'contracts', 'contractsAll', 'cash', 'extRev'
     ].forEach(function (f) { o[f] = add(w[f], k[f]); });
     o.reg = add(w.regGoal, k.reg);
+    var ch = (laLaunchNow() || {}).in_channel || {};
+    o.chanTg = (ch.tg || {}).live; o.chanMax = (ch.max || {}).live; o.chanVk = (ch.vk || {}).undated;
     o.warmReg = w.regGoal;
     o.paidReg = k.reg;
     o.budget = k.budget;
@@ -36162,6 +36167,19 @@
     }
     return a === 'none' ? null : a;
   }
+  /* зрители по дням эфира — тот же ответ «Запусков» с ?day=, как на плашке дня */
+  function laLaunchDay(day) {
+    var c = state._laLaunchDays = state._laLaunchDays || {};
+    if (c[day] === undefined) {
+      c[day] = null;
+      api('/admin/api/marketing/launch?day=' + day).then(function (r) {
+        c[day] = (r && r.launches && r.launches[0]) || 'none';
+      }).catch(function () { c[day] = 'none'; }).then(function () {
+        if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+      });
+    }
+    return c[day] && c[day] !== 'none' ? c[day] : null;
+  }
   function laWarmFact() {
     var a = state._laWarm;
     if (!a) {
@@ -36188,12 +36206,31 @@
     var ext = minus(pay.paid, ads.ext), extRev = minus(pay.paid_rub, ads.extRev);
     var sales = minus(supN, ads.sales), contracts = minus(supRub, ads.contracts);
     var money = (extRev || 0) + (contracts || 0);
+    var step = function (k) { return ((cur.path || []).filter(function (s) { return s.key === k; })[0] || {}).people; };
+    var seg = cur.seg || {};
+    /* в бота: строки бота из охвата там по определению, формы — по сегменту запуска */
+    var clean = reach == null || step('reg') == null || seg.to_bot == null ? null :
+      minus(reach - step('reg') + seg.to_bot, ads.clean);
+    var days = cur.event_days || [];
+    var dayView = function (i) {
+      var d = days[i] && laLaunchDay(days[i]), dv = d && d.viewers;
+      return dv ? (dv.known.viewers || 0) + (dv.anon.viewers || 0) : null;
+    };
+    var e1 = minus(dayView(0), ads.e1), e2 = minus(dayView(1), ads.e2);
+    var rec = minus(step('rec_any'), ads.rec);
+    var diagStart = minus(tag.anketa, ads.diagStart), diagDone = minus(tag.diag, ads.diagDone);
     return {
+      clean: clean, crClean: div(clean, reg),
+      e1: e1, crE1: div(e1, clean), e2: e2, crE2: div(e2, clean),
+      rec: rec, crRec: div(rec, clean),
+      crDiagStart: div(diagStart, clean), diagDone: diagDone, crDiagDone: div(diagDone, diagStart),
+      btn: minus(step('offer'), ads.btn),
       regGoal: reg, amb: 0, social: a.social, mail: minus(reg, a.social),
       ext: ext, crExt: div(ext, reg), extRev: extRev,
       chan: minus((cur.in_channel || {}).total, ads.chan),
+      crChan: div(minus((cur.in_channel || {}).total, ads.chan), clean),
       live: v ? minus((v.known.viewers || 0) + (v.anon.viewers || 0), ads.live) : null,
-      diagStart: minus(tag.anketa, ads.diagStart),
+      diagStart: diagStart,
       req: minus(tag.cons, ads.req),
       sales: sales, crReg: div(sales, reg), contracts: contracts,
       contractsAll: money, cash: money, revPerReg: div(money, reg),
