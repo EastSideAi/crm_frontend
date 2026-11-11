@@ -37620,18 +37620,31 @@
     var plan = o.plan || {}, full = o.full || {};
     // Ольга 11.11.2026: квалифицированный лид — прошел разбор шансов на платформе или
     // консультацию в боте до окна записи к тьютору (воронка «Консультация», не тест
-    // «Россия или Китай»). Сервер отдает по человеку дату первого прихода к окну (cc.cons).
-    // Человек из бота с карточкой пока не связан, поэтому «всего» это сумма двух дверей:
-    // прошедший обе посчитается дважды, и подпись это говорит.
-    var consIn = function (a, b) {
-      return (cc.cons || []).filter(function (d) { return d >= a && d <= b; }).length;
+    // «Россия или Китай»). Сервер отдает по человеку [дату первого прихода к окну, его
+    // карточку] (cc.cons). «Всего» считает людей, а не проходы: прошедший и платформу,
+    // и бота — один человек (Ольга 11.11.2026: «чтобы люди не задваивались»; в октябре
+    // таких 6 из 8). Человек — склейка карточек сквозной (l.g), бот без карточки — сам по себе.
+    var grp = {};
+    (cc.leads || []).forEach(function (l) { if (l.i) grp[l.i] = l.g ? 'g' + l.g : 's' + l.i; });
+    var qualOf = function (x, a, b) {
+      var who = {}, n = 0;
+      (cc.leads || []).forEach(function (l) {
+        if (l.dg && l.dg >= a && l.dg <= b) who[l.g ? 'g' + l.g : 's' + l.i] = 1;
+      });
+      (cc.cons || []).forEach(function (c, i) {
+        var d = Array.isArray(c) ? c[0] : c, sid = Array.isArray(c) ? c[1] : null;
+        if (!d || d < a || d > b) return;
+        n++;
+        who[sid ? (grp[sid] || 's' + sid) : 'b' + i] = 1;
+      });
+      x.consBook = n;
+      x.qual = Object.keys(who).length;
     };
-    cur.consBook = consIn(o.cur[0], o.cur[1]);
-    prv.consBook = consIn(o.prv[0], o.prv[1]);
-    [cur, prv].forEach(function (x) { x.qual = (x.diagPlat || 0) + x.consBook; });
+    qualOf(cur, o.cur[0], o.cur[1]);
+    qualOf(prv, o.prv[0], o.prv[1]);
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
-      ['Квалифицированные лиды', 'платформа плюс бот; прошедший оба пока считается дважды', 'qual'],
+      ['Квалифицированные лиды', 'людей: платформа или бот, прошедший оба — один раз', 'qual'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'diagPlat', null, false, true],
       ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true],
       ['Записались к тьютору', 'выбрали время разбора', 'signed'],
@@ -37640,9 +37653,11 @@
       ['Оплатили', 'людей', 'payers', 'payments'],
       ['Деньги', 'пришло на счет', 'revenue', 'revenue', true]
     ];
-    var anyPlan = rows.some(function (r) { return r[3] && plan[r[3]] != null; });
-    return box + '<div class="mg-tbl' + (anyPlan ? '' : ' noplan') + (o.pf ? ' pf' : '') + '">' +
-      '<div class="mg-tr th"><span>Ступень</span>' + (anyPlan ? '<span class="r c-pl">' + esc(o.planLbl || 'План') + '</span>' : '') +
+    // Ольга 11.11.2026: столбец плана стоит в каждом периоде, где плана нет — прочерк.
+    // Пустой столбец тоже ответ: видно, что план на период не ставили.
+    var hasPlan = rows.some(function (r) { return r[3] && plan[r[3]] != null; });
+    return box + '<div class="mg-tbl' + (o.pf ? ' pf' : '') + '">' +
+      '<div class="mg-tr th"><span>Ступень</span><span class="r c-pl">' + esc(o.planLbl || 'План') + '</span>' +
       '<span class="r">' + esc(o.curLbl) + '</span>' +
       '<span class="r c-pv">' + esc(o.prvLbl) + '</span><span class="r c-dl"></span></div>' +
       rows.map(function (r) {
@@ -37657,14 +37672,14 @@
         // Виталий 02.11.2026: «меня интересует отношение к плановым показателям» — процент рядом с цифрой.
         var pct = function (v) { return Math.round(c / v * 100) + '%'; };
         return '<div class="mg-tr' + (r[5] ? ' sub' : '') + '"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
-          (anyPlan ? '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
-            (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + (fv > 0 ? ' · ' + pct(fv) : '') + '</small>' : '') : '') + '</span>' : '') +
+          '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
+            (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + (fv > 0 ? ' · ' + pct(fv) : '') + '</small>' : '') : '—') + '</span>' +
           '<span class="r num big ' + pl + '">' + f(c) +
             (pl ? '<small class="mg-pc">' + pct(pv) + (o.full ? ' к дате' : ' плана') + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + f(p) + '</span>' +
           '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
       }).join('') + '</div>' +
-      (anyPlan ? '<div class="mg-note">' + esc(o.note) + '</div>' : '') +
+      (hasPlan ? '<div class="mg-note">' + esc(o.note) + '</div>' : '') +
     '</div>';
   }
 
