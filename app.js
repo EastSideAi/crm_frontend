@@ -35776,11 +35776,14 @@
       var key = srcId + '.' + plan + '.' + k;
       out[k] = ed[key] != null ? ed[key] : base[k];
     });
-    /* соцсети в тёплой базе вводят руками; пока не трогали — остаток от цели */
+    /* Ольга 11.11.2026: цель по регистрациям тёплой базы — сумма каналов
+       (амбассадоры + рассылки + соцсети), руками ее не вводят. Соцсети, пока их
+       не трогали, — остаток от цели файла, поэтому без правок цифры прежние */
     if (srcId === 'warm') {
       var sk = srcId + '.' + plan + '.social';
       out.social = ed[sk] != null ? ed[sk] : base.social != null ? base.social :
-        laNum(out.regGoal) - laNum(out.amb) - laNum(out.mail);
+        laNum(base.regGoal) - laNum(base.amb) - laNum(base.mail);
+      out.regGoal = laNum(out.amb) + laNum(out.mail) + laNum(out.social);
     }
     return out;
   }
@@ -35865,6 +35868,7 @@
       o.payback34 = o.budget ? o.cash34 / o.budget : 0;
     } else {
       o = laFunnel(v, laNum(v.regGoal));
+      o.regGoal = o.reg;
       o.amb = laNum(v.amb);
       o.mail = laNum(v.mail);
       o.social = laNum(v.social);
@@ -35983,7 +35987,7 @@
           { id: 'ext', l: 'Взяли расширенный доступ 690 ₽, шт' },
           { id: 'extRev', l: 'Выручка с расширенных доступов, ₽', u: 'rub' } ] }
       : { t: '1. Регистрации: цель, каналы и трафик на страницу', rows: [
-          { id: 'regGoal', l: 'Регистраций, цель', k: 'in', step: 10 },
+          { id: 'regGoal', l: 'Регистраций, цель' },
           { id: 'amb', l: 'Амбассадоры и партнёры, регистраций', k: 'in', step: 5 },
           { id: 'mail', l: 'Регистраций из рассылок по базе', k: 'in' },
           { id: 'social', l: 'Регистраций из соцсетей', k: 'in' },
@@ -37767,7 +37771,8 @@
           '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
             (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + '</small>' : '') : '—') + '</span>' +
           '<span class="r num big ' + pl + '">' + f(c) +
-            (pl ? '<small class="mg-pc">' + pct(pv) + (o.full ? ' к дате' : ' плана') + '</small>' : '') +
+            // Ольга 11.11.2026: «12% к дате» убрать, в идущем месяце процент к плану не пишем
+            (pl && !o.full ? '<small class="mg-pc">' + pct(pv) + ' плана</small>' : '') +
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + f(p) + '</span>' +
@@ -37805,9 +37810,10 @@
     return mgLadder({
       title: (state.mgDayShift ? 'Цифры за ' : 'Вчера, ') + mgSpan(d, d),
       sub: 'лестница сквозной, рядом ' + MG_WD[mgDate(p).getDay()] + ' неделей раньше',
-      cur: [d, d], prv: [p, p], plan: mgPlan(d, d), full: null, pf: true,
-      curLbl: mgSpan(d, d), prvLbl: mgSpan(p, p),
-      note: 'План дня — месячный план, деленный на дни месяца. Поэтому он бывает дробным: две оплаты на месяц это 0,1 в день.'
+      // Ольга 11.11.2026: долю месячного плана на день не показываем, плана дня никто
+      // не ставит — в столбце прочерк
+      cur: [d, d], prv: [p, p], plan: {}, full: null, pf: true,
+      curLbl: mgSpan(d, d), prvLbl: mgSpan(p, p), note: ''
     });
   }
 
@@ -37828,7 +37834,7 @@
       cur: [a, b], prv: [pa, pb], plan: mgPlan(a, b), full: going ? mgPlan(a, z) : null, pf: true,
       planLbl: going ? 'План к дате' : 'План',
       curLbl: mgSpan(a, b), prvLbl: mgSpan(pa, pb),
-      note: going ? 'План к дате — сколько месячного плана приходится на прошедшие дни. Процент под фактом считается от него, а процент рядом с целью месяца — от всего плана.'
+      note: going ? 'План к дате: сколько месячного плана приходится на прошедшие дни. Под ним цель на весь месяц.'
         : 'План месяца с «Продаж», вкладка «План периода».'
     });
   }
