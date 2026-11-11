@@ -35697,7 +35697,7 @@
   /* Сентябрь (Ольга 11.11.2026): тот же план, что у октября, факт сентябрьского
      интенсива. Рекламы в сентябре не было — листов «Трафик ВК» и «Всего» нет. */
   var LA_LAUNCHES = [{ id: '2026-09', label: 'Интенсив 23.09.26', fact: true, noAds: true,
-                       slug: 'intensive-2026-09', srcs: ['warm', 'month'],
+                       slug: 'intensive-2026-09', srcs: ['warm', 'month'], monthFact: true,
                        days: ['23 сентября', '24 сентября'], factLabel: 'факт 23–24.09',
                        title: 'Декомпозиция запуска: интенсив 23–24 сентября 2026',
                        lede: 'План — копия плана интенсива 28–29 октября, факт — живые цифры сентябрьского интенсива. Подсвеченные поля — вводные, их правят руками; остальное считается.' },
@@ -36064,8 +36064,9 @@
      На листе «Всего» факт равен тёплой базе: рекламы в сентябре не было. */
   function laFact(srcId) {
     var d = state._launch;
-    /* у месяца факта нет вовсе: колонку ему не рисуем, а не заполняем прочерками */
-    if (srcId === 'month') return {};
+    /* у месяца факта нет вовсе: колонку ему не рисуем, а не заполняем прочерками.
+       Исключение — сентябрь: там лист считает людей интенсива (Ольга 11.11.2026) */
+    if (srcId === 'month') return laLaunchCur().monthFact ? laMonthFact() : {};
     if (!laLaunchCur().fact) return {};
     if (srcId === 'vk') return laAdsFact() || {};
     if (srcId === 'warm') return laWarmFact() || {};
@@ -36271,6 +36272,17 @@
       contractsAll: money, cash: money, revPerReg: div(money, reg),
     };
   }
+  /* записи к диагносту, проведено, счета и оплаты — те же люди, что в тёплой базе */
+  function laMonthFact() {
+    var w = laWarmFact();
+    if (!w) return {};
+    var div = function (x, y) { return y && x != null ? x / y : null; };
+    return {
+      signups: w.req, held: w.held, crHeld: w.crHeld, bills: w.bills, crBill: w.crBill,
+      sales: w.sales, crPaid: w.crPaid, crSale: w.crSale, crReg: div(w.sales, w.req),
+      contracts: w.contracts, revPerReg: div(w.contracts, w.req),
+    };
+  }
   function laFactVal(srcId, id) {
     var f = laFact(srcId);
     return f && f[id] != null ? f[id] : null;
@@ -36290,6 +36302,7 @@
        где интенсива нет по определению, читается как ошибка экрана */
     var lch = laLaunchCur();
     var mon = src === 'month', head1 = mon ? (d.month || {}) : (lch.title ? lch : d);
+    var nofact = mon && !lch.monthFact;
     var launchTabs = '<div class="po-tabs po-econsegs la-launches"><div class="dperiod">' +
       LA_LAUNCHES.map(function (l) {
         return '<button type="button" data-lalaunch="' + l.id + '"' +
@@ -36324,7 +36337,7 @@
       : { title: d[src].title, note: d[src].note };
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
-      (mon ? '' : '<div class="th r">' + esc(lch.factLabel || 'факт') + '</div>') + '</div>';
+      (nofact ? '' : '<div class="th r">' + esc(lch.factLabel || 'факт') + '</div>') + '</div>';
     var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
@@ -36355,7 +36368,7 @@
             '<div class="la-l">' + esc(r.l) + '</div>' + cells +
             /* факт конверсии приходит долей (224 из 290), а вводная плана — числом
                процентов: формат у колонок разный, значение одно и то же */
-            (mon ? '' : '<div class="la-c num la-f">' +
+            (nofact ? '' : '<div class="la-c num la-f">' +
               (f == null ? '—' : esc(laFmt(f, r.u === 'pct' ? 'pctv' : r.u)) +
                 (src === 'vk' && r.id === 'budget' ? ' <span class="la-u">с НДС</span>' : '') +
                 (src === 'vk' && r.id === 'clicks' ? ' <span class="la-u">визиты, Метрика</span>' : '')) +
@@ -36365,7 +36378,7 @@
 
     view.innerHTML = top +
       '<div class="card listcard la-card"><div class="po-note la-note">' + esc(meta.note) + '</div>' +
-        '<div class="la-tbl' + (mon ? ' nofact' : '') + '">' + head + body + '</div></div>' +
+        '<div class="la-tbl' + (nofact ? ' nofact' : '') + '">' + head + body + '</div></div>' +
       '<div class="po-note la-foot">Цифры на этом экране повторяют рабочий файл: люди округляются до целых, ' +
         'поэтому продажи прыгают ступенькой. Правки живут в вашем браузере и у остальных ничего не меняют; ' +
         'вернуть цифры плана — кнопка «Вернуть план» в шапке.</div>';
