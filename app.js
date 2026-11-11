@@ -18239,6 +18239,12 @@
      Одна прокручиваемая карточка, без вкладок: данных немного, а листать вкладки
      ради трех полей — лишняя работа руками. Правки копятся в CZ.dirty и уходят
      одним PATCH по кнопке: молча сохранять реквизиты и ИНН нельзя. */
+  /* Принятый в анкете текст (согласие на данные, соглашение о подписи) — страница
+     сервера, как печатная форма акта. */
+  function czConsentUrl(cid, kind) {
+    return API + '/admin/api/contractors/' + encodeURIComponent(cid) + '/consent/' +
+      encodeURIComponent(kind) + '?k=' + encodeURIComponent(getKey());
+  }
   function openCz(id) {
     CZ.openId = id;
     CZ.dirty = {};
@@ -18584,6 +18590,8 @@
         (byPerson
           ? '<span class="cz-doc-fixed"><span class="sev cz-ok">Принято в анкете</span>' +
             (d0.signed_at ? '<span class="cz-doc-when">' + fmtWhen(d0.signed_at) + '</span>' : '') +
+            '<a class="cz-doc-open" href="' + czConsentUrl(id, dk[0]) +
+              '" target="_blank" rel="noopener">Открыть</a>' +
             '</span>'
           /* сегмент — общий системный рецепт .pay-seg: та же логика «три состояния,
              последнее хорошее», активное красится через data-v */
@@ -20512,6 +20520,12 @@
         if (kind === 'act') {
           var tid = r.getAttribute('data-dt');
           if (tid) return openCt(tid);
+        }
+        /* Согласие и соглашение о подписи человек принимает галочкой в анкете — файла
+           нет, есть отметка. Открываем сам принятый текст с отметкой, когда и откуда
+           нажал: ради этого сюда и заходят (Роман 11.11.2026). */
+        if (CZ_SELF_DOCS.indexOf(kind) !== -1) {
+          return window.open(czConsentUrl(r.getAttribute('data-dc'), kind), '_blank', 'noopener');
         }
         openCz(r.getAttribute('data-dc'));
       });
