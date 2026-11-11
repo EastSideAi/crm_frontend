@@ -37767,7 +37767,8 @@
           '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
             (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + '</small>' : '') : '—') + '</span>' +
           '<span class="r num big ' + pl + '">' + f(c) +
-            (pl ? '<small class="mg-pc">' + pct(pv) + (o.full ? ' к дате' : ' плана') + '</small>' : '') +
+            // Ольга 11.11.2026: «12% к дате» убрать, в идущем месяце процент к плану не пишем
+            (pl && !o.full ? '<small class="mg-pc">' + pct(pv) + ' плана</small>' : '') +
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + f(p) + '</span>' +
@@ -37828,7 +37829,7 @@
       cur: [a, b], prv: [pa, pb], plan: mgPlan(a, b), full: going ? mgPlan(a, z) : null, pf: true,
       planLbl: going ? 'План к дате' : 'План',
       curLbl: mgSpan(a, b), prvLbl: mgSpan(pa, pb),
-      note: going ? 'План к дате — сколько месячного плана приходится на прошедшие дни. Процент под фактом считается от него, а процент рядом с целью месяца — от всего плана.'
+      note: going ? 'План к дате: сколько месячного плана приходится на прошедшие дни. Под ним цель на весь месяц.'
         : 'План месяца с «Продаж», вкладка «План периода».'
     });
   }
