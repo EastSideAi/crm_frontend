@@ -37687,9 +37687,9 @@
     qualOf(prv, o.prv[0], o.prv[1]);
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
-      ['Квалифицированные лиды', 'людей: платформа или бот, прошедший оба — один раз', 'qual'],
-      ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'diagPlat', null, false, true],
-      ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true],
+      ['Квалифицированные лиды', 'людей: платформа или бот, прошедший оба — один раз', 'qual', null, false, false, 'leads', 'от лидов'],
+      ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'diagPlat', null, false, true, 'qual', 'от квалифицированных'],
+      ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
       ['Записались к тьютору', 'выбрали время разбора', 'signed'],
       ['Разбор состоялся', 'встреча прошла', 'meeting'],
       ['Счета', 'выставлено', 'invN'],
@@ -37716,9 +37716,11 @@
         var pct = function (v) { return Math.round(c / v * 100) + '%'; };
         return '<div class="mg-tr' + (r[5] ? ' sub' : '') + '"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
           '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
-            (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + (fv > 0 ? ' · ' + pct(fv) : '') + '</small>' : '') : '—') + '</span>' +
+            (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + '</small>' : '') : '—') + '</span>' +
           '<span class="r num big ' + pl + '">' + f(c) +
-            (pl ? '<small class="mg-pc">' + pct(pv) + (o.full ? ' к дате' : ' плана') + '</small>' : '') + '</span>' +
+            (pl ? '<small class="mg-pc">' + pct(pv) + (o.full ? ' к дате' : ' плана') + '</small>' : '') +
+            // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
+            (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + f(p) + '</span>' +
           '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
       }).join('') + '</div>' +
