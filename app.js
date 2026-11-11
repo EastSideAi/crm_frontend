@@ -35760,6 +35760,12 @@
       var key = srcId + '.' + plan + '.' + k;
       out[k] = ed[key] != null ? ed[key] : base[k];
     });
+    /* соцсети в тёплой базе вводят руками; пока не трогали — остаток от цели */
+    if (srcId === 'warm') {
+      var sk = srcId + '.' + plan + '.social';
+      out.social = ed[sk] != null ? ed[sk] : base.social != null ? base.social :
+        laNum(out.regGoal) - laNum(out.amb) - laNum(out.mail);
+    }
     return out;
   }
   function laNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
@@ -35845,7 +35851,7 @@
       o = laFunnel(v, laNum(v.regGoal));
       o.amb = laNum(v.amb);
       o.mail = laNum(v.mail);
-      o.social = o.reg - o.amb - o.mail;
+      o.social = laNum(v.social);
       o.cash = o.cashIn + o.extRev;
       o.contractsAll = o.contracts + o.extRev;
       o.second = o.first;
@@ -35961,7 +35967,7 @@
           { id: 'regGoal', l: 'Регистраций, цель', k: 'in', step: 10 },
           { id: 'amb', l: 'Амбассадоры и партнёры, регистраций', k: 'in', step: 5 },
           { id: 'mail', l: 'Регистраций из рассылок по базе', k: 'in' },
-          { id: 'social', l: 'Регистраций из соцсетей' },
+          { id: 'social', l: 'Регистраций из соцсетей', k: 'in' },
           { id: 'crLand', l: 'CR переход на страницу регистрации → регистрация', k: 'in', u: 'pct' },
           { id: 'clicks', l: 'Нужно переходов на страницу регистрации' },
           { id: 'crExt', l: 'CR регистрация → расширенный доступ', k: 'in', u: 'pct' },
