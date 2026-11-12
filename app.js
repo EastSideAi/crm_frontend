@@ -226,6 +226,7 @@
     new:      { label: 'Новые',         hint: 'написали или зашли, но ничего не оставили — пока с ними говорит бот' },
     queue:    { label: 'В работе',      hint: 'оставили заявку или их взяли в работу — от горячих к спокойным' },
     clients:  { label: 'Клиенты',       hint: 'оплатившие и те, кого отметили клиентом вручную' },
+    support:  { label: 'Сопровождение', hint: 'те, кого мы ведем прямо сейчас: клиент с тарифом сопровождения или проставленным направлением' },
     all:      { label: 'Все',           hint: 'все карточки, кроме архива' },
     rejected: { label: 'Отказы',        hint: 'не сложилось — но контакт остался' },
     archive:  { label: 'Архив',         hint: 'скрытые лиды и тестовые записи — можно вернуть' },
@@ -1024,10 +1025,31 @@
      ведём как клиентов, включая перенесённых руками (Павел 06.10.2026; расширяет
      решение от 05.09 «только оплата»). */
   function isClient(l) { return !!l.paid || (l.crm && l.crm.status === 'client'); }
+  /* «Сопровождение» — те, с кем мы работаем по поступлению ПРЯМО СЕЙЧАС.
+     Статуса «клиент» для этого мало: им помечены и ученики языковой школы, и
+     старые оплаты теплого приема, и пустые заходы из бота (Мария 05.11.2026:
+     «чтобы там были все наши текущие клиенты, с которыми мы работаем, а не все,
+     кто намешивается»). Поэтому правило двойное: статус клиента И признак работы
+     по поступлению — тариф сопровождения или проставленное направление подачи.
+     Ручная отметка (overrides.support) сильнее правила в обе стороны: правило не
+     поймает того, кому тариф еще не проставили, и не отпустит уехавшего. */
+  var SUPPORT_TARIFFS = ['std', 'plus', 'prem'];
+  function supportByRule(l) {
+    if (!isClient(l)) return false;
+    var o = (l.crm && l.crm.overrides) || {};
+    return SUPPORT_TARIFFS.indexOf(o.tariff || '') !== -1 || !!(o.track || '');
+  }
+  function isSupport(l) {
+    var o = (l.crm && l.crm.overrides) || {};
+    if (o.support === 'off') return false;
+    if (o.support === 'on') return true;
+    return supportByRule(l);
+  }
   function segBase(seg) {
     return state.leads.filter(function (l) {
       if (seg === 'queue') return inQueue(l);
       if (seg === 'clients') return isClient(l);
+      if (seg === 'support') return isSupport(l);
       if (seg === 'rejected') return l.crm.status === 'rejected';
       if (seg === 'new') return isProspect(l);
       // Кому «Новые» не показаны, тому и во «Всех» холодных нет.
@@ -1111,7 +1133,7 @@
   function counts() {
     /* Счетчики вкладок «Контактов» — по тем же правилам, что и списки, иначе цифра
        спорила бы со строками. c.cold — вкладка «Новые», c.all — «Все» вместе с ними. */
-    var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
+    var c = { queue: 0, all: 0, clients: 0, support: 0, rejected: 0, hot: 0, week: 0, today: 0,
               anketa: 0, booked: 0, blank: 0, cold: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
@@ -1122,6 +1144,7 @@
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
       if (isClient(l)) c.clients++;
+      if (isSupport(l)) c.support++;
       if (l.crm.status === 'rejected') c.rejected++;
       if (l.created_at && new Date(l.created_at) > weekAgo) c.week++;
       if (isToday(l.created_at)) c.today++;
@@ -3129,7 +3152,7 @@
       var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
         (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).filter(segAvail).map(function (s) {
-        var n = s === 'new' ? c.cold : s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
+        var n = s === 'new' ? c.cold : s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'support' ? c.support : s === 'rejected' ? c.rejected : 0;
         return '<a class="tab' + (!onDup && state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
       }).join('') + dupTab + '</nav>';
@@ -26977,8 +27000,8 @@
     if (H === undefined) { finLoadHistory(); }
     var head = '<div class="list-tools fph-head">' +
       '<div><div class="t fe-t">История выплат</div>' +
-        '<div class="s fe-s">перенос из ведомости · в фонд маркетинга не идёт</div></div>' +
-      '<button class="qchip add fph-add">' + ic('plus', 12) + 'запись</button></div>';
+        '<div class="s fe-s">выплаты вручную и перенос из старой ведомости</div></div>' +
+      '<button class="qchip add fph-add">' + ic('plus', 12) + 'выплата</button></div>';
     var inner;
     if (H === undefined) {
       inner = '<div class="empty">Загружаю историю…</div>';
@@ -27003,9 +27026,12 @@
         var who = esc(r.partner || '—');
         var forwhom = r.client ? ' <span class="fph-for">за ' + esc(r.client) + '</span>' : '';
         var sub = r.gross_rub ? '<i>с ' + finRub(r.gross_rub) + '</i>' : '';
+        // Строка, которая сама провела выплату расходом в фонд маркетинга, — отметкой:
+        // её правка и удаление двигают деньги, у справочной строки — нет.
+        var led = r.in_ledger ? '<span class="fst ok">в ведомости</span>' : '';
         return '<div class="trow fph-row" data-hedit="' + r.id + '">' +
           '<span class="fo-what"><b>' + who + '</b>' + forwhom + sub + '</span>' +
-          '<span class="fph-mid">' + rate + '</span>' +
+          '<span class="fph-mid">' + led + rate + '</span>' +
           '<span class="num fo-sum">' + finRub(r.amount_rub) + '</span>' +
           '<button class="fph-del" data-hdel="' + r.id + '" title="Убрать строку">' +
             ic('x', 11) + '</button>' +
@@ -27466,10 +27492,10 @@
     // row задан — правим существующую строку (PUT), иначе добавляем новую (POST).
     row = row || {};
     var isEdit = row.id !== undefined && row.id !== null;
-    openSheet(isEdit ? 'Правка строки истории' : 'Строка истории',
-      'Выплата, которую уже провели раньше (мимо CRM или из старой ведомости). ' +
-      'Это справочная запись: в фонд маркетинга она не попадает.',
-      [['partner', 'line', 'Партнёр', row.partner || ''],
+    // Новая выплата партнёру, которого нет в партнёрке CRM, проводится отсюда в фонд
+    // маркетинга (Роман 12.11.2026: «сначала в партнёрские и оттуда в фонд
+    // маркетинга»). Выбор только при заведении: у заведённой строки он уже сделан.
+    var fields = [['partner', 'line', 'Партнёр', row.partner || ''],
        ['client', 'line', 'За какого клиента', row.client || ''],
        ['yr', 'number', 'Год', row.yr != null ? String(row.yr) : String(new Date().getFullYear())],
        ['mon', 'pick', 'Месяц', FPH_MONTH_PICK, row.mon != null ? String(row.mon) : ''],
@@ -27479,7 +27505,17 @@
        ['amount_rub', 'number', 'Вознаграждение партнёру, ₽',
         row.amount_rub != null ? String(row.amount_rub) : ''],
        ['paid_on', 'line', 'Дата выплаты (ГГГГ-ММ-ДД)', row.paid_on || ''],
-       ['note', 'text', 'Примечание', row.note || '']],
+       ['note', 'text', 'Примечание', row.note || '']];
+    if (!isEdit) fields.unshift(['ledger', 'pick', 'Что это', [
+      ['1', 'Выплата сейчас: провести в ведомость, расход фонда маркетинга'],
+      ['', 'Уже выплачено раньше: только запись в истории']], '1']);
+    var subText = isEdit
+      ? (row.in_ledger
+          ? 'Выплата проведена в ведомость: новая сумма поменяет и расход в фонде маркетинга.'
+          : 'Справочная запись: в фонд маркетинга она не попадает.')
+      : 'Выплата сейчас ляжет и сюда, и расходом в фонд маркетинга открытой ведомости. ' +
+        'Старую выплату из прошлых периодов вносите только записью в истории.';
+    openSheet(isEdit ? 'Правка выплаты' : 'Выплата партнёру', subText, fields,
       function (v, close) {
         var partner = String(v.partner || '').trim();
         if (!partner) return 'Впишите партнёра';
@@ -27495,21 +27531,33 @@
           paid_on: String(v.paid_on || '').trim() || null,
           note: String(v.note || '').trim(),
         };
+        if (!isEdit) body.ledger = v.ledger === '1';
         var url = '/admin/api/partners/payouts/history' + (isEdit ? '/' + row.id : '');
         czSend(url, isEdit ? 'PUT' : 'POST', body).then(function () {
           close(); FIN.phistory = undefined; FIN.phistoryBusy = false;
-          renderAll(); showToast(isEdit ? 'Строка обновлена' : 'Строка добавлена в историю');
+          // Строка в ведомости меняет фонд маркетинга и каскад — сбрасываем ведомость.
+          if (body.ledger || row.in_ledger) finForget(true);
+          renderAll();
+          showToast(isEdit ? 'Строка обновлена'
+            : (body.ledger ? 'Выплата проведена в фонд маркетинга' : 'Строка добавлена в историю'));
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
       }, false, 'Партнёрские выплаты', isEdit ? 'Сохранить' : 'Добавить');
   }
 
   function finHistoryDelete(hid) {
+    var H = FIN.phistory, led = false;
+    if (H && H.rows) H.rows.forEach(function (r) {
+      if (String(r.id) === String(hid)) led = !!r.in_ledger;
+    });
     finConfirm('Убрать строку истории',
-      'Строка пропадёт из истории. Деньги это не трогает — запись справочная.',
+      led ? 'Выплата уйдёт из истории вместе с расходом в фонде маркетинга. ' +
+            'Отчисления в фонды пересчитаются.'
+          : 'Строка пропадёт из истории. Деньги это не трогает — запись справочная.',
       'Убрать', function () {
         czSend('/admin/api/partners/payouts/history/' + hid, 'DELETE')
           .then(function () {
             FIN.phistory = undefined; FIN.phistoryBusy = false;
+            if (led) finForget(true);
             renderAll(); showToast('Строка убрана');
           }).catch(function (e) { showToast(finLineErr(e)); });
       });
@@ -46633,6 +46681,7 @@
     var map = {
       queue: ['Очередь пуста', 'По всем заявкам есть движение — горячих на связь нет.', 'check'],
       clients: ['Клиентов пока нет', 'Будут — как только первая заявка дойдет до оплаты.', 'card'],
+      support: ['Никого не ведем', 'Сюда попадают клиенты с тарифом или направлением. Если кто-то в работе, а его тут нет — поставь ему в карточке «ведем сейчас».', 'card'],
       rejected: ['Отказов нет', 'Никто пока не закрыт отказом. Так держать.', 'check'],
       all: ['Лидов пока нет', 'Появятся после первых прохождений диагностики на платформе.', 'leads'],
     };
@@ -51763,6 +51812,10 @@
   function buildQual(ctx) {
     var crm = ctx.crm || {};
     var q = crm.qual || {};
+    var sup = (crm.overrides || {}).support || '';
+    /* ctx — обертка (lead/d/crm), а не сама карточка: правилу нужен признак оплаты,
+       иначе оплатившему без статуса «клиент» подпись сказала бы «не ведем». */
+    var supL = { crm: crm, paid: !!((ctx.lead && ctx.lead.paid) || (ctx.base && ctx.base.paid)) };
     var mql = crm.mql || { ok: false, checks: {} };
     var checks = mql.checks || {};
 
@@ -51807,6 +51860,19 @@
       '<label class="ql-f"><span class="ql-l">Направление</span>' +
         '<select class="tm-sel" data-track="1"><option value="">не выбрано</option></select>' +
       '</label>' +
+      /* Ручная отметка для вкладки «Сопровождение». Правило (клиент с тарифом или
+         направлением) ловит не всех: тариф проставляют не сразу, а уехавшего никакое
+         поле само не отпустит. Поэтому отметка перекрывает правило в обе стороны, а
+         пустое значение возвращает карточку правилу — и подпись говорит, что оно
+         сейчас решает. Живет в overrides.support, отдельной колонки под три значения
+         не заводим (как тариф и направление). */
+      '<label class="ql-f"><span class="ql-l">Сопровождение</span>' +
+        '<select class="tm-sel' + (sup ? '' : ' auto') + '" data-support="1">' +
+          '<option value=""' + (sup ? '' : ' selected') + '>по правилу: ' +
+            (supportByRule(supL) ? 'ведем' : 'не ведем') + '</option>' +
+          '<option value="on"' + (sup === 'on' ? ' selected' : '') + '>ведем сейчас</option>' +
+          '<option value="off"' + (sup === 'off' ? ' selected' : '') + '>не ведем</option>' +
+        '</select></label>' +
     '</div>';
 
     var marks = q.sql || {};
@@ -54638,6 +54704,11 @@
           patch(id, { overrides: { track: trSel.value } });
         });
       }
+      // отметка «ведем / не ведем»: пустое значение возвращает карточку правилу
+      var supSel = qlHost.querySelector('select[data-support]');
+      if (supSel) supSel.addEventListener('change', function () {
+        patch(id, { overrides: { support: supSel.value } });
+      });
     }
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
