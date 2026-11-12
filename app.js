@@ -26993,51 +26993,88 @@
     return row.period_label || (row.yr ? String(row.yr) : 'Без месяца');
   }
 
+  // Строка летописи. Ручная выплата, которую ещё не провели (`due`), рисуется в
+  // «Начислениях» с кнопкой «Выплатить»; выплаченная — в «Истории» с отметкой
+  // «в ведомости»: её правка и удаление двигают деньги, у справочной строки — нет.
+  function fphRow(r) {
+    var rate = r.rate_text ? '<i class="fph-rate">' + esc(r.rate_text) + '</i>' : '';
+    var who = esc(r.partner || '—');
+    var forwhom = r.client ? ' <span class="fph-for">за ' + esc(r.client) + '</span>' : '';
+    var sub = r.gross_rub ? '<i>с ' + finRub(r.gross_rub) + '</i>' : '';
+    var mid = r.due
+      ? '<span class="fst wait">к выплате</span>' +
+        '<button class="qchip add" data-hpay="' + r.id + '">' + ic('card', 12) +
+          'Выплатить</button>'
+      : (r.in_ledger ? '<span class="fst ok">в ведомости</span>' : '') + rate;
+    return '<div class="trow fph-row' + (r.due ? ' fph-due' : '') + '" data-hedit="' + r.id + '">' +
+      '<span class="fo-what"><b>' + who + '</b>' + forwhom + sub + '</span>' +
+      '<span class="fph-mid">' + mid + '</span>' +
+      '<span class="num fo-sum">' + finRub(r.amount_rub) + '</span>' +
+      '<button class="fph-del" data-hdel="' + r.id + '" title="Убрать строку">' +
+        ic('x', 11) + '</button>' +
+    '</div>';
+  }
+  function fphDueRows() {
+    var H = FIN.phistory;
+    return (H && H.rows) ? H.rows.filter(function (r) { return r.due; }) : [];
+  }
+
+  // Ручные начисления в «Начислениях»: партнёру не из партнёрки CRM платим отсюда.
+  // Пока не выплачено, строка тут, а в фонде маркетинга висит планом; «Выплатить»
+  // делает расход фактом и уводит строку в «Историю» (Роман 12.11.2026: «а почему в
+  // истории? ему ещё не оплатили»).
+  function finManualDueSection() {
+    if (FIN.phistory === undefined) finLoadHistory();
+    var due = fphDueRows();
+    var head = '<div class="list-tools fph-head">' +
+      '<div><div class="t fe-t">Выплаты вручную</div>' +
+        '<div class="s fe-s">партнёрам, которых нет в партнёрке CRM</div></div>' +
+      '<button class="qchip add fph-add" data-hledger="1">' + ic('plus', 12) +
+        'выплата</button></div>';
+    var inner = due.length
+      ? due.map(fphRow).join('')
+      : '<div class="empty">Ручных начислений нет.</div>';
+    return '<div class="card listcard fph-card">' + head + inner + '</div>';
+  }
+
   // Блок «История выплат»: годы сверткой, свежий год открыт, остальные свёрнуты —
-  // строк под две сотни, разом вываливать их на экран незачем.
+  // строк под две сотни, разом вываливать их на экран незачем. Невыплаченные ручные
+  // строки сюда не попадают: их место в «Начислениях».
   function finHistorySection() {
     var H = FIN.phistory;
     if (H === undefined) { finLoadHistory(); }
     var head = '<div class="list-tools fph-head">' +
       '<div><div class="t fe-t">История выплат</div>' +
-        '<div class="s fe-s">выплаты вручную и перенос из старой ведомости</div></div>' +
-      '<button class="qchip add fph-add">' + ic('plus', 12) + 'выплата</button></div>';
+        '<div class="s fe-s">что уже выплатили, в том числе из старой ведомости</div></div>' +
+      '<button class="qchip add fph-add" data-hledger="">' + ic('plus', 12) +
+        'запись</button></div>';
+    var rows = (H && H !== 'none' && H.rows) ? H.rows.filter(function (r) { return !r.due; }) : [];
     var inner;
     if (H === undefined) {
       inner = '<div class="empty">Загружаю историю…</div>';
-    } else if (H === 'none' || !H.rows || !H.rows.length) {
+    } else if (!rows.length) {
       inner = '<div class="empty">Истории пока нет. Перенесём из ведомости или добавьте строку.</div>';
     } else {
+      // Годы и итоги считаем здесь по выплаченному: сводка сервера включает и то,
+      // что ещё к выплате.
+      var byYear = {}, years = [], total = 0;
+      rows.forEach(function (r) {
+        var key = r.yr === null || r.yr === undefined ? '—' : String(r.yr);
+        if (!byYear[key]) { byYear[key] = []; years.push({ yr: r.yr, count: 0, total: 0 }); }
+        byYear[key].push(r);
+        var y = years[years.length - 1];
+        y.count += 1; y.total += Number(r.amount_rub) || 0;
+        total += Number(r.amount_rub) || 0;
+      });
       if (!FIN.histOpen) {
         FIN.histOpen = {};
-        var newest = (H.by_year[0] || {}).yr;
-        FIN.histOpen[String(newest)] = true;   // свежий год раскрыт
+        var y0 = years[0].yr;
+        FIN.histOpen[y0 === null || y0 === undefined ? '—' : String(y0)] = true;   // свежий год раскрыт
       }
       // Строки по годам, внутри года — по месяцам (бэкенд отдал уже yr desc, mon desc).
       // Месяц вынесен в заголовок со своей суммой: сразу видно, когда и сколько
       // выплатили (Роман 28.10.2026). Строка кликается — открывается правка.
-      var byYear = {};
-      H.rows.forEach(function (r) {
-        var key = r.yr === null || r.yr === undefined ? '—' : String(r.yr);
-        (byYear[key] = byYear[key] || []).push(r);
-      });
-      var fphRow = function (r) {
-        var rate = r.rate_text ? '<i class="fph-rate">' + esc(r.rate_text) + '</i>' : '';
-        var who = esc(r.partner || '—');
-        var forwhom = r.client ? ' <span class="fph-for">за ' + esc(r.client) + '</span>' : '';
-        var sub = r.gross_rub ? '<i>с ' + finRub(r.gross_rub) + '</i>' : '';
-        // Строка, которая сама провела выплату расходом в фонд маркетинга, — отметкой:
-        // её правка и удаление двигают деньги, у справочной строки — нет.
-        var led = r.in_ledger ? '<span class="fst ok">в ведомости</span>' : '';
-        return '<div class="trow fph-row" data-hedit="' + r.id + '">' +
-          '<span class="fo-what"><b>' + who + '</b>' + forwhom + sub + '</span>' +
-          '<span class="fph-mid">' + led + rate + '</span>' +
-          '<span class="num fo-sum">' + finRub(r.amount_rub) + '</span>' +
-          '<button class="fph-del" data-hdel="' + r.id + '" title="Убрать строку">' +
-            ic('x', 11) + '</button>' +
-        '</div>';
-      };
-      inner = (H.by_year || []).map(function (y) {
+      inner = years.map(function (y) {
         var key = y.yr === null || y.yr === undefined ? '—' : String(y.yr);
         var open = !!FIN.histOpen[key];
         // Режем год на месяцы, сохраняя порядок (строки уже mon desc).
@@ -27071,8 +27108,8 @@
         '</div>';
       }).join('');
       var foot = '<div class="fin-note calm fph-total">' + ic('coins', 15) +
-        '<span>Всего в истории: <b>' + finRub(H.total) + '</b> за ' +
-        H.count + ' ' + plural(H.count, 'выплату', 'выплаты', 'выплат') + '</span></div>';
+        '<span>Всего в истории: <b>' + finRub(total) + '</b> за ' +
+        rows.length + ' ' + plural(rows.length, 'выплату', 'выплаты', 'выплат') + '</span></div>';
       inner = inner + foot;
     }
     return '<div class="card listcard fph-card">' + head + inner + '</div>';
@@ -27099,7 +27136,10 @@
         if (c.payable && !c.paid) clientsDue += 1;
       });
     });
-    var waiting = partners.filter(function (p) { return (p.due || 0) > 0; }).length;
+    var manualDue = fphDueRows();
+    manualDue.forEach(function (r) { totalDue += Number(r.amount_rub) || 0; });
+    var waiting = partners.filter(function (p) { return (p.due || 0) > 0; }).length +
+      manualDue.length;
 
     var tiles = [
       { label: 'К выплате', value: finRub(totalDue), sub: 'начислено, не выплачено' },
@@ -27287,14 +27327,15 @@
     // выплате (Роман 28.10.2026): «Начисления» — кто к оплате сейчас, «История» —
     // что выплатили раньше (перенос из ведомости).
     var pview = FIN.pview === 'history' ? 'history' : 'due';
-    var histN = (FIN.phistory && FIN.phistory !== 'none') ? FIN.phistory.count : null;
+    var histN = (FIN.phistory && FIN.phistory !== 'none')
+      ? FIN.phistory.rows.length - fphDueRows().length : null;
     var tabs = '<nav class="tabs fpt-tabs">' +
       '<a class="tab' + (pview === 'due' ? ' on' : '') + '" data-pview="due">Начисления</a>' +
       '<a class="tab' + (pview === 'history' ? ' on' : '') + '" data-pview="history">История' +
         (histN ? '<span class="n num">' + histN + '</span>' : '') + '</a></nav>';
     var content = pview === 'history'
       ? finHistorySection()
-      : statBar(tiles) + rateBar + body;
+      : statBar(tiles) + rateBar + finManualDueSection() + body;
     view.innerHTML = tabs + content;
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-pview]'), function (t) {
@@ -27313,8 +27354,17 @@
         renderAll();
       });
     });
-    var ha = view.querySelector('.fph-add');
-    if (ha) ha.addEventListener('click', function () { finHistoryForm(); });
+    Array.prototype.forEach.call(view.querySelectorAll('.fph-add'), function (b) {
+      b.addEventListener('click', function () {
+        finHistoryForm(null, b.getAttribute('data-hledger'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-hpay]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();   // не открывать правку строки
+        finHistoryPay(b.getAttribute('data-hpay'));
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-hdel]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();   // не открывать правку, когда жмут крестик
@@ -27324,7 +27374,7 @@
     // Клик по строке — правка: находим строку по id в загруженной истории.
     Array.prototype.forEach.call(view.querySelectorAll('[data-hedit]'), function (b) {
       b.addEventListener('click', function (e) {
-        if (e.target.closest('.fph-del')) return;
+        if (e.target.closest('.fph-del') || e.target.closest('[data-hpay]')) return;
         var id = b.getAttribute('data-hedit');
         var H = FIN.phistory;
         var row = H && H.rows && H.rows.filter(function (r) {
@@ -27488,8 +27538,10 @@
     ['5', 'май'], ['6', 'июнь'], ['7', 'июль'], ['8', 'август'],
     ['9', 'сентябрь'], ['10', 'октябрь'], ['11', 'ноябрь'], ['12', 'декабрь']];
 
-  function finHistoryForm(row) {
+  function finHistoryForm(row, ledgerDefault) {
     // row задан — правим существующую строку (PUT), иначе добавляем новую (POST).
+    // ledgerDefault — что выбрано в «Что это» у новой: из «Начислений» выплата к
+    // проведению, из «Истории» запись о прошлой выплате.
     row = row || {};
     var isEdit = row.id !== undefined && row.id !== null;
     // Новая выплата партнёру, которого нет в партнёрке CRM, проводится отсюда в фонд
@@ -27507,14 +27559,18 @@
        ['paid_on', 'line', 'Дата выплаты (ГГГГ-ММ-ДД)', row.paid_on || ''],
        ['note', 'text', 'Примечание', row.note || '']];
     if (!isEdit) fields.unshift(['ledger', 'pick', 'Что это', [
-      ['1', 'Выплата сейчас: провести в ведомость, расход фонда маркетинга'],
-      ['', 'Уже выплачено раньше: только запись в истории']], '1']);
+      ['1', 'Нужно выплатить: встанет в начисления, в фонде маркетинга планом'],
+      ['', 'Уже выплачено раньше: только запись в истории']],
+      ledgerDefault === '' ? '' : '1']);
     var subText = isEdit
-      ? (row.in_ledger
-          ? 'Выплата проведена в ведомость: новая сумма поменяет и расход в фонде маркетинга.'
-          : 'Справочная запись: в фонд маркетинга она не попадает.')
-      : 'Выплата сейчас ляжет и сюда, и расходом в фонд маркетинга открытой ведомости. ' +
-        'Старую выплату из прошлых периодов вносите только записью в истории.';
+      ? (row.due
+          ? 'Ещё не выплачено: новая сумма поменяет и плановую строку в фонде маркетинга.'
+          : row.in_ledger
+            ? 'Выплата проведена в ведомость: новая сумма поменяет и расход в фонде маркетинга.'
+            : 'Справочная запись: в фонд маркетинга она не попадает.')
+      : 'Новая выплата встанет в начисления «к выплате», а в фонде маркетинга открытой ' +
+        'ведомости плановой строкой. Заплатили — жмите «Выплатить». Старую выплату из ' +
+        'прошлых периодов вносите только записью в истории.';
     openSheet(isEdit ? 'Правка выплаты' : 'Выплата партнёру', subText, fields,
       function (v, close) {
         var partner = String(v.partner || '').trim();
@@ -27539,18 +27595,37 @@
           if (body.ledger || row.in_ledger) finForget(true);
           renderAll();
           showToast(isEdit ? 'Строка обновлена'
-            : (body.ledger ? 'Выплата проведена в фонд маркетинга' : 'Строка добавлена в историю'));
+            : (body.ledger ? 'Выплата встала в начисления' : 'Строка добавлена в историю'));
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
       }, false, 'Партнёрские выплаты', isEdit ? 'Сохранить' : 'Добавить');
   }
 
+  function finHistoryPay(hid) {
+    var H = FIN.phistory, row = null;
+    if (H && H.rows) H.rows.forEach(function (r) { if (String(r.id) === String(hid)) row = r; });
+    if (!row) return;
+    finConfirm('Выплатить ' + finRub(row.amount_rub),
+      (row.partner || 'Партнёр') + (row.client ? ' за ' + row.client : '') +
+        '. Плановая строка в фонде маркетинга станет фактом с сегодняшней датой, ' +
+        'выплата уйдёт в историю.',
+      'Выплачено', function () {
+        czSend('/admin/api/partners/payouts/history/' + hid + '/pay', 'POST')
+          .then(function () {
+            FIN.phistory = undefined; FIN.phistoryBusy = false;
+            finForget(true);
+            renderAll(); showToast('Выплата проведена');
+          }).catch(function (e) { showToast(finLineErr(e)); });
+      });
+  }
+
   function finHistoryDelete(hid) {
-    var H = FIN.phistory, led = false;
+    var H = FIN.phistory, led = false, due = false;
     if (H && H.rows) H.rows.forEach(function (r) {
-      if (String(r.id) === String(hid)) led = !!r.in_ledger;
+      if (String(r.id) === String(hid)) { led = !!r.in_ledger; due = !!r.due; }
     });
-    finConfirm('Убрать строку истории',
-      led ? 'Выплата уйдёт из истории вместе с расходом в фонде маркетинга. ' +
+    finConfirm(due ? 'Убрать начисление' : 'Убрать строку истории',
+      due ? 'Начисление уйдёт вместе с плановой строкой в фонде маркетинга.'
+      : led ? 'Выплата уйдёт из истории вместе с расходом в фонде маркетинга. ' +
             'Отчисления в фонды пересчитаются.'
           : 'Строка пропадёт из истории. Деньги это не трогает — запись справочная.',
       'Убрать', function () {
