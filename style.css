@@ -8296,6 +8296,10 @@ button.fsp-via { cursor: pointer; }
   font-variant-numeric: tabular-nums; line-height: 20px; }
 .fph-mid { text-align: right; }
 .fph-mid .fst + .fph-rate { margin-left: 6px; }
+/* Ручная выплата к проведению: чип и кнопка «Выплатить» в одной колонке, поэтому
+   колонка по содержимому, а не 80px истории. */
+.fph-due { grid-template-columns: minmax(0, 1fr) auto 120px; align-items: center; }
+.fph-due .fph-mid { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .fph-row .fo-sum { line-height: 20px; }
 .fph-del { position: absolute; right: 10px; top: 9px; background: none; border: 0;
   cursor: pointer; color: var(--ink-3); display: inline-flex;
@@ -8307,6 +8311,7 @@ button.fsp-via { cursor: pointer; }
     padding: 10px 38px 10px 16px; gap: 2px 10px; }
   .fph-row .fo-what { grid-column: 1; grid-row: 1; }
   .fph-row .fph-mid { grid-column: 1; grid-row: 2; text-align: left; }
+  .fph-due .fph-mid { justify-content: flex-start; }
   .fph-row .fo-sum { grid-column: 2; grid-row: 1; text-align: right; }
 }
 
