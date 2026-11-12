@@ -38996,6 +38996,7 @@
 
   function renderSales(view) {
     if (sbTab() === 'money') { renderSalesMoney(view); return; }
+    if (sbTab() === 'debts') { renderSalesDebts(view); return; }
     if (sbTab() === 'plan') { renderSalesPlan(view); return; }
     // Экран смотрят по ходу дня: данные старше минуты перезапрашиваем при заходе.
     if (state._sb && Date.now() - (state._sbAt || 0) > 60000) state._sb = null;
@@ -39164,12 +39165,12 @@
      Своих денег экран не считает: сумма — та же, что «доход к зачислению» в каскаде,
      сервер сверяет это сам (routers/sales_money.py). */
   var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План периода' },
-                 { id: 'money', label: 'Деньги и сверка' }];
+                 { id: 'money', label: 'Деньги и сверка' }, { id: 'debts', label: 'Дебиторка' }];
   var SM_KIND = { new: 'новая продажа', more: 'доплата', renew: 'продление', rest: 'прочее' };
 
   function smCan() { return can('finance') || can('finmodel'); }
   function sbTab() {
-    return (state.sbTab === 'money' || state.sbTab === 'plan') && smCan() ? state.sbTab : 'funnel';
+    return ['money', 'plan', 'debts'].indexOf(state.sbTab) >= 0 && smCan() ? state.sbTab : 'funnel';
   }
   function sbTabs() {
     if (!smCan()) return '';
@@ -39382,6 +39383,104 @@
     if (rs) rs.addEventListener('click', function () { state._smF = null; renderView(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
+  }
+
+  /* ── ПРОДАЖИ → ДЕБИТОРКА ─────────────────────────────────────────────────────
+     Павел 11.11.2026 на ведомости: «всех, кого мы продали, проверить, нормальные ли
+     стоят даты следующих платежей». Дебиторка ведомости собирается сама из графиков
+     рассрочки в карточке, но на 12.11.2026 график был у 9 клиентов из 64. Здесь каждый
+     клиент в одном состоянии: просрочен взнос, не разобран, ждем взнос, долга нет.
+     Состояние считает сервер (GET /admin/api/sales/debts, sales_money.debt_state).
+     Строка открывает карточку сразу в «Оплатах», стрелки карточки идут по списку. */
+  var DBT_CLS = { late: 'miss', todo: 'warn', wait: 'calm', done: 'ok' };
+  function dbtFetch() {
+    state._dbtAt = Date.now();
+    api('/admin/api/sales/debts').then(function (r) {
+      state._dbt = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      state._dbt = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+  function dbtRow(r) {
+    var next = r.state === 'late' || r.state === 'wait'
+      ? '<b class="num">' + smRub(r.next_rub) + '</b><small>' + (r.state === 'late'
+          ? 'просрочен ' + r.late_days + ' ' + plural(r.late_days, 'день', 'дня', 'дней')
+          : 'до ' + fmtDay(r.next_due).slice(0, 5)) + '</small>'
+      : r.state === 'done'
+        ? '<small>' + (r.mark === 'none' ? 'отмечено, долга нет' : 'график закрыт') + '</small>'
+        : '<small>графика нет</small>';
+    return '<button class="dbt-r ' + r.state + '" data-dbtlead="' + esc(r.id) + '">' +
+      '<span class="sb-pn"><b>' + esc(r.name) + '</b><small>' +
+        esc([r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет'].filter(Boolean).join(' · ')) +
+      '</small></span>' +
+      '<span class="sb-po' + (r.owner ? ' calm' : ' none') + '" data-l="Ведет">' + esc(r.owner || 'никто') + '</span>' +
+      '<span class="dbt-v" data-l="Оплачено"><b class="num">' + smRub(r.paid_rub) + '</b>' +
+        (r.last_paid ? '<small>последняя ' + fmtDay(r.last_paid).slice(0, 5) + '</small>' : '<small>в карточке нет оплат</small>') + '</span>' +
+      '<span class="dbt-v" data-l="Следующий взнос">' + next + '</span>' +
+    '</button>';
+  }
+  function renderSalesDebts(view) {
+    if (state._dbt && Date.now() - (state._dbtAt || 0) > 60000) state._dbt = null;
+    if (!state._dbt) { view.innerHTML = dashSkeleton(); dbtFetch(); return; }
+    if (state._dbt === 'none' || state._dbt === 'acl') {
+      view.innerHTML = '<div class="dash sb"><div class="card pf-head sb-thead">' + sbTabs() + '</div>' +
+        '<div class="card"><div class="empty">' + (state._dbt === 'acl'
+        ? 'Дебиторку видят те, кому открыты оплаты клиентов или ведомость.'
+        : 'Не удалось загрузить дебиторку. Проверьте интернет.') + '</div></div></div>';
+      sbTabsBind(view);
+      return;
+    }
+    var d = state._dbt, st = {};
+    d.states.forEach(function (x) { st[x.key] = x; });
+    var f = state.dbtF || '';
+    var v = st.late.count
+      ? { cls: 'miss', t: 'Просрочено ' + st.late.count + ' ' + plural(st.late.count, 'взнос', 'взноса', 'взносов') + ' на ' + smRub(st.late.rub),
+          s: 'семье пора напомнить или отметить оплату, если деньги пришли мимо кассы' }
+      : st.todo.count
+        ? { cls: 'warn', t: 'Не разобрано ' + st.todo.count + ' ' + plural(st.todo.count, 'клиент', 'клиента', 'клиентов'),
+            s: 'у каждого внесите график рассрочки или отметьте «долга нет»' }
+        : { cls: 'ok', t: 'Все клиенты разобраны', s: 'дебиторка ведомости собирается из графиков сама' };
+    var head = '<div class="card pf-head sb-thead">' + sbTabs() +
+      '<div class="pf-verdict ' + v.cls + '"><div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div></div></div>';
+    var stats = statBar(d.states.map(function (x) {
+      return { label: x.label, value: String(x.count), lead: x.key === 'late' && x.count > 0,
+               sub: x.key === 'late' || x.key === 'wait' ? 'на ' + smRub(x.rub)
+                 : x.key === 'todo' ? 'нет графика и отметки' : 'закрыт график или отметка' };
+    }), 'compact');
+    var rows = d.rows.filter(function (r) { return !f || r.state === f; });
+    var body = rows.map(dbtRow).join('');
+    var fl = f ? st[f].label : 'Все клиенты';
+    view.innerHTML = '<div class="dash sb dbt">' + head + '<div class="dbt-bar">' + stats + '</div>' +
+      '<div class="card sp12"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
+        '</span><div><div class="t">' + esc(fl) + ' · <span class="num">' + rows.length + '</span></div>' +
+        '<div class="s">строка открывает карточку на «Оплатах», стрелками в карточке дальше по списку</div></div>' +
+        (f ? '<button class="qchip dbt-all" data-dbtf="">Показать всех</button>' : '') + '</div>' +
+        (body ? '<div class="dbt-lh"><span>Клиент</span><span>Ведет</span><span>Оплачено</span><span>Следующий взнос</span></div>' +
+          '<div class="dbt-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') +
+      '</div></div>';
+    sbTabsBind(view);
+    // Плитки счетчиков и есть фильтр; повторное нажатие возвращает всех.
+    Array.prototype.forEach.call(view.querySelectorAll('.dbt-bar .stat'), function (b, i) {
+      var k = d.states[i].key;
+      b.classList.toggle('on', f === k);
+      b.setAttribute('aria-pressed', f === k ? 'true' : 'false');
+      b.addEventListener('click', function () { state.dbtF = f === k ? '' : k; renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dbtf]'), function (b) {
+      b.addEventListener('click', function () { state.dbtF = ''; renderView(); });
+    });
+    var ids = rows.map(function (r) { return r.id; });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dbtlead]'), function (b) {
+      b.addEventListener('click', function () {
+        openDrawer(b.getAttribute('data-dbtlead'), ids);
+        state.modalSection = 'pay';
+        renderDrawer(true);
+      });
     });
   }
 
@@ -51852,6 +51951,34 @@
     return '<div class="potc"><span class="ql-l">Чат с семьей</span>' + chat + form +
       '<span class="potc-sep"></span><span class="ql-l">Потенциал</span>' + mark + '</div>';
   }
+  /* «Долга нет» в «Оплатах» (Павел 12.11.2026, дебиторка с ведомости 11.11). Клиент
+     без графика рассрочки висит на «Продажах → Дебиторка» неразобранным, пока ему не
+     внесут график или не отметят, что платить больше нечего. Отметка лежит в
+     overrides.debt, просроченный взнос по графику ее перебивает (sales_money.debt_state). */
+  function buildDebtMark(ctx) {
+    if ((ctx.crm || {}).status !== 'client') return '';
+    var none = (((ctx.crm || {}).overrides) || {}).debt === 'none';
+    return '<div class="dbt-mark' + (none ? ' on' : '') + '">' + (none
+      ? '<span class="dbt-mt">' + ic('check', 13) + 'Долга нет: клиент оплатил полностью</span>' +
+        '<button class="bp ghost sm" data-dbt="">Снять отметку</button>'
+      : '<span class="dbt-mt">Платежи впереди есть? Заведите счет с рассрочкой ниже, взносы сами попадут в дебиторку ведомости.</span>' +
+        '<button class="bp ghost sm" data-dbt="none">Долга нет, оплачено полностью</button>') +
+    '</div>';
+  }
+  function wireDebtMark(host, id) {
+    var b = host.querySelector('[data-dbt]');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var v = b.getAttribute('data-dbt');
+      var ov = Object.assign({}, ((findLead(id) || {}).crm || {}).overrides || {}, { debt: v });
+      b.disabled = true;
+      patch(id, { overrides: ov }, null, function () {
+        showToast(v ? 'Отметил: долга нет' : 'Отметку снял');
+        state._dbt = null;
+        if (state.drawerId === id) renderModalContent();
+      });
+    });
+  }
   function wirePotChat(host, id) {
     var box = host.querySelector('.potc');
     if (!box) return;
@@ -54261,6 +54388,7 @@
         '</div></div>' +
       '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
         '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        buildDebtMark(ctx) +
         '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
         '<div class="ord-b">' +
           '<div class="ord-newh">Новый счет</div>' +
@@ -55281,6 +55409,7 @@
 
     // оплаты: добавить (статус-сегмент + дата)
     /* ── Счета ЮKassa (заказы) ── */
+    wireDebtMark(host, id);
     var ordList = el('ord-list');
     if (ordList) {
       var ORD_ST = {
