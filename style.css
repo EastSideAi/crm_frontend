@@ -8295,6 +8295,7 @@ button.fsp-via { cursor: pointer; }
 .fph-rate { font-style: normal; color: var(--ink-3); font-size: 12px;
   font-variant-numeric: tabular-nums; line-height: 20px; }
 .fph-mid { text-align: right; }
+.fph-mid .fst + .fph-rate { margin-left: 6px; }
 .fph-row .fo-sum { line-height: 20px; }
 .fph-del { position: absolute; right: 10px; top: 9px; background: none; border: 0;
   cursor: pointer; color: var(--ink-3); display: inline-flex;
