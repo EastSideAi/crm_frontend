@@ -24863,7 +24863,7 @@
           if (items[i].id === id) {
             var it = items[i];
             return finBreakdownOpen(it.contractor_id || it.smz_id, it.counterparty || it.item || '',
-              finMonthOf(it.date));
+              finMonthOf(it.date), it.id);
           }
         }
       });
@@ -24910,15 +24910,19 @@
     if (isNaN(d)) d = new Date();
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
   }
-  function finBreakdownOpen(cid, name, month) {
+  /* opId — строка ведомости, у которой нажали кнопку. Раскладываем ее сумму, а не сумму
+     человека за месяц: в месяце у него несколько выплат, и задания одной не должны
+     вычитаться из другой (Роман 12.11.2026: на 40 000 подобралось 15 000). */
+  function finBreakdownOpen(cid, name, month, opId) {
     if (!cid || document.querySelector('.al-ov')) return;
     var q = '?contractor_id=' + encodeURIComponent(cid) +
-            '&period=' + encodeURIComponent(month);
+            '&period=' + encodeURIComponent(month) +
+            (opId ? '&op_id=' + encodeURIComponent(opId) : '');
     czSend('/admin/api/contractor-reports/settlement/breakdown' + q, 'GET')
-      .then(function (d) { finBrkModal(cid, name, month, d); })
+      .then(function (d) { finBrkModal(cid, name, month, d, opId); })
       .catch(function (e) { showToast(e.message || 'Не удалось собрать раскладку'); });
   }
-  function finBrkModal(cid, name, month, d) {
+  function finBrkModal(cid, name, month, d, opId) {
     if (document.querySelector('.al-ov')) return;
     var items = (d.items || []).map(function (it) {
       return { code: it.code || null, title: it.title, unit: it.unit || 'шт',
@@ -24931,14 +24935,18 @@
     // задания уже часть суммы, второй раз их не раскладываем.
     var gap = d.gap != null ? Number(d.gap) : target;
     var sub;
+    var whose = opId ? 'строки' : 'листа';
     if (!d.linked || target <= 0) {
       sub = '. В расчётном листе за этот месяц суммы на человека нет — свяжите строку листа ' +
         'с карточкой или заполните ФИО. Ниже можно собрать состав вручную.';
+    } else if (assigned > 0 && gap <= 0) {
+      sub = '. Сумма ' + whose + ' ' + finRub(target) + ' уже разложена на задания целиком.';
     } else if (assigned > 0) {
-      sub = '. Сумма листа ' + finRub(target) + ', уже назначено ' + finRub(assigned) +
+      sub = '. Сумма ' + whose + ' ' + finRub(target) + ', уже назначено ' + finRub(assigned) +
         ', осталось разложить ' + finRub(gap) + '.';
     } else {
-      sub = '. Сумма из расчётного листа ' + finRub(target) + '.';
+      sub = '. Сумма ' + (opId ? 'строки ведомости ' : 'из расчётного листа ') +
+        finRub(target) + '.';
     }
     var ov = document.createElement('div');
     ov.className = 'al-ov over';
@@ -25043,7 +25051,7 @@
       btn.disabled = true;
       btn.textContent = 'Заводим…';
       czSend('/admin/api/contractor-reports/settlement/apply-breakdown', 'POST', {
-        contractor_id: cid, period: month,
+        contractor_id: cid, period: month, op_id: opId || undefined,
         items: clean.map(function (it) {
           return { service_code: it.code || undefined, service_title: it.title,
                    unit: it.unit, price: it.price, qty: it.qty };
@@ -25322,7 +25330,7 @@
         if (hit) {
           var it = hit.it;
           finBreakdownOpen(it.contractor_id || it.smz_id,
-            it.counterparty || it.item || '', finMonthOf(it.date));
+            it.counterparty || it.item || '', finMonthOf(it.date), it.id);
         }
       });
     });
@@ -26723,7 +26731,7 @@
           if (items[i].id === id) {
             var it = items[i];
             return finBreakdownOpen(it.contractor_id || it.smz_id,
-              it.counterparty || it.item || '', finMonthOf(it.date));
+              it.counterparty || it.item || '', finMonthOf(it.date), it.id);
           }
         }
       });
