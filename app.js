@@ -27000,8 +27000,8 @@
     if (H === undefined) { finLoadHistory(); }
     var head = '<div class="list-tools fph-head">' +
       '<div><div class="t fe-t">История выплат</div>' +
-        '<div class="s fe-s">перенос из ведомости · в фонд маркетинга не идёт</div></div>' +
-      '<button class="qchip add fph-add">' + ic('plus', 12) + 'запись</button></div>';
+        '<div class="s fe-s">выплаты вручную и перенос из старой ведомости</div></div>' +
+      '<button class="qchip add fph-add">' + ic('plus', 12) + 'выплата</button></div>';
     var inner;
     if (H === undefined) {
       inner = '<div class="empty">Загружаю историю…</div>';
@@ -27026,9 +27026,12 @@
         var who = esc(r.partner || '—');
         var forwhom = r.client ? ' <span class="fph-for">за ' + esc(r.client) + '</span>' : '';
         var sub = r.gross_rub ? '<i>с ' + finRub(r.gross_rub) + '</i>' : '';
+        // Строка, которая сама провела выплату расходом в фонд маркетинга, — отметкой:
+        // её правка и удаление двигают деньги, у справочной строки — нет.
+        var led = r.in_ledger ? '<span class="fst ok">в ведомости</span>' : '';
         return '<div class="trow fph-row" data-hedit="' + r.id + '">' +
           '<span class="fo-what"><b>' + who + '</b>' + forwhom + sub + '</span>' +
-          '<span class="fph-mid">' + rate + '</span>' +
+          '<span class="fph-mid">' + led + rate + '</span>' +
           '<span class="num fo-sum">' + finRub(r.amount_rub) + '</span>' +
           '<button class="fph-del" data-hdel="' + r.id + '" title="Убрать строку">' +
             ic('x', 11) + '</button>' +
@@ -27489,10 +27492,10 @@
     // row задан — правим существующую строку (PUT), иначе добавляем новую (POST).
     row = row || {};
     var isEdit = row.id !== undefined && row.id !== null;
-    openSheet(isEdit ? 'Правка строки истории' : 'Строка истории',
-      'Выплата, которую уже провели раньше (мимо CRM или из старой ведомости). ' +
-      'Это справочная запись: в фонд маркетинга она не попадает.',
-      [['partner', 'line', 'Партнёр', row.partner || ''],
+    // Новая выплата партнёру, которого нет в партнёрке CRM, проводится отсюда в фонд
+    // маркетинга (Роман 12.11.2026: «сначала в партнёрские и оттуда в фонд
+    // маркетинга»). Выбор только при заведении: у заведённой строки он уже сделан.
+    var fields = [['partner', 'line', 'Партнёр', row.partner || ''],
        ['client', 'line', 'За какого клиента', row.client || ''],
        ['yr', 'number', 'Год', row.yr != null ? String(row.yr) : String(new Date().getFullYear())],
        ['mon', 'pick', 'Месяц', FPH_MONTH_PICK, row.mon != null ? String(row.mon) : ''],
@@ -27502,7 +27505,17 @@
        ['amount_rub', 'number', 'Вознаграждение партнёру, ₽',
         row.amount_rub != null ? String(row.amount_rub) : ''],
        ['paid_on', 'line', 'Дата выплаты (ГГГГ-ММ-ДД)', row.paid_on || ''],
-       ['note', 'text', 'Примечание', row.note || '']],
+       ['note', 'text', 'Примечание', row.note || '']];
+    if (!isEdit) fields.unshift(['ledger', 'pick', 'Что это', [
+      ['1', 'Выплата сейчас: провести в ведомость, расход фонда маркетинга'],
+      ['', 'Уже выплачено раньше: только запись в истории']], '1']);
+    var subText = isEdit
+      ? (row.in_ledger
+          ? 'Выплата проведена в ведомость: новая сумма поменяет и расход в фонде маркетинга.'
+          : 'Справочная запись: в фонд маркетинга она не попадает.')
+      : 'Выплата сейчас ляжет и сюда, и расходом в фонд маркетинга открытой ведомости. ' +
+        'Старую выплату из прошлых периодов вносите только записью в истории.';
+    openSheet(isEdit ? 'Правка выплаты' : 'Выплата партнёру', subText, fields,
       function (v, close) {
         var partner = String(v.partner || '').trim();
         if (!partner) return 'Впишите партнёра';
@@ -27518,21 +27531,33 @@
           paid_on: String(v.paid_on || '').trim() || null,
           note: String(v.note || '').trim(),
         };
+        if (!isEdit) body.ledger = v.ledger === '1';
         var url = '/admin/api/partners/payouts/history' + (isEdit ? '/' + row.id : '');
         czSend(url, isEdit ? 'PUT' : 'POST', body).then(function () {
           close(); FIN.phistory = undefined; FIN.phistoryBusy = false;
-          renderAll(); showToast(isEdit ? 'Строка обновлена' : 'Строка добавлена в историю');
+          // Строка в ведомости меняет фонд маркетинга и каскад — сбрасываем ведомость.
+          if (body.ledger || row.in_ledger) finForget(true);
+          renderAll();
+          showToast(isEdit ? 'Строка обновлена'
+            : (body.ledger ? 'Выплата проведена в фонд маркетинга' : 'Строка добавлена в историю'));
         }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
       }, false, 'Партнёрские выплаты', isEdit ? 'Сохранить' : 'Добавить');
   }
 
   function finHistoryDelete(hid) {
+    var H = FIN.phistory, led = false;
+    if (H && H.rows) H.rows.forEach(function (r) {
+      if (String(r.id) === String(hid)) led = !!r.in_ledger;
+    });
     finConfirm('Убрать строку истории',
-      'Строка пропадёт из истории. Деньги это не трогает — запись справочная.',
+      led ? 'Выплата уйдёт из истории вместе с расходом в фонде маркетинга. ' +
+            'Отчисления в фонды пересчитаются.'
+          : 'Строка пропадёт из истории. Деньги это не трогает — запись справочная.',
       'Убрать', function () {
         czSend('/admin/api/partners/payouts/history/' + hid, 'DELETE')
           .then(function () {
             FIN.phistory = undefined; FIN.phistoryBusy = false;
+            if (led) finForget(true);
             renderAll(); showToast('Строка убрана');
           }).catch(function (e) { showToast(finLineErr(e)); });
       });
