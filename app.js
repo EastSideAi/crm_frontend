@@ -36854,16 +36854,26 @@
     var place = esc(cur.place_title || 'чужой площадке');
     return '<div class="dash">' +
       (tabsN > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      statBar([
-        { label: 'Рассылки письма на эфир', value: invited, ebl: 'invited',
-          sub: mail ? 'и еще ' + mail + ' ' + plural(mail, 'адрес', 'адреса', 'адресов') + ' на почту'
-                    : 'живые адреса, без наших копий' },
+      /* Те же три ряда, что у эфиров в нашей комнате (Ольга 13.11.2026). Людей по
+         источникам здесь нет — площадка их не отдает, поэтому в первом ряду
+         сколько позвали, а дальше клики по нашим ссылкам. */
+      efirGroup('Откуда пришли', [
+        { label: 'Рассылки бота', value: invited, ebl: invited ? 'invited' : '',
+          sub: 'отправлено в боте, без наших копий' },
+        { label: 'Рассылки писем', value: mail,
+          sub: mail ? 'отправлено писем, с людьми в базе не склеены' : 'писем не было' },
+      ]) +
+      efirGroup('Эфир', [
         { label: 'Перешли на эфир', value: perehody,
           sub: 'клики по ссылкам, а не люди' },
         { label: 'Перешли за записью', value: zapis,
           sub: zapis ? 'ссылка на запись эфира' : 'ссылки на запись не было' },
+      ]) +
+      efirGroup('Продажи', [
         { label: 'Нажали «консультация»', value: knopki,
-          sub: bot ? 'до бота дошло ' + bot : 'до бота никто не дошел' },
+          sub: 'клики по кнопкам записи' },
+        { label: 'Дошли до бота', value: bot, ebl: bot ? 'bot' : '',
+          sub: bot ? 'люди, вход в бота помнит метку' : 'до бота никто не дошел' },
       ]) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">' +
@@ -37030,9 +37040,8 @@
                           sub: 'живые адреса, без наших копий', ebl: 'invited' }] : [];
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      (srcTiles.length ? efirGroup('Откуда пришли',
-        statBar(srcTiles, (launchBarCls(srcTiles.length) + ' small').trim())) : '') +
-      efirGroup('Эфир', statBar([
+      (srcTiles.length ? efirGroup('Откуда пришли', srcTiles) : '') +
+      efirGroup('Эфир', [
         /* Регистрация — форма на сайте и вход в бота по ссылке эфира (Ольга
            13.11.2026: «они же в бота регались»). Стоит и рядом с рассылками. */
         { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
@@ -37053,8 +37062,8 @@
         { label: 'Смотрели запись', value: c.rec, ebl: c.rec ? 'rec' : '',
           sub: c.rec ? pct(c.rec, top) + topWord + (cur.anon_rec ? ', из них ' + cur.anon_rec + ' без регистрации' : '')
                      : 'записи пока нет' },
-      ], 'five')) +
-      efirGroup('Продажи', statBar([
+      ]) +
+      efirGroup('Продажи', [
         { label: 'Записались на разбор', value: cur.booked, ebl: cur.booked ? 'booked' : '',
           sub: (uchastniki ? pct(cur.booked || 0, uchastniki) + '% от участников эфира · ' : '') +
                (ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали') },
@@ -37072,7 +37081,7 @@
                (m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями') },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
-      ])) +
+      ]) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
           esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
@@ -37111,9 +37120,24 @@
   var EFIR_SPLIT = [['social', 'из соцсетей'], ['bot', 'из бота'], ['partner', 'от партнеров'],
                     ['ads', 'из рекламы'], ['other', 'без метки'], ['anon', 'без регистрации']];
   /* Ряд плашек эфира под тихой подписью: три смысловых блока экрана читаются
-     отдельно, а не одной стеной из тринадцати цифр. */
-  function efirGroup(title, bar) {
-    return '<section class="ef-group"><div class="ef-group-t">' + title + '</div>' + bar + '</section>';
+     отдельно, а не одной стеной из тринадцати цифр. Все ряды мелкие, подписи
+     черные, числа в них жирные (Ольга 13.11.2026: «слишком белесые»). */
+  function efirGroup(title, items) {
+    items = items.map(function (s) {
+      return s.sub ? Object.assign({}, s, { sub: efirSubNums(s.sub) }) : s;
+    });
+    return '<section class="ef-group"><div class="ef-group-t">' + title + '</div>' +
+      statBar(items, ((items.length === 2 ? 'two' : launchBarCls(items.length)) + ' small efir').trim()) +
+      '</section>';
+  }
+  /* Числа подписи — жирным. Теги и даты («с 11.11») не трогаем: дата не счетчик. */
+  function efirSubNums(html) {
+    return String(html).replace(/(<[^>]*>)|\d+(?:[ \u00a0]\d{3})*(?:[.,]\d+)?%?/g,
+      function (m, tag, at, all) {
+        if (tag) return m;
+        if (/^\d+\.\d+$/.test(m) || all.charAt(at - 1) === '.') return m;
+        return '<b class="enum">' + m + '</b>';
+      });
   }
 
   function efirSplitSub(sp) {
