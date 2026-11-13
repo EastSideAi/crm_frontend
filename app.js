@@ -38125,14 +38125,21 @@
         if (!l.ac || l.nl || l.d < a || l.d > b) return;
         var k = key(l);
         if (lead[k] || pon[k]) return;
-        pon[k] = {i: l.i, nm: l.nm || '', s: l.s || '', d: l.d, how: first[k] < l.d ? 'был у нас раньше' : 'впервые'};
+        pon[k] = {i: l.i, nm: l.nm || '', s: l.s || '', d: l.d, how: first[k] < a ? 'был у нас раньше' : 'впервые'};
+      });
+      // Ольга 13.11.2026: вернувшиеся — лиды периода, которые были у нас и раньше
+      // (карточка человека заведена до отрезка): спали и проявились. Мелким пунктом в «Лидах».
+      var back = {};
+      Object.keys(lead).forEach(function (k) {
+        if (first[k] < a) back[k] = {i: lead[k].i, nm: lead[k].nm || '', s: lead[k].s || '', d: lead[k].d, how: 'впервые пришел ' + fmtDay(first[k])};
       });
       var vals = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
+      x.back = Object.keys(back).length;
       x.platOnly = Object.keys(pon).length;
       x.platQ = Object.keys(plat).length;
       x.consBook = Object.keys(bot).length;
       x.qual = Object.keys(all).length;
-      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon)};
+      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back)};
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
@@ -38195,6 +38202,8 @@
             // Ольга 11.11.2026: «12% к дате» убрать, в идущем месяце процент к плану не пишем
             (pl && !o.full ? '<small class="mg-pc">' + pct(pv) + ' плана</small>' : '') +
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
+            // Ольга 13.11.2026: вернувшиеся мелким пунктом под лидами
+            (r[2] === 'leads' && cur.back ? '<small class="mg-of">' + numBtn(cur, 'back', 'c', 'из них вернулись ' + cur.back) + '</small>' : '') +
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + numBtn(prv, r[2], 'p', f(p)) + '</span>' +
           '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
@@ -38227,7 +38236,7 @@
       var cnt = list.reduce(function (s, p) { return s + (p.n || 1); }, 0);
       if (cnt !== list.length) sub = cnt + ' счетов у ' + list.length + ' человек; ' + sub;
     }
-    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : '') + ', ' + lbl, list.length, body, sub) + '</div>';
+    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
   }
 
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
