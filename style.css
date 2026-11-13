@@ -14808,7 +14808,8 @@ video.cs-media { background: #000; }
 .mg-nb:hover { border-bottom-color: currentColor; }
 .mg-nb.on { color: var(--blue); border-bottom-color: var(--blue); }
 .mg-nb:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--blue-tint); border-radius: 4px; }
-.mg-who .sb-people { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+.mg-who { margin: 4px 0 8px; }
+.mg-who .sb-people { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
 .mg-who .sb-pr.none { cursor: default; }
 .mg-who .sb-pr.none::before { display: none; }
 .mg-d.down { background: var(--red-soft); color: var(--red-ink); }

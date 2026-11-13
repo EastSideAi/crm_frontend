@@ -38224,16 +38224,21 @@
             (r[2] === 'qual' && cur.qualEarly ? '<small class="mg-of">' + numBtn(cur, 'qualEarly', 'c', 'из них пришли раньше ' + cur.qualEarly) + '</small>' : '') +
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + numBtn(prv, r[2], 'p', f(p)) + '</span>' +
-          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
+          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>' +
+          // Ольга 13.11.2026: «кликабельные, но не открываются» — список стоял под всей
+          // таблицей и уходил за экран. Теперь раскрывается прямо под строкой цифры.
+          (q && (MG_WHO_ROW[q.k] || q.k) === r[2]
+            ? mgWhoCard(rows, q, whoOf(q.s === 'c' ? cur : prv, q.k), q.s === 'c' ? o.curLbl : o.prvLbl) : '');
       }).join('') + '</div>' +
       (hasPlan ? '<div class="mg-note">' + esc(o.note) + '</div>' : '') +
-      (q ? mgWhoCard(rows, q, whoOf(q.s === 'c' ? cur : prv, q.k), q.s === 'c' ? o.curLbl : o.prvLbl) : '') +
     '</div>';
   }
 
   /* Люди за цифрой лестницы. Строка с карточкой открывает ее в новой вкладке, как на
      «Продажах»; человек из бота без карточки стоит строкой без перехода. */
   var MG_WHO_N = {invN: 'счет', payers: 'платеж', revenue: 'платеж'};
+  // мелкие пункты раскрывают список под строкой, к которой относятся
+  var MG_WHO_ROW = {back: 'leads', qualEarly: 'qual'};
   function mgWhoCard(rows, q, list, lbl) {
     var row = rows.filter(function (r) { return r[2] === q.k; })[0];
     list = (list || []).slice().sort(function (a, b) {
@@ -38515,11 +38520,14 @@
       b.addEventListener('click', function () {
         var v = b.dataset.mgq.split(':'), q = state._mgQ, at = b.closest('.mg-card') && b.closest('.mg-card').dataset.at;
         state._mgQ = q && q.k === v[0] && q.s === v[1] && q.at === at ? null : {k: v[0], s: v[1], at: at};
+        state._mgScroll = !!state._mgQ;
         renderView();
       });
     });
     var pc = view.querySelector('#sb-pclose');
     if (pc) pc.addEventListener('click', function () { state._mgQ = null; renderView(); });
+    var who = view.querySelector('.mg-who');
+    if (who && state._mgScroll) { state._mgScroll = false; who.scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
     view.querySelectorAll('[data-sblead]').forEach(function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
     });
