@@ -15045,7 +15045,7 @@ video.cs-media { background: #000; }
 .m-call:hover { background: var(--blue-d); }
 .m-call:active { transform: scale(.97); }
 .m-call svg { width: 14px; height: 14px; }
-.m-call svg + span + svg { width: 12px; height: 12px; opacity: .75; transform: rotate(90deg); }
+.m-call svg + span + svg { width: 12px; height: 12px; opacity: .75; }
 #m-callslot:empty { display: none; }
 
 .pc-nums { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 18px; }
@@ -15066,8 +15066,9 @@ video.cs-media { background: #000; }
 .pc-what.miss { color: var(--red-ink); }
 .pc-row .cl-m { font-size: 12.5px; }
 .pc-audio { display: block; width: 100%; max-width: 460px; height: 36px; margin-top: 10px; }
+/* На телефоне рядом с именем места нет: там стрелки листания и крестик. Кнопка
+   уходит своей строкой под имя и остается с подписью — это главное действие. */
 @media (max-width: 640px) {
-  .m-call span { display: none; }
-  .m-call { padding: 0 9px; }
-  .m-call svg + span + svg { display: none; }
+  .m-name-row { flex-wrap: wrap; row-gap: 8px; }
+  #m-callslot { order: 3; flex-basis: 100%; }
 }

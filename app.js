@@ -50295,6 +50295,12 @@
     el('m-close').addEventListener('click', closeDrawer);
     pcWireButton(id);
     if (can('clients')) pcLoad(id);
+    // На телефоне разделы идут лентой вбок, и открытый («Звонки», «Переписка») уезжал
+    // за край: человек не видел, где он. Подкручиваем ленту к открытому разделу.
+    var navOn = modal.querySelector('.m-ni.on');
+    if (navOn && navOn.parentNode.scrollWidth > navOn.parentNode.clientWidth) {
+      navOn.parentNode.scrollLeft = navOn.offsetLeft - (navOn.parentNode.clientWidth - navOn.offsetWidth) / 2;
+    }
     var ownJump = el('m-own-jump');
     if (ownJump) ownJump.addEventListener('click', function () { setModalSection('now'); });
     var hideBtn = el('m-hide');
@@ -50542,7 +50548,8 @@
   }
   function pcWireButton(id) {
     var b = el('m-call');
-    if (b) b.addEventListener('click', function () { pcPick(id, b); });
+    // stopPropagation: иначе тот же клик долетает до документа и закрывает выпадашку
+    if (b) b.addEventListener('click', function (e) { e.stopPropagation(); pcPick(id, b); });
   }
   function pcPick(id, anchor) {
     var ph = pcPhones(id);
@@ -50582,7 +50589,7 @@
         '<div class="cl-m"><b class="pc-what' + (miss ? ' miss' : '') + '">' + what + '</b>' + (meta ? ' · ' + meta : '') + '</div>' +
         (can('phone') && c.number ? '<button class="icobtn" data-pcdial="' + esc(c.number) + '" title="Перезвонить на ' + esc(msPhone(c.number)) + '">' + ic('phone', 14) + '</button>' : '') +
       '</div>' +
-      (c.audio ? '<audio class="pc-audio" controls preload="none" src="' +
+      (c.audio ? '<audio class="pc-audio" controls preload="metadata" src="' +
         esc(API + '/admin/api/leads/' + id + '/phone-calls/' + c.id + '/audio?k=' + encodeURIComponent(getKey())) + '"></audio>' : '') +
       note +
     '</div>';
