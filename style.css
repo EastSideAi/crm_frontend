@@ -395,6 +395,14 @@ a { color: inherit; text-decoration: none; }
    Метрика недоступна или счётчик не задан — плиток снова пять. */
 .statbar.six { grid-template-columns: repeat(6, 1fr); }
 .statbar.six .stat { padding: 16px 14px; }
+/* Мелкая полоса — вспомогательный ряд над главным (эфиры: рассылка и источники
+   регистраций). Цифра тише, чтобы якорем экрана остался ряд пути. */
+.statbar.small .stat { padding: 12px 18px; }
+.statbar.small .stat .sv { font-size: 28px; margin-top: 10px; }
+/* «Пришли из рассылок писем» длиннее узкой колонки — переносим, а не режем. */
+.statbar.small .stat .sl { white-space: normal; }
+.ef-group { display: flex; flex-direction: column; gap: 8px; }
+.ef-group-t { font-size: 13px; font-weight: 600; color: var(--ink-2); padding-left: 4px; }
 /* Семь и восемь плиток — когда к полосе запуска добавились диагностика и запись на
    консультацию. Ряд остаётся ОДНИМ (владелец 31.10.2026: «чтобы все плашки входили
    в 1 ряд, итого 2 ряда»), поэтому плитка ужимается: меньше кегль цифры, плотнее

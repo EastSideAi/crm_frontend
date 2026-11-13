@@ -37009,21 +37009,30 @@
     }).join('') || '<div class="empty">Ссылок в соцсети по этому эфиру не было.</div>';
 
     var rs = cur.reg_split;
+    /* Три ряда (Ольга 13.11.2026): откуда позвали и пришли — мелкой полосой сверху,
+       дальше путь от регистрации до записи на разбор, внизу деньги. */
+    /* Первый ряд — откуда пришли зарегистрировавшиеся (Ольга 13.11.2026): рассылки
+       писем и бота отдельно, у каждой в подписи — сколько отправили. Проценты — от
+       регистраций. Эфир без разбивки показывает одну плашку рассылки, как раньше. */
+    var srcTiles = rs ? [['mail', 'Пришли из рассылок писем'], ['bot', 'Пришли из рассылок бота'],
+                         ['social', 'Пришли из соцсетей'], ['partner', 'Пришли от партнеров'],
+                         ['ads', 'Пришли с рекламы']].map(function (x) {
+      var n = rs[x[0]] || 0;
+      var sent = x[0] === 'mail' ? 'отправлено писем ' + (cur.invited_mail || 0)
+        : x[0] === 'bot' && cur.invited
+          ? '<span class="go-sub esplit" data-ebl="invited" data-etitle="Отправлено в боте"' +
+            ' role="button" tabindex="0">отправлено в боте ' + invited + '</span>'
+        : '';
+      return { label: x[1], value: n, ebl: n ? 'reg_' + x[0] : '',
+               sub: (c.reg ? pct(n, c.reg) + '% от регистраций' : 'регистраций пока нет') +
+                    (sent ? '<br>' + sent : '') };
+    }) : cur.invited ? [{ label: 'Рассылки письма на эфир', value: invited,
+                          sub: 'живые адреса, без наших копий', ebl: 'invited' }] : [];
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      statBar([
-        /* «Позвали» — верх пути: без него зал читается как провал, хотя вопрос в
-           жизни другой — сколько людей из базы мы смогли привести. */
-        cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
-                        sub: 'живые адреса, без наших копий', ebl: 'invited' } : null,
-        /* Откуда пришли зарегистрировавшиеся (Ольга 13.11.2026): три источника
-           отдельными плашками перед общей цифрой, проценты — от регистраций. */
-      ].concat(rs ? [['social', 'Пришли из соцсетей'], ['partner', 'Пришли от партнеров'],
-                     ['ads', 'Пришли с рекламы']].map(function (x) {
-        var n = rs[x[0]] || 0;
-        return { label: x[1], value: n, ebl: n ? 'reg_' + x[0] : '',
-                 sub: c.reg ? pct(n, c.reg) + '% от регистраций' : 'регистраций пока нет' };
-      }) : [], [
+      (srcTiles.length ? efirGroup('Откуда пришли',
+        statBar(srcTiles, (launchBarCls(srcTiles.length) + ' small').trim())) : '') +
+      efirGroup('Эфир', statBar([
         /* Регистрация — форма на сайте и вход в бота по ссылке эфира (Ольга
            13.11.2026: «они же в бота регались»). Стоит и рядом с рассылками. */
         { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
@@ -37044,6 +37053,8 @@
         { label: 'Смотрели запись', value: c.rec, ebl: c.rec ? 'rec' : '',
           sub: c.rec ? pct(c.rec, top) + topWord + (cur.anon_rec ? ', из них ' + cur.anon_rec + ' без регистрации' : '')
                      : 'записи пока нет' },
+      ], 'five')) +
+      efirGroup('Продажи', statBar([
         { label: 'Записались на разбор', value: cur.booked, ebl: cur.booked ? 'booked' : '',
           sub: (uchastniki ? pct(cur.booked || 0, uchastniki) + '% от участников эфира · ' : '') +
                (ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали') },
@@ -37061,7 +37072,7 @@
                (m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями') },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
-      ]).filter(Boolean), 'five') +
+      ])) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
           esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
@@ -37099,6 +37110,12 @@
   /* Под «Участниками»: откуда пришли те же люди. Каждая цифра открывает своих. */
   var EFIR_SPLIT = [['social', 'из соцсетей'], ['bot', 'из бота'], ['partner', 'от партнеров'],
                     ['ads', 'из рекламы'], ['other', 'без метки'], ['anon', 'без регистрации']];
+  /* Ряд плашек эфира под тихой подписью: три смысловых блока экрана читаются
+     отдельно, а не одной стеной из тринадцати цифр. */
+  function efirGroup(title, bar) {
+    return '<section class="ef-group"><div class="ef-group-t">' + title + '</div>' + bar + '</section>';
+  }
+
   function efirSplitSub(sp) {
     return 'из них ' + EFIR_SPLIT.filter(function (x) {
       return x[0] !== 'other' && x[0] !== 'anon' || sp[x[0]];
@@ -37116,8 +37133,9 @@
         var block = n.getAttribute('data-ebl');
         if (!block) return;
         var nm = split ? null : n.querySelector('.sl, .lad-nm');
-        efirBlockOpen(cur.slug, block, split ? 'Участники ' + n.textContent.replace(/\s\d+$/, '')
-          : nm ? nm.childNodes[0].textContent.trim() : '', cur.title, n);
+        efirBlockOpen(cur.slug, block, n.getAttribute('data-etitle') ||
+          (split ? 'Участники ' + n.textContent.replace(/\s\d+$/, '')
+          : nm ? nm.childNodes[0].textContent.trim() : ''), cur.title, n);
       };
       n.addEventListener('click', open);
       n.addEventListener('keydown', function (e) {
