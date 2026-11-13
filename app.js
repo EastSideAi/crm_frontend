@@ -37054,7 +37054,7 @@
           sub: m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями' },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
-      ], 'five') +
+      ].filter(Boolean), 'five') +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
           esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
@@ -45794,7 +45794,7 @@
         { tint: over.length ? 'red' : '', label: 'Просрочено', value: over.length, go: 'queue', sub: over.length ? 'закрыть сегодня' : 'чисто' },
         { tint: 'navy', label: 'Ждут связи', value: c.hot, go: 'queue', sub: c.hot ? 'новые заявки' : 'разобрано' },
         { tint: 'green', label: 'Клиенты', value: c.clients, go: 'clients', delta: convClient ? convClient + '% из заявок' : '', deltaCls: 'good' },
-      ].filter(Boolean)) +
+      ]) +
       shiftCard() +
       '<div class="grid">' + potCard(5) +
         '<div class="sp7 vstack">' + queueCard + '</div>' +
