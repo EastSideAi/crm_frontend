@@ -6053,6 +6053,15 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 }
 
 .sp-total { font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+/* Ввод расхода раскрывается внутри карточки «Каналы» на «Воронке»: панель тонирована,
+   чтобы читаться вставкой поверх таблицы, а не ее первой строкой. */
+.sp-panel { padding: 16px 24px 20px; background: var(--fill); border-top: 1px solid var(--line); }
+.sp-panel .sp-form { margin-top: 14px; }
+.sp-panel .sp-tbl { margin: 16px -24px -20px; background: var(--card); }
+.sp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sp-head .s { font-size: 12.5px; color: var(--ink-2); }
+.sp-panel .sp-total { background: none; }
+.sp-panel .empty { padding: 16px 0 0; text-align: left; min-height: 0; }
 .sp-chs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px;
   padding-top: 14px; border-top: 1px solid var(--line); }
 .sp-ch { display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 13px;
