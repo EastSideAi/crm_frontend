@@ -38115,11 +38115,24 @@
       Object.keys(bot).forEach(function (k) {
         all[k] = all[k] ? Object.assign({}, all[k], {how: 'платформа и бот'}) : bot[k];
       });
+      // Ольга 13.11.2026: пришедшие сразу на платформу, минуя бота и формы, — отдельная
+      // строка. Контакт у них только в аккаунте платформы (поле ac сервера), в лиды выше
+      // они не попадают. Карточка заведена в отрезке; был у нас раньше и снова проявился —
+      // тоже считается, как и в лидах.
+      var first = {}, pon = {};
+      (cc.leads || []).forEach(function (l) { var k = key(l); if (!first[k] || l.d < first[k]) first[k] = l.d; });
+      (cc.leads || []).forEach(function (l) {
+        if (!l.ac || l.nl || l.d < a || l.d > b) return;
+        var k = key(l);
+        if (lead[k] || pon[k]) return;
+        pon[k] = {i: l.i, nm: l.nm || '', s: l.s || '', d: l.d, how: first[k] < l.d ? 'был у нас раньше' : 'впервые'};
+      });
       var vals = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
+      x.platOnly = Object.keys(pon).length;
       x.platQ = Object.keys(plat).length;
       x.consBook = Object.keys(bot).length;
       x.qual = Object.keys(all).length;
-      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot)};
+      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon)};
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
@@ -38147,6 +38160,7 @@
     };
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
+      ['Пришли на платформу, минуя бота', 'контакт только в аккаунте платформы, в лиды выше не входят', 'platOnly', null],
       ['Квалифицированные лиды', 'лиды периода с разбором на платформе или консультацией в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
       ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
