@@ -37008,6 +37008,7 @@
       return flatRow(r.title, 'ссылка go.истсайд.рф/' + r.code, r.n);
     }).join('') || '<div class="empty">Ссылок в соцсети по этому эфиру не было.</div>';
 
+    var rs = cur.reg_split;
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
       statBar([
@@ -37015,6 +37016,14 @@
            жизни другой — сколько людей из базы мы смогли привести. */
         cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
                         sub: 'живые адреса, без наших копий', ebl: 'invited' } : null,
+        /* Откуда пришли зарегистрировавшиеся (Ольга 13.11.2026): три источника
+           отдельными плашками перед общей цифрой, проценты — от регистраций. */
+      ].concat(rs ? [['social', 'Пришли из соцсетей'], ['partner', 'Пришли от партнеров'],
+                     ['ads', 'Пришли с рекламы']].map(function (x) {
+        var n = rs[x[0]] || 0;
+        return { label: x[1], value: n, ebl: n ? 'reg_' + x[0] : '',
+                 sub: c.reg ? pct(n, c.reg) + '% от регистраций' : 'регистраций пока нет' };
+      }) : [], [
         /* Регистрация — форма на сайте и вход в бота по ссылке эфира (Ольга
            13.11.2026: «они же в бота регались»). Стоит и рядом с рассылками. */
         { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
@@ -37023,7 +37032,7 @@
         /* Участники — главная цифра эфира: сколько людей его вообще увидели, живьем
            или в записи. Человек, посмотревший оба раза, считается один раз. */
         { label: 'Участники эфира', value: uchastniki, ebl: 'people',
-          sub: (invited ? pct(uchastniki, invited) + '% от рассылки · ' : '') +
+          sub: (c.reg ? pct(uchastniki, c.reg) + '% от регистраций · ' : '') +
                'живьем ' + c.came + ', запись ' + c.rec +
                (cur.split ? '<br>' + efirSplitSub(cur.split) : '') },
         { label: 'Были в комнате', value: c.came, sub: zalSub, ebl: 'came' },
@@ -37036,20 +37045,23 @@
           sub: c.rec ? pct(c.rec, top) + topWord + (cur.anon_rec ? ', из них ' + cur.anon_rec + ' без регистрации' : '')
                      : 'записи пока нет' },
         { label: 'Записались на разбор', value: cur.booked, ebl: cur.booked ? 'booked' : '',
-          sub: ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали' },
+          sub: (uchastniki ? pct(cur.booked || 0, uchastniki) + '% от участников эфира · ' : '') +
+               (ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали') },
         /* Запись и состоявшийся разговор — разные цифры: между ними теряется
            половина, и одним числом эту потерю не увидеть. */
         { label: 'Были на консультации', value: cur.held || 0, ebl: cur.held ? 'held' : '',
-          sub: cur.booked ? 'из ' + cur.booked + ' ' + plural(cur.booked, 'записавшегося', 'записавшихся', 'записавшихся')
+          sub: cur.booked ? pct(cur.held || 0, cur.booked) + '% от записавшихся на разбор · из ' +
+                            cur.booked
                           : 'записей пока нет' },
         /* Деньги эфира растут неделями. Подпись про это стоит на самой плитке, а не
            в сноске внизу: маленькую цифру через день после эфира иначе прочитают
            как провал, хотя сделки только начались. */
         { label: 'Оплатили', value: m.people, ebl: m.people ? 'paid' : '',
-          sub: m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями' },
+          sub: (cur.held ? pct(m.people || 0, cur.held) + '% от бывших на консультации · ' : '') +
+               (m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями') },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
-      ].filter(Boolean), 'five') +
+      ]).filter(Boolean), 'five') +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
           esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
@@ -38049,7 +38061,7 @@
      сравнения и план. o.full — план всего месяца, когда месяц еще идет: красим факт
      по плану «к этой дате», а цель месяца стоит под ним мелко. */
   function mgLadder(o) {
-    var box = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
+    var box = '<div class="card mg-card" data-at="' + esc(o.cur.join()) + '"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
       '<div><div class="t">' + esc(o.title) + '</div><div class="s">' + esc(o.sub) + '</div></div></div>';
     if (!can('marketing')) {
       return box + '<div class="mg-note">Цифры сквозной открыты тем, у кого есть доступ к маркетингу. ' +
@@ -38070,36 +38082,97 @@
     // карточку] (cc.cons). «Всего» считает людей, а не проходы: прошедший и платформу,
     // и бота — один человек (Ольга 11.11.2026: «чтобы люди не задваивались»; в октябре
     // таких 6 из 8). Человек — склейка карточек сквозной (l.g), бот без карточки — сам по себе.
-    var grp = {};
-    (cc.leads || []).forEach(function (l) { if (l.i) grp[l.i] = l.g ? 'g' + l.g : 's' + l.i; });
-    // Ольга 11.11.2026 (второй заход): квалифицированные считаются только среди лидов
-    // периода — людей с контактом, чья карточка заведена в этом же отрезке, — чтобы
-    // лестница сужалась сверху вниз. Строки «из них» (платформа, бот) — те же люди.
+    var grp = {}, card = {};
+    (cc.leads || []).forEach(function (l) { if (l.i) { grp[l.i] = l.g ? 'g' + l.g : 's' + l.i; card[l.i] = l; } });
+    // Ольга 11.11.2026, подтверждено 13.11.2026: квалифицированные считаются только
+    // среди лидов периода — людей с контактом, чья карточка заведена в этом же отрезке,
+    // — чтобы лестница сужалась сверху вниз. Строки «из них» (платформа, бот) — те же
+    // люди. Человек — склейка карточек сквозной: разбор на платформе часто лежит в
+    // карточке кабинета без контакта, и к лиду ее приклеивает контакт аккаунта.
+    // Списки людей строим здесь же — цифра и список не могут разойтись.
     var qualOf = function (x, a, b) {
       var key = function (l) { return l.g ? 'g' + l.g : 's' + l.i; };
       var lead = {}, plat = {}, bot = {};
       (cc.leads || []).forEach(function (l) {
-        if (l.c && !l.nl && l.d >= a && l.d <= b) lead[key(l)] = 1;
+        if (l.c && !l.nl && l.d >= a && l.d <= b) lead[key(l)] = l;
       });
       (cc.leads || []).forEach(function (l) {
-        if (l.dg && l.dg >= a && l.dg <= b && lead[key(l)]) plat[key(l)] = 1;
+        if (!l.dg || l.dg < a || l.dg > b || !lead[key(l)]) return;
+        // имя и метку берем у карточки лида: карточка кабинета с разбором часто безымянная
+        var k = key(l), ld = lead[k];
+        if (!plat[k] || l.dg < plat[k].d) plat[k] = {i: ld.i, nm: ld.nm || l.nm || '', s: ld.s || l.s || '', d: l.dg, how: 'разбор на платформе'};
       });
       (cc.cons || []).forEach(function (c) {
         var d = Array.isArray(c) ? c[0] : c, sid = Array.isArray(c) ? c[1] : null;
         if (!d || d < a || d > b || !sid) return;
-        var k = grp[sid] || 's' + sid;
-        if (lead[k]) bot[k] = 1;
+        var k = grp[sid] || 's' + sid, l = card[sid];
+        if (!lead[k]) return;
+        var ld = lead[k];
+        if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
       });
       var all = {};
-      Object.keys(plat).concat(Object.keys(bot)).forEach(function (k) { all[k] = 1; });
+      Object.keys(plat).forEach(function (k) { all[k] = plat[k]; });
+      Object.keys(bot).forEach(function (k) {
+        all[k] = all[k] ? Object.assign({}, all[k], {how: 'платформа и бот'}) : bot[k];
+      });
+      // Ольга 13.11.2026: пришедшие сразу на платформу, минуя бота и формы, — отдельная
+      // строка. Контакт у них только в аккаунте платформы (поле ac сервера), в лиды выше
+      // они не попадают. Карточка заведена в отрезке; был у нас раньше и снова проявился —
+      // тоже считается, как и в лидах.
+      var first = {}, pon = {};
+      var gnm = {};
+      (cc.leads || []).forEach(function (l) {
+        var k = key(l);
+        if (!first[k] || l.d < first[k]) first[k] = l.d;
+        if (l.nm && !gnm[k]) gnm[k] = l.nm;
+      });
+      (cc.leads || []).forEach(function (l) {
+        if (!l.ac || l.nl || l.d < a || l.d > b) return;
+        var k = key(l);
+        if (lead[k] || pon[k]) return;
+        pon[k] = {i: l.i, nm: l.nm || gnm[k] || '', s: l.s || '', d: l.d, how: first[k] < a ? 'был у нас раньше' : 'впервые'};
+      });
+      // Ольга 13.11.2026: вернувшиеся — лиды периода, которые были у нас и раньше
+      // (карточка человека заведена до отрезка): спали и проявились. Мелким пунктом в «Лидах».
+      var back = {};
+      Object.keys(lead).forEach(function (k) {
+        if (first[k] < a) back[k] = {i: lead[k].i, nm: lead[k].nm || '', s: lead[k].s || '', d: lead[k].d, how: 'впервые пришел ' + fmtDay(first[k])};
+      });
+      var vals = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
+      x.back = Object.keys(back).length;
+      x.platOnly = Object.keys(pon).length;
       x.platQ = Object.keys(plat).length;
       x.consBook = Object.keys(bot).length;
       x.qual = Object.keys(all).length;
+      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back)};
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
+    // Ольга 13.11.2026: «цифры все должны быть кликабельные». Список под цифрой —
+    // из того же прохода, что и цифра; людей больше одного раза не показываем.
+    var whoOf = function (x, k) {
+      var w = x.who || {};
+      if (x._ql[k]) return x._ql[k];
+      if (k === 'payers' || k === 'revenue') {
+        var by = {}, out = [];
+        (w.revenue || []).forEach(function (r) {
+          var g = r.g ? 'g' + r.g : 's' + r.i;
+          if (by[g]) { by[g].v += r.v; by[g].n += r.n; return; }
+          out.push(by[g] = Object.assign({}, r));
+        });
+        return out;
+      }
+      return w[k] || null;
+    };
+    var at = o.cur.join(), q = state._mgQ && state._mgQ.at === at ? state._mgQ : null;
+    var numBtn = function (x, k, side, txt) {
+      if (!whoOf(x, k)) return txt;
+      var on = q && q.k === k && q.s === side;
+      return '<button class="mg-nb' + (on ? ' on' : '') + '" data-mgq="' + k + ':' + side + '" title="Кто за этой цифрой">' + txt + '</button>';
+    };
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
+      ['Пришли на платформу, минуя бота', 'контакт только в аккаунте платформы, в лиды выше не входят', 'platOnly', null],
       ['Квалифицированные лиды', 'лиды периода с разбором на платформе или консультацией в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
       ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
@@ -38130,16 +38203,45 @@
         return '<div class="mg-tr' + (r[5] ? ' sub' : '') + '"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
           '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
             (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + '</small>' : '') : '—') + '</span>' +
-          '<span class="r num big ' + pl + '">' + f(c) +
+          '<span class="r num big ' + pl + '">' + numBtn(cur, r[2], 'c', f(c)) +
             // Ольга 11.11.2026: «12% к дате» убрать, в идущем месяце процент к плану не пишем
             (pl && !o.full ? '<small class="mg-pc">' + pct(pv) + ' плана</small>' : '') +
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
+            // Ольга 13.11.2026: вернувшиеся мелким пунктом под лидами
+            (r[2] === 'leads' && cur.back ? '<small class="mg-of">' + numBtn(cur, 'back', 'c', 'из них вернулись ' + cur.back) + '</small>' : '') +
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
-          '<span class="r num mute c-pv">' + f(p) + '</span>' +
+          '<span class="r num mute c-pv">' + numBtn(prv, r[2], 'p', f(p)) + '</span>' +
           '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
       }).join('') + '</div>' +
       (hasPlan ? '<div class="mg-note">' + esc(o.note) + '</div>' : '') +
+      (q ? mgWhoCard(rows, q, whoOf(q.s === 'c' ? cur : prv, q.k), q.s === 'c' ? o.curLbl : o.prvLbl) : '') +
     '</div>';
+  }
+
+  /* Люди за цифрой лестницы. Строка с карточкой открывает ее в новой вкладке, как на
+     «Продажах»; человек из бота без карточки стоит строкой без перехода. */
+  var MG_WHO_N = {invN: 'счет', payers: 'платеж', revenue: 'платеж'};
+  function mgWhoCard(rows, q, list, lbl) {
+    var row = rows.filter(function (r) { return r[2] === q.k; })[0];
+    list = (list || []).slice().sort(function (a, b) {
+      return q.k === 'revenue' ? (b.v || 0) - (a.v || 0) : String(b.d || '').localeCompare(String(a.d || ''));
+    });
+    var body = list.slice(0, 300).map(function (p) {
+      var sub = [p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
+      var mark = p.v ? fmtMoney(Math.round(p.v)) + ' ₽' : '';
+      if (p.n > 1 && MG_WHO_N[q.k]) mark = (mark ? mark + ' · ' : '') + p.n + ' ' + (q.k === 'invN' ? 'счета' : 'платежа');
+      var inner = '<span class="sb-pn"><b>' + esc(p.nm || (p.i ? 'карточка без имени' : 'в боте, карточки нет')) + '</b>' +
+        '<small>' + esc(sub) + '</small></span><span></span>' +
+        '<span class="sb-pm">' + (mark ? '<em class="sev s-client">' + esc(mark) + '</em>' : '') + '</span>';
+      return p.i ? '<button class="sb-pr" data-sblead="' + esc(p.i) + '">' + inner + '</button>'
+        : '<div class="sb-pr none">' + inner + '</div>';
+    }).join('');
+    var sub = 'нажми на человека, откроется карточка';
+    if (q.k === 'invN') {
+      var cnt = list.reduce(function (s, p) { return s + (p.n || 1); }, 0);
+      if (cnt !== list.length) sub = cnt + ' счетов у ' + list.length + ' человек; ' + sub;
+    }
+    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
   }
 
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
@@ -38395,6 +38497,18 @@
     });
     view.querySelectorAll('[data-mgdept]').forEach(function (b) {
       b.addEventListener('click', function () { state.mgDept = b.dataset.mgdept; saveUi(); renderView(); });
+    });
+    view.querySelectorAll('[data-mgq]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var v = b.dataset.mgq.split(':'), q = state._mgQ, at = b.closest('.mg-card') && b.closest('.mg-card').dataset.at;
+        state._mgQ = q && q.k === v[0] && q.s === v[1] && q.at === at ? null : {k: v[0], s: v[1], at: at};
+        renderView();
+      });
+    });
+    var pc = view.querySelector('#sb-pclose');
+    if (pc) pc.addEventListener('click', function () { state._mgQ = null; renderView(); });
+    view.querySelectorAll('[data-sblead]').forEach(function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
     });
     var rl = view.querySelector('[data-mgreload]'); if (rl) rl.addEventListener('click', mgReload);
     var nw = view.querySelector('[data-mgnew]'); if (nw) nw.addEventListener('click', mgNew);
