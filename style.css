@@ -15056,3 +15056,19 @@ video.cs-media { background: #000; }
   text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
 .sb-vbtn:hover, .sb-vbtn.on { text-decoration-color: currentColor; }
 .sb-vbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
+
+/* «Что нового»: запись с инструкцией. Кнопка — тихая ссылка-действие под текстом,
+   страница — модалка для чтения: строка той же длины, что у регламентов (70ch). */
+.nw-read { margin-top: 12px; display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px;
+  border: 0; border-radius: 10px; background: var(--blue-tint); color: var(--blue);
+  font: 600 13px/1.2 'Manrope', sans-serif; cursor: pointer;
+  transition: background .14s cubic-bezier(.22,1,.36,1), color .14s cubic-bezier(.22,1,.36,1); }
+.nw-read:hover { background: var(--blue); color: #fff; }
+.nw-read:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.al-card.nwp-card { max-width: 760px; }
+.nwp-body { max-height: min(72vh, 860px); overflow-y: auto; padding-top: 4px; }
+.nwp-body .fkb-body { margin-top: 0; }
+.nwp-body .fkb-body > .fkb-h:first-child { margin-top: 4px; }
+@media (max-width: 760px) {
+  .nwp-body { max-height: calc(86vh - 72px); }
+}
