@@ -8930,13 +8930,30 @@
   /* «11:00–13:00» — планерка длиннее часа занимает несколько строк сетки, и без
      границ времени непонятно, одна это встреча или несколько. */
   function schedSpan(m, tz) {
-    var a = m.hour + (tz || 0), b = a + (m.duration || 1);
-    return ((a % 24) + 24) % 24 + ':00–' + ((b % 24) + 24) % 24 + ':00';
+    var a = (m.hour + (tz || 0)) * 60 + (m.minute || 0);
+    var b = a + (m.minutes || (m.duration || 1) * 60);
+    return schedClock(a) + '–' + schedClock(b);
+  }
+  /* Минуты от полуночи → «16:30». С 13.11.2026 планерка бывает не с ровного часа. */
+  function schedClock(t) {
+    t = ((t % 1440) + 1440) % 1440;
+    return Math.floor(t / 60) + ':' + ('0' + t % 60).slice(-2);
+  }
+  /* Не ровный час или не целые часы — время пишем прямо в строке, иначе 16:30
+     в сетке неотличима от 16:00. */
+  function schedOdd(m) {
+    return !!(m.minute || (m.minutes && m.minutes % 60));
+  }
+  /* «30 мин», «1 час», «1,5 часа» — длительность планерки в форме. */
+  function meetLen(n) {
+    if (n < 60) return n + ' мин';
+    if (n % 60) return (n / 60).toString().replace('.', ',') + ' часа';
+    return n === 60 ? '1 час' : n / 60 + ' часа';
   }
 
   function schedMeetAttr(m) {
     return ' data-sc-meet="' + m.id + '|' + (m.series ? 1 : 0) + '" data-sc-mt="' + esc(m.title) + '"' +
-      ' data-sc-md="' + m.date + '|' + m.hour + '" role="button" tabindex="0"';
+      ' data-sc-md="' + m.date + '|' + m.hour + '|' + (m.minute || 0) + '" role="button" tabindex="0"';
   }
 
   function schedChip(cls, text, title, attr) {
@@ -9175,7 +9192,8 @@
         var day = zoomYmd(x), at = schedAt(d, day, h, who), out = [];
         at.meets.forEach(function (m) {
           var long = (m.duration || 1) > 1;
-          out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''), m.title,
+          out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''),
+            (schedOdd(m) && h === m.hour ? schedSpan(m, tz) + ' ' : '') + m.title,
             m.title + ' · ' + schedSpan(m, tz) + ' · ' + (m.people || []).map(function (p) { return p.person; }).join(', ') +
             (d.can_edit_all ? ' · нажмите, чтобы изменить или снять' : ''),
             d.can_edit_all ? schedMeetAttr(m) : ''));
@@ -9223,7 +9241,7 @@
       at.meets.forEach(function (m) {
         if (m.hour !== h) return;
         cells.push(schedChip('meet' + (d.can_edit_all ? ' act' : ''),
-          m.title + ((m.duration || 1) > 1 ? ' · ' + schedSpan(m, tz) : '') + ' · ' +
+          m.title + ((m.duration || 1) > 1 || schedOdd(m) ? ' · ' + schedSpan(m, tz) : '') + ' · ' +
           (m.people || []).map(function (p) { return schedShort(p.person); }).join(', '),
           d.can_edit_all ? 'Нажмите, чтобы изменить или снять планерку' : (m.note || ''),
           d.can_edit_all ? schedMeetAttr(m) : ''));
@@ -9288,7 +9306,7 @@
     if (myName) {
       (d.meetings || []).forEach(function (m) {
         if (!(m.people || []).some(function (p) { return p.person === myName; })) return;
-        out.push({ ymd: m.date, hour: m.hour, cls: 'plan', title: m.title,
+        out.push({ ymd: m.date, hour: m.hour, min: m.minute || 0, cls: 'plan', title: m.title,
                    sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false, meet: m });
       });
       (d.slots || []).forEach(function (s) {
@@ -9302,22 +9320,28 @@
                    url: '', live: false });
       });
     }
+    // Встреча из чата стоит и в расписании, и в звонилке, а ссылка на звонилку
+    // лежит в заметке планерки: вторую строку той же встречи не показываем.
+    var notes = (d.meetings || []).map(function (m) { return m.note || ''; }).join(' ');
     var rooms = state.meetRooms;
     if (rooms && rooms !== 'none' && rooms !== 'loading' && rooms.rooms) {
       rooms.rooms.forEach(function (r) {
         if (r.status === 'cancel' || r.status === 'failed' || r.status === 'done') return;
+        if (r.url && notes.indexOf(r.url) !== -1) return;
         if (uid != null && r.created_by !== uid && (r.invited || []).indexOf(uid) === -1) return;
         var at = r.starts_at ? new Date(r.starts_at)
           : (r.status === 'live' && r.started_at ? new Date(r.started_at) : null);
         if (!at || isNaN(at.getTime())) return;
         var mk = mskHour(at), ymd = mk.ymd;
         if (ymd < from || ymd > to) return;
-        out.push({ ymd: ymd, hour: mk.hour, cls: 'room', title: r.title || 'Встреча',
+        out.push({ ymd: ymd, hour: mk.hour, min: at.getUTCMinutes(), cls: 'room', title: r.title || 'Встреча',
                    sub: r.status === 'live' ? 'идет прямо сейчас' : 'наша встреча',
                    url: r.url || '', live: r.status === 'live' });
       });
     }
-    out.sort(function (a, b) { return a.ymd === b.ymd ? a.hour - b.hour : (a.ymd < b.ymd ? -1 : 1); });
+    out.sort(function (a, b) {
+      return a.ymd === b.ymd ? (a.hour - b.hour) || ((a.min || 0) - (b.min || 0)) : (a.ymd < b.ymd ? -1 : 1);
+    });
     return out;
   }
 
@@ -9356,7 +9380,8 @@
         var ed = r.meet ? schedMeetAttr(r.meet) : '';
         return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + (r.meet ? ' tap' : '') + '"' + ed + '>' +
           '<span class="sc-my-h' + (tz ? ' two' : '') + '">' +
-            (tz ? '<b>' + r.hour + ':00</b><i>' + r.msk + ':00 мск</i>' : r.hour + ':00') + '</span>' +
+            (tz ? '<b>' + r.hour + ':' + pad(r.min || 0) + '</b><i>' + r.msk + ':' + pad(r.min || 0) + ' мск</i>'
+                : r.hour + ':' + pad(r.min || 0)) + '</span>' +
           '<span class="sc-my-b"><b>' + esc(r.title) + '</b><i>' + esc(r.sub) + '</i></span>' +
           (r.meet ? '<span class="sc-my-ed" title="Изменить встречу: время, участников">' + ic('edit', 14) + '</span>' : '') +
           (r.url ? '<a class="sc-my-go" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
@@ -9863,18 +9888,19 @@
         // Встречи нет в загруженной неделе (кэш успел устареть) — тогда хотя бы
         // снять ее человек сможет.
         var w = (c.getAttribute('data-sc-md') || '').split('|');
-        openSchedMeetDrop(+p[0], p[1] === '1', c.getAttribute('data-sc-mt') || '', w[0], +w[1]);
+        openSchedMeetDrop(+p[0], p[1] === '1', c.getAttribute('data-sc-mt') || '', w[0], +w[1], +w[2] || 0);
       });
     });
   }
 
   /* Снять планерку. Серию спрашиваем отдельной кнопкой: «повторяется по понедельникам»
      и «эта конкретная» — разные намерения, и по ошибке стереть весь квартал нельзя. */
-  function openSchedMeetDrop(id, series, title, day, hour) {
+  function openSchedMeetDrop(id, series, title, day, hour, minute) {
     if (document.querySelector('.al-ov')) return;
     var dt = new Date(day + 'T00:00:00');
     var when = isNaN(dt.getTime()) ? day
-      : WDAYS_RU[dt.getDay()] + ' ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] + ', ' + hour + ':00';
+      : WDAYS_RU[dt.getDay()] + ' ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] + ', ' +
+        schedClock(hour * 60 + (minute || 0));
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML = '<div class="al-card ct-card ct-slim" role="dialog" aria-modal="true">' +
@@ -9942,15 +9968,29 @@
             '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта" value="' + esc((m && m.title) || '') + '"></label>' +
           '<div class="al-row">' +
             '<label class="al-f"><span class="al-l">День</span><input id="sm-day" class="al-in sm" type="date" value="' + ((m && m.date) || zoomYmd(schedDay())) + '"></label>' +
-            '<label class="al-f"><span class="al-l">Час</span><span class="al-selwrap"><select id="sm-hour" class="al-sel">' +
-              (function () { var o = '', sel = m ? m.hour : 11; for (var h = 7; h <= 22; h++) o += '<option value="' + h + '"' + (h === sel ? ' selected' : '') + '>' + h + ':00</option>'; return o; })() +
+            // Начало с шагом 15 минут (Виталий 13.11.2026: РНП в 16:30 не вставала
+            // в расписание). Значение — минуты от полуночи, на отправке делим.
+            '<label class="al-f"><span class="al-l">Начало</span><span class="al-selwrap"><select id="sm-hour" class="al-sel">' +
+              (function () {
+                var o = '', sel = m ? m.hour * 60 + (m.minute || 0) : 660;
+                for (var t = 7 * 60; t <= 22 * 60 + 45; t += 15) {
+                  o += '<option value="' + t + '"' + (t === sel ? ' selected' : '') + '>' +
+                    Math.floor(t / 60) + ':' + ('0' + t % 60).slice(-2) + '</option>';
+                }
+                return o;
+              })() +
             '</select></span></label>' +
           '</div>' +
           '<div class="al-row">' +
             '<label class="al-f"><span class="al-l">Длительность</span><span class="al-selwrap"><select id="sm-dur" class="al-sel">' +
-              [1, 2, 3].map(function (h) {
-                return '<option value="' + h + '"' + ((m ? m.duration : 1) === h ? ' selected' : '') + '>' + (h === 1 ? '1 час' : h + ' часа') + '</option>';
-              }).join('') + '</select></span></label>' +
+              (function () {
+                var cur = m ? (m.minutes || (m.duration || 1) * 60) : 60;
+                var opts = [15, 30, 45, 60, 90, 120, 180];
+                if (opts.indexOf(cur) < 0) opts.push(cur);
+                return opts.sort(function (a, b) { return a - b; }).map(function (n) {
+                  return '<option value="' + n + '"' + (n === cur ? ' selected' : '') + '>' + meetLen(n) + '</option>';
+                }).join('');
+              })() + '</select></span></label>' +
             // Отдел у планерки нужен затем же, зачем у зума: собрать встречи направления.
             '<label class="al-f"><span class="al-l">Отдел</span><span class="al-selwrap"><select id="sm-kind" class="al-sel">' +
               '<option value="">Без отдела</option>' +
@@ -10040,14 +10080,14 @@
 
     if (el('sm-drop')) el('sm-drop').addEventListener('click', function () {
       close();
-      openSchedMeetDrop(m.id, !!m.series, m.title || '', m.date, m.hour);
+      openSchedMeetDrop(m.id, !!m.series, m.title || '', m.date, m.hour, m.minute);
     });
 
     // Область правки: «только эту» или «всю серию». Сегмент тот же, что в карточке
     // зума, — вопрос один и тот же, и спрашивать его двумя разными способами на
     // соседних экранах нельзя.
     var scope = 'one';
-    var day0 = m && m.date, hour0 = m && m.hour, facts = null;
+    var day0 = m && m.date, hour0 = m && m.hour * 60 + (m.minute || 0), facts = null;
     // Рисунок серии пересчитывается по тому дню, который сейчас стоит в форме:
     // иначе при переносе пятницы на среду рядом со «сдвинем серию» осталось бы
     // «повторяется по пятницам».
@@ -10117,9 +10157,10 @@
       if (!title) { el('sm-title').focus({ preventScroll: true }); return fail('Напишите, как называется встреча'); }
       if (!people.length) return fail('Отметьте хотя бы одного участника');
       el('sm-ok').disabled = true;
+      var start = +el('sm-hour').value;
       var body = {
-        title: title, date: el('sm-day').value, hour: +el('sm-hour').value,
-        duration: +el('sm-dur').value, kind: el('sm-kind').value || '', people: people,
+        title: title, date: el('sm-day').value, hour: Math.floor(start / 60), minute: start % 60,
+        minutes: +el('sm-dur').value, kind: el('sm-kind').value || '', people: people,
       };
       var ok = function (r) {
         close();
@@ -10971,7 +11012,7 @@
     (data.meetings || []).forEach(function (m) {
       if (m.date !== ymd) return;
       if (who && !(m.people || []).some(function (x) { return x.person === who; })) return;
-      out.push({ kind: 'plan', hour: m.hour, min: 0, title: m.title,
+      out.push({ kind: 'plan', hour: m.hour, min: m.minute || 0, title: m.title,
                  who: (m.people || []).map(function (x) { return x.person; }).join(', ') });
     });
     out.sort(function (a, b) { return (a.hour - b.hour) || (a.min - b.min); });
@@ -32844,6 +32885,38 @@
       '</div>';
     }
 
+    /* Рабочие чаты отделов (Виталий 13.11.2026): в них бот по тегу ставит,
+       переносит и отменяет встречи, а встреча встает в отдел чата. Это не
+       «чаты направлений» выше: те еще и получают все задачи отдела. */
+    var WORK_DEPTS = ['manage', 'marketing', 'sales', 'finance', 'product', 'edu', 'teach', 'hr'];
+    function workBlock(g) {
+      if (!g || !g.groups) return '';
+      var mine = g.work_chats || [];
+      var used = {};
+      mine.forEach(function (w) { used[w.chat_id] = 1; });
+      var deptSel = function (cur, attr) {
+        return '<span class="al-selwrap tgd-sel"><select class="al-sel sm" ' + attr + '>' +
+          (cur ? '<option value="">убрать из рабочих</option>' : '<option value="" selected>отдел…</option>') +
+          WORK_DEPTS.map(function (d) {
+            return '<option value="' + d + '"' + (d === cur ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+          }).join('') + '</select></span>';
+      };
+      var rows = mine.map(function (w) {
+        return '<div class="tgd-row wc on"><span class="tgd-l" title="' + esc(w.title) + '">' + esc(w.title) + '</span>' +
+          deptSel(w.dept, 'data-wc="' + esc(w.chat_id) + '"') + '</div>';
+      }).join('');
+      var rest = g.groups.filter(function (x) { return !used[x.chat_id]; });
+      var add = rest.length
+        ? '<div class="tgd-row wc"><span class="al-selwrap tgd-l"><select class="al-sel sm" id="wc-new">' +
+            '<option value="">добавить чат…</option>' + rest.map(function (x) {
+              return '<option value="' + esc(x.chat_id) + '">' + esc(x.title || x.chat_id) + '</option>';
+            }).join('') + '</select></span>' + deptSel('', 'id="wc-new-dept"') + '</div>'
+        : '';
+      return '<div class="tgg"><div class="tgg-h">Рабочие чаты</div>' +
+        '<div class="tgg-s">Здесь договариваются о встречах. Тегни бота в таком чате, и он внесет встречу в расписание и звонилку, перенесет или отменит. Встреча встает в отдел чата.</div>' +
+        '<div class="tgd">' + (rows || '<div class="tgg-s">Пока ни одного.</div>') + add + '</div></div>';
+    }
+
     Promise.all([
       api('/admin/api/tasks/tg/links'),
       api('/admin/api/tasks/tg/group').catch(function () { return null; }),
@@ -32894,7 +32967,7 @@
             ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
               ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
             : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
-        '<div class="al-body">' + groupBlock(grp, links) + deptBlock(grp) +
+        '<div class="al-body">' + groupBlock(grp, links) + deptBlock(grp) + workBlock(grp) +
           '<div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
           (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
         '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
@@ -32952,6 +33025,24 @@
             showToast((e && e.body && e.body.detail) || 'Не удалось сохранить — попробуй еще раз');
           });
         });
+      });
+      var saveWork = function (chat, dept, sel) {
+        sel.disabled = true;
+        apiSend('/admin/api/tasks/tg/work-chat', 'PUT', { chat_id: chat, dept: dept }, function () {
+          showToast(dept ? 'Рабочий чат: ' + DEPTS[dept] : 'Чат убран из рабочих');
+          reopen();
+        }, function (code, e) {
+          sel.disabled = false;
+          showToast((e && e.body && e.body.detail) || 'Не удалось сохранить, попробуй еще раз');
+        });
+      };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-wc]'), function (sel) {
+        sel.addEventListener('change', function () { saveWork(sel.getAttribute('data-wc'), sel.value, sel); });
+      });
+      var wcd = el('wc-new-dept');
+      if (wcd) wcd.addEventListener('change', function () {
+        if (!el('wc-new').value) { wcd.value = ''; return showToast('Сначала выбери чат'); }
+        if (wcd.value) saveWork(el('wc-new').value, wcd.value, wcd);
       });
       Array.prototype.forEach.call(ov.querySelectorAll('[data-gdt]'), function (b) {
         b.addEventListener('click', function () {
@@ -36925,20 +37016,33 @@
       return flatRow(r.title, 'ссылка go.истсайд.рф/' + r.code, r.n);
     }).join('') || '<div class="empty">Ссылок в соцсети по этому эфиру не было.</div>';
 
+    var rs = cur.reg_split;
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
       statBar([
         /* «Позвали» — верх пути: без него зал читается как провал, хотя вопрос в
            жизни другой — сколько людей из базы мы смогли привести. */
-        (cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
-                         sub: 'живые адреса, без наших копий', ebl: 'invited' }
-                     : { label: 'Зарегистрировались', value: c.reg,
-                         sub: efirWindowText(cur.window), ebl: 'reg' }),
+        cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
+                        sub: 'живые адреса, без наших копий', ebl: 'invited' } : null,
+        /* Откуда пришли зарегистрировавшиеся (Ольга 13.11.2026): три источника
+           отдельными плашками перед общей цифрой, проценты — от регистраций. */
+      ].concat(rs ? [['social', 'Пришли из соцсетей'], ['partner', 'Пришли от партнеров'],
+                     ['ads', 'Пришли с рекламы']].map(function (x) {
+        var n = rs[x[0]] || 0;
+        return { label: x[1], value: n, ebl: n ? 'reg_' + x[0] : '',
+                 sub: c.reg ? pct(n, c.reg) + '% от регистраций' : 'регистраций пока нет' };
+      }) : [], [
+        /* Регистрация — форма на сайте и вход в бота по ссылке эфира (Ольга
+           13.11.2026: «они же в бота регались»). Стоит и рядом с рассылками. */
+        { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
+          sub: (c.reg_bot ? 'сайт ' + c.reg_site + ' · бот ' + c.reg_bot + '<br>' : '') +
+               efirWindowText(cur.window) },
         /* Участники — главная цифра эфира: сколько людей его вообще увидели, живьем
            или в записи. Человек, посмотревший оба раза, считается один раз. */
         { label: 'Участники эфира', value: uchastniki, ebl: 'people',
-          sub: (invited ? pct(uchastniki, invited) + '% от рассылки · ' : '') +
-               'живьем ' + c.came + ', запись ' + c.rec },
+          sub: (c.reg ? pct(uchastniki, c.reg) + '% от регистраций · ' : '') +
+               'живьем ' + c.came + ', запись ' + c.rec +
+               (cur.split ? '<br>' + efirSplitSub(cur.split) : '') },
         { label: 'Были в комнате', value: c.came, sub: zalSub, ebl: 'came' },
         { label: 'Вопросов в чате', value: c.questions, ebl: c.askers ? 'askers' : '',
           sub: c.askers ? 'от ' + c.askers + ' ' + plural(c.askers, 'человека', 'человек', 'человек') : 'вопросов не было' },
@@ -36949,20 +37053,23 @@
           sub: c.rec ? pct(c.rec, top) + topWord + (cur.anon_rec ? ', из них ' + cur.anon_rec + ' без регистрации' : '')
                      : 'записи пока нет' },
         { label: 'Записались на разбор', value: cur.booked, ebl: cur.booked ? 'booked' : '',
-          sub: ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали' },
+          sub: (uchastniki ? pct(cur.booked || 0, uchastniki) + '% от участников эфира · ' : '') +
+               (ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали') },
         /* Запись и состоявшийся разговор — разные цифры: между ними теряется
            половина, и одним числом эту потерю не увидеть. */
         { label: 'Были на консультации', value: cur.held || 0, ebl: cur.held ? 'held' : '',
-          sub: cur.booked ? 'из ' + cur.booked + ' ' + plural(cur.booked, 'записавшегося', 'записавшихся', 'записавшихся')
+          sub: cur.booked ? pct(cur.held || 0, cur.booked) + '% от записавшихся на разбор · из ' +
+                            cur.booked
                           : 'записей пока нет' },
         /* Деньги эфира растут неделями. Подпись про это стоит на самой плитке, а не
            в сноске внизу: маленькую цифру через день после эфира иначе прочитают
            как провал, хотя сделки только начались. */
         { label: 'Оплатили', value: m.people, ebl: m.people ? 'paid' : '',
-          sub: m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями' },
+          sub: (cur.held ? pct(m.people || 0, cur.held) + '% от бывших на консультации · ' : '') +
+               (m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями') },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
-      ], 'five') +
+      ]).filter(Boolean), 'five') +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
           esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
@@ -36997,18 +37104,32 @@
      которую нельзя развернуть в людей, команду не убеждает — ее перепроверяют в
      своей табличке и перестают смотреть на экран. Вкладки эфиров живут тут же:
      обработчики общие для обоих экранов, нашего и чужой площадки. */
+  /* Под «Участниками»: откуда пришли те же люди. Каждая цифра открывает своих. */
+  var EFIR_SPLIT = [['social', 'из соцсетей'], ['bot', 'из бота'], ['partner', 'от партнеров'],
+                    ['ads', 'из рекламы'], ['other', 'без метки'], ['anon', 'без регистрации']];
+  function efirSplitSub(sp) {
+    return 'из них ' + EFIR_SPLIT.filter(function (x) {
+      return x[0] !== 'other' && x[0] !== 'anon' || sp[x[0]];
+    }).map(function (x) {
+      return '<span class="go-sub esplit" data-ebl="src_' + x[0] + '" role="button" tabindex="0">' +
+        esc(x[1]) + ' ' + (sp[x[0]] || 0) + '</span>';
+    }).join(' · ');
+  }
   function efirBindClicks(view, cur) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-ebl]'), function (n) {
-      var open = function () {
+      /* строка разбивки лежит внутри плашки: её клик не должен открыть и плашку */
+      var split = n.classList.contains('esplit');
+      var open = function (e) {
+        if (split && e) e.stopPropagation();
         var block = n.getAttribute('data-ebl');
         if (!block) return;
-        var nm = n.querySelector('.sl, .lad-nm');
-        efirBlockOpen(cur.slug, block, nm ? nm.childNodes[0].textContent.trim() : '',
-          cur.title, n);
+        var nm = split ? null : n.querySelector('.sl, .lad-nm');
+        efirBlockOpen(cur.slug, block, split ? 'Участники ' + n.textContent.replace(/\s\d+$/, '')
+          : nm ? nm.childNodes[0].textContent.trim() : '', cur.title, n);
       };
       n.addEventListener('click', open);
       n.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); }
       });
     });
 
@@ -37948,7 +38069,7 @@
      сравнения и план. o.full — план всего месяца, когда месяц еще идет: красим факт
      по плану «к этой дате», а цель месяца стоит под ним мелко. */
   function mgLadder(o) {
-    var box = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
+    var box = '<div class="card mg-card" data-at="' + esc(o.cur.join()) + '"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
       '<div><div class="t">' + esc(o.title) + '</div><div class="s">' + esc(o.sub) + '</div></div></div>';
     if (!can('marketing')) {
       return box + '<div class="mg-note">Цифры сквозной открыты тем, у кого есть доступ к маркетингу. ' +
@@ -37969,36 +38090,97 @@
     // карточку] (cc.cons). «Всего» считает людей, а не проходы: прошедший и платформу,
     // и бота — один человек (Ольга 11.11.2026: «чтобы люди не задваивались»; в октябре
     // таких 6 из 8). Человек — склейка карточек сквозной (l.g), бот без карточки — сам по себе.
-    var grp = {};
-    (cc.leads || []).forEach(function (l) { if (l.i) grp[l.i] = l.g ? 'g' + l.g : 's' + l.i; });
-    // Ольга 11.11.2026 (второй заход): квалифицированные считаются только среди лидов
-    // периода — людей с контактом, чья карточка заведена в этом же отрезке, — чтобы
-    // лестница сужалась сверху вниз. Строки «из них» (платформа, бот) — те же люди.
+    var grp = {}, card = {};
+    (cc.leads || []).forEach(function (l) { if (l.i) { grp[l.i] = l.g ? 'g' + l.g : 's' + l.i; card[l.i] = l; } });
+    // Ольга 11.11.2026, подтверждено 13.11.2026: квалифицированные считаются только
+    // среди лидов периода — людей с контактом, чья карточка заведена в этом же отрезке,
+    // — чтобы лестница сужалась сверху вниз. Строки «из них» (платформа, бот) — те же
+    // люди. Человек — склейка карточек сквозной: разбор на платформе часто лежит в
+    // карточке кабинета без контакта, и к лиду ее приклеивает контакт аккаунта.
+    // Списки людей строим здесь же — цифра и список не могут разойтись.
     var qualOf = function (x, a, b) {
       var key = function (l) { return l.g ? 'g' + l.g : 's' + l.i; };
       var lead = {}, plat = {}, bot = {};
       (cc.leads || []).forEach(function (l) {
-        if (l.c && !l.nl && l.d >= a && l.d <= b) lead[key(l)] = 1;
+        if (l.c && !l.nl && l.d >= a && l.d <= b) lead[key(l)] = l;
       });
       (cc.leads || []).forEach(function (l) {
-        if (l.dg && l.dg >= a && l.dg <= b && lead[key(l)]) plat[key(l)] = 1;
+        if (!l.dg || l.dg < a || l.dg > b || !lead[key(l)]) return;
+        // имя и метку берем у карточки лида: карточка кабинета с разбором часто безымянная
+        var k = key(l), ld = lead[k];
+        if (!plat[k] || l.dg < plat[k].d) plat[k] = {i: ld.i, nm: ld.nm || l.nm || '', s: ld.s || l.s || '', d: l.dg, how: 'разбор на платформе'};
       });
       (cc.cons || []).forEach(function (c) {
         var d = Array.isArray(c) ? c[0] : c, sid = Array.isArray(c) ? c[1] : null;
         if (!d || d < a || d > b || !sid) return;
-        var k = grp[sid] || 's' + sid;
-        if (lead[k]) bot[k] = 1;
+        var k = grp[sid] || 's' + sid, l = card[sid];
+        if (!lead[k]) return;
+        var ld = lead[k];
+        if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
       });
       var all = {};
-      Object.keys(plat).concat(Object.keys(bot)).forEach(function (k) { all[k] = 1; });
+      Object.keys(plat).forEach(function (k) { all[k] = plat[k]; });
+      Object.keys(bot).forEach(function (k) {
+        all[k] = all[k] ? Object.assign({}, all[k], {how: 'платформа и бот'}) : bot[k];
+      });
+      // Ольга 13.11.2026: пришедшие сразу на платформу, минуя бота и формы, — отдельная
+      // строка. Контакт у них только в аккаунте платформы (поле ac сервера), в лиды выше
+      // они не попадают. Карточка заведена в отрезке; был у нас раньше и снова проявился —
+      // тоже считается, как и в лидах.
+      var first = {}, pon = {};
+      var gnm = {};
+      (cc.leads || []).forEach(function (l) {
+        var k = key(l);
+        if (!first[k] || l.d < first[k]) first[k] = l.d;
+        if (l.nm && !gnm[k]) gnm[k] = l.nm;
+      });
+      (cc.leads || []).forEach(function (l) {
+        if (!l.ac || l.nl || l.d < a || l.d > b) return;
+        var k = key(l);
+        if (lead[k] || pon[k]) return;
+        pon[k] = {i: l.i, nm: l.nm || gnm[k] || '', s: l.s || '', d: l.d, how: first[k] < a ? 'был у нас раньше' : 'впервые'};
+      });
+      // Ольга 13.11.2026: вернувшиеся — лиды периода, которые были у нас и раньше
+      // (карточка человека заведена до отрезка): спали и проявились. Мелким пунктом в «Лидах».
+      var back = {};
+      Object.keys(lead).forEach(function (k) {
+        if (first[k] < a) back[k] = {i: lead[k].i, nm: lead[k].nm || '', s: lead[k].s || '', d: lead[k].d, how: 'впервые пришел ' + fmtDay(first[k])};
+      });
+      var vals = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
+      x.back = Object.keys(back).length;
+      x.platOnly = Object.keys(pon).length;
       x.platQ = Object.keys(plat).length;
       x.consBook = Object.keys(bot).length;
       x.qual = Object.keys(all).length;
+      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back)};
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
+    // Ольга 13.11.2026: «цифры все должны быть кликабельные». Список под цифрой —
+    // из того же прохода, что и цифра; людей больше одного раза не показываем.
+    var whoOf = function (x, k) {
+      var w = x.who || {};
+      if (x._ql[k]) return x._ql[k];
+      if (k === 'payers' || k === 'revenue') {
+        var by = {}, out = [];
+        (w.revenue || []).forEach(function (r) {
+          var g = r.g ? 'g' + r.g : 's' + r.i;
+          if (by[g]) { by[g].v += r.v; by[g].n += r.n; return; }
+          out.push(by[g] = Object.assign({}, r));
+        });
+        return out;
+      }
+      return w[k] || null;
+    };
+    var at = o.cur.join(), q = state._mgQ && state._mgQ.at === at ? state._mgQ : null;
+    var numBtn = function (x, k, side, txt) {
+      if (!whoOf(x, k)) return txt;
+      var on = q && q.k === k && q.s === side;
+      return '<button class="mg-nb' + (on ? ' on' : '') + '" data-mgq="' + k + ':' + side + '" title="Кто за этой цифрой">' + txt + '</button>';
+    };
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
+      ['Пришли на платформу, минуя бота', 'контакт только в аккаунте платформы, в лиды выше не входят', 'platOnly', null],
       ['Квалифицированные лиды', 'лиды периода с разбором на платформе или консультацией в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
       ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
@@ -38029,16 +38211,45 @@
         return '<div class="mg-tr' + (r[5] ? ' sub' : '') + '"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
           '<span class="r num mute c-pl">' + (pv != null ? fp(pv) +
             (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + '</small>' : '') : '—') + '</span>' +
-          '<span class="r num big ' + pl + '">' + f(c) +
+          '<span class="r num big ' + pl + '">' + numBtn(cur, r[2], 'c', f(c)) +
             // Ольга 11.11.2026: «12% к дате» убрать, в идущем месяце процент к плану не пишем
             (pl && !o.full ? '<small class="mg-pc">' + pct(pv) + ' плана</small>' : '') +
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
+            // Ольга 13.11.2026: вернувшиеся мелким пунктом под лидами
+            (r[2] === 'leads' && cur.back ? '<small class="mg-of">' + numBtn(cur, 'back', 'c', 'из них вернулись ' + cur.back) + '</small>' : '') +
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
-          '<span class="r num mute c-pv">' + f(p) + '</span>' +
+          '<span class="r num mute c-pv">' + numBtn(prv, r[2], 'p', f(p)) + '</span>' +
           '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
       }).join('') + '</div>' +
       (hasPlan ? '<div class="mg-note">' + esc(o.note) + '</div>' : '') +
+      (q ? mgWhoCard(rows, q, whoOf(q.s === 'c' ? cur : prv, q.k), q.s === 'c' ? o.curLbl : o.prvLbl) : '') +
     '</div>';
+  }
+
+  /* Люди за цифрой лестницы. Строка с карточкой открывает ее в новой вкладке, как на
+     «Продажах»; человек из бота без карточки стоит строкой без перехода. */
+  var MG_WHO_N = {invN: 'счет', payers: 'платеж', revenue: 'платеж'};
+  function mgWhoCard(rows, q, list, lbl) {
+    var row = rows.filter(function (r) { return r[2] === q.k; })[0];
+    list = (list || []).slice().sort(function (a, b) {
+      return q.k === 'revenue' ? (b.v || 0) - (a.v || 0) : String(b.d || '').localeCompare(String(a.d || ''));
+    });
+    var body = list.slice(0, 300).map(function (p) {
+      var sub = [p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
+      var mark = p.v ? fmtMoney(Math.round(p.v)) + ' ₽' : '';
+      if (p.n > 1 && MG_WHO_N[q.k]) mark = (mark ? mark + ' · ' : '') + p.n + ' ' + (q.k === 'invN' ? 'счета' : 'платежа');
+      var inner = '<span class="sb-pn"><b>' + esc(p.nm || (p.i ? 'карточка без имени' : 'в боте, карточки нет')) + '</b>' +
+        '<small>' + esc(sub) + '</small></span><span></span>' +
+        '<span class="sb-pm">' + (mark ? '<em class="sev s-client">' + esc(mark) + '</em>' : '') + '</span>';
+      return p.i ? '<button class="sb-pr" data-sblead="' + esc(p.i) + '">' + inner + '</button>'
+        : '<div class="sb-pr none">' + inner + '</div>';
+    }).join('');
+    var sub = 'нажми на человека, откроется карточка';
+    if (q.k === 'invN') {
+      var cnt = list.reduce(function (s, p) { return s + (p.n || 1); }, 0);
+      if (cnt !== list.length) sub = cnt + ' счетов у ' + list.length + ' человек; ' + sub;
+    }
+    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
   }
 
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
@@ -38294,6 +38505,18 @@
     });
     view.querySelectorAll('[data-mgdept]').forEach(function (b) {
       b.addEventListener('click', function () { state.mgDept = b.dataset.mgdept; saveUi(); renderView(); });
+    });
+    view.querySelectorAll('[data-mgq]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var v = b.dataset.mgq.split(':'), q = state._mgQ, at = b.closest('.mg-card') && b.closest('.mg-card').dataset.at;
+        state._mgQ = q && q.k === v[0] && q.s === v[1] && q.at === at ? null : {k: v[0], s: v[1], at: at};
+        renderView();
+      });
+    });
+    var pc = view.querySelector('#sb-pclose');
+    if (pc) pc.addEventListener('click', function () { state._mgQ = null; renderView(); });
+    view.querySelectorAll('[data-sblead]').forEach(function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
     });
     var rl = view.querySelector('[data-mgreload]'); if (rl) rl.addEventListener('click', mgReload);
     var nw = view.querySelector('[data-mgnew]'); if (nw) nw.addEventListener('click', mgNew);
