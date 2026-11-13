@@ -37008,6 +37008,7 @@
       return flatRow(r.title, 'ссылка go.истсайд.рф/' + r.code, r.n);
     }).join('') || '<div class="empty">Ссылок в соцсети по этому эфиру не было.</div>';
 
+    var rs = cur.reg_split;
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
       statBar([
@@ -37015,6 +37016,14 @@
            жизни другой — сколько людей из базы мы смогли привести. */
         cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
                         sub: 'живые адреса, без наших копий', ebl: 'invited' } : null,
+        /* Откуда пришли зарегистрировавшиеся (Ольга 13.11.2026): три источника
+           отдельными плашками перед общей цифрой, проценты — от регистраций. */
+      ].concat(rs ? [['social', 'Пришли из соцсетей'], ['partner', 'Пришли от партнеров'],
+                     ['ads', 'Пришли с рекламы']].map(function (x) {
+        var n = rs[x[0]] || 0;
+        return { label: x[1], value: n, ebl: n ? 'reg_' + x[0] : '',
+                 sub: c.reg ? pct(n, c.reg) + '% от регистраций' : 'регистраций пока нет' };
+      }) : [], [
         /* Регистрация — форма на сайте и вход в бота по ссылке эфира (Ольга
            13.11.2026: «они же в бота регались»). Стоит и рядом с рассылками. */
         { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
@@ -37023,7 +37032,7 @@
         /* Участники — главная цифра эфира: сколько людей его вообще увидели, живьем
            или в записи. Человек, посмотревший оба раза, считается один раз. */
         { label: 'Участники эфира', value: uchastniki, ebl: 'people',
-          sub: (invited ? pct(uchastniki, invited) + '% от рассылки · ' : '') +
+          sub: (c.reg ? pct(uchastniki, c.reg) + '% от регистраций · ' : '') +
                'живьем ' + c.came + ', запись ' + c.rec +
                (cur.split ? '<br>' + efirSplitSub(cur.split) : '') },
         { label: 'Были в комнате', value: c.came, sub: zalSub, ebl: 'came' },
@@ -37036,20 +37045,23 @@
           sub: c.rec ? pct(c.rec, top) + topWord + (cur.anon_rec ? ', из них ' + cur.anon_rec + ' без регистрации' : '')
                      : 'записи пока нет' },
         { label: 'Записались на разбор', value: cur.booked, ebl: cur.booked ? 'booked' : '',
-          sub: ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали' },
+          sub: (uchastniki ? pct(cur.booked || 0, uchastniki) + '% от участников эфира · ' : '') +
+               (ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали') },
         /* Запись и состоявшийся разговор — разные цифры: между ними теряется
            половина, и одним числом эту потерю не увидеть. */
         { label: 'Были на консультации', value: cur.held || 0, ebl: cur.held ? 'held' : '',
-          sub: cur.booked ? 'из ' + cur.booked + ' ' + plural(cur.booked, 'записавшегося', 'записавшихся', 'записавшихся')
+          sub: cur.booked ? pct(cur.held || 0, cur.booked) + '% от записавшихся на разбор · из ' +
+                            cur.booked
                           : 'записей пока нет' },
         /* Деньги эфира растут неделями. Подпись про это стоит на самой плитке, а не
            в сноске внизу: маленькую цифру через день после эфира иначе прочитают
            как провал, хотя сделки только начались. */
         { label: 'Оплатили', value: m.people, ebl: m.people ? 'paid' : '',
-          sub: m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями' },
+          sub: (cur.held ? pct(m.people || 0, cur.held) + '% от бывших на консультации · ' : '') +
+               (m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями') },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
-      ].filter(Boolean), 'five') +
+      ]).filter(Boolean), 'five') +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
           esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
