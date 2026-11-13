@@ -10687,15 +10687,32 @@
       if (n.editor) {
         tags += '<span class="sev">' + esc(newsWho(it)) + '</span>';
         if (!it.sent) tags += '<span class="sev nw-draft">черновик</span>';
+      } else if (it.audience) {
+        // Для кого запись видят все: по ней понятно, про меня это или про соседний
+        // отдел (Виталий 13.11.2026). Поименный список остается у редактора.
+        tags += '<span class="sev">' + esc(it.audience) + '</span>';
       }
       return '<article class="nw-item' + (it.mine && !it.read ? ' unread' : '') + '" data-nw="' + it.id + '">' +
         '<div class="nw-top"><h3 class="nw-title">' + esc(it.title) + '</h3>' +
           (n.editor ? '<button class="icobtn nw-edit" data-nwe="' + it.id + '" title="Поправить">' + ic('pen', 14) + '</button>' : '') + '</div>' +
         '<div class="nw-meta">' + esc(meta.join(' · ')) + tags + '</div>' +
         (it.body ? '<div class="nw-body">' + newsText(it.body) + '</div>' : '') +
+        (it.page ? '<button type="button" class="nw-read" data-nwo="' + it.id + '">' + ic('doc', 14) + '<span>Читать инструкцию</span></button>' : '') +
       '</article>';
     }).join('') : '<div class="empty">' + (n.editor ? 'Записей пока нет. Первую напиши кнопкой «Написать» сверху.' : 'Пока ничего нового. Записи об обновлениях будут появляться здесь и в боте.') + '</div>';
     view.innerHTML = '<div class="card nw">' + body + '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-nwo]'), function (b) {
+      b.addEventListener('click', function () {
+        var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-nwo'); })[0];
+        if (it) openNewsPage(it);
+      });
+    });
+    // Пришли ссылкой «Читать инструкцию» из бота: #page/news/<id>.
+    if (state.newsOpen) {
+      var want = items.filter(function (x) { return x.id === state.newsOpen; })[0];
+      state.newsOpen = 0;
+      if (want && want.page) openNewsPage(want);
+    }
     Array.prototype.forEach.call(view.querySelectorAll('[data-nwe]'), function (b) {
       b.addEventListener('click', function () {
         var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-nwe'); })[0];
@@ -10711,6 +10728,34 @@
         state.newsUnread = 0; renderSide(); if (state.page === 'news') renderHead();
       }, function () {});
     }
+  }
+  /* Страница записи: короткая строка живет в ленте и в боте, а инструкция целиком
+     открывается поверх (Виталий, 13.11.2026). Разметка та же, что у регламентов
+     (kbMd): заголовки, списки, выноски. */
+  function openNewsPage(it) {
+    if (document.querySelector('.al-ov.nwp-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over nwp-ov';
+    ov.innerHTML =
+      '<div class="al-card nwp-card" role="dialog" aria-modal="true" aria-label="' + esc(it.title) + '">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Что нового · ' + esc(dayLabel(it.at)) + '</div>' +
+          '<div class="al-title">' + esc(it.title) + '</div></div>' +
+          '<button class="al-x" id="nwp-x" aria-label="Закрыть">' + ic('x', 14) + '</button></div>' +
+        '<div class="al-body nwp-body"><div class="fkb-body">' + kbMd(it.page) + '</div></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    try { history.replaceState(null, '', '#page/news/' + it.id); } catch (e) {}
+    var close = function () {
+      document.removeEventListener('keydown', onKey, true);
+      try { if (location.hash.indexOf('#page/news/') === 0) history.replaceState(null, '', '#page/news'); } catch (e) {}
+      ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('nwp-x').addEventListener('click', close);
   }
   function openNewsForm(it) {
     if (document.querySelector('.al-ov.nw-ov')) return;
@@ -10733,6 +10778,8 @@
             '<input id="nw-title" class="al-in" type="text" maxlength="200" placeholder="Что появилось, одной строкой" value="' + esc(it ? it.title : '') + '"></label>' +
           '<label class="al-f"><span class="al-l">Как этим пользоваться</span>' +
             '<textarea id="nw-body" class="al-in al-ta" rows="6" maxlength="4000" placeholder="Простыми словами: где найти, что нажать, что изменилось">' + esc(it ? it.body : '') + '</textarea></label>' +
+          '<label class="al-f"><span class="al-l">Инструкция отдельной страницей, если нужна</span>' +
+            '<textarea id="nw-page" class="al-in al-ta" rows="6" maxlength="30000" placeholder="Подробно, по шагам. ## заголовок, - пункт списка, 1. шаг">' + esc(it ? (it.page || '') : '') + '</textarea></label>' +
           '<div class="al-f"><span class="al-l">Кому</span>' +
             // Наборы рядом с «всей командой»: ролей двенадцать, и выбирать их по
             // одной — ровно та работа, ради которой выбор пропускают целиком.
@@ -10840,6 +10887,7 @@
     setTimeout(function () { el('nw-title').focus(); }, 30);
     var payload = function () {
       return { title: el('nw-title').value.trim(), body: el('nw-body').value.trim(),
+               page: el('nw-page').value.trim(),
                roles: sel.roles, users: sel.users, chats: sel.chats, everyone: sel.everyone };
     };
     var busy = function (on) { Array.prototype.forEach.call(ov.querySelectorAll('.al-foot button'), function (b) { b.disabled = on; }); };
@@ -58129,6 +58177,15 @@
      пришла ссылкой. Вкладку из чужой ссылки ставим ТОЛЬКО когда она этому человеку
      доступна: ссылку пересылают и тем, у кого прав на нее нет. */
   var PAGE_SEG = {
+    /* #page/news/<id> — кнопка «Читать инструкцию» из бота: открыть ленту и сразу
+       страницу записи. В адрес экрана id не пишем: лента — это лента. */
+    news: {
+      get: function () { return ''; },
+      set: function (s) {
+        if (!/^\d{1,9}$/.test(s)) return false;
+        state.newsOpen = +s; return true;
+      },
+    },
     manage: {
       get: mgTab,
       set: function (s) {
