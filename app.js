@@ -38092,22 +38092,29 @@
     // Списки людей строим здесь же — цифра и список не могут разойтись.
     var qualOf = function (x, a, b) {
       var key = function (l) { return l.g ? 'g' + l.g : 's' + l.i; };
-      var lead = {}, plat = {}, bot = {};
+      // Ольга 13.11.2026: квалифицированный считается в том месяце, когда прошел разбор
+      // или консультацию, даже если лидом стал раньше («стал лидом 30.10, разбор 2.11 —
+      // считаем в ноябре»). Лид — любая его карточка с контактом, заведенная не позже
+      // конца отрезка; пришедшие раньше отрезка подписаны «из них пришли раньше».
+      var lead = {}, ever = {}, plat = {}, bot = {};
       (cc.leads || []).forEach(function (l) {
-        if (l.c && !l.nl && l.d >= a && l.d <= b) lead[key(l)] = l;
+        if (!l.c || l.nl || l.d > b) return;
+        var k = key(l);
+        if (l.d >= a) lead[k] = l;
+        if (!ever[k] || l.d < ever[k].d) ever[k] = l;
       });
       (cc.leads || []).forEach(function (l) {
-        if (!l.dg || l.dg < a || l.dg > b || !lead[key(l)]) return;
+        if (!l.dg || l.dg < a || l.dg > b || !ever[key(l)]) return;
         // имя и метку берем у карточки лида: карточка кабинета с разбором часто безымянная
-        var k = key(l), ld = lead[k];
+        var k = key(l), ld = lead[k] || ever[k];
         if (!plat[k] || l.dg < plat[k].d) plat[k] = {i: ld.i, nm: ld.nm || l.nm || '', s: ld.s || l.s || '', d: l.dg, how: 'разбор на платформе'};
       });
       (cc.cons || []).forEach(function (c) {
         var d = Array.isArray(c) ? c[0] : c, sid = Array.isArray(c) ? c[1] : null;
         if (!d || d < a || d > b || !sid) return;
         var k = grp[sid] || 's' + sid, l = card[sid];
-        if (!lead[k]) return;
-        var ld = lead[k];
+        if (!ever[k]) return;
+        var ld = lead[k] || ever[k];
         if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
       });
       var all = {};
@@ -38138,13 +38145,18 @@
       Object.keys(lead).forEach(function (k) {
         if (first[k] < a) back[k] = {i: lead[k].i, nm: lead[k].nm || '', s: lead[k].s || '', d: lead[k].d, how: 'впервые пришел ' + fmtDay(first[k])};
       });
+      var early = {};
+      Object.keys(all).forEach(function (k) {
+        if (!lead[k]) early[k] = Object.assign({}, all[k], {how: all[k].how + ' · лид с ' + fmtDay(ever[k].d)});
+      });
       var vals = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
+      x.qualEarly = Object.keys(early).length;
       x.back = Object.keys(back).length;
       x.platOnly = Object.keys(pon).length;
       x.platQ = Object.keys(plat).length;
       x.consBook = Object.keys(bot).length;
       x.qual = Object.keys(all).length;
-      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back)};
+      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back), qualEarly: vals(early)};
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
@@ -38173,7 +38185,7 @@
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
       ['Пришли на платформу, минуя бота', 'контакт только в аккаунте платформы, в лиды выше не входят', 'platOnly', null],
-      ['Квалифицированные лиды', 'лиды периода с разбором на платформе или консультацией в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
+      ['Квалифицированные лиды', 'лиды, прошедшие в этом периоде разбор на платформе или консультацию в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
       ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
       ['Записались к тьютору', 'выбрали время разбора', 'signed', null, false, false, 'qual', 'от квалифицированных'],
@@ -38209,6 +38221,7 @@
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
             // Ольга 13.11.2026: вернувшиеся мелким пунктом под лидами
             (r[2] === 'leads' && cur.back ? '<small class="mg-of">' + numBtn(cur, 'back', 'c', 'из них вернулись ' + cur.back) + '</small>' : '') +
+            (r[2] === 'qual' && cur.qualEarly ? '<small class="mg-of">' + numBtn(cur, 'qualEarly', 'c', 'из них пришли раньше ' + cur.qualEarly) + '</small>' : '') +
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + numBtn(prv, r[2], 'p', f(p)) + '</span>' +
           '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
@@ -38241,7 +38254,7 @@
       var cnt = list.reduce(function (s, p) { return s + (p.n || 1); }, 0);
       if (cnt !== list.length) sub = cnt + ' счетов у ' + list.length + ' человек; ' + sub;
     }
-    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
+    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : q.k === 'qualEarly' ? 'Квалифицированные, пришедшие раньше' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
   }
 
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
