@@ -37821,9 +37821,18 @@
       mkCrossTabsBind(view);
       if (state._mkCrossLoad) return;
       state._mkCrossLoad = true;
-      api('/admin/api/marketing/crosscut').then(function (r) {
+      /* Лестницу запуска сквозная берет из «Запусков» (Ольга 13.11.2026): второй
+         запрос идет рядом, и его отказ не роняет сквозную, а возвращает свой счет. */
+      Promise.all([
+        api('/admin/api/marketing/crosscut'),
+        api('/admin/api/marketing/launch').catch(function () { return null; })
+      ]).then(function (rs) {
+        var r = rs[0], ls = (rs[1] && rs[1].launches) || [];
         state._mkCrossLoad = false;
-        state._mkCross = (r && r.leads) ? r : 'none';
+        if (r && r.leads) {
+          r.launch = ls.filter(function (l) { return l.slug === 'intensive-2026-10'; })[0] || null;
+          state._mkCross = r;
+        } else state._mkCross = 'none';
         renderView();
       }).catch(function () {
         state._mkCrossLoad = false;
