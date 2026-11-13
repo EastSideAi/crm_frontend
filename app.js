@@ -41614,7 +41614,7 @@
     if (c.cabinet) tags.push('<span class="idup-t">есть кабинет</span>');
     var contact = [c.contact, c.email].filter(Boolean).join(' · ');
     return '<div class="idup-c' + (isMain ? ' main' : '') + '">' +
-      '<div class="idup-c-t">' + esc(c.name || 'Без имени') + mark + '</div>' +
+      '<div class="idup-c-t">' + esc(c.name || c.label || 'Без имени') + mark + '</div>' +
       (contact ? '<div class="idup-c-s">' + esc(contact) + '</div>' : '') +
       '<div class="idup-c-s">заведена ' + esc(idupWhen(c.created_at)) +
         (c.from ? ' · пришла: ' + esc(c.from) : '') + '</div>' +
@@ -41731,7 +41731,7 @@
         var g = find(b.getAttribute('data-cfam')), side = g ? cdupParSide(g) : null;
         if (!g || side == null) return;
         var ppl = g.kin.people, nm = {};
-        g.cards.forEach(function (c) { nm[c.id] = c.name || 'без имени'; });
+        g.cards.forEach(function (c) { nm[c.id] = c.name || c.label || 'без имени'; });
         var par = ppl[side][0], kid = ppl[1 - side][0];
         if (!confirm('Связать семьей: «' + nm[kid] + '» ребенок, «' + nm[par] + '» родитель? ' +
                      'Карточки останутся разными, ребенок перестанет считаться новым лидом.')) return;
