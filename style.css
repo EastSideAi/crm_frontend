@@ -5009,6 +5009,20 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
 .tsk-imp { display: inline-flex; align-items: center; flex: none; margin-right: 6px;
   color: var(--amber-ink); vertical-align: -1px; }
 .tsk-imp svg { width: 11px; height: 11px; }
+/* Регулярка: задача пришла по расписанию. Серый, не цветной: это происхождение
+   строки, а не сигнал к действию, и спорить с важностью и просрочкой не должен. */
+.tsk-rep { display: inline-flex; align-items: center; flex: none; margin-right: 6px;
+  color: var(--ink-3); vertical-align: -1px; }
+.tsk-rep svg { width: 11px; height: 11px; }
+.dy-rep { margin-top: 12px; }
+.rep-row { cursor: pointer; }
+.rep-row:hover { background: #FBFBFC; }
+.rep-ic { display: inline-flex; flex: none; width: 18px; justify-content: center; color: var(--ink-3); }
+.rep-ic svg { width: 12px; height: 12px; }
+.rep-add { padding: 10px 20px 14px; }
+.rep-wd { margin-top: 8px; align-self: flex-start; flex-wrap: wrap; }
+#rp-md { margin-top: 8px; }
+.rep-wd[hidden], #rp-md[hidden] { display: none; }
 
 /* Полоса-разделитель внутри списка дня: «Срочно и важно» и все остальное.
    Отдельным блоком наверху те же задачи не выносим — они задваивались бы. */
