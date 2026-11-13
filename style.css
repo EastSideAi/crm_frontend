@@ -11180,6 +11180,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tgd-l { flex: 0 0 104px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .tgd-row.on .tgd-l { color: var(--ink); }
 .tgd-sel { flex: 1 1 auto; min-width: 0; }
+/* Рабочие чаты: название чата длинное («Eastside Управление компанией и финансы»),
+   поэтому ему место шире, а отдел — короткое слово в узком селекте справа. */
+.tgd-row.wc .tgd-l { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tgd-row.wc .tgd-sel { flex: 0 0 168px; }
 .tgd-t { flex: none; margin-top: 0; }
 /* На телефоне подпись и «Проверить» делят первую строку, выбор группы — вторую:
    кнопка под селектом тянула каждую строку на три этажа. */
@@ -11189,6 +11193,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .tgd-l { flex: 1 1 auto; }
   .tgd-t { order: 2; margin-left: auto; }
   .tgd-sel { order: 3; flex-basis: 100%; }
+  .tgd-row.wc .tgd-l { flex-basis: 100%; white-space: normal; }
+  .tgd-row.wc .tgd-sel { flex: 1 1 100%; }
 }
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
