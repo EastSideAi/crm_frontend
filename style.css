@@ -14877,6 +14877,15 @@ video.cs-media { background: #000; }
 .mg-lead { flex-wrap: wrap; }
 .mg-lead.off .mg-ht { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line-2); }
 .mg-hint { color: var(--amber-ink); font-weight: 600; }
+.mg-who-l { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
+.mg-who-l b { font-weight: 600; color: var(--ink); }
+.mg-who-l .mg-none { color: var(--ink-3); }
+.mg-lead.off .mg-who-l { color: var(--ink-3); }
+.mg-team { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 24px;
+  border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+.mg-back { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: none;
+  border-radius: 999px; padding: 3px 8px; font: inherit; color: var(--ink-2); cursor: pointer; }
+.mg-back:hover { color: var(--blue); border-color: var(--blue); }
 .mg-nl { margin: 0; gap: 6px; }
 .mg-nl .qchip { padding: 6px 11px; }
 /* подсказка системы: подтверждается одним нажатием, поэтому чип обведен */

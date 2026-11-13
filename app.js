@@ -38642,6 +38642,7 @@
       '<div class="s">' + (hinted ? 'система подозревает ' + hinted + ': проверь и подтверди' : 'отметь тех, кто не новый лид: текущих клиентов, дубли, спам') +
       '</div></div></div>';
     if (!d.leads.length) return html + '<div class="mg-note">За эту неделю новых карточек нет.</div></div>';
+    var team = d.team || [];
     return html + '<div class="mg-list">' + d.leads.map(function (l) {
       var chips = Object.keys(R).map(function (k) {
         return '<button class="qchip' + (l.not_lead === k ? ' on' : '') + (!l.not_lead && l.hint === k ? ' hint' : '') +
@@ -38650,9 +38651,34 @@
       return '<div class="mg-lead' + (l.not_lead ? ' off' : '') + '">' +
         '<div class="mg-hb"><div class="mg-ht"><a href="#lead/' + esc(l.id) + '" data-mglead="' + esc(l.id) + '">' + esc(l.name || 'Без имени') + '</a></div>' +
         '<div class="mg-hw">' + esc(fmtDay(l.at)) + (l.src ? ' · ' + esc(l.src) : l.channel ? ' · ' + esc(l.channel) : ' · без метки') +
-          (l.hint && !l.not_lead ? ' · <span class="mg-hint">похоже: ' + esc(R[l.hint] || l.hint) + '</span>' : '') + '</div></div>' +
+          (l.hint && !l.not_lead ? ' · <span class="mg-hint">похоже: ' + esc(R[l.hint] || l.hint) + '</span>' : '') + '</div>' +
+        mgLeadWho(l) + '</div>' +
         '<div class="list-quick mg-nl">' + chips + '</div></div>';
-    }).join('') + '</div></div>';
+    }).join('') + '</div>' + (team.length ? '<div class="mg-team">Убраны как наши и тест: ' + team.map(function (t) {
+      return '<button class="mg-back" data-mgback="' + esc(t.id) + '" title="Вернуть в список">' + esc(t.name || 'без имени') + ' ' + ic('x', 11) + '</button>';
+    }).join('') + '</div>' : '') + '</div>';
+  }
+
+  /* Кто это: анкета (класс, программа, год, направление), откуда пришел, что успел
+     сделать у нас и кто ведет. Ольга 13.11.2026: «заходя во вкладку, видеть, кто это
+     такие», раньше в строке был один канал. */
+  var MG_STEP = { reg: 'записался на эфир', watched: 'смотрел эфир', gift: 'забрал подарок',
+    offer: 'нажал на предложение', bot: 'пишет в бота', diag: 'разбор на платформе',
+    booked: 'записался на консультацию', call: 'консультация прошла' };
+  function mgLeadWho(l) {
+    var who = [l.grade, l.program, l.year && /^\d{4}$/.test(l.year) ? 'поступление ' + l.year : l.year]
+      .concat(l.dirs || []).filter(Boolean);
+    var did = (l.steps || []).filter(function (k) { return MG_STEP[k]; }).map(function (k) { return MG_STEP[k]; });
+    if (l.paid) did.push('платил');
+    var st = l.status && l.status !== 'new' && CRM[l.status] ? CRM[l.status].label : '';
+    var how = [l.note, (l.contacts || []).length ? 'есть ' + l.contacts.join(', ') : '']
+      .filter(Boolean);
+    var tail = [st, l.owner ? 'ведет ' + l.owner : 'никто не ведет'].filter(Boolean);
+    return '<div class="mg-who-l">' +
+      (who.length ? '<div><b>' + esc(who.join(' · ')) + '</b></div>' : '<div class="mg-none">анкеты нет</div>') +
+      (how.length ? '<div>' + esc(how.join(' · ')) + '</div>' : '') +
+      (did.length ? '<div>' + esc(did.join(' → ')) + '</div>' : '') +
+      '<div>' + esc(tail.join(' · ')) + '</div></div>';
   }
 
   function mgBind(view) {
@@ -38714,15 +38740,28 @@
     });
     view.querySelectorAll('[data-mgnl]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var id = b.dataset.mgnl, l = (state._mgLeads.leads || []).filter(function (x) { return x.id === id; })[0];
+        var d = state._mgLeads, id = b.dataset.mgnl;
+        var l = (d.leads || []).filter(function (x) { return x.id === id; })[0];
         var reason = l && l.not_lead === b.dataset.r ? null : b.dataset.r;
         api('/admin/api/rnp/leads/' + id + '/not-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason }) })
           .then(function () {
             l.not_lead = reason;
-            state._mgLeads.counted = state._mgLeads.leads.filter(function (x) { return !x.not_lead; }).length;
+            // «наш / тест» уходит из списка вниз, к убранным: вдруг промахнулись
+            if (reason === 'team') {
+              d.leads = d.leads.filter(function (x) { return x.id !== id; });
+              d.team = (d.team || []).concat([{ id: id, name: l.name }]);
+            }
+            d.counted = d.leads.filter(function (x) { return !x.not_lead; }).length;
             state._mkCross = null;  // сквозная пересчитается без отмеченного
             renderView();
           }).catch(function () { showToast('Отметка не сохранилась. Проверь сеть'); });
+      });
+    });
+    view.querySelectorAll('[data-mgback]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        api('/admin/api/rnp/leads/' + b.dataset.mgback + '/not-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: null }) })
+          .then(function () { state._mgLeads = null; state._mkCross = null; renderView(); })
+          .catch(function () { showToast('Не вернулось. Проверь сеть'); });
       });
     });
   }
