@@ -14801,6 +14801,16 @@ video.cs-media { background: #000; }
 .mg-d { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 7px;
   background: var(--fill); color: var(--ink-2); }
 .mg-d.up { background: var(--green-soft); color: var(--green-ink); }
+/* Цифра лестницы — кнопка к людям за ней (Ольга 13.11.2026). Выглядит цифрой, а не
+   кнопкой: подчеркивание пунктиром появляется по наведению, открытая — синяя. */
+.mg-nb { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+  border-bottom: 1px dashed transparent; transition: color .14s var(--ease), border-color .14s var(--ease); }
+.mg-nb:hover { border-bottom-color: currentColor; }
+.mg-nb.on { color: var(--blue); border-bottom-color: var(--blue); }
+.mg-nb:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--blue-tint); border-radius: 4px; }
+.mg-who .sb-people { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+.mg-who .sb-pr.none { cursor: default; }
+.mg-who .sb-pr.none::before { display: none; }
 .mg-d.down { background: var(--red-soft); color: var(--red-ink); }
 
 /* гипотезы и решения */

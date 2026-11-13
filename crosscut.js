@@ -216,7 +216,7 @@ window.CROSSCUT = (function () {
          списка нет вовсе — там у лида нет ни id, ни имени, и это сделано нарочно. */
       function who(key, l, item){
         if (!l.i) return;
-        var row = {i: l.i, nm: l.nm || '', k: l.k || '', s: l.s || ''};
+        var row = {i: l.i, g: l.g || null, nm: l.nm || '', k: l.k || '', s: l.s || ''};
         for (var q in item) row[q] = item[q];
         (r.who[key] || (r.who[key] = [])).push(row);
       }
@@ -248,7 +248,7 @@ window.CROSSCUT = (function () {
           r.regs++; if (x[1]) r.watched++; who('regs', l, {d: x[0]});
         });
         if (inP(l.dg, a, b)){ r.diagPlat++; who('diagPlat', l, {d: l.dg}); }
-        if (inP(l.sb, a, b)) r.signed++;
+        if (inP(l.sb, a, b)){ r.signed++; who('signed', l, {d: l.sb}); }
         var myCalls = (l.cl || []).filter(function(c){ return inP(c, a, b); }).length;
         if (myCalls){
           r.meetings += myCalls; r.meeting++;
