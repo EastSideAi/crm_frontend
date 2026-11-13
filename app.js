@@ -404,6 +404,11 @@
       x: '<path d="M5 5l10 10M15 5L5 15"/>',
       alert: '<path d="M10 3.2 17.8 16.5a1 1 0 0 1-.9 1.5H3.1a1 1 0 0 1-.9-1.5L10 3.2z"/><path d="M10 8v3.6M10 14.3v.01"/>',
       phone: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/>',
+      // Журнал звонков: трубка с волнами. Направление звонка — та же трубка со стрелкой.
+      calls: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/><path d="M12.4 2.6a5.2 5.2 0 0 1 5 5"/><path d="M12.2 5.5a2.4 2.4 0 0 1 2.3 2.3"/>',
+      callin: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/><path d="M17.2 2.8l-4.6 4.6"/><path d="M12.6 3.8v3.6h3.6"/>',
+      callout: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/><path d="M12.6 7.4l4.6-4.6"/><path d="M13.6 2.8h3.6v3.6"/>',
+      callmiss: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/><path d="M13 2.8l4 4M17 2.8l-4 4"/>',
       mail: '<rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M3.2 6.2l6.1 4.4a1.2 1.2 0 0 0 1.4 0l6.1-4.4"/>',
       send: '<path d="M17 3L8.5 11.5"/><path d="M17 3l-5.5 14-3-6.5L2 7.5 17 3z"/>',
       cal: '<rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/>',
@@ -40119,7 +40124,7 @@
     // Одно окно звонилки на всю смену: следующий номер подставляется в него же.
     Array.prototype.forEach.call(view.querySelectorAll('[data-mscall]'), function (b) {
       b.addEventListener('click', function () {
-        window.open(location.origin + '/zvonilka/#n=' + encodeURIComponent(b.getAttribute('data-mscall')), 'es-zvonilka');
+        pcDial(b.getAttribute('data-mscall'));
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mslead]'), function (b) {
@@ -49079,6 +49084,8 @@
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
     { id: 'mail',   label: 'Почта',      icon: 'mail' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
+    // Звонки стоят рядом с перепиской: это тот же разговор с семьей, только голосом.
+    { id: 'calls',  label: 'Звонки',     icon: 'calls' },
     { id: 'dialog', label: 'Переписка',  icon: 'chat' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
   ];
@@ -50199,7 +50206,7 @@
     var navHtml = MODAL_SECTIONS.filter(function (sct) {
       if (sct.id === 'pay') return can('finance|pay_create');
       // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
-      if (sct.id === 'consult' || sct.id === 'projects') return can('clients');
+      if (sct.id === 'consult' || sct.id === 'projects' || sct.id === 'calls') return can('clients');
       // Переписка закрыта тем же правом, что и раздел «Диалоги»: пункт, который
       // открывается только отказом, хуже отсутствующего пункта. У тьютора право
       // своё (`inbox_own`) — он пишет семье, но потока продаж не видит.
@@ -50215,6 +50222,7 @@
       // Курс открыт — зеленая точка на разделе. Без нее «он у нас учится китайскому»
       // видно только внутри вкладки, куда без повода не заходят.
       else if (sct.id === 'course' && lead && lead.course && lead.course.has_access) extra = '<span class="doto"></span>';
+      else if (sct.id === 'calls' && pcList(id).length) extra = '<span class="cnt num">' + pcList(id).length + '</span>';
       else if (sct.id === 'notes' && openTasks) extra = '<span class="cnt num">' + openTasks + '</span>';
       else if (sct.id === 'docs' && d && d.docs && d.docs.length) extra = '<span class="cnt num">' + d.docs.length + '</span>';
       else if (sct.id === 'pay' && d && d.payments && d.payments.length) extra = '<span class="cnt num">' + d.payments.length + '</span>';
@@ -50256,6 +50264,7 @@
           '<div class="m-name-row">' +
             '<div class="m-name' + (nm ? '' : ' anon') + '" id="m-name" data-raw="' + esc(nm) + '">' + esc(nm || 'Без имени') + '</div>' +
             '<button class="m-edit" id="m-name-edit" title="Изменить имя">' + ic('note', 14) + '</button>' +
+            '<span id="m-callslot">' + pcButton(id) + '</span>' +
           '</div>' +
           // Ведет клиента — в шапке, а не спрятан во вкладке «Сейчас»: процент продаж
           // капает именно на ответственного, значит он должен быть на виду. Клик ведет
@@ -50284,6 +50293,8 @@
       '</div>';
 
     el('m-close').addEventListener('click', closeDrawer);
+    pcWireButton(id);
+    if (can('clients')) pcLoad(id);
     var ownJump = el('m-own-jump');
     if (ownJump) ownJump.addEventListener('click', function () { setModalSection('now'); });
     var hideBtn = el('m-hide');
@@ -50332,11 +50343,13 @@
     if (s === 'mail' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'points' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
+    if (s === 'calls' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'consult') host.innerHTML = buildConsultSection(id);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
+    else if (s === 'calls') host.innerHTML = buildCallsSection(id);
     else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
     else if (s === 'apply') host.innerHTML = buildApplySection(ctx);
     else if (s === 'points') host.innerHTML = buildPointsSection(ctx);
@@ -50473,6 +50486,159 @@
     else text = 'Рассылка: согласия нет — рекламные письма не отправляются';
     return '<div class="mail-off">' + text + '</div>';
   }
+
+  /* ── ЗВОНКИ В КАРТОЧКЕ ─────────────────────────────────────────────────────
+     Вера 13.11.2026: «кнопка Позвонить — нажал и звонишь, без набора номера; номеров
+     несколько — выбор; звонки с записью и конспектом рядом с перепиской». Номера
+     собирает сервер (контакт, заявка, анкета, кабинет — только российские: звонилка
+     за границу не звонит), звонки он же отдает вместе с конспектом разбора.
+     Звонит звонилка в одном окне es-zvonilka на всю смену; &go=1 говорит ей набрать
+     сразу, как только она подключится. Без личного права phone кнопки нет: карточку
+     видят и тьюторы, а звонок идет с номера компании. Послушать запись может тот же,
+     кто ведет семью (право clients). */
+  var PCALLS = {};      // id лида -> {phones, calls} с бэка, или 'none'
+  var PCALLS_AT = {};   // id лида -> когда загрузили: раздел перечитывает старое
+  var PCALLS_BUSY = {};
+
+  function pcList(id) { var b = PCALLS[id]; return (b && b !== 'none' && b.calls) || []; }
+  function pcPhones(id) { var b = PCALLS[id]; return (b && b !== 'none' && b.phones) || []; }
+
+  function pcLoad(id, force) {
+    if (PCALLS_BUSY[id]) return;
+    if (!force && PCALLS[id] && Date.now() - (PCALLS_AT[id] || 0) < 20000) return;
+    PCALLS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/phone-calls').then(function (r) {
+      PCALLS_BUSY[id] = false; PCALLS[id] = r || { phones: [], calls: [] }; PCALLS_AT[id] = Date.now();
+      if (state.drawerId !== id) return;
+      pcPaintButton(id);
+      var cnt = document.querySelector('.m-ni[data-s="calls"]');
+      if (cnt) {
+        var old = cnt.querySelector('.cnt'); if (old) old.remove();
+        if (pcList(id).length) cnt.insertAdjacentHTML('beforeend', '<span class="cnt num">' + pcList(id).length + '</span>');
+      }
+      if (state.modalSection === 'calls') renderModalContent();
+    }).catch(function (e) {
+      PCALLS_BUSY[id] = false;
+      if (e.message !== '403') { PCALLS[id] = 'none'; PCALLS_AT[id] = Date.now(); if (state.drawerId === id && state.modalSection === 'calls') renderModalContent(); }
+    });
+  }
+
+  // Набор номера: одно окно звонилки на смену, следующий номер встает в него же.
+  function pcDial(num) {
+    window.open(location.origin + '/zvonilka/#n=' + encodeURIComponent(num) + '&go=1', 'es-zvonilka');
+  }
+
+  function pcButton(id) {
+    if (!can('phone') || !pcPhones(id).length) return '';
+    var many = pcPhones(id).length > 1;
+    return '<button class="m-call" id="m-call" title="' + (many ? 'Выбрать номер и позвонить' : 'Позвонить через звонилку') + '">' +
+      ic('phone', 14) + '<span>Позвонить</span>' + (many ? ic('chev', 12) : '') + '</button>';
+  }
+  function pcPaintButton(id) {
+    var slot = el('m-callslot');
+    if (!slot) return;
+    slot.innerHTML = pcButton(id);
+    pcWireButton(id);
+  }
+  function pcWireButton(id) {
+    var b = el('m-call');
+    if (b) b.addEventListener('click', function () { pcPick(id, b); });
+  }
+  function pcPick(id, anchor) {
+    var ph = pcPhones(id);
+    if (!ph.length) return;
+    if (ph.length === 1) return pcDial(ph[0].number);
+    openDropdown(anchor, ph.map(function (p) {
+      return { v: p.number, label: msPhone(p.number) + ' · ' + p.from };
+    }), '', pcDial);
+    // карточка лежит поверх страницы, меню обычной высоты легло бы под нее
+    var m = el('smenu');
+    if (m) m.classList.add('ddmenu--over-modal');
+  }
+
+  function pcDur(sec) {
+    if (!sec) return '';
+    if (sec < 60) return sec + ' с';
+    return Math.floor(sec / 60) + ' мин' + (sec % 60 ? ' ' + (sec % 60) + ' с' : '');
+  }
+
+  function pcRow(id, c) {
+    var miss = !c.answered;
+    var kind = miss ? 'miss' : c.direction;
+    var what = c.direction === 'in'
+      ? (miss ? 'Пропущенный' : 'Входящий')
+      : (miss ? 'Не дозвонились' : 'Исходящий');
+    var meta = [fmtWhen(c.started_at), c.answered ? pcDur(c.talk_sec) : '', c.staff_login || '']
+      .filter(Boolean).map(esc).join(' · ');
+    var body = (c.summary || '').trim();
+    var note = '';
+    if (body) note = '<div class="cl-sum">' + callSummaryHtml(body) + '</div>';
+    else if (c.notes_status === 'transcribing') note = '<div class="cl-empty">Слушаем запись, конспект появится через пару минут.</div>';
+    else if (c.notes_status === 'failed') note = '<div class="cl-empty">Конспект не получился. Запись можно послушать.</div>';
+    else if (c.answered && (c.talk_sec || 0) < 20) note = '<div class="cl-empty">Короткий разговор, конспект не делаем.</div>';
+    return '<div class="cl-row pc-row">' +
+      '<div class="cl-h">' +
+        '<span class="pc-ic ' + kind + '">' + ic(c.direction === 'in' ? (miss ? 'callmiss' : 'callin') : 'callout', 15) + '</span>' +
+        '<div class="cl-m"><b class="pc-what' + (miss ? ' miss' : '') + '">' + what + '</b>' + (meta ? ' · ' + meta : '') + '</div>' +
+        (can('phone') && c.number ? '<button class="icobtn" data-pcdial="' + esc(c.number) + '" title="Перезвонить на ' + esc(msPhone(c.number)) + '">' + ic('phone', 14) + '</button>' : '') +
+      '</div>' +
+      (c.audio ? '<audio class="pc-audio" controls preload="none" src="' +
+        esc(API + '/admin/api/leads/' + id + '/phone-calls/' + c.id + '/audio?k=' + encodeURIComponent(getKey())) + '"></audio>' : '') +
+      note +
+    '</div>';
+  }
+
+  function buildCallsSection(id) {
+    pcLoad(id);
+    var b = PCALLS[id];
+    var head = '<div class="m-ctitle">Звонки</div>' +
+      '<div class="m-csub">Все звонки через звонилку: запись хранится 90 дней, разговор дольше 20 секунд разбирается в конспект сам.</div>';
+    if (!b) return head + '<div class="sk-rows"><div class="sk row"></div><div class="sk row"></div></div>';
+    if (b === 'none') return head + '<div class="field-empty">Не удалось загрузить звонки. Откройте раздел заново.</div>';
+    var nums = '';
+    if (can('phone') && pcPhones(id).length) {
+      nums = '<div class="pc-nums">' + pcPhones(id).map(function (p) {
+        return '<button class="pc-num" data-pcdial="' + esc(p.number) + '">' + ic('phone', 13) +
+          '<span class="num">' + esc(msPhone(p.number)) + '</span><small>' + esc(p.from) + '</small></button>';
+      }).join('') + '</div>';
+    } else if (can('phone')) {
+      nums = '<div class="field-empty">Российского номера в карточке нет. Впишите его в «Контакт» на вкладке «Главное», и кнопка появится.</div>';
+    }
+    var list = pcList(id);
+    var rows = list.length
+      ? '<div class="pc-list">' + list.map(function (c) { return pcRow(id, c); }).join('') + '</div>'
+      : '<div class="field-empty">Звонков пока не было.</div>';
+    return head + nums + rows;
+  }
+
+  function pcWire(id, host) {
+    Array.prototype.forEach.call(host.querySelectorAll('[data-pcdial]'), function (b) {
+      b.addEventListener('click', function () { pcDial(b.getAttribute('data-pcdial')); });
+    });
+    // Пока конспект считается, раздел сам перечитывает список: иначе человек видит
+    // «слушаем запись» до тех пор, пока не закроет и не откроет карточку.
+    if (pcList(id).some(function (c) { return c.notes_status === 'transcribing'; })) {
+      clearTimeout(PCALLS._t);
+      PCALLS._t = setTimeout(function () {
+        if (state.drawerId === id && state.modalSection === 'calls') pcLoad(id, true);
+      }, 15000);
+    }
+  }
+
+  /* Любая ссылка tel: в CRM у того, у кого есть звонилка, звонит через нее: контакт
+     в карточке, «Связаться» в «Сейчас», колонка контакта в списке. Иначе ноутбук
+     предлагает открыть FaceTime или Skype, и звонок уходит мимо записи. Иностранный
+     номер звонилка не берет — такой остается обычной ссылкой. */
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest && e.target.closest('a[href^="tel:"]');
+    if (!a || !can('phone')) return;
+    var d = a.getAttribute('href').slice(4).replace(/\D/g, '');
+    if (d.length === 11 && (d.charAt(0) === '8' || d.charAt(0) === '7')) d = '7' + d.slice(1);
+    else if (d.length === 10) d = '7' + d;
+    if (!/^7\d{10}$/.test(d)) return;
+    e.preventDefault();
+    pcDial(d);
+  }, true);
 
   function buildMailSection(id) {
     var b = MAIL[id];
@@ -54901,6 +55067,7 @@
     // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
     if (state.modalSection === 'course') wireCourse(id);
     if (state.modalSection === 'mail') wireMail(id, host);
+    if (state.modalSection === 'calls') pcWire(id, host);
 
     // ── ПРОЕКТ: доступ, тема, решения по шагам ──
     if (state.modalSection === 'projects') wireProject(id, host);
