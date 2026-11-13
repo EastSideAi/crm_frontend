@@ -33864,7 +33864,16 @@
           : 'за период не внесен' },
     ], 'five');
 
-    view.innerHTML = '<div class="dash">' + bar + '<div class="grid">' +
+    /* Ввод расхода первым блоком и всегда открыт (Ольга 13.11.2026): без внесенных
+       денег не считаются цена лида и клиента, в том числе по трафику из соцсетей
+       помимо официального таргета. Ниже воронка, каналы, размещения. */
+    var spendCard = '<div class="card" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('wallet', 14) + '</span>' +
+        '<div><div class="t">Расход и цена клиента</div>' +
+        '<div class="s">внеси деньги по каналу, и ниже посчитаются цена лида, клиента и окупаемость</div></div></div>' +
+        '<div class="sp-panel">' + spendPanel() + '</div></div>';
+
+    view.innerHTML = '<div class="dash">' + spendCard + bar + '<div class="grid">' +
       '<div class="card sp7" style="overflow:hidden">' +
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">От клика до оплаты</div>' +
@@ -33879,10 +33888,7 @@
           : '<div class="empty">За период данных нет.</div>') + '</div>' +
       '<div class="card sp12" style="overflow:hidden">' +
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('mega', 14) + '</span>' +
-        '<div><div class="t">Каналы</div><div class="s">сначала те, куда ушло больше денег</div></div>' +
-        '<button class="bp ghost sm" id="sp-toggle" type="button" aria-expanded="' + (state.mkSpendOpen ? 'true' : 'false') + '">' +
-          ic(state.mkSpendOpen ? 'x' : 'plus', 13) + (state.mkSpendOpen ? 'Свернуть' : 'Внести расход') + '</button></div>' +
-        (state.mkSpendOpen ? '<div class="sp-panel">' + spendPanel() + '</div>' : '') +
+        '<div><div class="t">Каналы</div><div class="s">сначала те, куда ушло больше денег</div></div></div>' +
         (channels ? '<div class="mkd-tbl">' + mkHead() + channels + '</div>'
           : '<div class="empty">За период переходов по меткам не было.</div>') + '</div>' +
       '<div class="card sp12" style="overflow:hidden">' +
@@ -33897,12 +33903,7 @@
         '<div style="border-top:1px solid var(--line)">' + gaps + '</div></div>' +
     '</div></div>';
     animBars(view);
-    var tg = el('sp-toggle');
-    if (tg) tg.addEventListener('click', function () {
-      state.mkSpendOpen = !state.mkSpendOpen;
-      renderView();
-    });
-    if (state.mkSpendOpen) spendWire(view);
+    spendWire(view);
   }
 
   /* ── РАСХОД НА РЕКЛАМУ ────────────────────────────────────────────────────
@@ -34253,8 +34254,8 @@
     });
   }
 
-  /* Ввод расхода живет внутри «Воронки», под кнопкой у таблицы каналов: отдельной
-     вкладкой им почти не пользовались (одна строка за все время). */
+  /* Ввод расхода живет первым блоком «Каналов и лидов»: отдельной вкладкой им почти
+     не пользовались (одна строка за все время). */
   function spendPanel() {
     var days = state.mkDays || 90;
     if (state._mkSpend === 'none') {
