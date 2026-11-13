@@ -37013,15 +37013,19 @@
       statBar([
         /* «Позвали» — верх пути: без него зал читается как провал, хотя вопрос в
            жизни другой — сколько людей из базы мы смогли привести. */
-        (cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
-                         sub: 'живые адреса, без наших копий', ebl: 'invited' }
-                     : { label: 'Зарегистрировались', value: c.reg,
-                         sub: efirWindowText(cur.window), ebl: 'reg' }),
+        cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
+                        sub: 'живые адреса, без наших копий', ebl: 'invited' } : null,
+        /* Регистрация — форма на сайте и вход в бота по ссылке эфира (Ольга
+           13.11.2026: «они же в бота регались»). Стоит и рядом с рассылками. */
+        { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
+          sub: (c.reg_bot ? 'сайт ' + c.reg_site + ' · бот ' + c.reg_bot + '<br>' : '') +
+               efirWindowText(cur.window) },
         /* Участники — главная цифра эфира: сколько людей его вообще увидели, живьем
            или в записи. Человек, посмотревший оба раза, считается один раз. */
         { label: 'Участники эфира', value: uchastniki, ebl: 'people',
           sub: (invited ? pct(uchastniki, invited) + '% от рассылки · ' : '') +
-               'живьем ' + c.came + ', запись ' + c.rec },
+               'живьем ' + c.came + ', запись ' + c.rec +
+               (cur.split ? '<br>' + efirSplitSub(cur.split) : '') },
         { label: 'Были в комнате', value: c.came, sub: zalSub, ebl: 'came' },
         { label: 'Вопросов в чате', value: c.questions, ebl: c.askers ? 'askers' : '',
           sub: c.askers ? 'от ' + c.askers + ' ' + plural(c.askers, 'человека', 'человек', 'человек') : 'вопросов не было' },
@@ -37080,18 +37084,32 @@
      которую нельзя развернуть в людей, команду не убеждает — ее перепроверяют в
      своей табличке и перестают смотреть на экран. Вкладки эфиров живут тут же:
      обработчики общие для обоих экранов, нашего и чужой площадки. */
+  /* Под «Участниками»: откуда пришли те же люди. Каждая цифра открывает своих. */
+  var EFIR_SPLIT = [['social', 'из соцсетей'], ['bot', 'из бота'], ['partner', 'от партнеров'],
+                    ['ads', 'из рекламы'], ['other', 'без метки'], ['anon', 'без регистрации']];
+  function efirSplitSub(sp) {
+    return 'из них ' + EFIR_SPLIT.filter(function (x) {
+      return x[0] !== 'other' && x[0] !== 'anon' || sp[x[0]];
+    }).map(function (x) {
+      return '<span class="go-sub esplit" data-ebl="src_' + x[0] + '" role="button" tabindex="0">' +
+        esc(x[1]) + ' ' + (sp[x[0]] || 0) + '</span>';
+    }).join(' · ');
+  }
   function efirBindClicks(view, cur) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-ebl]'), function (n) {
-      var open = function () {
+      /* строка разбивки лежит внутри плашки: её клик не должен открыть и плашку */
+      var split = n.classList.contains('esplit');
+      var open = function (e) {
+        if (split && e) e.stopPropagation();
         var block = n.getAttribute('data-ebl');
         if (!block) return;
-        var nm = n.querySelector('.sl, .lad-nm');
-        efirBlockOpen(cur.slug, block, nm ? nm.childNodes[0].textContent.trim() : '',
-          cur.title, n);
+        var nm = split ? null : n.querySelector('.sl, .lad-nm');
+        efirBlockOpen(cur.slug, block, split ? 'Участники ' + n.textContent.replace(/\s\d+$/, '')
+          : nm ? nm.childNodes[0].textContent.trim() : '', cur.title, n);
       };
       n.addEventListener('click', open);
       n.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); }
       });
     });
 
@@ -45771,7 +45789,7 @@
         { tint: over.length ? 'red' : '', label: 'Просрочено', value: over.length, go: 'queue', sub: over.length ? 'закрыть сегодня' : 'чисто' },
         { tint: 'navy', label: 'Ждут связи', value: c.hot, go: 'queue', sub: c.hot ? 'новые заявки' : 'разобрано' },
         { tint: 'green', label: 'Клиенты', value: c.clients, go: 'clients', delta: convClient ? convClient + '% из заявок' : '', deltaCls: 'good' },
-      ]) +
+      ].filter(Boolean)) +
       shiftCard() +
       '<div class="grid">' + potCard(5) +
         '<div class="sp7 vstack">' + queueCard + '</div>' +
