@@ -36041,9 +36041,11 @@
                      { id: '2026-10', label: 'Интенсив 28.10.26', fact: true,
                        slug: 'intensive-2026-10', days: ['28 октября', '29 октября'],
                        factLabel: 'факт 28–29.10' },
-                     { id: '2026-11', label: 'Ноябрь 2026', fact: false,
+                     /* shared — план общий: правки лежат на сервере и видны всей
+                        команде, а не в браузере того, кто вписал (Ольга 13.11.2026) */
+                     { id: '2026-11', label: 'Ноябрь 2026', fact: false, shared: true,
                        title: 'Декомпозиция запуска: ноябрь 2026',
-                       lede: 'План ноябрьского запуска — копия плана интенсива 28–29 октября. Подсвеченные поля — вводные, их правят руками; остальное считается.' }];
+                       lede: 'План ноябрьского запуска, общий для команды. Подсвеченные поля — вводные, их правят руками, и правка сразу видна всем; остальное считается.' }];
   var LA_LAUNCH_LS = 'es_launch_plan_cur';
   function laLaunchCur() {
     if (!state.laLaunch) {
@@ -36084,6 +36086,13 @@
   function laEdits() {
     if (state._laEd) return state._laEd;
     var e = {};
+    var lch = laLaunchCur();
+    if (lch.shared) {
+      var sh = (state._laShared || {})[lch.id] || {};
+      Object.keys(sh).forEach(function (k) { e[k] = sh[k]; });
+      state._laEd = e;
+      return e;
+    }
     try {
       var raw = localStorage.getItem(laKey());
       /* новый запуск открывается копией того, что было на экране у октября */
@@ -36093,7 +36102,44 @@
     state._laEd = e;
     return e;
   }
-  function laSaveEdits() { try { localStorage.setItem(laKey(), JSON.stringify(state._laEd || {})); } catch (e) {} }
+  function laSaveEdits(key) {
+    var lch = laLaunchCur();
+    if (lch.shared) { if (key) laPush(lch.id, key); return; }
+    try { localStorage.setItem(laKey(), JSON.stringify(state._laEd || {})); } catch (e) {}
+  }
+  /* Общий план: правки копятся и уходят на сервер пачкой через полсекунды после
+     последнего нажатия — запрос на каждую цифру забил бы сеть и перемешал ответы */
+  var laQueue = {}, laTimer = null;
+  function laSharedLoad() {
+    if (state._laShared !== undefined) return;
+    state._laShared = null;
+    api('/admin/api/launch-plan/edits').then(function (r) {
+      state._laShared = (r && r.edits) || {};
+    }).catch(function () { state._laShared = 'none'; }).then(function () {
+      state._laEd = null;
+      if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+    });
+  }
+  function laPush(launch, key) {
+    var q = laQueue[launch] = laQueue[launch] || {};
+    q[key] = (state._laEd || {})[key];
+    clearTimeout(laTimer);
+    laTimer = setTimeout(laFlush, 600);
+  }
+  function laFlush() {
+    Object.keys(laQueue).forEach(function (launch) {
+      var edits = laQueue[launch];
+      delete laQueue[launch];
+      api('/admin/api/launch-plan/edits', { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ launch: launch, edits: edits }) })
+        .then(function (r) {
+          var sh = state._laShared && state._laShared !== 'none' ? state._laShared : (state._laShared = {});
+          sh[launch] = (r && r.edits) || {};
+        })
+        .catch(function () { showToast('Не удалось сохранить план, проверь интернет и поправь цифру еще раз'); });
+    });
+  }
   function laTouched() { return Object.keys(laEdits()).length > 0; }
   /* свернутые этапы — привычка одного человека, а не настройка команды: лист
      длинный, и каждый смотрит свой кусок. Поэтому в браузере, а не на сервере;
@@ -36631,6 +36677,14 @@
 
   function renderMkPlan(view) {
     if (!state._launch) { view.innerHTML = dashSkeleton(); fetchLaunch(); return; }
+    if (laLaunchCur().shared) {
+      laSharedLoad();
+      if (state._laShared === null) { view.innerHTML = dashSkeleton(); return; }
+      if (state._laShared === 'none') {
+        view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить общий план запуска. Обновите страницу.</div></div>';
+        return;
+      }
+    }
     if (state._launch === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить декомпозицию. Обновите страницу; если раздел закрыт правами, скажите руководителю.</div></div>';
       return;
@@ -36721,8 +36775,10 @@
       '<div class="card listcard la-card"><div class="po-note la-note">' + esc(meta.note) + '</div>' +
         '<div class="la-tbl' + (nofact ? ' nofact' : '') + '">' + head + body + '</div></div>' +
       '<div class="po-note la-foot">Цифры на этом экране повторяют рабочий файл: люди округляются до целых, ' +
-        'поэтому продажи прыгают ступенькой. Правки живут в вашем браузере и у остальных ничего не меняют; ' +
-        'вернуть цифры плана — кнопка «Вернуть план» в шапке.</div>';
+        'поэтому продажи прыгают ступенькой. ' + (lch.shared
+          ? 'План общий: правки сохраняются сразу и видны всей команде; «Вернуть план» в шапке снимает их у всех.'
+          : 'Правки живут в вашем браузере и у остальных ничего не меняют; ' +
+            'вернуть цифры плана — кнопка «Вернуть план» в шапке.') + '</div>';
     laWire(view);
     laPaint(view);
   }
@@ -36794,7 +36850,7 @@
       inp.addEventListener('input', function () {
         var key = inp.getAttribute('data-la');
         laEdits()[key] = laNum(inp.value);
-        laSaveEdits();
+        laSaveEdits(key);
         if (reset) reset.hidden = false;
         laPaint(view);
       });
@@ -36810,6 +36866,16 @@
       }
       clearTimeout(armed); armed = null;
       state._laEd = {};
+      var lch = laLaunchCur();
+      if (lch.shared) {
+        delete laQueue[lch.id];
+        api('/admin/api/launch-plan/edits', { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ launch: lch.id, reset: true }) })
+          .then(function () { state._laShared[lch.id] = {}; state._laEd = null; renderView(); })
+          .catch(function () { state._laEd = null; showToast('Не удалось вернуть план, попробуй еще раз'); renderView(); });
+        return;
+      }
       try {
         if (laKey() === LA_KEY) localStorage.removeItem(LA_KEY);
         else localStorage.setItem(laKey(), '{}');   /* план из файла, а не копия октября */
@@ -36859,16 +36925,26 @@
     var place = esc(cur.place_title || 'чужой площадке');
     return '<div class="dash">' +
       (tabsN > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      statBar([
-        { label: 'Рассылки письма на эфир', value: invited, ebl: 'invited',
-          sub: mail ? 'и еще ' + mail + ' ' + plural(mail, 'адрес', 'адреса', 'адресов') + ' на почту'
-                    : 'живые адреса, без наших копий' },
+      /* Те же три ряда, что у эфиров в нашей комнате (Ольга 13.11.2026). Людей по
+         источникам здесь нет — площадка их не отдает, поэтому в первом ряду
+         сколько позвали, а дальше клики по нашим ссылкам. */
+      efirGroup('Откуда пришли', [
+        { label: 'Рассылки бота', value: invited, ebl: invited ? 'invited' : '',
+          sub: 'отправлено в боте, без наших копий' },
+        { label: 'Рассылки писем', value: mail,
+          sub: mail ? 'отправлено писем, с людьми в базе не склеены' : 'писем не было' },
+      ]) +
+      efirGroup('Эфир', [
         { label: 'Перешли на эфир', value: perehody,
           sub: 'клики по ссылкам, а не люди' },
         { label: 'Перешли за записью', value: zapis,
           sub: zapis ? 'ссылка на запись эфира' : 'ссылки на запись не было' },
+      ]) +
+      efirGroup('Продажи', [
         { label: 'Нажали «консультация»', value: knopki,
-          sub: bot ? 'до бота дошло ' + bot : 'до бота никто не дошел' },
+          sub: 'клики по кнопкам записи' },
+        { label: 'Дошли до бота', value: bot, ebl: bot ? 'bot' : '',
+          sub: bot ? 'люди, вход в бота помнит метку' : 'до бота никто не дошел' },
       ]) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">' +
@@ -37014,21 +37090,29 @@
     }).join('') || '<div class="empty">Ссылок в соцсети по этому эфиру не было.</div>';
 
     var rs = cur.reg_split;
+    /* Три ряда (Ольга 13.11.2026): откуда позвали и пришли — мелкой полосой сверху,
+       дальше путь от регистрации до записи на разбор, внизу деньги. */
+    /* Первый ряд — откуда пришли зарегистрировавшиеся (Ольга 13.11.2026): рассылки
+       писем и бота отдельно, у каждой в подписи — сколько отправили. Проценты — от
+       регистраций. Эфир без разбивки показывает одну плашку рассылки, как раньше. */
+    var srcTiles = rs ? [['mail', 'Пришли из рассылок писем'], ['bot', 'Пришли из рассылок бота'],
+                         ['social', 'Пришли из соцсетей'], ['partner', 'Пришли от партнеров'],
+                         ['ads', 'Пришли с рекламы']].map(function (x) {
+      var n = rs[x[0]] || 0;
+      var sent = x[0] === 'mail' ? 'отправлено писем ' + (cur.invited_mail || 0)
+        : x[0] === 'bot' && cur.invited
+          ? '<span class="go-sub esplit" data-ebl="invited" data-etitle="Отправлено в боте"' +
+            ' role="button" tabindex="0">отправлено в боте ' + invited + '</span>'
+        : '';
+      return { label: x[1], value: n, ebl: n ? 'reg_' + x[0] : '',
+               sub: (c.reg ? pct(n, c.reg) + '% от регистраций' : 'регистраций пока нет') +
+                    (sent ? '<br>' + sent : '') };
+    }) : cur.invited ? [{ label: 'Рассылки письма на эфир', value: invited,
+                          sub: 'живые адреса, без наших копий', ebl: 'invited' }] : [];
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
-      statBar([
-        /* «Позвали» — верх пути: без него зал читается как провал, хотя вопрос в
-           жизни другой — сколько людей из базы мы смогли привести. */
-        cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
-                        sub: 'живые адреса, без наших копий', ebl: 'invited' } : null,
-        /* Откуда пришли зарегистрировавшиеся (Ольга 13.11.2026): три источника
-           отдельными плашками перед общей цифрой, проценты — от регистраций. */
-      ].concat(rs ? [['social', 'Пришли из соцсетей'], ['partner', 'Пришли от партнеров'],
-                     ['ads', 'Пришли с рекламы']].map(function (x) {
-        var n = rs[x[0]] || 0;
-        return { label: x[1], value: n, ebl: n ? 'reg_' + x[0] : '',
-                 sub: c.reg ? pct(n, c.reg) + '% от регистраций' : 'регистраций пока нет' };
-      }) : [], [
+      (srcTiles.length ? efirGroup('Откуда пришли', srcTiles) : '') +
+      efirGroup('Эфир', [
         /* Регистрация — форма на сайте и вход в бота по ссылке эфира (Ольга
            13.11.2026: «они же в бота регались»). Стоит и рядом с рассылками. */
         { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
@@ -37049,6 +37133,8 @@
         { label: 'Смотрели запись', value: c.rec, ebl: c.rec ? 'rec' : '',
           sub: c.rec ? pct(c.rec, top) + topWord + (cur.anon_rec ? ', из них ' + cur.anon_rec + ' без регистрации' : '')
                      : 'записи пока нет' },
+      ]) +
+      efirGroup('Продажи', [
         { label: 'Записались на разбор', value: cur.booked, ebl: cur.booked ? 'booked' : '',
           sub: (uchastniki ? pct(cur.booked || 0, uchastniki) + '% от участников эфира · ' : '') +
                (ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали') },
@@ -37066,7 +37152,7 @@
                (m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями') },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
-      ]).filter(Boolean), 'five') +
+      ]) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
           esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
@@ -37104,6 +37190,27 @@
   /* Под «Участниками»: откуда пришли те же люди. Каждая цифра открывает своих. */
   var EFIR_SPLIT = [['social', 'из соцсетей'], ['bot', 'из бота'], ['partner', 'от партнеров'],
                     ['ads', 'из рекламы'], ['other', 'без метки'], ['anon', 'без регистрации']];
+  /* Ряд плашек эфира под тихой подписью: три смысловых блока экрана читаются
+     отдельно, а не одной стеной из тринадцати цифр. Все ряды мелкие, подписи
+     черные, числа в них жирные (Ольга 13.11.2026: «слишком белесые»). */
+  function efirGroup(title, items) {
+    items = items.map(function (s) {
+      return s.sub ? Object.assign({}, s, { sub: efirSubNums(s.sub) }) : s;
+    });
+    return '<section class="ef-group"><div class="ef-group-t">' + title + '</div>' +
+      statBar(items, ((items.length === 2 ? 'two' : launchBarCls(items.length)) + ' small efir').trim()) +
+      '</section>';
+  }
+  /* Числа подписи — жирным. Теги и даты («с 11.11») не трогаем: дата не счетчик. */
+  function efirSubNums(html) {
+    return String(html).replace(/(<[^>]*>)|\d+(?:[ \u00a0]\d{3})*(?:[.,]\d+)?%?/g,
+      function (m, tag, at, all) {
+        if (tag) return m;
+        if (/^\d+\.\d+$/.test(m) || all.charAt(at - 1) === '.') return m;
+        return '<b class="enum">' + m + '</b>';
+      });
+  }
+
   function efirSplitSub(sp) {
     return 'из них ' + EFIR_SPLIT.filter(function (x) {
       return x[0] !== 'other' && x[0] !== 'anon' || sp[x[0]];
@@ -37121,8 +37228,9 @@
         var block = n.getAttribute('data-ebl');
         if (!block) return;
         var nm = split ? null : n.querySelector('.sl, .lad-nm');
-        efirBlockOpen(cur.slug, block, split ? 'Участники ' + n.textContent.replace(/\s\d+$/, '')
-          : nm ? nm.childNodes[0].textContent.trim() : '', cur.title, n);
+        efirBlockOpen(cur.slug, block, n.getAttribute('data-etitle') ||
+          (split ? 'Участники ' + n.textContent.replace(/\s\d+$/, '')
+          : nm ? nm.childNodes[0].textContent.trim() : ''), cur.title, n);
       };
       n.addEventListener('click', open);
       n.addEventListener('keydown', function (e) {
@@ -38097,23 +38205,33 @@
     // Списки людей строим здесь же — цифра и список не могут разойтись.
     var qualOf = function (x, a, b) {
       var key = function (l) { return l.g ? 'g' + l.g : 's' + l.i; };
-      var lead = {}, plat = {}, bot = {};
+      // Ольга 13.11.2026: квалифицированный считается в том месяце, когда прошел разбор
+      // или консультацию, даже если лидом стал раньше («стал лидом 30.10, разбор 2.11 —
+      // считаем в ноябре»). Лид — любая его карточка с контактом, заведенная не позже
+      // конца отрезка; пришедшие раньше отрезка подписаны «из них пришли раньше».
+      var lead = {}, ever = {}, plat = {}, bot = {};
       (cc.leads || []).forEach(function (l) {
-        if (l.c && !l.nl && l.d >= a && l.d <= b) lead[key(l)] = l;
+        if (!l.c || l.nl || l.d > b) return;
+        var k = key(l);
+        if (l.d >= a) lead[k] = l;
+        if (!ever[k] || l.d < ever[k].d) ever[k] = l;
       });
       (cc.leads || []).forEach(function (l) {
-        if (!l.dg || l.dg < a || l.dg > b || !lead[key(l)]) return;
+        if (!l.dg || l.dg < a || l.dg > b || !ever[key(l)]) return;
         // имя и метку берем у карточки лида: карточка кабинета с разбором часто безымянная
-        var k = key(l), ld = lead[k];
+        var k = key(l), ld = lead[k] || ever[k];
         if (!plat[k] || l.dg < plat[k].d) plat[k] = {i: ld.i, nm: ld.nm || l.nm || '', s: ld.s || l.s || '', d: l.dg, how: 'разбор на платформе'};
       });
-      (cc.cons || []).forEach(function (c) {
+      // Ольга 13.11.2026: прошедший консультацию в боте квалифицирован, даже если он не
+      // лид — у бота нет телефона, только мессенджер. Без карточки он отдельный человек.
+      (cc.cons || []).forEach(function (c, n) {
         var d = Array.isArray(c) ? c[0] : c, sid = Array.isArray(c) ? c[1] : null;
-        if (!d || d < a || d > b || !sid) return;
-        var k = grp[sid] || 's' + sid, l = card[sid];
-        if (!lead[k]) return;
-        var ld = lead[k];
-        if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
+        if (!d || d < a || d > b) return;
+        var l = sid && card[sid];
+        if (l && l.nl) return;
+        var k = sid ? (grp[sid] || 's' + sid) : 'b' + n;
+        var ld = lead[k] || ever[k] || l || {};
+        if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i || null, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
       });
       var all = {};
       Object.keys(plat).forEach(function (k) { all[k] = plat[k]; });
@@ -38143,13 +38261,21 @@
       Object.keys(lead).forEach(function (k) {
         if (first[k] < a) back[k] = {i: lead[k].i, nm: lead[k].nm || '', s: lead[k].s || '', d: lead[k].d, how: 'впервые пришел ' + fmtDay(first[k])};
       });
+      var early = {};
+      Object.keys(all).forEach(function (k) {
+        if (!lead[k] && ever[k]) early[k] = Object.assign({}, all[k], {how: all[k].how + ' · лид с ' + fmtDay(ever[k].d)});
+      });
       var vals = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
+      x.qualEarly = Object.keys(early).length;
       x.back = Object.keys(back).length;
       x.platOnly = Object.keys(pon).length;
+      // Ольга 13.11.2026: и здесь мелко «из них пришли раньше» — кто был у нас до отрезка
+      var ponEarly = vals(pon).filter(function (p) { return p.how === 'был у нас раньше'; });
+      x.platEarly = ponEarly.length;
       x.platQ = Object.keys(plat).length;
       x.consBook = Object.keys(bot).length;
       x.qual = Object.keys(all).length;
-      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back)};
+      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back), qualEarly: vals(early), platEarly: ponEarly};
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
@@ -38178,9 +38304,9 @@
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
       ['Пришли на платформу, минуя бота', 'контакт только в аккаунте платформы, в лиды выше не входят', 'platOnly', null],
-      ['Квалифицированные лиды', 'лиды периода с разбором на платформе или консультацией в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
+      ['Квалифицированные лиды', 'прошли в этом периоде разбор на платформе (лиды) или консультацию в боте (все), человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
-      ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
+      ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору, с телефоном или без', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
       ['Записались к тьютору', 'выбрали время разбора', 'signed', null, false, false, 'qual', 'от квалифицированных'],
       ['Разбор состоялся', 'встреча прошла', 'meeting', null, false, false, 'signed', 'от записавшихся'],
       ['Счета', 'выставлено', 'invN', null, false, false, 'meeting', 'от разборов'],
@@ -38214,18 +38340,25 @@
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
             // Ольга 13.11.2026: вернувшиеся мелким пунктом под лидами
             (r[2] === 'leads' && cur.back ? '<small class="mg-of">' + numBtn(cur, 'back', 'c', 'из них вернулись ' + cur.back) + '</small>' : '') +
+            (r[2] === 'platOnly' && cur.platEarly ? '<small class="mg-of">' + numBtn(cur, 'platEarly', 'c', 'из них пришли раньше ' + cur.platEarly) + '</small>' : '') +
+            (r[2] === 'qual' && cur.qualEarly ? '<small class="mg-of">' + numBtn(cur, 'qualEarly', 'c', 'из них пришли раньше ' + cur.qualEarly) + '</small>' : '') +
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + numBtn(prv, r[2], 'p', f(p)) + '</span>' +
-          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
+          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>' +
+          // Ольга 13.11.2026: «кликабельные, но не открываются» — список стоял под всей
+          // таблицей и уходил за экран. Теперь раскрывается прямо под строкой цифры.
+          (q && (MG_WHO_ROW[q.k] || q.k) === r[2]
+            ? mgWhoCard(rows, q, whoOf(q.s === 'c' ? cur : prv, q.k), q.s === 'c' ? o.curLbl : o.prvLbl) : '');
       }).join('') + '</div>' +
       (hasPlan ? '<div class="mg-note">' + esc(o.note) + '</div>' : '') +
-      (q ? mgWhoCard(rows, q, whoOf(q.s === 'c' ? cur : prv, q.k), q.s === 'c' ? o.curLbl : o.prvLbl) : '') +
     '</div>';
   }
 
   /* Люди за цифрой лестницы. Строка с карточкой открывает ее в новой вкладке, как на
      «Продажах»; человек из бота без карточки стоит строкой без перехода. */
   var MG_WHO_N = {invN: 'счет', payers: 'платеж', revenue: 'платеж'};
+  // мелкие пункты раскрывают список под строкой, к которой относятся
+  var MG_WHO_ROW = {back: 'leads', qualEarly: 'qual', platEarly: 'platOnly'};
   function mgWhoCard(rows, q, list, lbl) {
     var row = rows.filter(function (r) { return r[2] === q.k; })[0];
     list = (list || []).slice().sort(function (a, b) {
@@ -38246,7 +38379,7 @@
       var cnt = list.reduce(function (s, p) { return s + (p.n || 1); }, 0);
       if (cnt !== list.length) sub = cnt + ' счетов у ' + list.length + ' человек; ' + sub;
     }
-    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
+    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : q.k === 'qualEarly' ? 'Квалифицированные, пришедшие раньше' : q.k === 'platEarly' ? 'Пришли на платформу, были у нас раньше' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
   }
 
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
@@ -38507,11 +38640,14 @@
       b.addEventListener('click', function () {
         var v = b.dataset.mgq.split(':'), q = state._mgQ, at = b.closest('.mg-card') && b.closest('.mg-card').dataset.at;
         state._mgQ = q && q.k === v[0] && q.s === v[1] && q.at === at ? null : {k: v[0], s: v[1], at: at};
+        state._mgScroll = !!state._mgQ;
         renderView();
       });
     });
     var pc = view.querySelector('#sb-pclose');
     if (pc) pc.addEventListener('click', function () { state._mgQ = null; renderView(); });
+    var who = view.querySelector('.mg-who');
+    if (who && state._mgScroll) { state._mgScroll = false; who.scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
     view.querySelectorAll('[data-sblead]').forEach(function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
     });
