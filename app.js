@@ -10684,6 +10684,10 @@
       if (n.editor) {
         tags += '<span class="sev">' + esc(newsWho(it)) + '</span>';
         if (!it.sent) tags += '<span class="sev nw-draft">черновик</span>';
+      } else if (it.audience) {
+        // Для кого запись видят все: по ней понятно, про меня это или про соседний
+        // отдел (Виталий 13.11.2026). Поименный список остается у редактора.
+        tags += '<span class="sev">' + esc(it.audience) + '</span>';
       }
       return '<article class="nw-item' + (it.mine && !it.read ? ' unread' : '') + '" data-nw="' + it.id + '">' +
         '<div class="nw-top"><h3 class="nw-title">' + esc(it.title) + '</h3>' +
