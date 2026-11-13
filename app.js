@@ -38120,12 +38120,17 @@
       // они не попадают. Карточка заведена в отрезке; был у нас раньше и снова проявился —
       // тоже считается, как и в лидах.
       var first = {}, pon = {};
-      (cc.leads || []).forEach(function (l) { var k = key(l); if (!first[k] || l.d < first[k]) first[k] = l.d; });
+      var gnm = {};
+      (cc.leads || []).forEach(function (l) {
+        var k = key(l);
+        if (!first[k] || l.d < first[k]) first[k] = l.d;
+        if (l.nm && !gnm[k]) gnm[k] = l.nm;
+      });
       (cc.leads || []).forEach(function (l) {
         if (!l.ac || l.nl || l.d < a || l.d > b) return;
         var k = key(l);
         if (lead[k] || pon[k]) return;
-        pon[k] = {i: l.i, nm: l.nm || '', s: l.s || '', d: l.d, how: first[k] < a ? 'был у нас раньше' : 'впервые'};
+        pon[k] = {i: l.i, nm: l.nm || gnm[k] || '', s: l.s || '', d: l.d, how: first[k] < a ? 'был у нас раньше' : 'впервые'};
       });
       // Ольга 13.11.2026: вернувшиеся — лиды периода, которые были у нас и раньше
       // (карточка человека заведена до отрезка): спали и проявились. Мелким пунктом в «Лидах».
