@@ -616,10 +616,10 @@ window.CROSSCUT = (function () {
         var mx = LP.reduce(function(m, p){ return Math.max(m, p.people || 0); }, 1);
         $id('lad').innerHTML = LP.map(function(p){
           var n = p.people || 0;
-          return '<div class="lad-row' + (n ? '' : ' dead') + (p.branch ? ' sub' : '') + '">' +
+          return '<div class="lad-row' + (n ? '' : ' dead') + (p.branch ? ' br' : '') + '">' +
             '<div class="lad-t">' + esq(p.title) + (p.note ? '<span>' + esq(p.note) + '</span>' : '') + '</div>' +
             '<div class="lad-n">' + (n ? num(n) : '—') +
-            (p.of_reg != null && p.key !== 'reg' ? '<em>' + p.of_reg + '% от регистраций</em>' : '') + '</div>' +
+            (p.of_reg != null && p.of_reg <= 100 && p.key !== 'reg' ? '<em>' + p.of_reg + '% от регистраций</em>' : '') + '</div>' +
             '<div class="lad-bar"><i style="width:' + Math.max(n ? 1.5 : 0, Math.round(n / mx * 100)) + '%"></i></div></div>';
         }).join('');
         ['ladNote', 'ladGrew', 'ladWarn'].forEach(function(id){ var e = $id(id); if (e) e.hidden = true; });
