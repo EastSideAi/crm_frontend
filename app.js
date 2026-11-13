@@ -8930,13 +8930,30 @@
   /* «11:00–13:00» — планерка длиннее часа занимает несколько строк сетки, и без
      границ времени непонятно, одна это встреча или несколько. */
   function schedSpan(m, tz) {
-    var a = m.hour + (tz || 0), b = a + (m.duration || 1);
-    return ((a % 24) + 24) % 24 + ':00–' + ((b % 24) + 24) % 24 + ':00';
+    var a = (m.hour + (tz || 0)) * 60 + (m.minute || 0);
+    var b = a + (m.minutes || (m.duration || 1) * 60);
+    return schedClock(a) + '–' + schedClock(b);
+  }
+  /* Минуты от полуночи → «16:30». С 13.11.2026 планерка бывает не с ровного часа. */
+  function schedClock(t) {
+    t = ((t % 1440) + 1440) % 1440;
+    return Math.floor(t / 60) + ':' + ('0' + t % 60).slice(-2);
+  }
+  /* Не ровный час или не целые часы — время пишем прямо в строке, иначе 16:30
+     в сетке неотличима от 16:00. */
+  function schedOdd(m) {
+    return !!(m.minute || (m.minutes && m.minutes % 60));
+  }
+  /* «30 мин», «1 час», «1,5 часа» — длительность планерки в форме. */
+  function meetLen(n) {
+    if (n < 60) return n + ' мин';
+    if (n % 60) return (n / 60).toString().replace('.', ',') + ' часа';
+    return n === 60 ? '1 час' : n / 60 + ' часа';
   }
 
   function schedMeetAttr(m) {
     return ' data-sc-meet="' + m.id + '|' + (m.series ? 1 : 0) + '" data-sc-mt="' + esc(m.title) + '"' +
-      ' data-sc-md="' + m.date + '|' + m.hour + '" role="button" tabindex="0"';
+      ' data-sc-md="' + m.date + '|' + m.hour + '|' + (m.minute || 0) + '" role="button" tabindex="0"';
   }
 
   function schedChip(cls, text, title, attr) {
@@ -9175,7 +9192,8 @@
         var day = zoomYmd(x), at = schedAt(d, day, h, who), out = [];
         at.meets.forEach(function (m) {
           var long = (m.duration || 1) > 1;
-          out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''), m.title,
+          out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''),
+            (schedOdd(m) && h === m.hour ? schedSpan(m, tz) + ' ' : '') + m.title,
             m.title + ' · ' + schedSpan(m, tz) + ' · ' + (m.people || []).map(function (p) { return p.person; }).join(', ') +
             (d.can_edit_all ? ' · нажмите, чтобы изменить или снять' : ''),
             d.can_edit_all ? schedMeetAttr(m) : ''));
@@ -9223,7 +9241,7 @@
       at.meets.forEach(function (m) {
         if (m.hour !== h) return;
         cells.push(schedChip('meet' + (d.can_edit_all ? ' act' : ''),
-          m.title + ((m.duration || 1) > 1 ? ' · ' + schedSpan(m, tz) : '') + ' · ' +
+          m.title + ((m.duration || 1) > 1 || schedOdd(m) ? ' · ' + schedSpan(m, tz) : '') + ' · ' +
           (m.people || []).map(function (p) { return schedShort(p.person); }).join(', '),
           d.can_edit_all ? 'Нажмите, чтобы изменить или снять планерку' : (m.note || ''),
           d.can_edit_all ? schedMeetAttr(m) : ''));
@@ -9863,18 +9881,19 @@
         // Встречи нет в загруженной неделе (кэш успел устареть) — тогда хотя бы
         // снять ее человек сможет.
         var w = (c.getAttribute('data-sc-md') || '').split('|');
-        openSchedMeetDrop(+p[0], p[1] === '1', c.getAttribute('data-sc-mt') || '', w[0], +w[1]);
+        openSchedMeetDrop(+p[0], p[1] === '1', c.getAttribute('data-sc-mt') || '', w[0], +w[1], +w[2] || 0);
       });
     });
   }
 
   /* Снять планерку. Серию спрашиваем отдельной кнопкой: «повторяется по понедельникам»
      и «эта конкретная» — разные намерения, и по ошибке стереть весь квартал нельзя. */
-  function openSchedMeetDrop(id, series, title, day, hour) {
+  function openSchedMeetDrop(id, series, title, day, hour, minute) {
     if (document.querySelector('.al-ov')) return;
     var dt = new Date(day + 'T00:00:00');
     var when = isNaN(dt.getTime()) ? day
-      : WDAYS_RU[dt.getDay()] + ' ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] + ', ' + hour + ':00';
+      : WDAYS_RU[dt.getDay()] + ' ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] + ', ' +
+        schedClock(hour * 60 + (minute || 0));
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML = '<div class="al-card ct-card ct-slim" role="dialog" aria-modal="true">' +
@@ -9942,15 +9961,29 @@
             '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта" value="' + esc((m && m.title) || '') + '"></label>' +
           '<div class="al-row">' +
             '<label class="al-f"><span class="al-l">День</span><input id="sm-day" class="al-in sm" type="date" value="' + ((m && m.date) || zoomYmd(schedDay())) + '"></label>' +
-            '<label class="al-f"><span class="al-l">Час</span><span class="al-selwrap"><select id="sm-hour" class="al-sel">' +
-              (function () { var o = '', sel = m ? m.hour : 11; for (var h = 7; h <= 22; h++) o += '<option value="' + h + '"' + (h === sel ? ' selected' : '') + '>' + h + ':00</option>'; return o; })() +
+            // Начало с шагом 15 минут (Виталий 13.11.2026: РНП в 16:30 не вставала
+            // в расписание). Значение — минуты от полуночи, на отправке делим.
+            '<label class="al-f"><span class="al-l">Начало</span><span class="al-selwrap"><select id="sm-hour" class="al-sel">' +
+              (function () {
+                var o = '', sel = m ? m.hour * 60 + (m.minute || 0) : 660;
+                for (var t = 7 * 60; t <= 22 * 60 + 45; t += 15) {
+                  o += '<option value="' + t + '"' + (t === sel ? ' selected' : '') + '>' +
+                    Math.floor(t / 60) + ':' + ('0' + t % 60).slice(-2) + '</option>';
+                }
+                return o;
+              })() +
             '</select></span></label>' +
           '</div>' +
           '<div class="al-row">' +
             '<label class="al-f"><span class="al-l">Длительность</span><span class="al-selwrap"><select id="sm-dur" class="al-sel">' +
-              [1, 2, 3].map(function (h) {
-                return '<option value="' + h + '"' + ((m ? m.duration : 1) === h ? ' selected' : '') + '>' + (h === 1 ? '1 час' : h + ' часа') + '</option>';
-              }).join('') + '</select></span></label>' +
+              (function () {
+                var cur = m ? (m.minutes || (m.duration || 1) * 60) : 60;
+                var opts = [15, 30, 45, 60, 90, 120, 180];
+                if (opts.indexOf(cur) < 0) opts.push(cur);
+                return opts.sort(function (a, b) { return a - b; }).map(function (n) {
+                  return '<option value="' + n + '"' + (n === cur ? ' selected' : '') + '>' + meetLen(n) + '</option>';
+                }).join('');
+              })() + '</select></span></label>' +
             // Отдел у планерки нужен затем же, зачем у зума: собрать встречи направления.
             '<label class="al-f"><span class="al-l">Отдел</span><span class="al-selwrap"><select id="sm-kind" class="al-sel">' +
               '<option value="">Без отдела</option>' +
@@ -10040,14 +10073,14 @@
 
     if (el('sm-drop')) el('sm-drop').addEventListener('click', function () {
       close();
-      openSchedMeetDrop(m.id, !!m.series, m.title || '', m.date, m.hour);
+      openSchedMeetDrop(m.id, !!m.series, m.title || '', m.date, m.hour, m.minute);
     });
 
     // Область правки: «только эту» или «всю серию». Сегмент тот же, что в карточке
     // зума, — вопрос один и тот же, и спрашивать его двумя разными способами на
     // соседних экранах нельзя.
     var scope = 'one';
-    var day0 = m && m.date, hour0 = m && m.hour, facts = null;
+    var day0 = m && m.date, hour0 = m && m.hour * 60 + (m.minute || 0), facts = null;
     // Рисунок серии пересчитывается по тому дню, который сейчас стоит в форме:
     // иначе при переносе пятницы на среду рядом со «сдвинем серию» осталось бы
     // «повторяется по пятницам».
@@ -10117,9 +10150,10 @@
       if (!title) { el('sm-title').focus({ preventScroll: true }); return fail('Напишите, как называется встреча'); }
       if (!people.length) return fail('Отметьте хотя бы одного участника');
       el('sm-ok').disabled = true;
+      var start = +el('sm-hour').value;
       var body = {
-        title: title, date: el('sm-day').value, hour: +el('sm-hour').value,
-        duration: +el('sm-dur').value, kind: el('sm-kind').value || '', people: people,
+        title: title, date: el('sm-day').value, hour: Math.floor(start / 60), minute: start % 60,
+        minutes: +el('sm-dur').value, kind: el('sm-kind').value || '', people: people,
       };
       var ok = function (r) {
         close();
@@ -10971,7 +11005,7 @@
     (data.meetings || []).forEach(function (m) {
       if (m.date !== ymd) return;
       if (who && !(m.people || []).some(function (x) { return x.person === who; })) return;
-      out.push({ kind: 'plan', hour: m.hour, min: 0, title: m.title,
+      out.push({ kind: 'plan', hour: m.hour, min: m.minute || 0, title: m.title,
                  who: (m.people || []).map(function (x) { return x.person; }).join(', ') });
     });
     out.sort(function (a, b) { return (a.hour - b.hour) || (a.min - b.min); });
@@ -32836,6 +32870,38 @@
       '</div>';
     }
 
+    /* Рабочие чаты отделов (Виталий 13.11.2026): в них бот по тегу ставит,
+       переносит и отменяет встречи, а встреча встает в отдел чата. Это не
+       «чаты направлений» выше: те еще и получают все задачи отдела. */
+    var WORK_DEPTS = ['manage', 'marketing', 'sales', 'finance', 'product', 'edu', 'teach', 'hr'];
+    function workBlock(g) {
+      if (!g || !g.groups) return '';
+      var mine = g.work_chats || [];
+      var used = {};
+      mine.forEach(function (w) { used[w.chat_id] = 1; });
+      var deptSel = function (cur, attr) {
+        return '<span class="al-selwrap tgd-sel"><select class="al-sel sm" ' + attr + '>' +
+          (cur ? '<option value="">убрать из рабочих</option>' : '<option value="" selected>добавить чат…</option>') +
+          WORK_DEPTS.map(function (d) {
+            return '<option value="' + d + '"' + (d === cur ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+          }).join('') + '</select></span>';
+      };
+      var rows = mine.map(function (w) {
+        return '<div class="tgd-row on"><span class="tgd-l">' + esc(w.title) + '</span>' +
+          deptSel(w.dept, 'data-wc="' + esc(w.chat_id) + '"') + '</div>';
+      }).join('');
+      var rest = g.groups.filter(function (x) { return !used[x.chat_id]; });
+      var add = rest.length
+        ? '<div class="tgd-row"><span class="al-selwrap tgd-sel"><select class="al-sel sm" id="wc-new">' +
+            '<option value="">еще чат…</option>' + rest.map(function (x) {
+              return '<option value="' + esc(x.chat_id) + '">' + esc(x.title || x.chat_id) + '</option>';
+            }).join('') + '</select></span>' + deptSel('', 'id="wc-new-dept"') + '</div>'
+        : '';
+      return '<div class="tgg"><div class="tgg-h">Рабочие чаты</div>' +
+        '<div class="tgg-s">Здесь договариваются о встречах. Тегни бота в таком чате, и он внесет встречу в расписание и звонилку, перенесет или отменит. Встреча встает в отдел чата.</div>' +
+        '<div class="tgd">' + (rows || '<div class="tgg-s">Пока ни одного.</div>') + add + '</div></div>';
+    }
+
     Promise.all([
       api('/admin/api/tasks/tg/links'),
       api('/admin/api/tasks/tg/group').catch(function () { return null; }),
@@ -32886,7 +32952,7 @@
             ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
               ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
             : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
-        '<div class="al-body">' + groupBlock(grp, links) + deptBlock(grp) +
+        '<div class="al-body">' + groupBlock(grp, links) + deptBlock(grp) + workBlock(grp) +
           '<div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
           (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
         '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
@@ -32944,6 +33010,24 @@
             showToast((e && e.body && e.body.detail) || 'Не удалось сохранить — попробуй еще раз');
           });
         });
+      });
+      var saveWork = function (chat, dept, sel) {
+        sel.disabled = true;
+        apiSend('/admin/api/tasks/tg/work-chat', 'PUT', { chat_id: chat, dept: dept }, function () {
+          showToast(dept ? 'Рабочий чат: ' + DEPTS[dept] : 'Чат убран из рабочих');
+          reopen();
+        }, function (code, e) {
+          sel.disabled = false;
+          showToast((e && e.body && e.body.detail) || 'Не удалось сохранить, попробуй еще раз');
+        });
+      };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-wc]'), function (sel) {
+        sel.addEventListener('change', function () { saveWork(sel.getAttribute('data-wc'), sel.value, sel); });
+      });
+      var wcd = el('wc-new-dept');
+      if (wcd) wcd.addEventListener('change', function () {
+        if (!el('wc-new').value) { wcd.value = ''; return showToast('Сначала выбери чат'); }
+        if (wcd.value) saveWork(el('wc-new').value, wcd.value, wcd);
       });
       Array.prototype.forEach.call(ov.querySelectorAll('[data-gdt]'), function (b) {
         b.addEventListener('click', function () {
