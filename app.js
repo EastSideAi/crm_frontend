@@ -36036,9 +36036,11 @@
                      { id: '2026-10', label: 'Интенсив 28.10.26', fact: true,
                        slug: 'intensive-2026-10', days: ['28 октября', '29 октября'],
                        factLabel: 'факт 28–29.10' },
-                     { id: '2026-11', label: 'Ноябрь 2026', fact: false,
+                     /* shared — план общий: правки лежат на сервере и видны всей
+                        команде, а не в браузере того, кто вписал (Ольга 13.11.2026) */
+                     { id: '2026-11', label: 'Ноябрь 2026', fact: false, shared: true,
                        title: 'Декомпозиция запуска: ноябрь 2026',
-                       lede: 'План ноябрьского запуска — копия плана интенсива 28–29 октября. Подсвеченные поля — вводные, их правят руками; остальное считается.' }];
+                       lede: 'План ноябрьского запуска, общий для команды. Подсвеченные поля — вводные, их правят руками, и правка сразу видна всем; остальное считается.' }];
   var LA_LAUNCH_LS = 'es_launch_plan_cur';
   function laLaunchCur() {
     if (!state.laLaunch) {
@@ -36079,6 +36081,13 @@
   function laEdits() {
     if (state._laEd) return state._laEd;
     var e = {};
+    var lch = laLaunchCur();
+    if (lch.shared) {
+      var sh = (state._laShared || {})[lch.id] || {};
+      Object.keys(sh).forEach(function (k) { e[k] = sh[k]; });
+      state._laEd = e;
+      return e;
+    }
     try {
       var raw = localStorage.getItem(laKey());
       /* новый запуск открывается копией того, что было на экране у октября */
@@ -36088,7 +36097,44 @@
     state._laEd = e;
     return e;
   }
-  function laSaveEdits() { try { localStorage.setItem(laKey(), JSON.stringify(state._laEd || {})); } catch (e) {} }
+  function laSaveEdits(key) {
+    var lch = laLaunchCur();
+    if (lch.shared) { if (key) laPush(lch.id, key); return; }
+    try { localStorage.setItem(laKey(), JSON.stringify(state._laEd || {})); } catch (e) {}
+  }
+  /* Общий план: правки копятся и уходят на сервер пачкой через полсекунды после
+     последнего нажатия — запрос на каждую цифру забил бы сеть и перемешал ответы */
+  var laQueue = {}, laTimer = null;
+  function laSharedLoad() {
+    if (state._laShared !== undefined) return;
+    state._laShared = null;
+    api('/admin/api/launch-plan/edits').then(function (r) {
+      state._laShared = (r && r.edits) || {};
+    }).catch(function () { state._laShared = 'none'; }).then(function () {
+      state._laEd = null;
+      if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+    });
+  }
+  function laPush(launch, key) {
+    var q = laQueue[launch] = laQueue[launch] || {};
+    q[key] = (state._laEd || {})[key];
+    clearTimeout(laTimer);
+    laTimer = setTimeout(laFlush, 600);
+  }
+  function laFlush() {
+    Object.keys(laQueue).forEach(function (launch) {
+      var edits = laQueue[launch];
+      delete laQueue[launch];
+      api('/admin/api/launch-plan/edits', { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ launch: launch, edits: edits }) })
+        .then(function (r) {
+          var sh = state._laShared && state._laShared !== 'none' ? state._laShared : (state._laShared = {});
+          sh[launch] = (r && r.edits) || {};
+        })
+        .catch(function () { showToast('Не удалось сохранить план, проверь интернет и поправь цифру еще раз'); });
+    });
+  }
   function laTouched() { return Object.keys(laEdits()).length > 0; }
   /* свернутые этапы — привычка одного человека, а не настройка команды: лист
      длинный, и каждый смотрит свой кусок. Поэтому в браузере, а не на сервере;
@@ -36626,6 +36672,14 @@
 
   function renderMkPlan(view) {
     if (!state._launch) { view.innerHTML = dashSkeleton(); fetchLaunch(); return; }
+    if (laLaunchCur().shared) {
+      laSharedLoad();
+      if (state._laShared === null) { view.innerHTML = dashSkeleton(); return; }
+      if (state._laShared === 'none') {
+        view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить общий план запуска. Обновите страницу.</div></div>';
+        return;
+      }
+    }
     if (state._launch === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить декомпозицию. Обновите страницу; если раздел закрыт правами, скажите руководителю.</div></div>';
       return;
@@ -36716,8 +36770,10 @@
       '<div class="card listcard la-card"><div class="po-note la-note">' + esc(meta.note) + '</div>' +
         '<div class="la-tbl' + (nofact ? ' nofact' : '') + '">' + head + body + '</div></div>' +
       '<div class="po-note la-foot">Цифры на этом экране повторяют рабочий файл: люди округляются до целых, ' +
-        'поэтому продажи прыгают ступенькой. Правки живут в вашем браузере и у остальных ничего не меняют; ' +
-        'вернуть цифры плана — кнопка «Вернуть план» в шапке.</div>';
+        'поэтому продажи прыгают ступенькой. ' + (lch.shared
+          ? 'План общий: правки сохраняются сразу и видны всей команде; «Вернуть план» в шапке снимает их у всех.'
+          : 'Правки живут в вашем браузере и у остальных ничего не меняют; ' +
+            'вернуть цифры плана — кнопка «Вернуть план» в шапке.') + '</div>';
     laWire(view);
     laPaint(view);
   }
@@ -36789,7 +36845,7 @@
       inp.addEventListener('input', function () {
         var key = inp.getAttribute('data-la');
         laEdits()[key] = laNum(inp.value);
-        laSaveEdits();
+        laSaveEdits(key);
         if (reset) reset.hidden = false;
         laPaint(view);
       });
@@ -36805,6 +36861,16 @@
       }
       clearTimeout(armed); armed = null;
       state._laEd = {};
+      var lch = laLaunchCur();
+      if (lch.shared) {
+        delete laQueue[lch.id];
+        api('/admin/api/launch-plan/edits', { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ launch: lch.id, reset: true }) })
+          .then(function () { state._laShared[lch.id] = {}; state._laEd = null; renderView(); })
+          .catch(function () { state._laEd = null; showToast('Не удалось вернуть план, попробуй еще раз'); renderView(); });
+        return;
+      }
       try {
         if (laKey() === LA_KEY) localStorage.removeItem(LA_KEY);
         else localStorage.setItem(laKey(), '{}');   /* план из файла, а не копия октября */
@@ -38151,13 +38217,16 @@
         var k = key(l), ld = lead[k] || ever[k];
         if (!plat[k] || l.dg < plat[k].d) plat[k] = {i: ld.i, nm: ld.nm || l.nm || '', s: ld.s || l.s || '', d: l.dg, how: 'разбор на платформе'};
       });
-      (cc.cons || []).forEach(function (c) {
+      // Ольга 13.11.2026: прошедший консультацию в боте квалифицирован, даже если он не
+      // лид — у бота нет телефона, только мессенджер. Без карточки он отдельный человек.
+      (cc.cons || []).forEach(function (c, n) {
         var d = Array.isArray(c) ? c[0] : c, sid = Array.isArray(c) ? c[1] : null;
-        if (!d || d < a || d > b || !sid) return;
-        var k = grp[sid] || 's' + sid, l = card[sid];
-        if (!ever[k]) return;
-        var ld = lead[k] || ever[k];
-        if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
+        if (!d || d < a || d > b) return;
+        var l = sid && card[sid];
+        if (l && l.nl) return;
+        var k = sid ? (grp[sid] || 's' + sid) : 'b' + n;
+        var ld = lead[k] || ever[k] || l || {};
+        if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i || null, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
       });
       var all = {};
       Object.keys(plat).forEach(function (k) { all[k] = plat[k]; });
@@ -38189,16 +38258,19 @@
       });
       var early = {};
       Object.keys(all).forEach(function (k) {
-        if (!lead[k]) early[k] = Object.assign({}, all[k], {how: all[k].how + ' · лид с ' + fmtDay(ever[k].d)});
+        if (!lead[k] && ever[k]) early[k] = Object.assign({}, all[k], {how: all[k].how + ' · лид с ' + fmtDay(ever[k].d)});
       });
       var vals = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
       x.qualEarly = Object.keys(early).length;
       x.back = Object.keys(back).length;
       x.platOnly = Object.keys(pon).length;
+      // Ольга 13.11.2026: и здесь мелко «из них пришли раньше» — кто был у нас до отрезка
+      var ponEarly = vals(pon).filter(function (p) { return p.how === 'был у нас раньше'; });
+      x.platEarly = ponEarly.length;
       x.platQ = Object.keys(plat).length;
       x.consBook = Object.keys(bot).length;
       x.qual = Object.keys(all).length;
-      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back), qualEarly: vals(early)};
+      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back), qualEarly: vals(early), platEarly: ponEarly};
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
@@ -38227,9 +38299,9 @@
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
       ['Пришли на платформу, минуя бота', 'контакт только в аккаунте платформы, в лиды выше не входят', 'platOnly', null],
-      ['Квалифицированные лиды', 'лиды, прошедшие в этом периоде разбор на платформе или консультацию в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
+      ['Квалифицированные лиды', 'прошли в этом периоде разбор на платформе (лиды) или консультацию в боте (все), человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
-      ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
+      ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору, с телефоном или без', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
       ['Записались к тьютору', 'выбрали время разбора', 'signed', null, false, false, 'qual', 'от квалифицированных'],
       ['Разбор состоялся', 'встреча прошла', 'meeting', null, false, false, 'signed', 'от записавшихся'],
       ['Счета', 'выставлено', 'invN', null, false, false, 'meeting', 'от разборов'],
@@ -38263,6 +38335,7 @@
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
             // Ольга 13.11.2026: вернувшиеся мелким пунктом под лидами
             (r[2] === 'leads' && cur.back ? '<small class="mg-of">' + numBtn(cur, 'back', 'c', 'из них вернулись ' + cur.back) + '</small>' : '') +
+            (r[2] === 'platOnly' && cur.platEarly ? '<small class="mg-of">' + numBtn(cur, 'platEarly', 'c', 'из них пришли раньше ' + cur.platEarly) + '</small>' : '') +
             (r[2] === 'qual' && cur.qualEarly ? '<small class="mg-of">' + numBtn(cur, 'qualEarly', 'c', 'из них пришли раньше ' + cur.qualEarly) + '</small>' : '') +
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + numBtn(prv, r[2], 'p', f(p)) + '</span>' +
@@ -38280,7 +38353,7 @@
      «Продажах»; человек из бота без карточки стоит строкой без перехода. */
   var MG_WHO_N = {invN: 'счет', payers: 'платеж', revenue: 'платеж'};
   // мелкие пункты раскрывают список под строкой, к которой относятся
-  var MG_WHO_ROW = {back: 'leads', qualEarly: 'qual'};
+  var MG_WHO_ROW = {back: 'leads', qualEarly: 'qual', platEarly: 'platOnly'};
   function mgWhoCard(rows, q, list, lbl) {
     var row = rows.filter(function (r) { return r[2] === q.k; })[0];
     list = (list || []).slice().sort(function (a, b) {
@@ -38301,7 +38374,7 @@
       var cnt = list.reduce(function (s, p) { return s + (p.n || 1); }, 0);
       if (cnt !== list.length) sub = cnt + ' счетов у ' + list.length + ' человек; ' + sub;
     }
-    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : q.k === 'qualEarly' ? 'Квалифицированные, пришедшие раньше' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
+    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : q.k === 'qualEarly' ? 'Квалифицированные, пришедшие раньше' : q.k === 'platEarly' ? 'Пришли на платформу, были у нас раньше' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
   }
 
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
