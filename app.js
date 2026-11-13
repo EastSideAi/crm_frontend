@@ -3093,10 +3093,10 @@
   /* «Источники» и «Расход» влиты в «Воронку», та переименована в «Каналы и лиды»
      (Ольга 13.11.2026: «очень много вкладок», «это точно не воронка»; все три про
      одно — откуда лиды, сколько стоят и окупается ли реклама) */
-  var MK_TABS = [['dash', 'Каналы и лиды'], ['cross', 'Сквозная'],
-                 ['launch', 'Запуски'], ['efir', 'Эфиры'],
-                 ['ads', 'Реклама'], ['plan', 'Декомпозиция'],
-                 ['links', 'Ссылки и сценарии']];
+  /* Порядок вкладок задала Ольга 13.11.2026; первая открывается по умолчанию */
+  var MK_TABS = [['cross', 'Сквозная'], ['plan', 'Декомпозиция'],
+                 ['launch', 'Запуски'], ['ads', 'Реклама'], ['efir', 'Эфиры'],
+                 ['dash', 'Каналы и лиды'], ['links', 'Ссылки и сценарии']];
   /* Какие вкладки «Маркетинга» человеку положены. У подрядчика по рекламе (cap `ads`
      без `marketing`) остается одна «Реклама»: остальные вкладки — сквозная воронка,
      оплаты клиентов, план запуска и ссылки бота, и внешнему человеку их не отдаем.
@@ -3122,6 +3122,8 @@
      свое состояние и свои ссылки #page/..., поэтому переезжают они только шапкой.
      Видит их тот, кому открыт весь «Маркетинг», а не подрядчик с одной «Рекламой». */
   var MK_PAGES = [['social', 'Соцстатистика'], ['broadcasts', 'Рассылки'], ['gifts', 'Подарки']];
+  /* Общий порядок ряда: вкладки и страницы вперемешку (Ольга 13.11.2026) */
+  var MK_ORDER = ['cross', 'plan', 'launch', 'ads', 'efir', 'dash', 'social', 'links', 'broadcasts', 'gifts'];
   function mkPagesFor() {
     if (!can('marketing')) return [];
     return MK_PAGES.filter(function (o) { return can(pageCap(o[0])); });
@@ -3253,11 +3255,13 @@
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта.
          На вкладках-страницах тоже: у них свои фильтры внутри экрана */
-      tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
-        return '<a class="tab' + (onMk && state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
-      }).join('') + mkPagesFor().map(function (o) {
-        return '<a class="tab' + (state.page === o[0] ? ' on' : '') + '" data-mkpage="' + o[0] + '">' + o[1] + '</a>';
-      }).join('') + '</nav>' +
+      var mkRow = mkTabs.map(function (o) {
+        return [o[0], '<a class="tab' + (onMk && state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>'];
+      }).concat(mkPagesFor().map(function (o) {
+        return [o[0], '<a class="tab' + (state.page === o[0] ? ' on' : '') + '" data-mkpage="' + o[0] + '">' + o[1] + '</a>'];
+      }));
+      mkRow.sort(function (a, b) { return MK_ORDER.indexOf(a[0]) - MK_ORDER.indexOf(b[0]); });
+      tb.innerHTML = '<nav class="tabs">' + mkRow.map(function (o) { return o[1]; }).join('') + '</nav>' +
         (state.page === 'gifts' ? giftPeriodHtml() :
          !onMk || state.mkTab === 'launch' || state.mkTab === 'efir' ||
          state.mkTab === 'plan' || state.mkTab === 'cross' ? '' :
