@@ -428,8 +428,63 @@ window.CROSSCUT = (function () {
         (prevVal === undefined ? '' : delta(nowVal, prevVal)) + '</button>';
     }
 
+    /* Ступень лестницы «Запусков» по ключу: в режиме запуска плитки денег, счетов,
+       разборов и регистраций берутся оттуда (Ольга 13.11.2026: «цифры старые, не с
+       запуска»). Сравнения с прошлым периодом у них нет: запуск считается целиком. */
+    /* Паспорта плиток запуска: людей поименно здесь не показываем, они на ступенях
+       «Запусков», и второй список разошелся бы с тем, что там проверено. */
+    (function(){
+      var how = 'Откройте вкладку «Запуски», этот интенсив, и нажмите на ту же ступень пути: там люди поименно.';
+      var from = 'Вкладка «Запуски», путь человека по запуску. Сквозная берет ступень оттуда как есть.';
+      PASSPORTS.lrev = {t: 'Выручка запуска', what: 'Деньги от людей, оплативших после интенсива, за весь запуск.', from: from, how: how};
+      PASSPORTS.lpay = {t: 'Оплатили', what: 'Сколько человек из запуска заплатили.', from: from, how: how};
+      PASSPORTS.linv = {t: 'Получили счет', what: 'Сколько человек получили счет по офферу запуска.', from: from, how: how};
+      PASSPORTS.lcall = {t: 'Провели консультацию', what: 'Сколько человек из запуска дошли до встречи с тьютором.', from: from, how: how};
+      PASSPORTS.lview = {t: 'Открыли эфир', what: 'Сколько человек открыли страницу эфира.', from: from, how: how};
+      PASSPORTS.ldiag = {t: 'Записались на диагностику', what: 'Заполнили анкету по ссылке запуска.', from: from, how: how};
+      PASSPORTS.ltutor = {t: 'Записались на консультацию', what: 'Заявки к тьютору за время запуска.', from: from, how: how};
+      PASSPORTS.lreach = {t: 'Охват запуска', what: 'Все люди запуска: оставили заявку на странице или получили ссылку на эфир в боте.', from: from, how: how};
+    })();
+
+    function lstep(key){
+      var LP = state.scope === 'launch' && SNAP.launch && SNAP.launch.path;
+      if (!LP) return null;
+      for (var i = 0; i < LP.length; i++) if (LP[i].key === key) return LP[i];
+      return null;
+    }
+    function lrub(st){
+      var m = st && st.note && st.note.replace(/\s/g, '').match(/(\d+)₽/);
+      return m ? +m[1] : null;
+    }
+
     function renderKpis(){
       var d = CUR, p = PRV, h = '';
+      /* Запуск: плитки целиком из «Запусков» (Ольга 13.11.2026: декомпозиция, запуски и
+         сквозная должны биться, выверены первые две). Свои плитки тут считали других
+         людей за другой отрезок и спорили с ними. */
+      var sPaid = lstep('paid');
+      if (sPaid){
+        var LW = 'за весь запуск, как в «Запусках»';
+        var lt = function(key, step, label, sub, extra){
+          var st = lstep(step);
+          if (!st) return '';
+          return kpiBtn(key, label, num(st.people || 0), sub || LW, undefined, 0, extra);
+        };
+        var r0 = lrub(sPaid), sReg = lstep('reg'), sBot = lstep('bot_only');
+        if (r0 != null) h += kpiBtn('lrev', 'Выручка', rub(r0),
+          'оплатили ' + (sPaid.people || 0) + ' человек · ' + LW, undefined, 0, 'hero');
+        h += lt('lreach', 'reach', 'Охват запуска',
+          [sReg ? 'с формы ' + sReg.people : '', sBot ? 'из бота ' + sBot.people : ''].filter(Boolean).join(' · '));
+        h += lt('lview', 'viewers', 'Открыли эфир');
+        h += lt('ldiag', 'plat_diag', 'Записались на диагностику');
+        h += lt('ltutor', 'tutor', 'Записались на консультацию');
+        h += lt('lcall', 'call_done', 'Провели консультацию');
+        h += lt('linv', 'invoiced', 'Получили счет');
+        h += lt('lpay', 'paid', 'Оплатили');
+        $id('kpis').innerHTML = h;
+        if (state.open) openDrawer(state.open, true);
+        return;
+      }
       h += kpiBtn('revenue', 'Выручка', rub(d.revenue), '', p ? p.revenue : undefined, d.revenue, 'hero');
       h += kpiBtn('payN', 'Оплат', num(d.payN), '', p ? p.payN : undefined, d.payN);
       h += kpiBtn('invN', 'Счетов выставлено', num(d.invN),
