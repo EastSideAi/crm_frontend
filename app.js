@@ -32888,19 +32888,19 @@
       mine.forEach(function (w) { used[w.chat_id] = 1; });
       var deptSel = function (cur, attr) {
         return '<span class="al-selwrap tgd-sel"><select class="al-sel sm" ' + attr + '>' +
-          (cur ? '<option value="">убрать из рабочих</option>' : '<option value="" selected>добавить чат…</option>') +
+          (cur ? '<option value="">убрать из рабочих</option>' : '<option value="" selected>отдел…</option>') +
           WORK_DEPTS.map(function (d) {
             return '<option value="' + d + '"' + (d === cur ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
           }).join('') + '</select></span>';
       };
       var rows = mine.map(function (w) {
-        return '<div class="tgd-row on"><span class="tgd-l">' + esc(w.title) + '</span>' +
+        return '<div class="tgd-row wc on"><span class="tgd-l" title="' + esc(w.title) + '">' + esc(w.title) + '</span>' +
           deptSel(w.dept, 'data-wc="' + esc(w.chat_id) + '"') + '</div>';
       }).join('');
       var rest = g.groups.filter(function (x) { return !used[x.chat_id]; });
       var add = rest.length
-        ? '<div class="tgd-row"><span class="al-selwrap tgd-sel"><select class="al-sel sm" id="wc-new">' +
-            '<option value="">еще чат…</option>' + rest.map(function (x) {
+        ? '<div class="tgd-row wc"><span class="al-selwrap tgd-l"><select class="al-sel sm" id="wc-new">' +
+            '<option value="">добавить чат…</option>' + rest.map(function (x) {
               return '<option value="' + esc(x.chat_id) + '">' + esc(x.title || x.chat_id) + '</option>';
             }).join('') + '</select></span>' + deptSel('', 'id="wc-new-dept"') + '</div>'
         : '';
