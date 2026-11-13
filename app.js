@@ -3474,6 +3474,7 @@
       html = '<div><h2>Управление</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('helm', 13) + '</span><span>' +
         (({
+          today: 'Кто пришел к нам <b>сегодня</b>, по всем каналам. Список обновляется сам раз в минуту.',
           leads: 'Новые лиды недели. Отметь текущих клиентов, дубли и спам: они уйдут из счета сквозной и план-факта, карточка останется.',
           day: 'Сверка дня: <b>вчерашние цифры против плана дня</b>. Зеленое — план сделан, желтое — близко, красное — сильно ниже.',
           month: 'Месяц против плана. Идущий месяц сверяется <b>с тем, что должны были сделать к этой дате</b>, а не со всем планом сразу.'
@@ -38062,6 +38063,7 @@
      показатели за вчера, а так же месяц». Это та же лестница сквозной, только на
      другом отрезке, поэтому вкладки открыты тем же, кому открыты цифры. */
   var MG_TABS = [
+    { id: 'today', label: 'Сегодня', cap: 'marketing' },
     { id: 'day', label: 'День', cap: 'marketing' },
     { id: 'rnp', label: 'Неделя' },
     { id: 'month', label: 'Месяц', cap: 'marketing' },
@@ -38163,6 +38165,7 @@
       mgNav(tab) + deptBar +
     '</div>';
     if (tab === 'leads') { view.innerHTML = '<div class="dash mg">' + head + mgLeadsHtml() + '</div>'; mgBind(view); return; }
+    if (tab === 'today') { view.innerHTML = '<div class="dash mg">' + head + mgTodayHtml() + '</div>'; mgBind(view); return; }
     if (tab === 'day' || tab === 'month') {
       mgCross();
       view.innerHTML = '<div class="dash mg">' + head + (tab === 'day' ? mgDayHtml() : mgMonthHtml()) + '</div>';
@@ -38198,6 +38201,7 @@
       var sh = state.mgDayShift || 0;
       return n('mgdw', 'Днем раньше', sh < 1 ? 'Днем позже' : '', mgDayLabel(mgDay()), sh !== 0, 'Вчера');
     }
+    if (tab === 'today') return '<div class="brd-nav"><span class="brd-label">' + esc(mgDayLabel(mgIso(new Date()))) + '</span></div>';
     if (tab === 'month') {
       var m = mgDate(mgMonth());
       return n('mgmw', 'Прошлый месяц', 'Следующий месяц', MG_MONN[m.getMonth()] + ' ' + m.getFullYear(), !!state.mgMonShift, 'Этот месяц');
@@ -38642,21 +38646,54 @@
       '<div class="s">' + (hinted ? 'система подозревает ' + hinted + ': проверь и подтверди' : 'отметь тех, кто не новый лид: текущих клиентов, дубли, спам') +
       '</div></div></div>';
     if (!d.leads.length) return html + '<div class="mg-note">За эту неделю новых карточек нет.</div></div>';
+    return html + mgRows(d, R, false);
+  }
+
+  // Строки людей с отметками: общие у «Чистки» и «Сегодня».
+  function mgRows(d, R, today) {
     var team = d.team || [];
-    return html + '<div class="mg-list">' + d.leads.map(function (l) {
+    return '<div class="mg-list">' + d.leads.map(function (l) {
       var chips = Object.keys(R).map(function (k) {
         return '<button class="qchip' + (l.not_lead === k ? ' on' : '') + (!l.not_lead && l.hint === k ? ' hint' : '') +
           '" aria-pressed="' + (l.not_lead === k) + '" data-mgnl="' + esc(l.id) + '" data-r="' + k + '">' + esc(R[k]) + '</button>';
       }).join('');
       return '<div class="mg-lead' + (l.not_lead ? ' off' : '') + '">' +
         '<div class="mg-hb"><div class="mg-ht"><a href="#lead/' + esc(l.id) + '" data-mglead="' + esc(l.id) + '">' + esc(l.name || 'Без имени') + '</a></div>' +
-        '<div class="mg-hw">' + esc(fmtDay(l.at)) + (l.src ? ' · ' + esc(l.src) : l.channel ? ' · ' + esc(l.channel) : ' · без метки') +
+        '<div class="mg-hw">' + esc(today ? fmtTime(l.at) : fmtDay(l.at)) + (l.src ? ' · ' + esc(l.src) : l.channel ? ' · ' + esc(l.channel) : ' · без метки') +
           (l.hint && !l.not_lead ? ' · <span class="mg-hint">похоже: ' + esc(R[l.hint] || l.hint) + '</span>' : '') + '</div>' +
         mgLeadWho(l) + '</div>' +
         '<div class="list-quick mg-nl">' + chips + '</div></div>';
     }).join('') + '</div>' + (team.length ? '<div class="mg-team">Убраны как наши и тест: ' + team.map(function (t) {
       return '<button class="mg-back" data-mgback="' + esc(t.id) + '" title="Вернуть в список">' + esc(t.name || 'без имени') + ' ' + ic('x', 11) + '</button>';
     }).join('') + '</div>' : '') + '</div>';
+  }
+
+  /* «Сегодня» (Ольга 13.11.2026: «сделай вкладку сегодня и добавляй туда оперативно
+     всех, кто к нам поступает»). Те же люди и строки, что в чистке, за сутки по
+     Москве, плюс пишущие только в мессенджер. Список перечитывается раз в минуту. */
+  function mgTodayHtml() {
+    var day = mgIso(new Date()), d = state._mgToday;
+    var fresh = d && d.day === day && Date.now() - (d._t || 0) < 60000;
+    if (!fresh && !state._mgTodayLoad) {
+      state._mgTodayLoad = true;
+      api('/admin/api/rnp/leads?day=' + day).then(function (r) { r._t = Date.now(); state._mgToday = r; })
+        .catch(function () { if (!state._mgToday) state._mgToday = { day: day, fail: true, leads: [], _t: Date.now() }; })
+        .then(function () { state._mgTodayLoad = false; if (state.page === 'manage' && mgTab() === 'today') renderView(); });
+    }
+    clearTimeout(state._mgTodayTimer);
+    state._mgTodayTimer = setTimeout(function () {
+      // пока человек что-то печатает в поле, экран не пересобираем
+      var a = document.activeElement;
+      if (state.page === 'manage' && mgTab() === 'today' && !(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) renderView();
+    }, 60000);
+    if (!d || d.day !== day) return '<div class="card"><div class="sk-list"><div class="shim"></div><div class="shim"></div></div></div>';
+    if (d.fail) return '<div class="card"><div class="empty">Список не загрузился. Проверь сеть.</div></div>';
+    var n = d.leads.filter(function (l) { return !l.not_lead; }).length;
+    var html = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('leads', 14) + '</span>' +
+      '<div><div class="t">Сегодня пришли: ' + n + '</div>' +
+      '<div class="s">обновлено в ' + esc(fmtTime(new Date(d._t).toISOString())) + ', сотрудников и тестов здесь нет</div></div></div>';
+    if (!d.leads.length && !(d.team || []).length) return html + '<div class="mg-note">Сегодня пока никто не пришел.</div></div>';
+    return html + mgRows(d, d.reasons || {}, true);
   }
 
   /* Кто это: анкета (класс, программа, год, направление), откуда пришел, что успел
@@ -38671,7 +38708,8 @@
     var did = (l.steps || []).filter(function (k) { return MG_STEP[k]; }).map(function (k) { return MG_STEP[k]; });
     if (l.paid) did.push('платил');
     var st = l.status && l.status !== 'new' && CRM[l.status] ? CRM[l.status].label : '';
-    var how = [l.note, (l.contacts || []).length ? 'есть ' + l.contacts.join(', ') : '']
+    var how = [l.note, (l.contacts || []).length ? 'есть ' + l.contacts.join(', ')
+      : l.chans ? 'пишет в ' + l.chans + ', телефона и почты нет' : '']
       .filter(Boolean);
     var tail = [st, l.owner ? 'ведет ' + l.owner : 'никто не ведет'].filter(Boolean);
     return '<div class="mg-who-l">' +
@@ -38740,7 +38778,7 @@
     });
     view.querySelectorAll('[data-mgnl]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var d = state._mgLeads, id = b.dataset.mgnl;
+        var d = mgTab() === 'today' ? state._mgToday : state._mgLeads, id = b.dataset.mgnl;
         var l = (d.leads || []).filter(function (x) { return x.id === id; })[0];
         var reason = l && l.not_lead === b.dataset.r ? null : b.dataset.r;
         api('/admin/api/rnp/leads/' + id + '/not-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason }) })
@@ -38753,6 +38791,7 @@
             }
             d.counted = d.leads.filter(function (x) { return !x.not_lead; }).length;
             state._mkCross = null;  // сквозная пересчитается без отмеченного
+            if (d === state._mgToday) state._mgLeads = null; else state._mgToday = null;
             renderView();
           }).catch(function () { showToast('Отметка не сохранилась. Проверь сеть'); });
       });
@@ -38760,7 +38799,7 @@
     view.querySelectorAll('[data-mgback]').forEach(function (b) {
       b.addEventListener('click', function () {
         api('/admin/api/rnp/leads/' + b.dataset.mgback + '/not-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: null }) })
-          .then(function () { state._mgLeads = null; state._mkCross = null; renderView(); })
+          .then(function () { state._mgLeads = null; state._mgToday = null; state._mkCross = null; renderView(); })
           .catch(function () { showToast('Не вернулось. Проверь сеть'); });
       });
     });
