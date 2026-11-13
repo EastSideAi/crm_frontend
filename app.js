@@ -36036,9 +36036,11 @@
                      { id: '2026-10', label: 'Интенсив 28.10.26', fact: true,
                        slug: 'intensive-2026-10', days: ['28 октября', '29 октября'],
                        factLabel: 'факт 28–29.10' },
-                     { id: '2026-11', label: 'Ноябрь 2026', fact: false,
+                     /* shared — план общий: правки лежат на сервере и видны всей
+                        команде, а не в браузере того, кто вписал (Ольга 13.11.2026) */
+                     { id: '2026-11', label: 'Ноябрь 2026', fact: false, shared: true,
                        title: 'Декомпозиция запуска: ноябрь 2026',
-                       lede: 'План ноябрьского запуска — копия плана интенсива 28–29 октября. Подсвеченные поля — вводные, их правят руками; остальное считается.' }];
+                       lede: 'План ноябрьского запуска, общий для команды. Подсвеченные поля — вводные, их правят руками, и правка сразу видна всем; остальное считается.' }];
   var LA_LAUNCH_LS = 'es_launch_plan_cur';
   function laLaunchCur() {
     if (!state.laLaunch) {
@@ -36079,6 +36081,13 @@
   function laEdits() {
     if (state._laEd) return state._laEd;
     var e = {};
+    var lch = laLaunchCur();
+    if (lch.shared) {
+      var sh = (state._laShared || {})[lch.id] || {};
+      Object.keys(sh).forEach(function (k) { e[k] = sh[k]; });
+      state._laEd = e;
+      return e;
+    }
     try {
       var raw = localStorage.getItem(laKey());
       /* новый запуск открывается копией того, что было на экране у октября */
@@ -36088,7 +36097,44 @@
     state._laEd = e;
     return e;
   }
-  function laSaveEdits() { try { localStorage.setItem(laKey(), JSON.stringify(state._laEd || {})); } catch (e) {} }
+  function laSaveEdits(key) {
+    var lch = laLaunchCur();
+    if (lch.shared) { if (key) laPush(lch.id, key); return; }
+    try { localStorage.setItem(laKey(), JSON.stringify(state._laEd || {})); } catch (e) {}
+  }
+  /* Общий план: правки копятся и уходят на сервер пачкой через полсекунды после
+     последнего нажатия — запрос на каждую цифру забил бы сеть и перемешал ответы */
+  var laQueue = {}, laTimer = null;
+  function laSharedLoad() {
+    if (state._laShared !== undefined) return;
+    state._laShared = null;
+    api('/admin/api/launch-plan/edits').then(function (r) {
+      state._laShared = (r && r.edits) || {};
+    }).catch(function () { state._laShared = 'none'; }).then(function () {
+      state._laEd = null;
+      if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+    });
+  }
+  function laPush(launch, key) {
+    var q = laQueue[launch] = laQueue[launch] || {};
+    q[key] = (state._laEd || {})[key];
+    clearTimeout(laTimer);
+    laTimer = setTimeout(laFlush, 600);
+  }
+  function laFlush() {
+    Object.keys(laQueue).forEach(function (launch) {
+      var edits = laQueue[launch];
+      delete laQueue[launch];
+      api('/admin/api/launch-plan/edits', { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ launch: launch, edits: edits }) })
+        .then(function (r) {
+          var sh = state._laShared && state._laShared !== 'none' ? state._laShared : (state._laShared = {});
+          sh[launch] = (r && r.edits) || {};
+        })
+        .catch(function () { showToast('Не удалось сохранить план, проверь интернет и поправь цифру еще раз'); });
+    });
+  }
   function laTouched() { return Object.keys(laEdits()).length > 0; }
   /* свернутые этапы — привычка одного человека, а не настройка команды: лист
      длинный, и каждый смотрит свой кусок. Поэтому в браузере, а не на сервере;
@@ -36626,6 +36672,14 @@
 
   function renderMkPlan(view) {
     if (!state._launch) { view.innerHTML = dashSkeleton(); fetchLaunch(); return; }
+    if (laLaunchCur().shared) {
+      laSharedLoad();
+      if (state._laShared === null) { view.innerHTML = dashSkeleton(); return; }
+      if (state._laShared === 'none') {
+        view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить общий план запуска. Обновите страницу.</div></div>';
+        return;
+      }
+    }
     if (state._launch === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить декомпозицию. Обновите страницу; если раздел закрыт правами, скажите руководителю.</div></div>';
       return;
@@ -36716,8 +36770,10 @@
       '<div class="card listcard la-card"><div class="po-note la-note">' + esc(meta.note) + '</div>' +
         '<div class="la-tbl' + (nofact ? ' nofact' : '') + '">' + head + body + '</div></div>' +
       '<div class="po-note la-foot">Цифры на этом экране повторяют рабочий файл: люди округляются до целых, ' +
-        'поэтому продажи прыгают ступенькой. Правки живут в вашем браузере и у остальных ничего не меняют; ' +
-        'вернуть цифры плана — кнопка «Вернуть план» в шапке.</div>';
+        'поэтому продажи прыгают ступенькой. ' + (lch.shared
+          ? 'План общий: правки сохраняются сразу и видны всей команде; «Вернуть план» в шапке снимает их у всех.'
+          : 'Правки живут в вашем браузере и у остальных ничего не меняют; ' +
+            'вернуть цифры плана — кнопка «Вернуть план» в шапке.') + '</div>';
     laWire(view);
     laPaint(view);
   }
@@ -36789,7 +36845,7 @@
       inp.addEventListener('input', function () {
         var key = inp.getAttribute('data-la');
         laEdits()[key] = laNum(inp.value);
-        laSaveEdits();
+        laSaveEdits(key);
         if (reset) reset.hidden = false;
         laPaint(view);
       });
@@ -36805,6 +36861,16 @@
       }
       clearTimeout(armed); armed = null;
       state._laEd = {};
+      var lch = laLaunchCur();
+      if (lch.shared) {
+        delete laQueue[lch.id];
+        api('/admin/api/launch-plan/edits', { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ launch: lch.id, reset: true }) })
+          .then(function () { state._laShared[lch.id] = {}; state._laEd = null; renderView(); })
+          .catch(function () { state._laEd = null; showToast('Не удалось вернуть план, попробуй еще раз'); renderView(); });
+        return;
+      }
       try {
         if (laKey() === LA_KEY) localStorage.removeItem(LA_KEY);
         else localStorage.setItem(laKey(), '{}');   /* план из файла, а не копия октября */
