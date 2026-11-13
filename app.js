@@ -38217,13 +38217,16 @@
         var k = key(l), ld = lead[k] || ever[k];
         if (!plat[k] || l.dg < plat[k].d) plat[k] = {i: ld.i, nm: ld.nm || l.nm || '', s: ld.s || l.s || '', d: l.dg, how: 'разбор на платформе'};
       });
-      (cc.cons || []).forEach(function (c) {
+      // Ольга 13.11.2026: прошедший консультацию в боте квалифицирован, даже если он не
+      // лид — у бота нет телефона, только мессенджер. Без карточки он отдельный человек.
+      (cc.cons || []).forEach(function (c, n) {
         var d = Array.isArray(c) ? c[0] : c, sid = Array.isArray(c) ? c[1] : null;
-        if (!d || d < a || d > b || !sid) return;
-        var k = grp[sid] || 's' + sid, l = card[sid];
-        if (!ever[k]) return;
-        var ld = lead[k] || ever[k];
-        if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
+        if (!d || d < a || d > b) return;
+        var l = sid && card[sid];
+        if (l && l.nl) return;
+        var k = sid ? (grp[sid] || 's' + sid) : 'b' + n;
+        var ld = lead[k] || ever[k] || l || {};
+        if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i || null, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
       });
       var all = {};
       Object.keys(plat).forEach(function (k) { all[k] = plat[k]; });
@@ -38255,16 +38258,19 @@
       });
       var early = {};
       Object.keys(all).forEach(function (k) {
-        if (!lead[k]) early[k] = Object.assign({}, all[k], {how: all[k].how + ' · лид с ' + fmtDay(ever[k].d)});
+        if (!lead[k] && ever[k]) early[k] = Object.assign({}, all[k], {how: all[k].how + ' · лид с ' + fmtDay(ever[k].d)});
       });
       var vals = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
       x.qualEarly = Object.keys(early).length;
       x.back = Object.keys(back).length;
       x.platOnly = Object.keys(pon).length;
+      // Ольга 13.11.2026: и здесь мелко «из них пришли раньше» — кто был у нас до отрезка
+      var ponEarly = vals(pon).filter(function (p) { return p.how === 'был у нас раньше'; });
+      x.platEarly = ponEarly.length;
       x.platQ = Object.keys(plat).length;
       x.consBook = Object.keys(bot).length;
       x.qual = Object.keys(all).length;
-      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back), qualEarly: vals(early)};
+      x._ql = {qual: vals(all), platQ: vals(plat), consBook: vals(bot), platOnly: vals(pon), back: vals(back), qualEarly: vals(early), platEarly: ponEarly};
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
@@ -38293,9 +38299,9 @@
     var rows = [
       ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
       ['Пришли на платформу, минуя бота', 'контакт только в аккаунте платформы, в лиды выше не входят', 'platOnly', null],
-      ['Квалифицированные лиды', 'лиды, прошедшие в этом периоде разбор на платформе или консультацию в боте, человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
+      ['Квалифицированные лиды', 'прошли в этом периоде разбор на платформе (лиды) или консультацию в боте (все), человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
-      ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
+      ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору, с телефоном или без', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
       ['Записались к тьютору', 'выбрали время разбора', 'signed', null, false, false, 'qual', 'от квалифицированных'],
       ['Разбор состоялся', 'встреча прошла', 'meeting', null, false, false, 'signed', 'от записавшихся'],
       ['Счета', 'выставлено', 'invN', null, false, false, 'meeting', 'от разборов'],
@@ -38329,6 +38335,7 @@
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
             // Ольга 13.11.2026: вернувшиеся мелким пунктом под лидами
             (r[2] === 'leads' && cur.back ? '<small class="mg-of">' + numBtn(cur, 'back', 'c', 'из них вернулись ' + cur.back) + '</small>' : '') +
+            (r[2] === 'platOnly' && cur.platEarly ? '<small class="mg-of">' + numBtn(cur, 'platEarly', 'c', 'из них пришли раньше ' + cur.platEarly) + '</small>' : '') +
             (r[2] === 'qual' && cur.qualEarly ? '<small class="mg-of">' + numBtn(cur, 'qualEarly', 'c', 'из них пришли раньше ' + cur.qualEarly) + '</small>' : '') +
             (r[6] ? '<small class="mg-of">' + (cur[r[6]] > 0 ? Math.round(c / cur[r[6]] * 100) + '%' : '—') + ' ' + esc(r[7]) + '</small>' : '') + '</span>' +
           '<span class="r num mute c-pv">' + numBtn(prv, r[2], 'p', f(p)) + '</span>' +
@@ -38346,7 +38353,7 @@
      «Продажах»; человек из бота без карточки стоит строкой без перехода. */
   var MG_WHO_N = {invN: 'счет', payers: 'платеж', revenue: 'платеж'};
   // мелкие пункты раскрывают список под строкой, к которой относятся
-  var MG_WHO_ROW = {back: 'leads', qualEarly: 'qual'};
+  var MG_WHO_ROW = {back: 'leads', qualEarly: 'qual', platEarly: 'platOnly'};
   function mgWhoCard(rows, q, list, lbl) {
     var row = rows.filter(function (r) { return r[2] === q.k; })[0];
     list = (list || []).slice().sort(function (a, b) {
@@ -38367,7 +38374,7 @@
       var cnt = list.reduce(function (s, p) { return s + (p.n || 1); }, 0);
       if (cnt !== list.length) sub = cnt + ' счетов у ' + list.length + ' человек; ' + sub;
     }
-    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : q.k === 'qualEarly' ? 'Квалифицированные, пришедшие раньше' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
+    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : q.k === 'qualEarly' ? 'Квалифицированные, пришедшие раньше' : q.k === 'platEarly' ? 'Пришли на платформу, были у нас раньше' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
   }
 
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
