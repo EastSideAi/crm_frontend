@@ -9306,7 +9306,7 @@
     if (myName) {
       (d.meetings || []).forEach(function (m) {
         if (!(m.people || []).some(function (p) { return p.person === myName; })) return;
-        out.push({ ymd: m.date, hour: m.hour, cls: 'plan', title: m.title,
+        out.push({ ymd: m.date, hour: m.hour, min: m.minute || 0, cls: 'plan', title: m.title,
                    sub: schedSpan(m, schedTz(d)) + ' · команда', url: '', live: false, meet: m });
       });
       (d.slots || []).forEach(function (s) {
@@ -9320,22 +9320,28 @@
                    url: '', live: false });
       });
     }
+    // Встреча из чата стоит и в расписании, и в звонилке, а ссылка на звонилку
+    // лежит в заметке планерки: вторую строку той же встречи не показываем.
+    var notes = (d.meetings || []).map(function (m) { return m.note || ''; }).join(' ');
     var rooms = state.meetRooms;
     if (rooms && rooms !== 'none' && rooms !== 'loading' && rooms.rooms) {
       rooms.rooms.forEach(function (r) {
         if (r.status === 'cancel' || r.status === 'failed' || r.status === 'done') return;
+        if (r.url && notes.indexOf(r.url) !== -1) return;
         if (uid != null && r.created_by !== uid && (r.invited || []).indexOf(uid) === -1) return;
         var at = r.starts_at ? new Date(r.starts_at)
           : (r.status === 'live' && r.started_at ? new Date(r.started_at) : null);
         if (!at || isNaN(at.getTime())) return;
         var mk = mskHour(at), ymd = mk.ymd;
         if (ymd < from || ymd > to) return;
-        out.push({ ymd: ymd, hour: mk.hour, cls: 'room', title: r.title || 'Встреча',
+        out.push({ ymd: ymd, hour: mk.hour, min: at.getUTCMinutes(), cls: 'room', title: r.title || 'Встреча',
                    sub: r.status === 'live' ? 'идет прямо сейчас' : 'наша встреча',
                    url: r.url || '', live: r.status === 'live' });
       });
     }
-    out.sort(function (a, b) { return a.ymd === b.ymd ? a.hour - b.hour : (a.ymd < b.ymd ? -1 : 1); });
+    out.sort(function (a, b) {
+      return a.ymd === b.ymd ? (a.hour - b.hour) || ((a.min || 0) - (b.min || 0)) : (a.ymd < b.ymd ? -1 : 1);
+    });
     return out;
   }
 
@@ -9374,7 +9380,8 @@
         var ed = r.meet ? schedMeetAttr(r.meet) : '';
         return '<div class="sc-my-row ' + r.cls + (r.live ? ' live' : '') + (r.meet ? ' tap' : '') + '"' + ed + '>' +
           '<span class="sc-my-h' + (tz ? ' two' : '') + '">' +
-            (tz ? '<b>' + r.hour + ':00</b><i>' + r.msk + ':00 мск</i>' : r.hour + ':00') + '</span>' +
+            (tz ? '<b>' + r.hour + ':' + pad(r.min || 0) + '</b><i>' + r.msk + ':' + pad(r.min || 0) + ' мск</i>'
+                : r.hour + ':' + pad(r.min || 0)) + '</span>' +
           '<span class="sc-my-b"><b>' + esc(r.title) + '</b><i>' + esc(r.sub) + '</i></span>' +
           (r.meet ? '<span class="sc-my-ed" title="Изменить встречу: время, участников">' + ic('edit', 14) + '</span>' : '') +
           (r.url ? '<a class="sc-my-go" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
