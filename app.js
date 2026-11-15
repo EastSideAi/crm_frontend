@@ -38545,6 +38545,8 @@
         var fp = function (v) { return money ? f(v) : mgNum(Math.round(v * 10) / 10); };
         var dl = c - p, cls = !dl || r[2] === 'spend' ? '' : dl > 0 ? 'up' : 'down';
         var pl = pv != null && pv > 0 ? (c >= pv ? 'ok' : c >= pv * .7 ? 'risk' : 'miss') : '';
+        // Ольга 15.11.2026: пришедшие на платформу мимо лидов — красным, это потерянные лиды
+        if (r[2] === 'platOnly' && c > 0) pl = 'miss';
         // Виталий 02.11.2026: «меня интересует отношение к плановым показателям» — процент рядом с цифрой.
         var pct = function (v) { return Math.round(c / v * 100) + '%'; };
         return '<div class="mg-tr' + (r[5] ? ' sub' : '') + '"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
@@ -38552,7 +38554,7 @@
             (fv != null && o.full ? '<small class="mg-of">из ' + fp(fv) + '</small>' : '') : '—') + '</span>' +
           '<span class="r num big ' + pl + '">' + numBtn(cur, r[2], 'c', f(c)) +
             // Ольга 11.11.2026: «12% к дате» убрать, в идущем месяце процент к плану не пишем
-            (pl && !o.full ? '<small class="mg-pc">' + pct(pv) + ' плана</small>' : '') +
+            (pl && pv && !o.full ? '<small class="mg-pc">' + pct(pv) + ' плана</small>' : '') +
             // Ольга 11.11.2026: конверсия ступени от ступени выше; у лидов ее нет
             // Ольга 13.11.2026: вернувшиеся мелким пунктом под лидами
             (r[2] === 'leads' && cur.back ? '<small class="mg-of">' + numBtn(cur, 'back', 'c', 'из них вернулись ' + cur.back) + '</small>' : '') +
