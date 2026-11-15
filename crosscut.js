@@ -258,11 +258,20 @@ window.CROSSCUT = (function () {
           r.regs++; if (x[1]) r.watched++; who('regs', l, {d: x[0]});
         });
         if (inP(l.dg, a, b)){ r.diagPlat++; who('diagPlat', l, {d: l.dg}); }
-        if (inP(l.sb, a, b)){ r.signed++; who('signed', l, {d: l.sb}); }
+        /* Ольга 15.11.2026: «не нужно одного человека считать дважды». Записался и
+           встреча — люди, а не карточки: у человека с двумя карточками запись лежит в
+           обеих, и ступень выходила больше квалифицированных. Ключ тот же, что у
+           плательщиков, — склейка сквозной (l.g). */
+        var hk = l.g ? 'g' + l.g : 's' + (l.i || ('n' + (r._hn = (r._hn || 0) + 1)));
+        r._sg = r._sg || {}; r._mt = r._mt || {};
+        if (inP(l.sb, a, b) && !r._sg[hk]){ r._sg[hk] = 1; r.signed++; who('signed', l, {d: l.sb}); }
         var myCalls = (l.cl || []).filter(function(c){ return inP(c, a, b); }).length;
         if (myCalls){
-          r.meetings += myCalls; r.meeting++;
-          who('meeting', l, {d: (l.cl || []).filter(function(c){ return inP(c, a, b); }).pop(), n: myCalls});
+          r.meetings += myCalls;
+          if (!r._mt[hk]){
+            r._mt[hk] = 1; r.meeting++;
+            who('meeting', l, {d: (l.cl || []).filter(function(c){ return inP(c, a, b); }).pop(), n: myCalls});
+          }
         }
 
         /* Деньги приходят тремя дорогами: счета CRM (сопровождение, «Теплый прием»),
