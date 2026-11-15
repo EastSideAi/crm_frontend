@@ -7512,7 +7512,10 @@
   // Молния у важной задачи. Красным не помечаем: единственное красное на экране
   // задач — просрочка (design.md §7), иначе два разных сигнала спорят за глаз.
   function impMark(t) {
-    return t.important ? '<span class="tsk-imp" title="Важная">' + ic('bolt', 11) + '</span>' : '';
+    // Значок регулярки стоит там же, где важность: это метка строки, а не поле.
+    // Человек видит, что задача пришла по расписанию, а не что ее кто-то поставил.
+    return (t.source === 'repeat' ? '<span class="tsk-rep" title="Регулярная, по расписанию">' + ic('refresh', 11) + '</span>' : '') +
+      (t.important ? '<span class="tsk-imp" title="Важная">' + ic('bolt', 11) + '</span>' : '');
   }
 
   function renderTasks(view) {
@@ -7578,11 +7581,15 @@
       // только на текущей неделе.
       sh === 0 ? api('/admin/api/tasks?view=open&scope=author') : Promise.resolve(null),
       sh === 0 ? api('/admin/api/tasks?view=open&scope=watch') : Promise.resolve(null),
+      // Регулярка — полоса под «Потом»: шаблоны, из которых план собирается сам.
+      // Упала ручка — полосы просто нет, неделя от этого не ломается.
+      sh === 0 ? api('/admin/api/task-repeats').catch(function () { return null; }) : Promise.resolve(null),
     ]).then(function (rs) {
       state.tasksLoading = false;
       state.myweek = { tasks: (rs[0] && rs[0].tasks) || [], r: rs[1] || null,
                        accept: (rs[2] && rs[2].tasks) || [], later: (rs[3] && rs[3].tasks) || [],
                        gave: (rs[4] && rs[4].tasks) || [], part: (rs[5] && rs[5].tasks) || [],
+                       repeats: rs[6] ? (rs[6].repeats || []) : null,
                        starts: rs[0] && rs[0].week_starts, label: rs[0] && rs[0].week_label };
       state.taskMe = rs[0] ? rs[0].me : state.taskMe;
       if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
@@ -12023,6 +12030,161 @@
     var b = el('dy-later');
     if (b) b.addEventListener('click', function () { state.laterOpen = !state.laterOpen; renderView(); });
   }
+
+  /* ── Регулярка: задачи, которые повторяются сами ─────────────────────────────
+     Созвон фин-юр 12.11.2026, Виталий: регулярные задачи мало описать в
+     регламенте, они должны стоять в плане. Шаблон живет здесь, а в свой день
+     сервер сам ставит из него задачу в неделю со сроком (бэкенд
+     services/task_repeats.py). Сама задача потом обычная: сдать, принять,
+     вернуть. Поэтому здесь только расписание, без своего жизненного цикла. */
+  var REP_EVERY = [['day', 'каждый будний день'], ['week', 'по дням недели'], ['month', 'по числам']];
+  var REP_WD = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+  var REP_WD_EVERY = ['понедельникам', 'вторникам', 'средам', 'четвергам', 'пятницам', 'субботам', 'воскресеньям'];
+  function repWhen(r) {
+    var at = ' до ' + r.due_hour + ':00';
+    if (r.every === 'day') return 'каждый будний день' + at;
+    if (r.every === 'week') return 'по ' + (r.weekdays || []).map(function (d) { return REP_WD_EVERY[d]; }).join(' и ') + at;
+    return (r.month_days || []).join(' и ') + ' числа' + at;
+  }
+  function repeatBand(reps) {
+    var live = (reps || []).filter(function (r) { return r.active; });
+    var rows = live.map(function (r) {
+      return '<div class="trow dy-row later rep-row" data-rid="' + r.id + '">' +
+        '<div class="dy-t"><span class="rep-ic">' + ic('refresh', 12) + '</span><span class="dy-ttl">' + esc(r.title) + '</span>' +
+          '<span class="dy-cl">' + esc(repWhen(r)) + '</span></div></div>';
+    }).join('');
+    return '<div class="card dy-card dy-later dy-rep' + (state.repOpen ? ' open' : '') + '">' +
+      '<button class="dy-h dy-later-h" id="dy-rep"><span class="t">Регулярка</span>' +
+        '<span class="dy-h-n num">' + (live.length
+          ? '<b>' + live.length + '</b> ' + plural(live.length, 'задача', 'задачи', 'задач') + ' по расписанию'
+          : 'появляется в плане сама, в свой день') + '</span>' +
+        '<span class="dy-later-ic">' + ic('go', 14) + '</span></button>' +
+      (state.repOpen ? '<div class="dy-body">' + rows +
+        '<div class="rep-add"><button class="qchip" id="rep-new">' + ic('plus', 12) + 'Добавить регулярную задачу</button></div>' +
+      '</div>' : '') + '</div>';
+  }
+  function wireRepeats(view) {
+    var b = el('dy-rep');
+    if (b) b.addEventListener('click', function () { state.repOpen = !state.repOpen; renderView(); });
+    if (el('rep-new')) el('rep-new').addEventListener('click', function () { openRepeat(null); });
+    view.querySelectorAll('.rep-row').forEach(function (row) {
+      row.addEventListener('click', function () {
+        var id = +row.getAttribute('data-rid');
+        var r = ((state.myweek && state.myweek.repeats) || []).filter(function (x) { return x.id === id; })[0];
+        if (r) openRepeat(r);
+      });
+    });
+  }
+  function openRepeat(cur) {
+    if (document.querySelector('.al-ov')) return;
+    loadTaskPeople(function (people) {
+      var me = state.taskMe;
+      var r = cur || { every: 'day', weekdays: [], month_days: [], due_hour: 19,
+                       assignee_id: me, author_id: null, title: '', details: '', result_expect: '' };
+      var pOpt = function (sel, empty) {
+        return (empty ? '<option value="">' + empty + '</option>' : '') + people.map(function (p) {
+          return '<option value="' + p.id + '"' + (String(sel) === String(p.id) ? ' selected' : '') + '>' + esc(p.name || p.login) + '</option>';
+        }).join('');
+      };
+      var hours = [10, 12, 15, 17, 19, 21].map(function (h) {
+        return '<option value="' + h + '"' + (r.due_hour === h ? ' selected' : '') + '>до ' + h + ':00</option>';
+      }).join('');
+      var ov = document.createElement('div');
+      ov.className = 'al-ov';
+      ov.innerHTML =
+        '<div class="al-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head"><div><div class="al-eyebrow">Регулярка</div><div class="al-title">' +
+            (cur ? 'Регулярная задача' : 'Новая регулярная задача') + '</div></div>' +
+            '<button class="al-x" id="rp-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+          '<div class="al-sub">В свой день задача сама встанет в план со сроком. Сдаешь ее как обычную, принимает приемщик.</div>' +
+          '<div class="al-body">' +
+            '<label class="al-f"><span class="al-l">Что сделать <i>*</i></span>' +
+              '<input id="rp-title" class="al-in" maxlength="200" placeholder="Например: проверить, что оплаты ЮKassa упали в ведомость" value="' + esc(r.title) + '"></label>' +
+            '<div class="al-f"><span class="al-l">Когда</span>' +
+              '<span class="due-seg" id="rp-every">' + REP_EVERY.map(function (o) {
+                return '<button type="button" data-ev="' + o[0] + '"' + (r.every === o[0] ? ' class="on"' : '') + '>' + o[1] + '</button>';
+              }).join('') + '</span>' +
+              '<span class="due-seg rep-wd" id="rp-wd"' + (r.every === 'week' ? '' : ' hidden') + '>' + REP_WD.map(function (d, i) {
+                return '<button type="button" data-wd="' + i + '"' + ((r.weekdays || []).indexOf(i) >= 0 ? ' class="on"' : '') + '>' + d + '</button>';
+              }).join('') + '</span>' +
+              '<input id="rp-md" class="al-in" placeholder="Числа через запятую, например 10, 20" value="' + esc((r.month_days || []).join(', ')) + '"' + (r.every === 'month' ? '' : ' hidden') + '>' +
+              '<span class="al-hint" id="rp-mdh"' + (r.every === 'month' ? '' : ' hidden') + '>Число на выходной переезжает на пятницу перед ним, 31 в коротком месяце значит последний день.</span>' +
+            '</div>' +
+            '<label class="al-f"><span class="al-l">Срок в этот день</span><span class="al-selwrap"><select id="rp-hour" class="al-sel">' + hours + '</select></span></label>' +
+            '<label class="al-f"><span class="al-l">Кому</span><span class="al-selwrap"><select id="rp-who" class="al-sel">' + pOpt(r.assignee_id || me) + '</select></span></label>' +
+            '<label class="al-f"><span class="al-l">Кто принимает</span><span class="al-selwrap"><select id="rp-acc" class="al-sel">' + pOpt(r.author_id, '— выбери приемщика —') + '</select></span>' +
+              '<span class="al-hint">Регулярку принимает не сам исполнитель: так видно, что она правда сделана.</span></label>' +
+            '<label class="al-f"><span class="al-l">Как делать</span>' +
+              '<textarea id="rp-det" class="al-in al-ta" rows="3" placeholder="Шаги или ссылка на инструкцию в базе знаний">' + esc(r.details) + '</textarea></label>' +
+            '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +
+              '<textarea id="rp-res" class="al-in al-ta" rows="2" placeholder="Ссылка, файл или скрин, по которому видно результат">' + esc(r.result_expect) + '</textarea></label>' +
+          '</div>' +
+          '<div class="al-foot">' +
+            (cur ? '<button class="al-cancel" id="rp-stop">Больше не повторять</button>' : '<button class="al-cancel" id="rp-cancel">Отмена</button>') +
+            '<button class="bp al-save" id="rp-save">' + ic('check', 14) + (cur ? 'Сохранить' : 'Завести') + '</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function () { ov.classList.add('show'); });
+      var every = r.every;
+      var closed = false;
+      var close = function () {
+        if (closed) return; closed = true;
+        ov.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+      };
+      var onKey = function (e) { if (e.key === 'Escape') close(); };
+      document.addEventListener('keydown', onKey);
+      el('rp-x').addEventListener('click', close);
+      if (el('rp-cancel')) el('rp-cancel').addEventListener('click', close);
+      ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+      ov.querySelectorAll('#rp-every button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          every = b.getAttribute('data-ev');
+          ov.querySelectorAll('#rp-every button').forEach(function (x) { x.classList.toggle('on', x === b); });
+          el('rp-wd').hidden = every !== 'week';
+          el('rp-md').hidden = every !== 'month';
+          el('rp-mdh').hidden = every !== 'month';
+        });
+      });
+      ov.querySelectorAll('#rp-wd button').forEach(function (b) {
+        b.addEventListener('click', function () { b.classList.toggle('on'); });
+      });
+      var after = function (msg) {
+        close();
+        state.myweek = null;
+        if (state.page === 'tasks') renderView();
+        showToast(msg);
+      };
+      var fail = function (code, e) {
+        var s = el('rp-save'); if (s) { s.disabled = false; s.classList.remove('loading'); }
+        var why = e && e.body && typeof e.body.detail === 'string' ? e.body.detail : '';
+        showToast(why || 'Не получилось сохранить регулярку');
+      };
+      if (el('rp-stop')) el('rp-stop').addEventListener('click', function () {
+        apiSend('/admin/api/task-repeats/' + cur.id, 'DELETE', {}, function () { after('Регулярка выключена, уже стоящие задачи остались'); }, fail);
+      });
+      el('rp-save').addEventListener('click', function () {
+        var ti = el('rp-title'), title = (ti.value || '').trim();
+        if (!title) { ti.classList.add('al-err'); ti.focus(); return; }
+        var acc = el('rp-acc').value;
+        if (!acc) { showToast('Выбери, кто принимает регулярку'); return; }
+        var body = {
+          title: title, every: every,
+          weekdays: [].map.call(ov.querySelectorAll('#rp-wd button.on'), function (b) { return +b.getAttribute('data-wd'); }),
+          month_days: (el('rp-md').value || '').split(/[^0-9]+/).filter(Boolean).map(Number),
+          due_hour: +el('rp-hour').value,
+          assignee_id: +el('rp-who').value, author_id: +acc,
+          details: (el('rp-det').value || '').trim(),
+          result_expect: (el('rp-res').value || '').trim(),
+        };
+        var s = el('rp-save'); s.disabled = true; s.classList.add('loading');
+        if (cur) apiSend('/admin/api/task-repeats/' + cur.id, 'PATCH', body, function () { after('Регулярка сохранена'); }, fail);
+        else apiSend('/admin/api/task-repeats', 'POST', body, function () { after('Регулярка заведена, задача появится в свой день'); }, fail);
+      });
+    });
+  }
   function renderMyWeek(view) {
     if (state.planMode === 'month') { renderMyMonth(view); return; }
     if (state.planMode === 'board') { renderMyBoard(view); return; }
@@ -12094,7 +12256,8 @@
         meter + act +
         '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' + wkStateLine(r));
       var dg = view.querySelector('.dy-grid');
-      if (dg) dg.insertAdjacentHTML('afterend', laterBand(w.later || []));
+      if (dg) dg.insertAdjacentHTML('afterend', laterBand(w.later || []) +
+        (w.repeats ? repeatBand(w.repeats) : ''));
     } else {
       view.innerHTML = '<div class="wk-top">' + head + '<span class="wk-spacer"></span>' + wkNav(w.label || r.label) + '</div>' +
         '<div class="card listcard">' +
@@ -12107,10 +12270,10 @@
         '</div>' +
         wkStateLine(r) +
         '<div class="list-body">' + body + '</div>' +
-      '</div>' + laterBand(w.later || []);
+      '</div>' + laterBand(w.later || []) + (w.repeats && sh === 0 ? repeatBand(w.repeats) : '');
     }
 
-    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wirePrio(view); wireLater(view);
+    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wirePrio(view); wireLater(view); wireRepeats(view);
     if (el('tsk-new')) el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
     if (qi) {
@@ -24960,7 +25123,7 @@
           if (items[i].id === id) {
             var it = items[i];
             return finBreakdownOpen(it.contractor_id || it.smz_id, it.counterparty || it.item || '',
-              finMonthOf(it.date));
+              finMonthOf(it.date), it.id);
           }
         }
       });
@@ -25007,15 +25170,19 @@
     if (isNaN(d)) d = new Date();
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
   }
-  function finBreakdownOpen(cid, name, month) {
+  /* opId — строка ведомости, у которой нажали кнопку. Раскладываем ее сумму, а не сумму
+     человека за месяц: в месяце у него несколько выплат, и задания одной не должны
+     вычитаться из другой (Роман 12.11.2026: на 40 000 подобралось 15 000). */
+  function finBreakdownOpen(cid, name, month, opId) {
     if (!cid || document.querySelector('.al-ov')) return;
     var q = '?contractor_id=' + encodeURIComponent(cid) +
-            '&period=' + encodeURIComponent(month);
+            '&period=' + encodeURIComponent(month) +
+            (opId ? '&op_id=' + encodeURIComponent(opId) : '');
     czSend('/admin/api/contractor-reports/settlement/breakdown' + q, 'GET')
-      .then(function (d) { finBrkModal(cid, name, month, d); })
+      .then(function (d) { finBrkModal(cid, name, month, d, opId); })
       .catch(function (e) { showToast(e.message || 'Не удалось собрать раскладку'); });
   }
-  function finBrkModal(cid, name, month, d) {
+  function finBrkModal(cid, name, month, d, opId) {
     if (document.querySelector('.al-ov')) return;
     var items = (d.items || []).map(function (it) {
       return { code: it.code || null, title: it.title, unit: it.unit || 'шт',
@@ -25028,14 +25195,18 @@
     // задания уже часть суммы, второй раз их не раскладываем.
     var gap = d.gap != null ? Number(d.gap) : target;
     var sub;
+    var whose = opId ? 'строки' : 'листа';
     if (!d.linked || target <= 0) {
       sub = '. В расчётном листе за этот месяц суммы на человека нет — свяжите строку листа ' +
         'с карточкой или заполните ФИО. Ниже можно собрать состав вручную.';
+    } else if (assigned > 0 && gap <= 0) {
+      sub = '. Сумма ' + whose + ' ' + finRub(target) + ' уже разложена на задания целиком.';
     } else if (assigned > 0) {
-      sub = '. Сумма листа ' + finRub(target) + ', уже назначено ' + finRub(assigned) +
+      sub = '. Сумма ' + whose + ' ' + finRub(target) + ', уже назначено ' + finRub(assigned) +
         ', осталось разложить ' + finRub(gap) + '.';
     } else {
-      sub = '. Сумма из расчётного листа ' + finRub(target) + '.';
+      sub = '. Сумма ' + (opId ? 'строки ведомости ' : 'из расчётного листа ') +
+        finRub(target) + '.';
     }
     var ov = document.createElement('div');
     ov.className = 'al-ov over';
@@ -25140,7 +25311,7 @@
       btn.disabled = true;
       btn.textContent = 'Заводим…';
       czSend('/admin/api/contractor-reports/settlement/apply-breakdown', 'POST', {
-        contractor_id: cid, period: month,
+        contractor_id: cid, period: month, op_id: opId || undefined,
         items: clean.map(function (it) {
           return { service_code: it.code || undefined, service_title: it.title,
                    unit: it.unit, price: it.price, qty: it.qty };
@@ -25419,7 +25590,7 @@
         if (hit) {
           var it = hit.it;
           finBreakdownOpen(it.contractor_id || it.smz_id,
-            it.counterparty || it.item || '', finMonthOf(it.date));
+            it.counterparty || it.item || '', finMonthOf(it.date), it.id);
         }
       });
     });
@@ -26820,7 +26991,7 @@
           if (items[i].id === id) {
             var it = items[i];
             return finBreakdownOpen(it.contractor_id || it.smz_id,
-              it.counterparty || it.item || '', finMonthOf(it.date));
+              it.counterparty || it.item || '', finMonthOf(it.date), it.id);
           }
         }
       });
