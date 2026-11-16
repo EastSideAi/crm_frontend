@@ -5020,6 +5020,20 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
 .tsk-imp { display: inline-flex; align-items: center; flex: none; margin-right: 6px;
   color: var(--amber-ink); vertical-align: -1px; }
 .tsk-imp svg { width: 11px; height: 11px; }
+/* Регулярка: задача пришла по расписанию. Серый, не цветной: это происхождение
+   строки, а не сигнал к действию, и спорить с важностью и просрочкой не должен. */
+.tsk-rep { display: inline-flex; align-items: center; flex: none; margin-right: 6px;
+  color: var(--ink-3); vertical-align: -1px; }
+.tsk-rep svg { width: 11px; height: 11px; }
+.dy-rep { margin-top: 12px; }
+.rep-row { cursor: pointer; }
+.rep-row:hover { background: #FBFBFC; }
+.rep-ic { display: inline-flex; flex: none; width: 18px; justify-content: center; color: var(--ink-3); }
+.rep-ic svg { width: 12px; height: 12px; }
+.rep-add { padding: 10px 20px 14px; }
+.rep-wd { margin-top: 8px; align-self: flex-start; flex-wrap: wrap; }
+#rp-md { margin-top: 8px; }
+.rep-wd[hidden], #rp-md[hidden] { display: none; }
 
 /* Полоса-разделитель внутри списка дня: «Срочно и важно» и все остальное.
    Отдельным блоком наверху те же задачи не выносим — они задваивались бы. */
@@ -6053,6 +6067,15 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 }
 
 .sp-total { font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+/* Ввод расхода раскрывается внутри карточки «Каналы» на «Воронке»: панель тонирована,
+   чтобы читаться вставкой поверх таблицы, а не ее первой строкой. */
+.sp-panel { padding: 16px 24px 20px; background: var(--fill); border-top: 1px solid var(--line); }
+.sp-panel .sp-form { margin-top: 14px; }
+.sp-panel .sp-tbl { margin: 16px -24px -20px; background: var(--card); }
+.sp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sp-head .s { font-size: 12.5px; color: var(--ink-2); }
+.sp-panel .sp-total { background: none; }
+.sp-panel .empty { padding: 16px 0 0; text-align: left; min-height: 0; }
 .sp-chs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px;
   padding-top: 14px; border-top: 1px solid var(--line); }
 .sp-ch { display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 13px;
@@ -14868,6 +14891,15 @@ video.cs-media { background: #000; }
 .mg-lead { flex-wrap: wrap; }
 .mg-lead.off .mg-ht { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line-2); }
 .mg-hint { color: var(--amber-ink); font-weight: 600; }
+.mg-who-l { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
+.mg-who-l b { font-weight: 600; color: var(--ink); }
+.mg-who-l .mg-none { color: var(--ink-3); }
+.mg-lead.off .mg-who-l { color: var(--ink-3); }
+.mg-team { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 24px;
+  border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+.mg-back { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: none;
+  border-radius: 999px; padding: 3px 8px; font: inherit; color: var(--ink-2); cursor: pointer; }
+.mg-back:hover { color: var(--blue); border-color: var(--blue); }
 .mg-nl { margin: 0; gap: 6px; }
 .mg-nl .qchip { padding: 6px 11px; }
 /* подсказка системы: подтверждается одним нажатием, поэтому чип обведен */
@@ -15093,4 +15125,20 @@ video.cs-media { background: #000; }
 @media (max-width: 640px) {
   .m-name-row { flex-wrap: wrap; row-gap: 8px; }
   #m-callslot { order: 3; flex-basis: 100%; }
+}
+
+/* «Что нового»: запись с инструкцией. Кнопка — тихая ссылка-действие под текстом,
+   страница — модалка для чтения: строка той же длины, что у регламентов (70ch). */
+.nw-read { margin-top: 12px; display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px;
+  border: 0; border-radius: 10px; background: var(--blue-tint); color: var(--blue);
+  font: 600 13px/1.2 'Manrope', sans-serif; cursor: pointer;
+  transition: background .14s cubic-bezier(.22,1,.36,1), color .14s cubic-bezier(.22,1,.36,1); }
+.nw-read:hover { background: var(--blue); color: #fff; }
+.nw-read:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.al-card.nwp-card { max-width: 760px; }
+.nwp-body { max-height: min(72vh, 860px); overflow-y: auto; padding-top: 4px; }
+.nwp-body .fkb-body { margin-top: 0; }
+.nwp-body .fkb-body > .fkb-h:first-child { margin-top: 4px; }
+@media (max-width: 760px) {
+  .nwp-body { max-height: calc(86vh - 72px); }
 }
