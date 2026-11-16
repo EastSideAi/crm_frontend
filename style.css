@@ -3301,6 +3301,9 @@ button.tr-crumb:hover { color: var(--blue); }
 .brd-total .brd-who { font-size: 11px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--ink-3); }
 .brd-nav { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+/* «Период» в «Управлении»: два поля даты вместо стрелок */
+.mg-span .mg-dt { width: auto; padding: 7px 10px; font-size: 13px; }
+.mg-span .mg-dash { color: var(--ink-3); font-weight: 600; }
 .brd-label { font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em;
   min-width: 138px; text-align: center; }
 .brd-arrow { width: 28px; height: 28px; border-radius: 9px; }
@@ -13970,10 +13973,12 @@ body.office-full { overflow: hidden; }
 /* серая поверхность значит одно: исполнитель по ТЗ, а не ступень иерархии */
 .org-node.k-agent, .org-node.k-crew { background: var(--fill); border-color: transparent; }
 .org-node.k-agent:hover, .org-node.k-crew:hover { background: var(--card); border-color: #CFE0FF; }
-/* голова второй доски повторяет карточку с первой — здесь она тихая подпись,
-   а не вторая такая же кнопка с тем же счетчиком */
+/* голова второй доски: серая подложка. Если у руководителя есть задачи, она
+   кнопка со счетчиком (а в общем ряду та же карточка тихая), иначе подпись */
 .org-node.head { background: var(--fill); border-color: transparent; cursor: default; }
 .org-node.head:hover { background: var(--fill); border-color: transparent; }
+button.org-node.head { cursor: pointer; }
+button.org-node.head:hover { background: var(--card); border-color: #CFE0FF; }
 .org-cnt { margin-top: auto; padding-top: 8px; display: inline-flex; align-items: center; gap: 4px;
   font-size: 11.5px; font-weight: 600; color: var(--blue-d); }
 .org-cnt svg { transition: .14s var(--ease); }

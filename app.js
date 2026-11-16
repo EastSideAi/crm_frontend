@@ -3482,6 +3482,7 @@
           today: 'Кто пришел к нам <b>сегодня</b>, по всем каналам. Список обновляется сам раз в минуту.',
           leads: 'Новые лиды недели. Отметь текущих клиентов, дубли и спам: они уйдут из счета сквозной и план-факта, карточка останется.',
           day: 'Сверка дня: <b>вчерашние цифры против плана дня</b>. Зеленое — план сделан, желтое — близко, красное — сильно ниже.',
+          span: 'Цифры за <b>свои даты</b>. Рядом столько же дней перед ними.',
           month: 'Месяц против плана. Идущий месяц сверяется <b>с тем, что должны были сделать к этой дате</b>, а не со всем планом сразу.'
         })[mgTab()] || 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
         '</span></div></div>';
@@ -29356,6 +29357,7 @@
   }
   var FIN_UNITS = [['', 'не повторяется'], ['день', 'дней'], ['неделя', 'недель'],
                    ['месяц', 'месяцев'], ['год', 'лет']];
+  function finUsd(v) { return (Number(v) || 0).toFixed(2).replace('.', ',') + ' $'; }
   function finEvery(s) {
     if (!s.unit) return 'без повтора';
     var n = s.every || 1;
@@ -30231,7 +30233,12 @@
       var row = finSvcRow(srows, x.id);
       // Метку состояния держим в подстрочнике: в названии она первой попадает под
       // многоточие на узком экране, и строка теряет смысл.
-      var sub = (x.active ? '' : 'отключен · ') + esc(finEvery(x)) +
+      // OpenRouter пополняется, когда кончился баланс: дату и шаг ставит прогноз по
+      // расходу (бэкенд, раз в день), здесь показываем, из чего он сложился.
+      var fc = x.forecast;
+      var fcText = fc ? ' · по прогнозу, остаток ' + finUsd(fc.balance_usd) +
+        (fc.week_usd !== null ? ', за неделю ' + finUsd(fc.week_usd) : ', ' + finUsd(fc.per_day_usd) + ' в день') : '';
+      var sub = (x.active ? '' : 'отключен · ') + esc(finEvery(x)) + fcText +
         (x.counterparty ? ' · ' + esc(x.counterparty) : '') +
         (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact) : '') +
         (soon ? ' · пора платить' : '');
@@ -38458,6 +38465,8 @@
     { id: 'day', label: 'День', cap: 'marketing' },
     { id: 'rnp', label: 'Неделя' },
     { id: 'month', label: 'Месяц', cap: 'marketing' },
+    // Ольга 16.11.2026: «чтобы можно было выбрать свою дату»
+    { id: 'span', label: 'Период', cap: 'marketing' },
     { id: 'leads', label: 'Чистка лидов', cap: 'marketing' },
   ];
   var MG_WD = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
@@ -38557,9 +38566,9 @@
     '</div>';
     if (tab === 'leads') { view.innerHTML = '<div class="dash mg">' + head + mgLeadsHtml() + '</div>'; mgBind(view); return; }
     if (tab === 'today') { view.innerHTML = '<div class="dash mg">' + head + mgTodayHtml() + '</div>'; mgBind(view); return; }
-    if (tab === 'day' || tab === 'month') {
+    if (tab === 'day' || tab === 'month' || tab === 'span') {
       mgCross();
-      view.innerHTML = '<div class="dash mg">' + head + (tab === 'day' ? mgDayHtml() : mgMonthHtml()) + '</div>';
+      view.innerHTML = '<div class="dash mg">' + head + (tab === 'day' ? mgDayHtml() : tab === 'span' ? mgSpanHtml() : mgMonthHtml()) + '</div>';
       mgBind(view); return;
     }
 
@@ -38591,6 +38600,13 @@
     if (tab === 'day') {
       var sh = state.mgDayShift || 0;
       return n('mgdw', 'Днем раньше', sh < 1 ? 'Днем позже' : '', mgDayLabel(mgDay()), sh !== 0, 'Вчера');
+    }
+    if (tab === 'span') {
+      var sp = mgSpanDates(), mx = mgIso(new Date());
+      return '<div class="brd-nav mg-span">' +
+        '<input class="al-in mg-dt" type="date" data-mgfrom="1" max="' + mx + '" value="' + sp[0] + '" aria-label="С">' +
+        '<span class="mg-dash">–</span>' +
+        '<input class="al-in mg-dt" type="date" data-mgto="1" max="' + mx + '" value="' + sp[1] + '" aria-label="По"></div>';
     }
     if (tab === 'today') return '<div class="brd-nav"><span class="brd-label">' + esc(mgDayLabel(mgIso(new Date()))) + '</span></div>';
     if (tab === 'month') {
@@ -38875,6 +38891,27 @@
     });
   }
 
+  // Свой отрезок: по умолчанию последние 7 дней по сегодня. «С» позже «по» — меняем местами.
+  function mgSpanDates() {
+    var t = mgIso(new Date());
+    var a = state.mgFrom || mgAdd(t, -6), b = state.mgTo || t;
+    if (b > t) b = t;
+    if (a > b) { var x = a; a = b; b = x; }
+    return [a, b];
+  }
+  function mgSpanHtml() {
+    var sp = mgSpanDates(), a = sp[0], b = sp[1];
+    var n = Math.round((mgDate(b) - mgDate(a)) / 864e5) + 1;
+    var pb = mgAdd(a, -1), pa = mgAdd(a, -n);
+    return mgLadder({
+      title: 'Цифры за ' + mgSpan(a, b),
+      sub: 'рядом ' + mgSpan(pa, pb) + ', столько же дней перед ними',
+      cur: [a, b], prv: [pa, pb], plan: mgPlan(a, b), full: null, pf: true,
+      planLbl: 'План', curLbl: mgSpan(a, b), prvLbl: mgSpan(pa, pb),
+      note: 'План отрезка: доля месячного плана, которая приходится на эти дни.'
+    });
+  }
+
   /* Месяц: идущий — с первого числа по сегодня, план «к этой дате» и под ним цель
      месяца, рядом прошлый месяц за те же дни. Закрытый — целиком против прошлого. */
   function mgMonthHtml() {
@@ -39152,6 +39189,14 @@
           state[k[1]] = v === 'now' ? 0 : (state[k[1]] || 0) + Number(v);
           renderView();
         });
+      });
+    });
+    view.querySelectorAll('[data-mgfrom],[data-mgto]').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        if (!inp.value) return;
+        if (inp.dataset.mgfrom) state.mgFrom = inp.value; else state.mgTo = inp.value;
+        state._mgQ = null;
+        renderView();
       });
     });
     view.querySelectorAll('[data-mgdept]').forEach(function (b) {
@@ -43461,19 +43506,22 @@
      которая ничего не открывает, — обещание, которого экран не держит. */
   function orgNodeHtml(n, head) {
     var d = orgDuty(n.duties), cnt = d ? orgCount(d) : 0;
-    /* голова второй доски — та же карточка, что стояла рядом на первой. Второй
-       раз подряд она не кнопка и не повторяет подпись, которую уже несет
-       заголовок доски над ней: иначе человек видит один и тот же узел дважды */
+    /* голова второй доски — та же карточка, что стояла рядом на первой. Задачи
+       руководителя открываются с нее, на доске его отдела (Ольга 16.11.2026);
+       в общем ряду направлений та же карточка — без счетчика, чтобы один и тот
+       же список не висел на двух кнопках. Подпись, которую уже несет заголовок
+       доски, голова не повторяет */
+    var ownBoard = !!(n.person && ((n.children || []).length || n.crew));
     var inner = '<b>' + esc(head ? (n.headRole || n.title) : n.title) + '</b>' +
       (n.person ? '<i>' + esc(n.person) + '</i>' : '') +
       (n.role && !head ? '<small>' + esc(n.role) + '</small>' : '') +
       (n.from ? '<span class="org-from">' + esc(n.from) + '</span>' : '') +
       (n.note && !n.role ? '<small>' + esc(n.note) + '</small>' : '');
-    if (head) return '<div class="org-node head k-' + esc(n.kind || 'role') + '">' + inner + '</div>';
-    if (!d) {
+    if (head && !d) return '<div class="org-node head k-' + esc(n.kind || 'role') + '">' + inner + '</div>';
+    if (!d || (ownBoard && !head)) {
       return '<div class="org-node k-' + esc(n.kind || 'role') + ' flat">' + inner + '</div>';
     }
-    return '<button type="button" class="org-node k-' + esc(n.kind || 'role') + '" data-org="' + esc(n.duties) + '">' +
+    return '<button type="button" class="org-node' + (head ? ' head' : '') + ' k-' + esc(n.kind || 'role') + '" data-org="' + esc(n.duties) + '">' +
       inner + '<span class="org-cnt">' + cnt + ' ' + plural(cnt, 'задача', 'задачи', 'задач') + ic('go', 12) + '</span>' +
       '</button>';
   }
