@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0b2148">
+<title>Поступление в Китай на грант · ИСТСАЙД.РФ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="preload" as="image" href="img/hero-campus.webp">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231763c8'/><path d='M8 20l5-8 5 5 6-9' stroke='%23fff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+/* Презентация флагмана (поступление на грант, тариф Стандарт Плюс), 16.11.2026.
+   Собрана по консультации 15.11: каждый слайд отвечает на вопрос, который
+   родитель задал на встрече. Показывают с экрана на консультации, потом та же
+   ссылка уходит семье, поэтому все читается и на телефоне.
+   Решения Павла (16.11): цены и состав берем из портала CRM; цену показываем
+   сначала полную, скидку открывает ведущий нажатием; гарантия — ребенок в
+   любом случае уедет учиться в Китай, куда и с каким грантом решает профиль;
+   про платную диагностику не пишем, сейчас она бесплатная для всех.
+   Движок и палитра — те же, что у презентации отдела продаж (sales-intro). */
+:root{
+  --ink:#182440; --soft:#4a5771; --mute:#5c6982;
+  --blue:#1763c8; --blue-d:#0f4ea6; --blue-soft:#e7effc;
+  --bg:#eef2fc; --card:rgba(255,255,255,.8); --line:rgba(74,111,173,.18);
+  --amber:#8a5b12; --amber-soft:#fbf1dc;
+  --r:20px; --r-s:14px;
+  font-family:'SF Pro Display','Inter',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  color:var(--ink); color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0; overflow:hidden; background:var(--bg); -webkit-font-smoothing:antialiased;
+  font-synthesis:none}
+.num, .date, .trio, .pr-old, .pr-new, .row .v, .count, .stg .no{font-variant-numeric:tabular-nums}
+.nw{white-space:nowrap}
+h1,h2,h3,p,ul,li,figure{margin:0}
+h1,h2,h3{text-wrap:balance; letter-spacing:-.035em; font-weight:660}
+ul{padding:0; list-style:none}
+button{font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent; color:inherit}
+img{display:block; max-width:100%}
+:focus-visible{outline:2px solid var(--blue); outline-offset:3px}
+
+/* ── каркас колоды ──────────────────────────────────────────────────────── */
+.deck{position:fixed; inset:0}
+.slide{
+  position:absolute; inset:0; display:grid; align-content:safe center;
+  padding:clamp(26px,4vh,58px) clamp(24px,5vw,92px) clamp(84px,10vh,112px);
+  opacity:0; visibility:hidden; transform:translateY(16px);
+  transition:opacity .4s ease, transform .4s cubic-bezier(.22,1,.36,1), visibility .4s;
+  overflow-y:auto; overscroll-behavior:contain;
+}
+.slide.on{opacity:1; visibility:visible; transform:none}
+.slide > *:not(.shot-bg):not(.sky){width:min(1180px,100%); margin-inline:auto; position:relative; z-index:1}
+.slide > .hold{max-width:min(720px,74%); margin-inline:0}
+@media (max-width:860px){.slide > .hold{max-width:100%}}
+.slide.dark{color:#fff;
+  background:
+    radial-gradient(120% 90% at 16% -12%, rgba(52,110,196,.44), transparent 62%),
+    radial-gradient(90% 70% at 92% 108%, rgba(24,68,140,.52), transparent 66%),
+    #0b2148;
+}
+.slide.tint{background:linear-gradient(168deg, #e3ebfa 0%, #eef2fc 58%, #e8eefb 100%)}
+
+.slide.on .rise{animation:rise .5s cubic-bezier(.22,1,.36,1) both}
+.slide.on .rise:nth-child(2){animation-delay:.06s}
+.slide.on .rise:nth-child(3){animation-delay:.12s}
+.slide.on .rise:nth-child(4){animation-delay:.18s}
+@keyframes rise{from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none}}
+
+/* ── фото во весь слайд ─────────────────────────────────────────────────── */
+.shot-bg{position:absolute; inset:0; overflow:hidden; z-index:0}
+.shot-bg img{width:100%; height:100%; object-fit:cover; object-position:var(--pos,50% 50%)}
+.slide.on .shot-bg img{animation:drift 22s ease-out both}
+@keyframes drift{from{transform:scale(1.07)} to{transform:scale(1)}}
+.shot-bg::after{content:''; position:absolute; inset:0;
+  background:
+    linear-gradient(100deg, rgba(8,26,58,.94) 0%, rgba(8,26,58,.84) 42%, rgba(8,26,58,.4) 70%, rgba(8,26,58,.18) 100%),
+    linear-gradient(to top, rgba(8,26,58,.55), transparent 42%);
+}
+
+/* ── живой фон темных слайдов без фото ──────────────────────────────────── */
+.sky{position:absolute; inset:0; overflow:hidden; z-index:0; pointer-events:none}
+.sky i{position:absolute; left:-10%; right:-10%; top:-100%; height:200%; display:block; background-repeat:repeat; will-change:transform}
+.sky i:nth-child(1){
+  background-image:
+    radial-gradient(1.5px 1.5px at 34px 28px, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1.5px 1.5px at 178px 96px, rgba(214,236,255,.48), transparent 60%),
+    radial-gradient(2px 2px at 92px 168px, rgba(255,255,255,.42), transparent 60%);
+  background-size:240px 220px; animation:sky 38s linear infinite; opacity:.85}
+.sky i:nth-child(2){
+  background-image:
+    radial-gradient(1px 1px at 20px 60px, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1px 1px at 120px 20px, rgba(190,222,255,.42), transparent 60%);
+  background-size:160px 150px; animation:sky 64s linear infinite; opacity:.65}
+@keyframes sky{from{transform:translate3d(0,0,0)} to{transform:translate3d(0,50%,0)}}
+.sky b{position:absolute; border-radius:50%; filter:blur(60px); display:block}
+.sky b:nth-of-type(1){left:-14%; top:6%; width:52%; height:58%;
+  background:radial-gradient(50% 50% at 50% 50%, rgba(60,132,226,.32), transparent 70%);
+  animation:glow 26s ease-in-out infinite alternate}
+.sky b:nth-of-type(2){right:-12%; bottom:-16%; width:56%; height:62%;
+  background:radial-gradient(50% 50% at 50% 50%, rgba(126,186,255,.2), transparent 70%);
+  animation:glow 34s ease-in-out infinite alternate-reverse}
+@keyframes glow{from{transform:translate3d(0,0,0) scale(1)} to{transform:translate3d(6%,-6%,0) scale(1.16)}}
+@media (prefers-reduced-motion:reduce){
+  .slide{transition:opacity .01s}
+  .slide.on .rise, .shot-bg img, .sky i, .sky b{animation:none !important}
+}
+
+/* ── типографика ────────────────────────────────────────────────────────── */
+.kicker{display:block; margin-bottom:14px; font-size:clamp(14px,1.2vw,16px); font-weight:600; color:var(--blue-d)}
+.dark .kicker{color:rgba(196,220,255,.92)}
+h1{font-size:clamp(36px,5.6vw,74px); line-height:1.03}
+h2{font-size:clamp(27px,3.6vw,46px); line-height:1.08; max-width:30ch}
+.split h2{font-size:clamp(27px,3.2vw,42px)}
+.lead{margin-top:18px; max-width:56ch; font-size:clamp(16px,1.5vw,20px); line-height:1.55; color:var(--soft)}
+.dark .lead{color:rgba(255,255,255,.88)}
+.src{margin-top:clamp(18px,3vh,28px); font-size:12.5px; line-height:1.5; color:var(--mute); max-width:90ch}
+.dark .src{color:rgba(255,255,255,.62)}
+.hint{display:inline-flex; align-items:center; gap:8px; margin-top:14px; font-size:13px; color:var(--mute)}
+.hint::before{content:''; width:6px; height:6px; border-radius:50%; background:var(--blue); animation:pulse 1.8s ease-in-out infinite}
+.dark .hint{color:rgba(255,255,255,.7)}
+.dark .hint::before{background:#9cc4ff}
+@keyframes pulse{0%,100%{opacity:.35} 50%{opacity:1}}
+
+/* ── числа ──────────────────────────────────────────────────────────────── */
+.nums{display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:clamp(18px,2.6vw,40px); margin-top:clamp(26px,5vh,52px)}
+.num b{display:block; font-size:clamp(40px,6vw,82px); line-height:1; font-weight:680; letter-spacing:-.05em}
+.num.quiet b{font-size:clamp(30px,4vw,54px); color:var(--soft)}
+.dark .num.quiet b{color:rgba(255,255,255,.72)}
+.num span{display:block; margin-top:14px; font-size:clamp(14.5px,1.25vw,16.5px); line-height:1.45; color:var(--soft); max-width:30ch}
+.dark .num span{color:rgba(255,255,255,.84)}
+
+/* ── карточки и сетки ───────────────────────────────────────────────────── */
+.grid{display:grid; gap:14px; margin-top:clamp(22px,3.6vh,36px)}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.card{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:clamp(18px,2.4vh,26px) clamp(18px,1.7vw,24px)}
+.card h3{font-size:clamp(17px,1.5vw,20px); line-height:1.25}
+.card p{margin-top:9px; font-size:clamp(14.5px,1.1vw,16px); line-height:1.5; color:var(--soft)}
+.card .n{display:block; font-size:13px; font-weight:660; color:var(--blue-d); margin-bottom:10px}
+.dark .card{background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.22)}
+.dark .card p{color:rgba(255,255,255,.84)}
+.dark .card .n{color:#9cc4ff}
+
+/* раскрывающаяся карточка: «что делаем мы» */
+.flip{text-align:left; display:flex; flex-direction:column; transition:border-color .2s, background .2s}
+.flip:hover{border-color:rgba(23,99,200,.4)}
+.flip .more{display:grid; grid-template-rows:0fr; transition:grid-template-rows .35s cubic-bezier(.22,1,.36,1)}
+.flip .more > div{overflow:hidden}
+.flip .more p{margin-top:12px; padding-top:12px; border-top:1px solid var(--line); color:var(--ink)}
+.flip .more p b{display:block; font-size:12.5px; font-weight:660; color:var(--blue-d); margin-bottom:4px}
+.flip[aria-expanded=true]{background:#fff; border-color:rgba(23,99,200,.36)}
+.flip[aria-expanded=true] .more{grid-template-rows:1fr}
+.flip .plus{margin-top:auto; padding-top:14px; font-size:13px; font-weight:600; color:var(--blue-d)}
+.flip[aria-expanded=true] .plus{display:none}
+
+/* ── фото рядом с текстом ───────────────────────────────────────────────── */
+.split{display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr); gap:clamp(22px,3.6vw,56px); align-items:center}
+.split .pic{border-radius:var(--r); overflow:hidden; aspect-ratio:4/3; background:#dfe7f7;
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 10%); mask-image:linear-gradient(90deg, transparent, #000 10%)}
+.split .pic img{width:100%; height:100%; object-fit:cover}
+
+/* ── списки-строки ──────────────────────────────────────────────────────── */
+.rows{margin-top:clamp(20px,3.4vh,32px); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--line); display:grid; gap:1px}
+.row{background:rgba(255,255,255,.88); padding:17px 22px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:20px; align-items:center}
+.row .t{font-size:clamp(15.5px,1.3vw,17px); font-weight:620}
+.row .d{margin-top:5px; font-size:14.5px; line-height:1.45; color:var(--soft)}
+.row .v{font-size:clamp(15px,1.3vw,17px); font-weight:640; white-space:nowrap; text-align:right}
+.ticks{display:grid; margin-top:22px; max-width:60ch}
+.ticks li{padding:13px 0; border-top:1px solid var(--line); font-size:clamp(15px,1.3vw,17.5px); line-height:1.5}
+.ticks li:last-child{border-bottom:1px solid var(--line)}
+.dark .ticks li{border-color:rgba(255,255,255,.2)}
+
+/* ── даты экзамена ──────────────────────────────────────────────────────── */
+.dates{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-top:clamp(22px,3.6vh,34px)}
+.date{border:1px solid rgba(255,255,255,.22); border-radius:var(--r-s); padding:16px 16px 14px; background:rgba(255,255,255,.08)}
+.date b{display:block; font-size:clamp(22px,2.4vw,32px); font-weight:660; letter-spacing:-.04em}
+.date span{display:block; margin-top:4px; font-size:13.5px; color:rgba(255,255,255,.76)}
+.date.first{background:#fff; color:var(--ink); border-color:#fff}
+.date.first span{color:var(--blue-d); font-weight:600}
+.trio{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:clamp(16px,2.4vw,36px); margin-top:clamp(24px,4vh,40px)}
+.trio div b{display:block; font-size:clamp(24px,2.6vw,34px); font-weight:660; letter-spacing:-.04em}
+.trio div span{display:block; margin-top:6px; font-size:14.5px; line-height:1.45; color:rgba(255,255,255,.8); max-width:28ch}
+
+/* ── переключатель-сегмент ──────────────────────────────────────────────── */
+.seg{display:inline-flex; gap:4px; padding:4px; border-radius:14px; background:rgba(24,36,64,.06); border:1px solid var(--line); margin-top:clamp(20px,3.4vh,30px); flex-wrap:wrap}
+.seg button{border:0; background:transparent; padding:10px 16px; border-radius:10px; font-size:14.5px; font-weight:600; color:var(--soft); transition:background .2s, color .2s}
+.seg button[aria-pressed=true]{background:#fff; color:var(--ink)}
+.proj{display:grid; grid-template-columns:260px minmax(0,1fr); gap:clamp(16px,2.4vw,32px); align-items:start; margin-top:clamp(20px,3.4vh,30px)}
+.proj .seg{margin-top:0; flex-direction:column; display:flex}
+.proj .seg button{text-align:left; padding:14px 16px}
+.proj .seg-panel{margin-top:0}
+.seg-panel{margin-top:16px; border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:clamp(20px,3vh,30px) clamp(20px,2vw,30px); max-width:780px}
+.seg-panel h3{font-size:clamp(19px,1.8vw,24px)}
+.seg-panel p{margin-top:10px; font-size:clamp(15px,1.3vw,17px); line-height:1.55; color:var(--soft); max-width:62ch}
+.seg-panel .tag{display:inline-block; margin-top:14px; font-size:13px; font-weight:600; color:var(--blue-d)}
+.swap{animation:swap .35s cubic-bezier(.22,1,.36,1)}
+@keyframes swap{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
+
+/* ── год до зачисления ──────────────────────────────────────────────────── */
+.tl{position:relative; display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); margin-top:clamp(30px,5vh,48px)}
+.tl::before{content:''; position:absolute; left:calc(100%/14); right:calc(100%/14); top:11px; height:2px; background:linear-gradient(90deg, var(--blue), rgba(23,99,200,.25))}
+.tl button{position:relative; border:0; background:none; padding:0 4px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px}
+.tl i{width:24px; height:24px; border-radius:50%; background:var(--bg); border:2px solid var(--blue); transition:background .2s, transform .2s}
+.slide.tint .tl i{background:#e9effb}
+.tl button[aria-pressed=true] i{background:var(--blue); transform:scale(1.15)}
+.tl b{font-size:clamp(13px,1.1vw,15px); font-weight:640; line-height:1.3}
+.tl button[aria-pressed=true] b{color:var(--blue-d)}
+.tl-card{margin-top:clamp(24px,4vh,36px); border-top:2px solid var(--blue); padding-top:clamp(18px,3vh,26px); display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); gap:clamp(16px,3vw,48px)}
+.tl-card p{margin-top:0}
+.tl-card h3{font-size:clamp(19px,1.8vw,24px)}
+.tl-card p{margin-top:10px; font-size:clamp(15px,1.3vw,17px); line-height:1.55; color:var(--soft)}
+
+/* ── уровни A, B, C ─────────────────────────────────────────────────────── */
+.abc{display:grid; gap:12px; margin-top:clamp(22px,3.6vh,34px); max-width:880px}
+.abc button{display:grid; grid-template-columns:56px minmax(0,1fr); gap:18px; align-items:start; text-align:left; border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:18px 22px}
+.abc .l{width:56px; height:56px; border-radius:16px; display:grid; place-items:center; font-size:26px; font-weight:700; background:var(--blue-soft); color:var(--blue-d)}
+.abc button:nth-child(1) .l{background:var(--blue); color:#fff}
+.abc h3{font-size:clamp(17px,1.5vw,20px); margin-top:4px}
+.abc .k{display:block; margin-top:4px; font-size:14px; color:var(--mute)}
+.abc .more{display:grid; grid-template-rows:0fr; transition:grid-template-rows .35s cubic-bezier(.22,1,.36,1)}
+.abc .more > div{overflow:hidden}
+.abc .more p{margin-top:10px; font-size:15px; line-height:1.55; color:var(--soft); max-width:64ch}
+.abc button[aria-expanded=true]{background:#fff; border-color:rgba(23,99,200,.36)}
+.abc button[aria-expanded=true] .more{grid-template-rows:1fr}
+
+/* ── состав тарифа ──────────────────────────────────────────────────────── */
+.tar-head{display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:18px}
+.tar-head .seg{margin-top:0}
+.tar-sum{margin-top:clamp(16px,2.6vh,24px); font-size:clamp(15px,1.3vw,17px); color:var(--soft)}
+.tar-sum b{color:var(--ink)}
+.stg{margin-top:14px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px 10px}
+@media (max-width:1280px){.stg{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:1060px){.stg{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stg li{display:grid; grid-template-columns:28px minmax(0,1fr); gap:11px; align-items:start; padding:10px 12px; border-radius:var(--r-s); background:rgba(255,255,255,.72); border:1px solid var(--line); transition:opacity .25s, background .25s}
+.stg .no{width:28px; height:28px; border-radius:9px; display:grid; place-items:center; font-size:13px; font-weight:660; background:var(--blue-soft); color:var(--blue-d)}
+.stg b{display:block; font-size:15px; font-weight:620; line-height:1.3}
+.stg span{display:block; margin-top:3px; font-size:14px; line-height:1.45; color:var(--soft)}
+.stg li.off{opacity:.42; background:transparent}
+.stg li.off span{font-style:normal}
+.stg li.up .no{background:var(--blue); color:#fff}
+
+/* ── цена ───────────────────────────────────────────────────────────────── */
+.price{margin-top:clamp(26px,4.4vh,44px); min-height:clamp(200px,26vh,250px); display:grid; align-content:start}
+.pr-old{position:relative; display:inline-block; font-size:clamp(50px,8vw,112px); line-height:1; font-weight:680; letter-spacing:-.05em; transition:color .5s, font-size .5s}
+.pr-old::after{content:''; position:absolute; left:-2%; right:-2%; top:52%; height:3px; border-radius:2px; background:#9cc4ff; transform:scaleX(0); transform-origin:left; transition:transform .5s .1s cubic-bezier(.22,1,.36,1)}
+.price.open .pr-old{color:rgba(255,255,255,.5); font-size:clamp(26px,3vw,40px)}
+.price.open .pr-old::after{transform:scaleX(1)}
+.pr-cap{display:block; margin-top:14px; font-size:15px; color:rgba(255,255,255,.78)}
+.pr-btn{justify-self:start; margin-top:22px; border:0; border-radius:14px; background:#fff; color:#0b2148; font-size:17px; font-weight:640; padding:16px 24px}
+.pr-btn:hover{background:#e7effc}
+.pr-new{display:none}
+.price.open .pr-btn{display:none}
+.price.open .pr-cap{display:none}
+.price.open .pr-new{display:block; margin-top:10px; animation:rise .6s cubic-bezier(.22,1,.36,1) both}
+.pr-new small{display:none}
+.pr-new b{display:block; font-size:clamp(50px,8vw,112px); line-height:1; font-weight:700; letter-spacing:-.05em}
+.pr-new span{display:block; margin-top:12px; font-size:15px; color:rgba(255,255,255,.84)}
+.pay b span{display:inline; margin:0; color:inherit}
+.pay .p-sale{display:none}
+.deal.open .pay .p-full{display:none}
+.deal.open .pay .p-sale{display:inline}
+.pay{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:clamp(26px,4.4vh,40px)}
+.pay div{border:1px solid rgba(255,255,255,.22); border-radius:var(--r-s); padding:16px 18px; background:rgba(255,255,255,.08)}
+.pay b{display:block; font-size:16px; font-weight:640}
+.pay span{display:block; margin-top:5px; font-size:14.5px; line-height:1.45; color:rgba(255,255,255,.8)}
+
+/* ── гарантия ───────────────────────────────────────────────────────────── */
+.promise{margin-top:clamp(24px,4vh,40px); display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:clamp(18px,2.6vw,40px); align-items:start}
+.promise .main{border-radius:var(--r); padding:clamp(24px,3.6vh,36px) clamp(22px,2.4vw,34px); background:#0b2148; color:#fff}
+.promise .main h3{font-size:clamp(19px,1.7vw,22px); line-height:1.12; letter-spacing:-.035em}
+.promise .main p{margin-top:14px; font-size:clamp(15px,1.3vw,17.5px); line-height:1.55; color:rgba(255,255,255,.86)}
+
+/* ── вопросы ────────────────────────────────────────────────────────────── */
+.faq{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; align-items:start; margin-top:clamp(22px,3.6vh,34px)}
+.faq details{border:1px solid var(--line); border-radius:var(--r-s); background:var(--card); padding:0 22px}
+.faq summary{list-style:none; cursor:pointer; padding:18px 0; display:flex; justify-content:space-between; gap:16px; font-size:clamp(16px,1.4vw,18.5px); font-weight:620}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:'+'; flex:none; width:28px; height:28px; border-radius:8px; display:grid; place-items:center; background:var(--blue-soft); color:var(--blue-d); font-weight:600; transition:transform .25s}
+.faq details[open]{background:#fff}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq details p{padding:0 0 18px; margin-top:-4px; font-size:clamp(15px,1.25vw,16.5px); line-height:1.6; color:var(--soft); max-width:70ch}
+
+/* ── шаги ───────────────────────────────────────────────────────────────── */
+.steps{display:grid; gap:12px; margin-top:clamp(20px,3.4vh,30px)}
+.step{display:grid; grid-template-columns:auto minmax(0,1fr); gap:16px; align-items:start; border:1px solid rgba(255,255,255,.22); border-radius:var(--r-s); padding:16px 18px; background:rgba(255,255,255,.1)}
+.step .n{width:32px; height:32px; border-radius:10px; background:#fff; color:#123f85; display:grid; place-items:center; font-size:15px; font-weight:700}
+.step h3{font-size:17px}
+.step p{margin-top:5px; font-size:14.5px; line-height:1.5; color:rgba(255,255,255,.82)}
+.split.last{grid-template-columns:minmax(0,1fr) minmax(0,.62fr)}
+.pic-r{border-radius:var(--r); overflow:hidden; aspect-ratio:1/1; max-height:62vh}
+.pic-r img{width:100%; height:100%; object-fit:cover}
+
+/* ── панель управления ──────────────────────────────────────────────────── */
+.bar{position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:20;
+  display:flex; align-items:center; gap:14px; height:52px; padding:0 8px 0 18px;
+  border:1px solid rgba(255,255,255,.7); border-radius:16px;
+  background:rgba(240,245,255,.78); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  max-width:calc(100% - 24px)}
+.bar .brand{font-size:13.5px; font-weight:700; letter-spacing:-.3px; white-space:nowrap}
+.dots{display:flex; gap:5px; overflow:auto; scrollbar-width:none}
+.dots::-webkit-scrollbar{display:none}
+.dots button{width:8px; height:8px; padding:0; border:0; border-radius:50%; background:rgba(24,36,64,.22); transition:background .18s, transform .18s; flex:none}
+.dots button[aria-current=true]{background:var(--blue); transform:scale(1.4)}
+.arrows{display:flex; gap:6px}
+.arrows button{width:38px; height:38px; border-radius:11px; border:1px solid var(--line); background:rgba(255,255,255,.86); font-size:17px; line-height:1; display:grid; place-items:center}
+.arrows button:disabled{opacity:.36; cursor:default}
+.bar{transition:background .3s, border-color .3s}
+body.on-dark .bar{background:rgba(11,33,72,.86); border-color:rgba(255,255,255,.18); color:#fff}
+body.on-dark .count{color:rgba(255,255,255,.75)}
+body.on-dark .dots button{background:rgba(255,255,255,.28)}
+body.on-dark .dots button[aria-current=true]{background:#9cc4ff}
+body.on-dark .arrows button{background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2); color:#fff}
+.prog{display:none}
+.count{font-size:13px; color:var(--soft); white-space:nowrap; min-width:44px; text-align:right}
+
+@media (max-width:900px){
+  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g3{grid-template-columns:1fr}
+  .nums{grid-template-columns:1fr; gap:22px}
+  .dates{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dates .date:first-child{grid-column:1/-1}
+  .trio{grid-template-columns:1fr; gap:16px}
+  .split{grid-template-columns:1fr}
+  .split .pic{aspect-ratio:16/9; -webkit-mask-image:linear-gradient(180deg, transparent, #000 14%); mask-image:linear-gradient(180deg, transparent, #000 14%); order:-1}
+  .stg{grid-template-columns:1fr}
+  .price, .pay, .promise{grid-template-columns:1fr}
+  .tl{grid-template-columns:1fr; gap:6px}
+  .tl::before{left:11px; right:auto; top:12px; bottom:12px; width:2px; height:auto; background:linear-gradient(180deg, var(--blue), rgba(23,99,200,.25))}
+  .tl button{flex-direction:row; text-align:left; gap:14px; padding:4px 0}
+  .pic-r{display:none}
+  .split.last{grid-template-columns:1fr}
+  .seg button{padding:8px 11px; font-size:13.5px}
+}
+@media (max-width:820px){
+  .bar{gap:10px; padding:0 8px 0 12px; height:48px}
+  .bar .brand, .dots{display:none}
+  .bar{background:#f4f7fe; flex:1; left:12px; right:12px; transform:none; justify-content:space-between}
+  body.on-dark .bar{background:#0f2853}
+  .prog{display:block; position:absolute; left:14px; right:14px; top:0; height:2px; border-radius:2px; background:rgba(24,36,64,.1); overflow:hidden}
+  .prog i{display:block; height:100%; background:var(--blue); transition:width .3s}
+  body.on-dark .prog{background:rgba(255,255,255,.18)}
+  body.on-dark .prog i{background:#9cc4ff}
+  .slide{padding-bottom:128px}
+  .slide.on .shot-bg img{object-position:var(--mpos,var(--pos,50% 50%))}
+  .split .pic img{object-position:var(--mpos,50% 50%) !important}
+  .proj{grid-template-columns:1fr}
+  .proj .seg{flex-direction:row}
+  .proj .seg button{text-align:center; flex:1}
+  .tl-card{grid-template-columns:1fr; gap:8px}
+  .faq{grid-template-columns:1fr}
+  .g2, .g4{grid-template-columns:1fr}
+  .row{grid-template-columns:1fr; gap:6px}
+  .row .v{text-align:left}
+}
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- 1 · титул -->
+  <section class="slide dark on">
+    <div class="shot-bg" aria-hidden="true"><img src="img/hero-campus.webp" alt="" style="--pos:62% 50%; --mpos:74% 50%"></div>
+    <div class="hold">
+      <span class="kicker rise">ИСТСАЙД.РФ · с 2016 года</span>
+      <h1 class="rise">Поступление в Китай на грант</h1>
+      <p class="lead rise">Стандарт Плюс: от выбора вуза до первого месяца в общежитии</p>
+    </div>
+  </section>
+
+  <!-- 2 · россияне едут в Китай -->
+  <section class="slide tint">
+    <div>
+      <span class="kicker rise">Почему сейчас</span>
+      <h2 class="rise">Россиян в вузах Китая все больше</h2>
+      <div class="nums">
+        <div class="num"><b>21 000+</b><span>россиян учатся в вузах Китая в 2024/25 году</span></div>
+        <div class="num quiet"><b>100 000</b><span>студентов в обмене между Россией и Китаем: такую цель поставили на 2030 год</span></div>
+        <div class="num quiet"><b>380 000</b><span>иностранных студентов в Китае, почти в полтора раза больше, чем в 2021 году</span></div>
+      </div>
+      <p class="src">Источники: министр науки и высшего образования РФ В. Фальков, ТАСС, 26.08.2025; Министерство образования КНР, China Daily, 14.04.2026</p>
+    </div>
+  </section>
+
+  <!-- 3 · почему Китай для инженерии -->
+  <section class="slide">
+    <div class="split">
+      <div>
+        <span class="kicker rise">Почему Китай</span>
+        <h2 class="rise">Инженерию учат на английском</h2>
+        <p class="lead rise">С первого курса, без отдельного года китайского</p>
+        <ul class="ticks rise">
+          <li>Ребенок сразу учится в языковой среде</li>
+          <li>Программы на английском есть в Харбинском политехническом, Цинхуа, Пекинском университете, вузах Нанкина</li>
+          <li>Грант покрывает учебу и общежитие, поэтому сравнивать стоит с платным местом в России, а не с бюджетом</li>
+        </ul>
+      </div>
+      <div class="pic rise"><img src="img/city-future.webp" alt="Девушка смотрит на вечерний город с балкона" style="object-position:62% 40%"></div>
+    </div>
+  </section>
+
+  <!-- 4 · четыре фактора гранта -->
+  <section class="slide tint">
+    <div>
+      <span class="kicker rise">Как дают грант</span>
+      <h2 class="rise">За что Китай дает грант</h2>
+      <div class="grid g4" id="factors">
+        <button class="card flip" type="button" aria-expanded="false">
+          <span class="n">01</span><h3>Язык</h3><p>Экзамен Duolingo, цель <span class="nw">115–120 баллов</span>. Это уверенный B2</p>
+          <div class="more"><div><p><b>Что делаем мы</b>Тест уровня, план под него, тренажер и видеоинтенсив по формату экзамена</p></div></div>
+          <span class="plus">Что делаем мы</span>
+        </button>
+        <button class="card flip" type="button" aria-expanded="false">
+          <span class="n">02</span><h3>Экзамен CSCA</h3><p>Математика, для инженерии еще физика</p>
+          <div class="more"><div><p><b>Что делаем мы</b>Диагностика уровня, тренажер по темам и видеоинтенсив с отработкой после каждого занятия</p></div></div>
+          <span class="plus">Что делаем мы</span>
+        </button>
+        <button class="card flip" type="button" aria-expanded="false">
+          <span class="n">03</span><h3>Портфолио</h3><p>Олимпиады, конкурсы, <span class="nw">онлайн-курсы</span> китайских вузов</p>
+          <div class="more"><div><p><b>Что делаем мы</b>Говорим, какие курсы и сертификаты добрать под направление, и проверяем, что они засчитаются</p></div></div>
+          <span class="plus">Что делаем мы</span>
+        </button>
+        <button class="card flip" type="button" aria-expanded="false">
+          <span class="n">04</span><h3>Свой проект</h3><p>Исследование, статья или продукт по будущей специальности</p>
+          <div class="more"><div><p><b>Что делаем мы</b>Подбираем тему и доводим до результата, который ребенок покажет на интервью</p></div></div>
+          <span class="plus">Что делаем мы</span>
+        </button>
+      </div>
+      <p class="hint">Нажмите на карточку</p>
+    </div>
+  </section>
+
+  <!-- 5 · язык -->
+  <section class="slide">
+    <div class="split">
+      <div>
+        <span class="kicker rise">Язык</span>
+        <h2 class="rise">Для гранта хватит английского на B2</h2>
+        <ul class="ticks rise">
+          <li>Duolingo сдается из дома, в любой день и сколько угодно раз</li>
+          <li>Одна попытка стоит около 70 долларов, в разы дешевле IELTS</li>
+          <li>Начинаем с теста уровня на платформе: за 60 минут видно, сколько не хватает</li>
+        </ul>
+      </div>
+      <div class="pic rise"><img src="img/lang-desk.webp" alt="Ученик в наушниках занимается за столом" style="--mpos:50% 12%"></div>
+    </div>
+  </section>
+
+  <!-- 6 · CSCA -->
+  <section class="slide dark">
+    <div>
+      <span class="kicker rise">Математика</span>
+      <h2 class="rise">Экзамен CSCA сдают из дома</h2>
+      <p class="lead rise">В фиксированные даты, пять раз за год</p>
+      <div class="dates">
+        <div class="date first"><b>19–20</b><span>декабря, ближайшая</span></div>
+        <div class="date"><b>23–24</b><span>января</span></div>
+        <div class="date"><b>13–14</b><span>марта</span></div>
+        <div class="date"><b>24–25</b><span>апреля</span></div>
+        <div class="date"><b>26–27</b><span>июня</span></div>
+      </div>
+      <div class="trio">
+        <div><b>48 вопросов</b><span>за 60 минут, на английском языке</span></div>
+        <div><b>450 юаней</b><span>за один предмет, 750 за два</span></div>
+        <div><b>5 пробников</b><span>по математике, видеокурс и тренажер на платформе</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 · проект -->
+  <section class="slide">
+    <div>
+      <span class="kicker rise">Проект</span>
+      <h2 class="rise">Проект: три пути на выбор</h2>
+      <p class="lead rise">Выбираете под нагрузку ребенка</p>
+      <div class="proj">
+      <div class="seg" id="projSeg" role="group" aria-label="Путь проекта">
+        <button type="button" aria-pressed="true" data-i="0">С командой</button>
+        <button type="button" aria-pressed="false" data-i="1">Статья</button>
+        <button type="button" aria-pressed="false" data-i="2">Своя тема</button>
+      </div>
+      <div class="seg-panel" id="projPanel"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · год до зачисления -->
+  <section class="slide tint">
+    <div>
+      <span class="kicker rise">План года</span>
+      <h2 class="rise">Что и когда происходит до сентября</h2>
+      <div class="tl" id="tl" role="group" aria-label="Месяцы"></div>
+      <div class="tl-card" id="tlCard"></div>
+    </div>
+  </section>
+
+  <!-- 9 · A, B, C -->
+  <section class="slide">
+    <div>
+      <span class="kicker rise">Список вузов</span>
+      <h2 class="rise">7 вузов трех уровней</h2>
+      <p class="lead rise">Чтобы у ребенка всегда был запасной путь</p>
+      <div class="abc" id="abc">
+        <button type="button" aria-expanded="true">
+          <span class="l">A</span>
+          <span><h3>Вузы мечты</h3><span class="k">2–3 вуза, высокие требования</span>
+          <span class="more"><span style="display:block"><p>Самые сильные вузы, куда профиль ребенка дотягивает или почти дотягивает. Сюда подаем первыми.</p></span></span></span>
+        </button>
+        <button type="button" aria-expanded="false">
+          <span class="l">B</span>
+          <span><h3>Уверенный выбор</h3><span class="k">Средние требования</span>
+          <span class="more"><span style="display:block"><p>Хорошие вузы, где по языку и экзамену ребенок проходит с запасом.</p></span></span></span>
+        </button>
+        <button type="button" aria-expanded="false">
+          <span class="l">C</span>
+          <span><h3>Надежный путь</h3><span class="k">Через языковой год</span>
+          <span class="more"><span style="display:block"><p>Если по ходу года видим, что язык или экзамен не дотягивают, заранее усиливаем этот уровень. Поэтому поездка в Китай не зависит от одного экзамена.</p></span></span></span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 · документы и виза -->
+  <section class="slide tint">
+    <div>
+      <span class="kicker rise">Бумажная часть</span>
+      <h2 class="rise">Документы и визу ведем мы</h2>
+      <p class="lead rise">От семьи нужны только сканы</p>
+      <div class="grid g3">
+        <div class="card rise"><span class="n">Документы</span><h3>Переводим и заверяем весь пакет</h3><p>Вы присылаете сканы, мы делаем переводы и нотариальное заверение</p></div>
+        <div class="card rise"><span class="n">Медицина</span><h3>Медицинскую справку берем на себя</h3><p>По форме, которую требует китайский вуз</p></div>
+        <div class="card rise"><span class="n">Виза</span><h3>Заполняем анкету и записываем в визовый центр</h3><p>Ребенок приходит только сдать биометрию</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 · что входит -->
+  <section class="slide">
+    <div>
+      <div class="tar-head">
+        <div>
+          <span class="kicker rise">Что входит</span>
+          <h2 class="rise">Что делаем мы на каждом этапе</h2>
+        </div>
+        <div class="seg" id="tarSeg" role="group" aria-label="Тариф">
+          <button type="button" aria-pressed="false" data-t="std">Стандарт</button>
+          <button type="button" aria-pressed="true" data-t="plus">Стандарт Плюс</button>
+          <button type="button" aria-pressed="false" data-t="prem">Премиум</button>
+        </div>
+      </div>
+      <p class="tar-sum" id="tarSum"></p>
+      <ul class="stg" id="stg"></ul>
+    </div>
+  </section>
+
+  <!-- 12 · цена -->
+  <section class="slide dark">
+    <div>
+      <span class="kicker rise">Стоимость</span>
+      <h2 class="rise">Стандарт Плюс</h2>
+      <div class="deal" id="deal">
+      <div class="price" id="price">
+        <div><span class="pr-old">419 000 ₽</span></div>
+        <span class="pr-cap">за весь путь, от выбора вуза до месяца после заселения</span>
+        <button class="pr-btn" type="button" id="prBtn">Ваша цена</button>
+        <div class="pr-new" aria-live="polite">
+          <b>299 990 ₽</b>
+          <span>для вас, скидка 119 010 ₽</span>
+        </div>
+      </div>
+      <div class="pay">
+        <div><b>Двумя частями</b><span>Половина при договоре, вторая через 4–5 месяцев, когда экзамены позади</span></div>
+        <div><b>Премиум, <span class="p-full">510 000 ₽</span><span class="p-sale">399 990 ₽ для вас</span></b><span>До 10 вузов, виза без поездки в визовый центр, встреча в аэропорту, два месяца на связи после заселения</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13 · что оплачивается отдельно -->
+  <section class="slide">
+    <div>
+      <span class="kicker rise">Честно о расходах</span>
+      <h2 class="rise">Что оплачивается отдельно</h2>
+      <div class="rows">
+        <div class="row"><div><div class="t">Языковой экзамен Duolingo</div></div><div class="v">около 70 $ за попытку</div></div>
+        <div class="row"><div><div class="t">Экзамен CSCA</div></div><div class="v">450 юаней, 750 за два предмета</div></div>
+        <div class="row"><div><div class="t">Регистрационный взнос вуза</div><div class="d">Платится только в те вузы, куда подаем</div></div><div class="v">500–700 юаней</div></div>
+        <div class="row"><div><div class="t">Комиссии банков</div><div class="d">За переводы на иностранные счета</div></div><div class="v">по тарифу банка</div></div>
+        <div class="row"><div><div class="t">Билеты и доставка документов</div></div><div class="v">по факту</div></div>
+        <div class="row"><div><div class="t">Курсы и сертификаты для портфолио</div><div class="d">Ребенок проходит сам, чаще всего они бесплатные</div></div><div class="v">обычно 0 ₽</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14 · что дает грант -->
+  <section class="slide dark">
+    <div class="shot-bg" aria-hidden="true"><img src="img/campus-lake.webp" alt="" style="--pos:60% 50%"></div>
+    <div class="hold">
+      <span class="kicker rise">Что дает грант</span>
+      <h2 class="rise">Что покрывает полный грант</h2>
+      <ul class="ticks rise">
+        <li>Учебу, общежитие и медицинскую страховку</li>
+        <li>Сверху стипендия каждый месяц: 1500–3000 юаней, это около <span class="nw">15–30 тысяч рублей</span></li>
+        <li>Мы целимся в полное покрытие. Частичный грант тоже заметно снижает стоимость учебы</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 15 · гарантия -->
+  <section class="slide tint">
+    <div>
+      <span class="kicker rise">Что мы обещаем</span>
+      <h2 class="rise">Ваш ребенок уедет учиться в Китай</h2>
+      <p class="lead rise">В любом случае</p>
+      <div class="promise">
+        <div class="main rise">
+          <h3>Куда и с каким грантом, зависит от его академического профиля</h3>
+          <p>Язык, экзамен, оценки и портфолио. Над каждым из них мы работаем весь год, а решение о гранте принимает китайский вуз.</p>
+        </div>
+        <ul class="ticks rise">
+          <li>В каждом списке вузов есть надежный уровень C</li>
+          <li>Тесты каждый месяц показывают, где ребенок отстает, и мы меняем план заранее, а не после ответа вузов</li>
+          <li>Работаем по всем 13 этапам тарифа, каждый виден в кабинете семьи</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16 · вопросы -->
+  <section class="slide">
+    <div>
+      <span class="kicker rise">Вопросы</span>
+      <h2 class="rise">Частые вопросы родителей</h2>
+      <div class="faq">
+        <details><summary>А если ребенок не успеет подготовиться к ЕГЭ?</summary><p>Основные экзамены для Китая закрываем в декабре и январе. Весна остается для школы и ЕГЭ.</p></details>
+        <details><summary>Что с работой после учебы?</summary><p>После бакалавриата многие идут в магистратуру в Китае. С третьего курса в вузах стажировки и ярмарки вакансий.</p></details>
+        <details><summary>Не рискованно ли сейчас ехать в Китай?</summary><p>Россия и Китай договорились расширять обмен студентами до 100 000 человек к 2030 году. Китай тоже наращивает прием иностранцев.</p></details>
+        <details><summary>Чем это лучше платного места в нашем политехе?</summary><p>На гранте учеба и общежитие оплачены, сверху стипендия. Плюс диплом международного вуза и два языка к выпуску.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- 17 · следующий шаг -->
+  <section class="slide dark">
+    <div class="split last">
+      <div>
+        <span class="kicker rise">Следующий шаг</span>
+        <h2 class="rise">С чего начнем на этой неделе</h2>
+        <div class="steps">
+          <div class="step"><span class="n">1</span><div><h3>Тест английского на платформе</h3><p>60 минут: узнаем, где ребенок сейчас и сколько не хватает до B2</p></div></div>
+          <div class="step"><span class="n">2</span><div><h3>Пробник CSCA по математике</h3><p>Видно, готов ли он к декабрьской дате или лучше целиться в январь</p></div></div>
+          <div class="step"><span class="n">3</span><div><h3>Общий чат с семьей</h3><p>Договоренности, запись встречи и ответы на вопросы в одном месте</p></div></div>
+        </div>
+        <p class="lead" style="font-size:16px">Подготовка к декабрьскому экзамену начинается сейчас, поэтому решение лучше принять в течение недели.</p>
+      </div>
+      <div class="pic-r rise"><img src="img/family.webp" alt="Мама с сыном за ноутбуком" style="object-position:85% 50%"></div>
+    </div>
+  </section>
+
+</div>
+
+<div class="bar">
+  <span class="brand">ИСТСАЙД.РФ</span>
+  <div class="prog" aria-hidden="true"><i id="prog"></i></div>
+  <div class="dots" id="dots" role="tablist" aria-label="Слайды"></div>
+  <span class="count" id="count">1 / 17</span>
+  <div class="arrows">
+    <button id="full" aria-label="Во весь экран" title="Во весь экран (F)">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    </button>
+    <button id="prev" aria-label="Предыдущий слайд">‹</button>
+    <button id="next" aria-label="Следующий слайд">›</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  /* ── колода ──────────────────────────────────────────────────────────── */
+  var slides = [].slice.call(document.querySelectorAll('.slide'));
+  var dots = document.getElementById('dots');
+  var count = document.getElementById('count');
+  var prev = document.getElementById('prev'), next = document.getElementById('next');
+  var i = 0;
+
+  slides.forEach(function (s) {
+    if (!s.classList.contains('dark') || s.querySelector('.shot-bg')) return;
+    var sky = document.createElement('div');
+    sky.className = 'sky';
+    sky.setAttribute('aria-hidden', 'true');
+    sky.innerHTML = '<i></i><i></i><b></b><b></b>';
+    s.insertBefore(sky, s.firstChild);
+  });
+
+  slides.forEach(function (s, n) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-label', 'Слайд ' + (n + 1));
+    b.addEventListener('click', function () { go(n); });
+    dots.appendChild(b);
+  });
+
+  function go(n) {
+    n = Math.max(0, Math.min(slides.length - 1, n));
+    if (n === i) return;
+    slides[i].classList.remove('on');
+    i = n;
+    slides[i].classList.add('on');
+    slides[i].scrollTop = 0;
+    draw();
+    countUp(slides[i]);
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+  // число набирается при входе на слайд, пробелы и знаки остаются на месте
+  function countUp(box) {
+    [].forEach.call(box.querySelectorAll('.num b'), function (el) {
+      var raw = el.dataset.v || el.textContent;
+      el.dataset.v = raw;
+      var m = raw.match(/\d[\d\s ]*/);
+      if (!m) return;
+      var txt = m[0].replace(/[\s ]+$/, ''), target = parseInt(txt.replace(/[\s ]/g, ''), 10);
+      if (!isFinite(target) || !target) return;
+      var t0 = 0, dur = 900;
+      function frame(ts) {
+        if (!t0) t0 = ts;
+        var k = Math.min(1, (ts - t0) / dur);
+        el.textContent = raw.replace(txt, Math.round(target * (1 - Math.pow(1 - k, 3))).toLocaleString('ru-RU'));
+        if (k < 1) requestAnimationFrame(frame);
+      }
+      el.textContent = raw.replace(txt, '0');
+      requestAnimationFrame(frame);
+    });
+  }
+  function draw() {
+    [].forEach.call(dots.children, function (b, n) { b.setAttribute('aria-current', String(n === i)); });
+    count.textContent = (i + 1) + ' / ' + slides.length;
+    prev.disabled = i === 0;
+    next.disabled = i === slides.length - 1;
+    document.body.classList.toggle('on-dark', slides[i].classList.contains('dark'));
+    document.getElementById('prog').style.width = ((i + 1) / slides.length * 100) + '%';
+    document.body.style.background = slides[i].classList.contains('dark') ? '#0b2148'
+      : (slides[i].classList.contains('tint') ? '#e9effb' : '#eef2fc');
+  }
+  prev.addEventListener('click', function () { go(i - 1); });
+  next.addEventListener('click', function () { go(i + 1); });
+
+  var fullBtn = document.getElementById('full');
+  function fullOn() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function fullToggle() {
+    var el = document.documentElement;
+    if (fullOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else if (el.requestFullscreen || el.webkitRequestFullscreen) (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+  }
+  fullBtn.addEventListener('click', fullToggle);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(i + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(i - 1); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key === 'f' || e.key === 'F' || e.key === 'а' || e.key === 'А') { e.preventDefault(); fullToggle(); }
+  });
+  var x0 = null, y0 = null;
+  document.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) go(i + (dx < 0 ? 1 : -1));
+    x0 = y0 = null;
+  }, { passive: true });
+
+  function press(box, btn) {
+    [].forEach.call(box.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x === btn)); });
+  }
+  // короткий предлог или союз не остается в конце строки
+  var SHORT = /(^|[\s(«])(в|во|на|с|со|и|а|но|не|к|ко|о|об|у|по|за|из|до|от|для|или|что|как)\s+/gi;
+  function nbsp(root) {
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), n;
+    while ((n = w.nextNode())) {
+      if (n.parentNode.closest('script,style')) continue;
+      n.nodeValue = n.nodeValue.replace(SHORT, '$1$2\u00a0').replace(SHORT, '$1$2\u00a0');
+    }
+  }
+  function swap(el, html) { el.innerHTML = html; nbsp(el); el.classList.remove('swap'); void el.offsetWidth; el.classList.add('swap'); }
+
+  /* ── четыре фактора: карточка раскрывает «что делаем мы» ─────────────── */
+  document.getElementById('factors').addEventListener('click', function (e) {
+    var b = e.target.closest('.flip'); if (!b) return;
+    b.setAttribute('aria-expanded', String(b.getAttribute('aria-expanded') !== 'true'));
+  });
+
+  /* ── проект: три пути ────────────────────────────────────────────────── */
+  var PROJ = [
+    ['Свой проект с нашей командой', 'Подбираем тему под специальность и ведем до результата, который ребенок покажет на интервью: исследование, прототип или продукт.', 'Входит в Стандарт Плюс'],
+    ['Соавторство в статье', 'Ребенок участвует в научной статье вместе с магистрантом или аспирантом из вузов-партнеров. Подходит, если времени на свой проект мало.', 'Подключаем отдельно'],
+    ['Своя тема', 'У ребенка уже есть работа или идея. Мы оцениваем ее, подсказываем, как упаковать, и где показать на онлайн-конференции.', 'Входит в Стандарт Плюс']
+  ];
+  var projSeg = document.getElementById('projSeg'), projPanel = document.getElementById('projPanel');
+  function proj(n) { var p = PROJ[n]; swap(projPanel, '<h3>' + p[0] + '</h3><p>' + p[1] + '</p><span class="tag">' + p[2] + '</span>'); }
+  projSeg.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; press(projSeg, b); proj(+b.dataset.i); });
+  proj(0);
+
+  /* ── год до зачисления ───────────────────────────────────────────────── */
+  var TL = [
+    ['Ноябрь', 'Старт подготовки', 'Тест уровня английского, пробник по математике, план на год. Первая попытка CSCA 19–20 декабря.'],
+    ['Декабрь–январь', 'Экзамены', 'Основная сдача CSCA и Duolingo. Весна после этого остается для школы.'],
+    ['Январь–февраль', 'Подача', 'Подаем документы в 7 вузов через международную систему и следим за каждой заявкой.'],
+    ['Февраль–апрель', 'Интервью', 'Приглашения на собеседование. Готовим на тренажере и репетицией с тьютором.'],
+    ['Май', 'Зачисление', 'Приходят письма о зачислении и решение о гранте. Помогаем выбрать лучший вариант.'],
+    ['Лето', 'Виза', 'Заполняем анкету, записываем в визовый центр, готовим к переезду.'],
+    ['Сентябрь', 'Заселение', 'Начало учебы. Еще месяц после заселения тьютор на связи: банк, страховка, деканат.']
+  ];
+  var tl = document.getElementById('tl'), tlCard = document.getElementById('tlCard');
+  tl.innerHTML = TL.map(function (t, n) {
+    return '<button type="button" aria-pressed="' + (n === 0) + '" data-i="' + n + '"><i></i><b>' + t[0] + '</b></button>';
+  }).join('');
+  function tlShow(n) { var t = TL[n]; swap(tlCard, '<h3>' + t[0] + ': ' + t[1].toLowerCase() + '</h3><p>' + t[2] + '</p>'); }
+  tl.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; press(tl, b); tlShow(+b.dataset.i); });
+  tlShow(0);
+
+  /* ── уровни A, B, C ──────────────────────────────────────────────────── */
+  var abc = document.getElementById('abc');
+  abc.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    [].forEach.call(abc.children, function (x) { x.setAttribute('aria-expanded', String(x === b)); });
+  });
+
+  /* ── состав тарифа: этапы из портала CRM (content/portal.json, grant) ── */
+  // [название, Стандарт, Стандарт Плюс, Премиум]; пусто = этапа в тарифе нет
+  var ST = [
+    ['Доступ к платформе', 'Кабинет ученику и родителю в день оплаты: маршрут, календарь, задачи, тренажеры, чат с командой'],
+    ['Профиль и шансы', 'Шансы по каждому вузу и гранту в цифрах и разбор, где профиль проседает'],
+    ['Выбор вузов и грантов', 'До 5 вузов с грантами под профиль, маршрут и календарь', 'До 7 вузов с грантами и личная консультация с тьютором по итоговому списку', 'До 10 вузов с грантами и консультация с тьютором по итоговому списку'],
+    ['Документы', 'Список, шаблоны и проверка комплекта. К нотариусу и за справкой семья идет сама', 'Вы присылаете сканы, мы переводим и заверяем весь пакет, медицинская справка тоже на нас'],
+    ['Портфолио', 'Какие курсы и сертификаты добрать под направление', 'Стратегия усиления и проектный кейс, который видно на интервью'],
+    ['Письма', 'Мотивационное и рекомендательные письма, доводит и проверяет тьютор'],
+    ['Как учиться', '', '', 'Курс по методам обучения и запоминания, до экзаменов'],
+    ['Языковой экзамен', 'Тест уровня, план и безлимитные тренажеры', 'Тест уровня, план, тренажеры и видеоинтенсив по стратегии сдачи'],
+    ['CSCA по математике', 'Диагностика уровня и тренажер по темам', 'Диагностика, тренажер и видеоинтенсив с отработкой после занятий'],
+    ['Интервью', 'Тренажер вопросов приемных комиссий', 'Тренажер, репетиция с тьютором и разбор записи'],
+    ['Подача в вузы', 'Подаем в 5 вузов и ведем переписку с приемной комиссией', 'Подаем в 7 вузов, ведем переписку и поддерживаем семью на ожидании', 'Подаем в 10 вузов в первой волне и поддерживаем семью'],
+    ['Зачисление и грант', 'Получаем письмо о зачислении и JW201, объясняем условия и помогаем выбрать'],
+    ['Учебная виза', 'Инструкция и бот по анкете. В визовый центр семья идет сама', 'Заполняем анкету и записываем в визовый центр', 'Оформляем визу дистанционно, ехать никуда не нужно'],
+    ['Адаптация', 'Симулятор первого дня: общежитие, банк, симка, транспорт', 'Симулятор и онлайн-сессии: страховка, регистрация, быт и деньги'],
+    ['Встреча в Китае', '', '', 'Встречаем в аэропорту, довозим до вуза и заселяем. Родителю приходит подтверждение'],
+    ['Первые месяцы', '', 'Месяц онлайн-сопровождения после заселения: банк, страховка, деканат', 'Два месяца сопровождения после заселения']
+  ];
+  var TAR = { std: 1, plus: 2, prem: 3 };
+  var TNAME = { std: 'Стандарт', plus: 'Стандарт Плюс', prem: 'Премиум' };
+  function cell(row, k) {
+    // текст наследуется от младшего тарифа, но пустое место у этапа «только старшим» не наследуется
+    var only = row[1] === '' ? (row[2] === '' ? 3 : 2) : 1;
+    if (k < only) return null;
+    for (var j = k; j >= 1; j--) if (row[j]) return { t: row[j], own: j === k && k > 1 };
+    return null;
+  }
+  var tarSeg = document.getElementById('tarSeg'), stg = document.getElementById('stg'), tarSum = document.getElementById('tarSum');
+  function tar(id) {
+    var k = TAR[id], on = 0, n = 0;
+    stg.innerHTML = ST.map(function (r, idx) {
+      var c = cell(r, k);
+      if (c && idx > 0) on++;
+      var no = idx === 0 ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>' : (++n < 10 ? '0' + n : n);
+      if (!c) return '<li class="off"><span class="no">' + no + '</span><span><b>' + r[0] + '</b><span>Нет в этом тарифе</span></span></li>';
+      return '<li' + (c.own ? ' class="up"' : '') + '><span class="no">' + no + '</span><span><b>' + r[0] + '</b><span>' + c.t + '</span></span></li>';
+    }).join('');
+    nbsp(stg);
+    swap(tarSum, '<b>' + TNAME[id] + '</b>: ' + on + ' этапов и кабинет на платформе с первого дня. Синим отмечено, где делаем больше, чем в младшем тарифе');
+  }
+  tarSeg.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; press(tarSeg, b); tar(b.dataset.t); });
+  tar('plus');
+  nbsp(document.querySelector('.deck'));
+
+  /* ── цена: сначала полная, скидку открывает ведущий ──────────────────── */
+  document.getElementById('prBtn').addEventListener('click', function () { document.getElementById('price').classList.add('open'); document.getElementById('deal').classList.add('open'); });
+
+  var start = parseInt((location.hash || '').replace('#', ''), 10);
+  if (start > 1 && start <= slides.length) { slides[0].classList.remove('on'); i = start - 1; slides[i].classList.add('on'); }
+  draw();
+})();
+</script>
+</body>
+</html>
