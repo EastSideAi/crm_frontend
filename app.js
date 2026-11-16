@@ -31458,6 +31458,8 @@
     idle:   { cls: 'mr-wait',  label: 'ждет' },
     draft:  { cls: 'st-block', label: 'черновик' },
     done:   { cls: 'st-done',  label: 'задачи заведены' },
+    // Разбор встречи приходит статусом черновика: applied — «Завести» нажали.
+    applied: { cls: 'st-done', label: 'задачи заведены' },
     call:   { cls: 'st-done',  label: 'в карточке ученика' },
     failed: { cls: 'st-return', label: 'не разобралась' },
     new:    { cls: 'mr-wait',  label: 'без разбора' },
@@ -31500,6 +31502,10 @@
        читалось как два разных счета. */
     if (m.agreements) marks += tag('tasks', ic('task', 11) + m.agreements + ' ' +
       plural(m.agreements, 'задача', 'задачи', 'задач') + ' со встречи');
+    /* Снятые при разборе пункты: встреча разобрана, когда каждый пункт стал
+       задачей или снят с причиной (Виталий 16.11.2026). Причина в подсказке. */
+    if (m.skipped) marks += '<span class="mx-tag" title="' + esc(m.skip_reason || 'причина не записана') + '">' +
+      'снято ' + m.skipped + '</span>';
     if (m.has_text) marks += tag('text', ic('mic', 11) + 'расшифровка');
     if (m.has_notes) marks += tag('sum', ic('doc', 11) + 'конспект');
     /* Сама запись разговора лежит в Фатоме. Ссылка на нее была только внутри
