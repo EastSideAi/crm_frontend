@@ -29357,6 +29357,7 @@
   }
   var FIN_UNITS = [['', 'не повторяется'], ['день', 'дней'], ['неделя', 'недель'],
                    ['месяц', 'месяцев'], ['год', 'лет']];
+  function finUsd(v) { return (Number(v) || 0).toFixed(2).replace('.', ',') + ' $'; }
   function finEvery(s) {
     if (!s.unit) return 'без повтора';
     var n = s.every || 1;
@@ -30232,7 +30233,12 @@
       var row = finSvcRow(srows, x.id);
       // Метку состояния держим в подстрочнике: в названии она первой попадает под
       // многоточие на узком экране, и строка теряет смысл.
-      var sub = (x.active ? '' : 'отключен · ') + esc(finEvery(x)) +
+      // OpenRouter пополняется, когда кончился баланс: дату и шаг ставит прогноз по
+      // расходу (бэкенд, раз в день), здесь показываем, из чего он сложился.
+      var fc = x.forecast;
+      var fcText = fc ? ' · по прогнозу, остаток ' + finUsd(fc.balance_usd) +
+        (fc.week_usd !== null ? ', за неделю ' + finUsd(fc.week_usd) : ', ' + finUsd(fc.per_day_usd) + ' в день') : '';
+      var sub = (x.active ? '' : 'отключен · ') + esc(finEvery(x)) + fcText +
         (x.counterparty ? ' · ' + esc(x.counterparty) : '') +
         (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact) : '') +
         (soon ? ' · пора платить' : '');
