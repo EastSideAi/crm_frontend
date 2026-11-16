@@ -154,7 +154,7 @@
     // и 'cal' (месяц целиком, как гугл-календарь). С 02.11.2026 это раздел
     // «Расписание» в меню, под «Задачами».
     meetView: 'slots', meetMonth: 0, meetMonthData: {},
-    news: null, newsUnread: 0,
+    news: null, newsUnread: 0, learn: null, learnOpen: null,
     teamMode: 'office', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
     pulse: null, pulseDate: '', pulseTimer: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
@@ -3600,6 +3600,19 @@
             (gOver ? '. Просрочены сроки у <b>' + gOver + '</b> ' +
               plural(gOver, 'цели', 'целей', 'целей') : '') + '.'
           : 'Целей в работе нет. Цель появляется, когда у задачи есть шаги.';
+      }
+      if (TASK_SEGS[taskSeg()].view === 'learn') {
+        var lp = state.learn && state.learn !== 'none' ? state.learn.plan : null;
+        var li = lp ? (lp.items || []).filter(function (x) { return x.status !== 'skip'; }) : [];
+        var ld = li.filter(function (x) { return x.status === 'done'; }).length;
+        tphr = !lp ? 'Смотрю план обучения.'
+          : !li.length ? 'На этой неделе занятий нет. Агент соберет план по теме недели.'
+          : (function () {
+              var tday = lrnToday();
+              var now = li.filter(function (x) { return x.day === tday && x.status !== 'done'; })[0];
+              return now ? 'Сегодня: <b>' + esc(now.title) + '</b>, ' + now.minutes + ' мин.'
+                : 'Пройдено <b>' + ld + '</b> из <b>' + li.length + '</b> ' + plural(li.length, 'занятия', 'занятий', 'занятий') + ' недели.';
+            })();
       }
       // Пришли из табло по человеку: «на тебе задач нет» рядом с чужим списком
       // читается как ошибка системы.
@@ -7306,6 +7319,8 @@
        Сначала своя работа и куда она ведет, потом команда, потом ученики. */
     week:  { label: 'План',    view: 'myweek',   scope: 'my',  hint: 'мой план: сегодня, неделя, месяц; внизу очередь «Потом»' },
     goals: { label: 'Цели',    view: 'goals',    scope: 'my',  hint: 'куда мы идем, по направлениям' },
+    // Обучение (Виталий 16.11.2026): план недели, занятия по дням, копилка, ачивки.
+    learn: { label: 'Обучение', view: 'learn', scope: 'my',  hint: 'тема недели, занятия по 30 минут, копилка и ачивки' },
     team:  { label: 'Команда', view: 'teamweek', scope: 'all', cap: 'tasks_all', hint: 'кто над чем работает, фокус недели и что застряло' },
     // Второй вопрос коллеги — не «что делать мне», а «что сейчас с этим
     // учеником»: работа по одной семье разложена по разным исполнителям.
@@ -7533,6 +7548,7 @@
     if (fndOn() && (v === 'myweek' || v === 'goals')) { renderTaskFind(view); return; }
     if (v === 'myweek') { renderMyWeek(view); return; }
     if (v === 'teamweek') { renderTeamWeek(view); return; }
+    if (v === 'learn') { renderLearn(view); return; }
     if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
     if (state.tasks === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить задачи. Обнови страницу.</div></div>';
@@ -7540,6 +7556,171 @@
     }
     if (v === 'students') { renderStudentTasks(view); return; }
     renderGoals(view);
+  }
+
+  /* ── Обучение: план недели, занятия по дням, копилка, ачивки ──────────────
+     Пилот Виталия 16.11.2026 (бэкенд: routers/staff_learning.py). Тема недели и
+     5-7 занятий по 30 минут, каждое на свой день; агент предлагает, человек правит.
+     Отметка «прошел» с одной строкой «что вынес» — та же, что строка «Обучение:»
+     в итоге дня, просто отсюда. Ачивки приходят из итога дня строкой «Ачивка:». */
+  var LRN_DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  function lrnLoad(cb) {
+    Promise.all([
+      api('/admin/api/learning/plan'),
+      api('/admin/api/learning/achievements?days=30').catch(function () { return { items: [] }; }),
+    ]).then(function (r) {
+      state.learn = { plan: r[0] || {}, ach: (r[1] && r[1].items) || [] };
+      cb();
+    }).catch(function () { state.learn = 'none'; cb(); });
+  }
+  function lrnDay(iso) {
+    if (!iso) return '';
+    var d = new Date(iso + 'T12:00:00');
+    return LRN_DOW[d.getDay()] + ' ' + d.getDate();
+  }
+  function lrnHost(u) { var m = String(u || '').match(/^https?:\/\/(?:www\.)?([^\/?#]+)/); return m ? m[1] : 'материал'; }
+  function lrnToday() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function lrnRow(it, open) {
+    var done = it.status === 'done';
+    var today = it.day === lrnToday();
+    var meta = ['<span class="dy-m">' + (it.kind === 'practice' ? 'практика' : 'теория') + ', ' + it.minutes + ' мин</span>'];
+    if (done && it.takeaway) meta.push('<span class="dy-m lrn-take">' + esc(it.takeaway) + '</span>');
+    var chk = done
+      ? '<button class="tsk-chk done lrn-undo" data-lrn-undo="' + it.id + '" title="Снять отметку" aria-label="Снять отметку «прошел»">' + ic('check', 12) + '</button>'
+      : '<button class="tsk-chk" data-lrn-done="' + it.id + '" title="Прошел">' + ic('check', 12) + '</button>';
+    var body = open
+      ? '<div class="lrn-body">' + (it.body ? '<p>' + esc(it.body) + '</p>' : '') +
+          (it.url ? '<a class="lnk" href="' + esc(it.url) + '" target="_blank" rel="noopener">' + ic('ext', 12) + ' Открыть материал</a>' : '') +
+          (!done ? '<div class="lrn-say"><input class="al-in sm" data-lrn-take="' + it.id + '" maxlength="1000" placeholder="Что вынес, одной строкой" aria-label="Что вынес из занятия">' +
+            '<button class="bp sm" data-lrn-save="' + it.id + '">Прошел</button></div>' : '') +
+        '</div>'
+      : '';
+    return '<div class="trow dy-row lrn-row has-meta' + (done ? ' closed' : '') + (today ? ' lrn-now' : '') + (open ? ' open' : '') + '" data-lrn="' + it.id + '">' +
+      '<div class="dy-t">' + chk + '<div class="dy-main"><button class="dy-ttl lrn-tg" data-lrn-tg="' + it.id + '" aria-expanded="' + (open ? 'true' : 'false') + '">' + esc(it.title) + '</button>' +
+        '<div class="dy-meta">' + meta.join('') + '</div></div></div>' +
+      '<div class="dy-r"><span class="sev mini ' + (today ? 'ms-when' : 'ms-ok') + '">' + (today ? 'сегодня' : esc(lrnDay(it.day))) + '</span></div>' +
+      body + '</div>';
+  }
+  function renderLearn(view) {
+    if (!state.learn) { view.innerHTML = dashSkeleton(); lrnLoad(function () { if (taskSeg() === 'learn') { renderHead(); renderLearn(view); } }); return; }
+    if (state.learn === 'none') {
+      view.innerHTML = '<div class="card"><div class="wk-empty"><div class="wk-empty-t">Не удалось загрузить план</div>' +
+        '<div class="wk-empty-s">Проверь сеть и попробуй еще раз.</div><button class="bp" id="lrn-retry">Попробовать снова</button></div></div>';
+      view.querySelector('#lrn-retry').onclick = function () { state.learn = null; renderLearn(view); };
+      return;
+    }
+    var p = state.learn.plan || {}, wk = p.week, items = p.items || [], inbox = p.inbox || [];
+    var dated = items.filter(function (x) { return x.status !== 'skip'; });
+    var nDone = dated.filter(function (x) { return x.status === 'done'; }).length;
+    var head = wk
+      ? '<div class="lrn-hero"><div class="lrn-kick">Тема недели' + (wk.approved_at ? '' : ' · предложение агента') + '</div>' +
+          '<div class="lrn-topic">' + esc(wk.topic || 'Без темы') + '</div>' +
+          (wk.why ? '<div class="lrn-why">' + esc(wk.why) + '</div>' : '') +
+          (wk.result ? '<div class="lrn-res">' + ic('target', 13) + '<span><b>Итог недели:</b> ' + esc(wk.result) + '</span></div>' : '') +
+          (!wk.approved_at ? '<button class="bp" id="lrn-approve">Утвердить тему</button>' : '') +
+        '</div>'
+      : '';
+    var list = dated.length
+      ? dated.map(function (x) { return lrnRow(x, state.learnOpen === x.id); }).join('')
+      : '<div class="wk-empty"><div class="wk-empty-t">На эту неделю занятий нет</div>' +
+        '<div class="wk-empty-s">Агент собирает план по теме недели. Свое можно положить в копилку справа: ссылку, статью или задачу на практику.</div></div>';
+    var box = '<div class="card dy-card"><div class="dy-h"><span class="t">Копилка</span><span class="dy-h-n">' + inbox.length + '</span></div>' +
+      '<div class="lrn-add"><input class="al-in sm" id="lrn-new" maxlength="300" placeholder="Что изучить: тема или ссылка" aria-label="Что изучить: тема или ссылка">' +
+      '<button class="icobtn" id="lrn-add" title="Положить в копилку" aria-label="Положить в копилку">' + ic('plus', 14) + '</button></div>' +
+      '<div class="dy-body">' + (inbox.length ? inbox.map(function (x) {
+        return '<div class="trow dy-row lrn-inb"><div class="dy-t"><div class="dy-main"><span class="dy-ttl">' + esc(x.title) + '</span>' +
+          (x.url ? '<div class="dy-meta"><a class="dy-m lnk" href="' + esc(x.url) + '" target="_blank" rel="noopener">' + ic('ext', 11) + ' ' + esc(lrnHost(x.url)) + '</a></div>' : '') +
+          '</div></div></div>';
+      }).join('') : '<div class="dy-empty">Пусто. Сюда ложится то, что ты прислал боту или добавил сам. Агент поставит это в ближайшую подходящую неделю.</div>') + '</div></div>';
+    var ach = state.learn.ach || [];
+    var achCard = '<div class="card dy-card"><div class="dy-h"><span class="t">Ачивки</span><span class="dy-h-n">' + ach.length + '</span></div>' +
+      '<div class="dy-body">' + (ach.length ? ach.slice(0, 30).map(function (a) {
+        return '<div class="lrn-ach"><div class="lrn-ach-t">' + esc(a.text) + '</div>' +
+          '<div class="lrn-ach-m">' + esc(a.name || '') + ' · ' + esc(lrnDay(a.day)) + '</div></div>';
+      }).join('') : '<div class="dy-empty">Ачивка: что предлагаешь внедрить. Пиши ее в итоге дня строкой «Ачивка: …», она появится здесь. Видит твой отдел и руководитель.</div>') + '</div></div>';
+    view.innerHTML = '<div class="dy-grid">' +
+      '<div class="card dy-card lrn-main">' + head +
+        '<div class="dy-h"><span class="t">Занятия</span><span class="dy-h-n"><b>' + nDone + '</b> из ' + dated.length + '</span></div>' +
+        '<div class="dy-body">' + list + '</div>' +
+        '<div class="dy-foot lrn-foot">Прошел занятие: отметь здесь или напиши в итоге дня строку «Обучение: что вынес».</div>' +
+      '</div>' +
+      '<div class="dy-side">' + box + achCard + '</div></div>';
+    lrnWire(view);
+  }
+  function lrnPatch(id, body, done) {
+    apiSend('/admin/api/learning/items/' + id, 'PATCH', body, function (r) {
+      var it = r && r.item;
+      if (it && state.learn && state.learn.plan) {
+        state.learn.plan.items = (state.learn.plan.items || []).map(function (x) { return x.id === it.id ? it : x; });
+      }
+      if (done) done();
+    });
+  }
+  function lrnWire(view) {
+    var redraw = function () { renderHead(); renderLearn(view); };
+    var ap = view.querySelector('#lrn-approve');
+    if (ap) ap.onclick = function () {
+      var w = state.learn.plan.week || {};
+      apiSend('/admin/api/learning/week', 'PUT', { week_starts: state.learn.plan.week_starts, topic: w.topic, why: w.why, result: w.result, approve: true },
+        function () { w.approved_at = new Date().toISOString(); showToast('Тема утверждена'); redraw(); });
+    };
+    var adding = false;
+    var add = function () {
+      var inp = view.querySelector('#lrn-new'), v = (inp.value || '').trim();
+      if (!v) { inp.focus(); return; }
+      if (adding) return;
+      adding = true;
+      var url = /^https?:\/\/\S+$/.test(v) ? v : '';
+      apiSend('/admin/api/learning/items', 'POST', { title: url ? 'Материал: ' + lrnHost(url) : v, url: url, source: 'user' }, function (r) {
+        if (r && r.item) state.learn.plan.inbox = [r.item].concat(state.learn.plan.inbox || []);
+        showToast('В копилке'); redraw();
+      }, function () { adding = false; showToast('Не сохранилось, проверь сеть'); });
+    };
+    view.querySelector('#lrn-add').onclick = add;
+    view.querySelector('#lrn-new').onkeydown = function (e) { if (e.key === 'Enter') add(); };
+    var toggle = function (id) {
+      state.learnOpen = state.learnOpen === id ? null : id;
+      renderLearn(view);
+      var inp = view.querySelector('[data-lrn-take="' + id + '"]');
+      if (inp) inp.focus();
+      else { var tg = view.querySelector('[data-lrn-tg="' + id + '"]'); if (tg) tg.focus(); }
+    };
+    view.querySelectorAll('.lrn-row').forEach(function (row) {
+      row.onclick = function (e) {
+        // Раскрытая часть живет внутри строки: клик по описанию или полю не
+        // должен сворачивать занятие и стирать набранное.
+        if (e.target.closest('button, input, a, .lrn-body')) return;
+        toggle(+row.getAttribute('data-lrn'));
+      };
+    });
+    view.querySelectorAll('[data-lrn-tg]').forEach(function (b) {
+      b.onclick = function () { toggle(+b.getAttribute('data-lrn-tg')); };
+    });
+    view.querySelectorAll('[data-lrn-undo]').forEach(function (b) {
+      b.onclick = function () {
+        lrnPatch(+b.getAttribute('data-lrn-undo'), { status: 'plan' }, function () { showToast('Отметку снял'); redraw(); });
+      };
+    });
+    view.querySelectorAll('[data-lrn-done]').forEach(function (b) {
+      b.onclick = function () {
+        var id = +b.getAttribute('data-lrn-done');
+        state.learnOpen = id; renderLearn(view);
+        var inp = view.querySelector('[data-lrn-take="' + id + '"]'); if (inp) inp.focus();
+      };
+    });
+    var save = function (id) {
+      var inp = view.querySelector('[data-lrn-take="' + id + '"]');
+      lrnPatch(id, { status: 'done', takeaway: inp ? inp.value.trim() : '' }, function () {
+        state.learnOpen = null; showToast('Отметил'); redraw();
+      });
+    };
+    view.querySelectorAll('[data-lrn-save]').forEach(function (b) { b.onclick = function () { save(+b.getAttribute('data-lrn-save')); }; });
+    view.querySelectorAll('[data-lrn-take]').forEach(function (inp) {
+      inp.onkeydown = function (e) { if (e.key === 'Enter') save(+inp.getAttribute('data-lrn-take')); };
+    });
   }
 
   /* ── Недельный цикл: «Неделя», «Потом», «Команда» (ADR 001 бэкенда) ─────────
