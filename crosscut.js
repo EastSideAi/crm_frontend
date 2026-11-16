@@ -157,6 +157,9 @@ window.CROSSCUT = (function () {
               'intensiv_zak': 1, 'guide5': 1, 'guide5_insta': 1, 'diag': 1}
     };
 
+    /* Имя запуска приходит из «Запусков» вместе с его лестницей */
+    if (SNAP.launch && SNAP.launch.title) LAUNCH.title = SNAP.launch.title;
+
     var TODAY = SNAP.snap.slice(0, 10);
     var FIRST = SNAP.leads.length ? SNAP.leads[0].d : '2026-06-01';
 
@@ -186,12 +189,19 @@ window.CROSSCUT = (function () {
       var set = {};
       SNAP.leads.forEach(function(l){
         if (!l.g) return;
-        if (l.reg || (l.cp && LAUNCH.camps[l.cp])) set[l.g] = 1;
+        if (regInLaunch(l) || (l.cp && LAUNCH.camps[l.cp])) set[l.g] = 1;
       });
       return set;
     })();
+    /* Участник запуска — тот, кто записался на эфир С НАЧАЛА этого запуска. До
+       13.11.2026 годилась любая регистрация, и в октябрьский интенсив попадали люди
+       сентябрьского эфира (Ольга: цифры должны совпадать с «Запусками»). */
+    function regInLaunch(l){
+      var regs = l.rg || (l.reg ? [[l.reg, 0]] : []);
+      return regs.some(function(x){ return x[0] >= LAUNCH.from; });
+    }
     function inLaunch(l){
-      if (l.reg) return true;
+      if (regInLaunch(l)) return true;
       if (l.cp && LAUNCH.camps[l.cp]) return true;
       return !!(l.g && LAUNCH_PEOPLE[l.g]);
     }
@@ -216,7 +226,7 @@ window.CROSSCUT = (function () {
          списка нет вовсе — там у лида нет ни id, ни имени, и это сделано нарочно. */
       function who(key, l, item){
         if (!l.i) return;
-        var row = {i: l.i, nm: l.nm || '', k: l.k || '', s: l.s || ''};
+        var row = {i: l.i, g: l.g || null, nm: l.nm || '', k: l.k || '', s: l.s || ''};
         for (var q in item) row[q] = item[q];
         (r.who[key] || (r.who[key] = [])).push(row);
       }
@@ -248,7 +258,7 @@ window.CROSSCUT = (function () {
           r.regs++; if (x[1]) r.watched++; who('regs', l, {d: x[0]});
         });
         if (inP(l.dg, a, b)){ r.diagPlat++; who('diagPlat', l, {d: l.dg}); }
-        if (inP(l.sb, a, b)) r.signed++;
+        if (inP(l.sb, a, b)){ r.signed++; who('signed', l, {d: l.sb}); }
         var myCalls = (l.cl || []).filter(function(c){ return inP(c, a, b); }).length;
         if (myCalls){
           r.meetings += myCalls; r.meeting++;
@@ -418,8 +428,63 @@ window.CROSSCUT = (function () {
         (prevVal === undefined ? '' : delta(nowVal, prevVal)) + '</button>';
     }
 
+    /* Ступень лестницы «Запусков» по ключу: в режиме запуска плитки денег, счетов,
+       разборов и регистраций берутся оттуда (Ольга 13.11.2026: «цифры старые, не с
+       запуска»). Сравнения с прошлым периодом у них нет: запуск считается целиком. */
+    /* Паспорта плиток запуска: людей поименно здесь не показываем, они на ступенях
+       «Запусков», и второй список разошелся бы с тем, что там проверено. */
+    (function(){
+      var how = 'Откройте вкладку «Запуски», этот интенсив, и нажмите на ту же ступень пути: там люди поименно.';
+      var from = 'Вкладка «Запуски», путь человека по запуску. Сквозная берет ступень оттуда как есть.';
+      PASSPORTS.lrev = {t: 'Выручка запуска', what: 'Деньги от людей, оплативших после интенсива, за весь запуск.', from: from, how: how};
+      PASSPORTS.lpay = {t: 'Оплатили', what: 'Сколько человек из запуска заплатили.', from: from, how: how};
+      PASSPORTS.linv = {t: 'Получили счет', what: 'Сколько человек получили счет по офферу запуска.', from: from, how: how};
+      PASSPORTS.lcall = {t: 'Провели консультацию', what: 'Сколько человек из запуска дошли до встречи с тьютором.', from: from, how: how};
+      PASSPORTS.lview = {t: 'Открыли эфир', what: 'Сколько человек открыли страницу эфира.', from: from, how: how};
+      PASSPORTS.ldiag = {t: 'Записались на диагностику', what: 'Заполнили анкету по ссылке запуска.', from: from, how: how};
+      PASSPORTS.ltutor = {t: 'Записались на консультацию', what: 'Заявки к тьютору за время запуска.', from: from, how: how};
+      PASSPORTS.lreach = {t: 'Охват запуска', what: 'Все люди запуска: оставили заявку на странице или получили ссылку на эфир в боте.', from: from, how: how};
+    })();
+
+    function lstep(key){
+      var LP = state.scope === 'launch' && SNAP.launch && SNAP.launch.path;
+      if (!LP) return null;
+      for (var i = 0; i < LP.length; i++) if (LP[i].key === key) return LP[i];
+      return null;
+    }
+    function lrub(st){
+      var m = st && st.note && st.note.replace(/\s/g, '').match(/(\d+)₽/);
+      return m ? +m[1] : null;
+    }
+
     function renderKpis(){
       var d = CUR, p = PRV, h = '';
+      /* Запуск: плитки целиком из «Запусков» (Ольга 13.11.2026: декомпозиция, запуски и
+         сквозная должны биться, выверены первые две). Свои плитки тут считали других
+         людей за другой отрезок и спорили с ними. */
+      var sPaid = lstep('paid');
+      if (sPaid){
+        var LW = 'за весь запуск, как в «Запусках»';
+        var lt = function(key, step, label, sub, extra){
+          var st = lstep(step);
+          if (!st) return '';
+          return kpiBtn(key, label, num(st.people || 0), sub || LW, undefined, 0, extra);
+        };
+        var r0 = lrub(sPaid), sReg = lstep('reg'), sBot = lstep('bot_only');
+        if (r0 != null) h += kpiBtn('lrev', 'Выручка', rub(r0),
+          'оплатили ' + (sPaid.people || 0) + ' человек · ' + LW, undefined, 0, 'hero');
+        h += lt('lreach', 'reach', 'Охват запуска',
+          [sReg ? 'с формы ' + sReg.people : '', sBot ? 'из бота ' + sBot.people : ''].filter(Boolean).join(' · '));
+        h += lt('lview', 'viewers', 'Открыли эфир');
+        h += lt('ldiag', 'plat_diag', 'Записались на диагностику');
+        h += lt('ltutor', 'tutor', 'Записались на консультацию');
+        h += lt('lcall', 'call_done', 'Провели консультацию');
+        h += lt('linv', 'invoiced', 'Получили счет');
+        h += lt('lpay', 'paid', 'Оплатили');
+        $id('kpis').innerHTML = h;
+        if (state.open) openDrawer(state.open, true);
+        return;
+      }
       h += kpiBtn('revenue', 'Выручка', rub(d.revenue), '', p ? p.revenue : undefined, d.revenue, 'hero');
       h += kpiBtn('payN', 'Оплат', num(d.payN), '', p ? p.payN : undefined, d.payN);
       h += kpiBtn('invN', 'Счетов выставлено', num(d.invN),
@@ -596,6 +661,25 @@ window.CROSSCUT = (function () {
     function renderLadder(){
       var d = CUR, launch = state.scope === 'launch';
       $id('ladHint').textContent = periodWords();
+      /* Лестница запуска берется из «Запусков» целиком (Ольга 13.11.2026): те же шаги,
+         те же люди, та же чистка сотрудников. Свой пересчет здесь давал другие цифры
+         (644 регистрации против 220 с формы и 401 из бота). Считается нарастающим
+         итогом с начала запуска, период сверху на нее не влияет. */
+      var LP = SNAP.launch && SNAP.launch.path;
+      if (launch && LP && LP.length){
+        $id('ladHint').textContent = 'как во вкладке «Запуски», за весь запуск';
+        var mx = LP.reduce(function(m, p){ return Math.max(m, p.people || 0); }, 1);
+        $id('lad').innerHTML = LP.map(function(p){
+          var n = p.people || 0;
+          return '<div class="lad-row' + (n ? '' : ' dead') + (p.branch ? ' br' : '') + '">' +
+            '<div class="lad-t">' + esq(p.title) + (p.note ? '<span>' + esq(p.note) + '</span>' : '') + '</div>' +
+            '<div class="lad-n">' + (n ? num(n) : '—') +
+            (p.of_reg != null && p.of_reg <= 100 && p.key !== 'reg' ? '<em>' + p.of_reg + '% от регистраций</em>' : '') + '</div>' +
+            '<div class="lad-bar"><i style="width:' + Math.max(n ? 1.5 : 0, Math.round(n / mx * 100)) + '%"></i></div></div>';
+        }).join('');
+        ['ladNote', 'ladGrew', 'ladWarn'].forEach(function(id){ var e = $id(id); if (e) e.hidden = true; });
+        return;
+      }
       var steps = launch ? [
         {t: 'Зарегистрировались на интенсив', s: 'оставили заявку на эфир', n: d.regs},
         {t: 'Смотрели эфир', s: 'открыли трансляцию хотя бы раз', n: d.watched},
