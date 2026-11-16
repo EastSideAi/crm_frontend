@@ -404,6 +404,11 @@
       x: '<path d="M5 5l10 10M15 5L5 15"/>',
       alert: '<path d="M10 3.2 17.8 16.5a1 1 0 0 1-.9 1.5H3.1a1 1 0 0 1-.9-1.5L10 3.2z"/><path d="M10 8v3.6M10 14.3v.01"/>',
       phone: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/>',
+      // Журнал звонков: трубка с волнами. Направление звонка — та же трубка со стрелкой.
+      calls: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/><path d="M12.4 2.6a5.2 5.2 0 0 1 5 5"/><path d="M12.2 5.5a2.4 2.4 0 0 1 2.3 2.3"/>',
+      callin: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/><path d="M17.2 2.8l-4.6 4.6"/><path d="M12.6 3.8v3.6h3.6"/>',
+      callout: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/><path d="M12.6 7.4l4.6-4.6"/><path d="M13.6 2.8h3.6v3.6"/>',
+      callmiss: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/><path d="M13 2.8l4 4M17 2.8l-4 4"/>',
       mail: '<rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M3.2 6.2l6.1 4.4a1.2 1.2 0 0 0 1.4 0l6.1-4.4"/>',
       send: '<path d="M17 3L8.5 11.5"/><path d="M17 3l-5.5 14-3-6.5L2 7.5 17 3z"/>',
       cal: '<rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/>',
@@ -8749,7 +8754,12 @@
       right = '<button class="bp ghost sm" data-mopen="' + m.import_id + '">' + ic('task', 13) + 'Разобрать' +
         (m.goals ? ' <span class="num">' + m.goals + '</span>' : '') + '</button>';
     } else if (m.state === 'applied') {
-      right = '<button class="qchip" data-mopen="' + m.import_id + '"><span class="sev st-done">задачи заведены</span></button>';
+      // Снятые пункты видны рядом с заведенными, причина — в подсказке: встреча
+      // разобрана, когда каждый пункт стал задачей или снят с причиной (16.11.2026).
+      right = (m.skipped
+        ? '<span class="sev n-off mt-skip" title="' + esc(m.skip_reason || 'причина не записана') + '">снято ' + m.skipped + '</span>'
+        : '') +
+        '<button class="qchip" data-mopen="' + m.import_id + '"><span class="sev st-done">задачи заведены</span></button>';
     } else if (m.state === 'call') {
       right = '<button class="qchip" data-mcard="' + esc(m.session_id || '') + '">' + ic('card', 13) +
         (m.client_name ? esc(m.client_name) : 'карточка ученика') + '</button>';
@@ -17443,6 +17453,15 @@
         '<div class="al-body mi-body">' +
           (common ? '<div class="mi-note">' + esc(common) + '</div>' : '') +
           imps.map(one).join('') + '</div>' +
+        // Снять пункт молча нельзя (Виталий 16.11.2026): встреча разобрана, когда
+        // каждый пункт стал задачей или снят с причиной. Причина одна на разбор и
+        // видна в журнале встреч рядом с «снято N».
+        '<div class="mi-why" id="mi-why" hidden>' +
+          '<label class="mi-why-l" for="mi-reason">Почему не заводим снятое</label>' +
+          '<input class="al-in" id="mi-reason" maxlength="500" autocomplete="off" ' +
+            'placeholder="Например: уже есть в плане месяца" value="' +
+            esc((imps.filter(function (x) { return x.skip_reason; })[0] || {}).skip_reason || '') + '">' +
+        '</div>' +
         '<div class="al-foot mi-foot">' +
           '<span class="mi-count" id="mi-count"></span>' +
           '<button class="al-cancel" id="mi-cancel">Закрыть</button>' +
@@ -17457,6 +17476,8 @@
       });
 
       var save = el('mi-save'), count = el('mi-count');
+      var why = el('mi-why'), reason = el('mi-reason');
+      reason.addEventListener('input', function () { reason.classList.remove('al-err'); });
       var itemsLeft = function () {
         return card.querySelectorAll('.mi-item:not(.made):not(.off)').length;
       };
@@ -17489,8 +17510,10 @@
           : 'Все пункты сняты';
         // Новых пунктов нет, но заведенные можно править — кнопка остается,
         // только называется по делу.
-        save.disabled = !n && !made;
-        save.classList.toggle('off', !n && !made);
+        // Сняли все — сохранить все равно можно: снятое с причиной и есть разбор.
+        why.hidden = !off;
+        save.disabled = !n && !made && !off;
+        save.classList.toggle('off', !n && !made && !off);
         save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить';
         count.classList.toggle('warn', !!(n && nob));
       };
@@ -17575,6 +17598,16 @@
             ' ничьими: их никто не увидит в своем плане';
           return;
         }
+        var offNow = card.querySelectorAll('.mi-item.off:not(.made)').length;
+        var why_ = (reason.value || '').trim();
+        if (offNow && !why_) {
+          reason.classList.add('al-err');
+          reason.focus();
+          count.classList.add('warn');
+          count.textContent = 'Напиши одной строкой, почему не заводим ' + offNow + ' ' +
+            plural(offNow, 'пункт', 'пункта', 'пунктов');
+          return;
+        }
         save.disabled = true; save.classList.add('loading');
         // Заводим по протоколу за раз и в том же порядке, что на экране: пакет
         // из трех файлов — это три независимых разбора, и упавший третий не
@@ -17598,7 +17631,7 @@
           }
           var box = boxes[i];
           apiSend('/admin/api/meetings/' + box.getAttribute('data-id') + '/apply', 'POST',
-            { goals: collect(box) },
+            { goals: collect(box), skip_reason: why_ },
             function (r) {
               total += ((r && r.goals) || 0) + ((r && r.steps) || 0);
               upd += (r && r.updated) || 0;
@@ -31425,6 +31458,8 @@
     idle:   { cls: 'mr-wait',  label: 'ждет' },
     draft:  { cls: 'st-block', label: 'черновик' },
     done:   { cls: 'st-done',  label: 'задачи заведены' },
+    // Разбор встречи приходит статусом черновика: applied — «Завести» нажали.
+    applied: { cls: 'st-done', label: 'задачи заведены' },
     call:   { cls: 'st-done',  label: 'в карточке ученика' },
     failed: { cls: 'st-return', label: 'не разобралась' },
     new:    { cls: 'mr-wait',  label: 'без разбора' },
@@ -31467,6 +31502,10 @@
        читалось как два разных счета. */
     if (m.agreements) marks += tag('tasks', ic('task', 11) + m.agreements + ' ' +
       plural(m.agreements, 'задача', 'задачи', 'задач') + ' со встречи');
+    /* Снятые при разборе пункты: встреча разобрана, когда каждый пункт стал
+       задачей или снят с причиной (Виталий 16.11.2026). Причина в подсказке. */
+    if (m.skipped) marks += '<span class="mx-tag" title="' + esc(m.skip_reason || 'причина не записана') + '">' +
+      'снято ' + m.skipped + '</span>';
     if (m.has_text) marks += tag('text', ic('mic', 11) + 'расшифровка');
     if (m.has_notes) marks += tag('sum', ic('doc', 11) + 'конспект');
     /* Сама запись разговора лежит в Фатоме. Ссылка на нее была только внутри
@@ -39668,6 +39707,7 @@
 
   function renderSales(view) {
     if (sbTab() === 'money') { renderSalesMoney(view); return; }
+    if (sbTab() === 'debts') { renderSalesDebts(view); return; }
     if (sbTab() === 'plan') { renderSalesPlan(view); return; }
     // Экран смотрят по ходу дня: данные старше минуты перезапрашиваем при заходе.
     if (state._sb && Date.now() - (state._sbAt || 0) > 60000) state._sb = null;
@@ -39836,12 +39876,12 @@
      Своих денег экран не считает: сумма — та же, что «доход к зачислению» в каскаде,
      сервер сверяет это сам (routers/sales_money.py). */
   var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План периода' },
-                 { id: 'money', label: 'Деньги и сверка' }];
+                 { id: 'money', label: 'Деньги и сверка' }, { id: 'debts', label: 'Дебиторка' }];
   var SM_KIND = { new: 'новая продажа', more: 'доплата', renew: 'продление', rest: 'прочее' };
 
   function smCan() { return can('finance') || can('finmodel'); }
   function sbTab() {
-    return (state.sbTab === 'money' || state.sbTab === 'plan') && smCan() ? state.sbTab : 'funnel';
+    return ['money', 'plan', 'debts'].indexOf(state.sbTab) >= 0 && smCan() ? state.sbTab : 'funnel';
   }
   function sbTabs() {
     if (!smCan()) return '';
@@ -40054,6 +40094,104 @@
     if (rs) rs.addEventListener('click', function () { state._smF = null; renderView(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
+  }
+
+  /* ── ПРОДАЖИ → ДЕБИТОРКА ─────────────────────────────────────────────────────
+     Павел 11.11.2026 на ведомости: «всех, кого мы продали, проверить, нормальные ли
+     стоят даты следующих платежей». Дебиторка ведомости собирается сама из графиков
+     рассрочки в карточке, но на 12.11.2026 график был у 9 клиентов из 64. Здесь каждый
+     клиент в одном состоянии: просрочен взнос, не разобран, ждем взнос, долга нет.
+     Состояние считает сервер (GET /admin/api/sales/debts, sales_money.debt_state).
+     Строка открывает карточку сразу в «Оплатах», стрелки карточки идут по списку. */
+  var DBT_CLS = { late: 'miss', todo: 'warn', wait: 'calm', done: 'ok' };
+  function dbtFetch() {
+    state._dbtAt = Date.now();
+    api('/admin/api/sales/debts').then(function (r) {
+      state._dbt = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      state._dbt = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+  function dbtRow(r) {
+    var next = r.state === 'late' || r.state === 'wait'
+      ? '<b class="num">' + smRub(r.next_rub) + '</b><small>' + (r.state === 'late'
+          ? 'просрочен ' + r.late_days + ' ' + plural(r.late_days, 'день', 'дня', 'дней')
+          : 'до ' + fmtDay(r.next_due).slice(0, 5)) + '</small>'
+      : r.state === 'done'
+        ? '<small>' + (r.mark === 'none' ? 'отмечено, долга нет' : 'график закрыт') + '</small>'
+        : '<small>графика нет</small>';
+    return '<button class="dbt-r ' + r.state + '" data-dbtlead="' + esc(r.id) + '">' +
+      '<span class="sb-pn"><b>' + esc(r.name) + '</b><small>' +
+        esc([r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет'].filter(Boolean).join(' · ')) +
+      '</small></span>' +
+      '<span class="sb-po' + (r.owner ? ' calm' : ' none') + '" data-l="Ведет">' + esc(r.owner || 'никто') + '</span>' +
+      '<span class="dbt-v" data-l="Оплачено"><b class="num">' + smRub(r.paid_rub) + '</b>' +
+        (r.last_paid ? '<small>последняя ' + fmtDay(r.last_paid).slice(0, 5) + '</small>' : '<small>в карточке нет оплат</small>') + '</span>' +
+      '<span class="dbt-v" data-l="Следующий взнос">' + next + '</span>' +
+    '</button>';
+  }
+  function renderSalesDebts(view) {
+    if (state._dbt && Date.now() - (state._dbtAt || 0) > 60000) state._dbt = null;
+    if (!state._dbt) { view.innerHTML = dashSkeleton(); dbtFetch(); return; }
+    if (state._dbt === 'none' || state._dbt === 'acl') {
+      view.innerHTML = '<div class="dash sb"><div class="card pf-head sb-thead">' + sbTabs() + '</div>' +
+        '<div class="card"><div class="empty">' + (state._dbt === 'acl'
+        ? 'Дебиторку видят те, кому открыты оплаты клиентов или ведомость.'
+        : 'Не удалось загрузить дебиторку. Проверьте интернет.') + '</div></div></div>';
+      sbTabsBind(view);
+      return;
+    }
+    var d = state._dbt, st = {};
+    d.states.forEach(function (x) { st[x.key] = x; });
+    var f = state.dbtF || '';
+    var v = st.late.count
+      ? { cls: 'miss', t: 'Просрочено ' + st.late.count + ' ' + plural(st.late.count, 'взнос', 'взноса', 'взносов') + ' на ' + smRub(st.late.rub),
+          s: 'семье пора напомнить или отметить оплату, если деньги пришли мимо кассы' }
+      : st.todo.count
+        ? { cls: 'warn', t: 'Не разобрано ' + st.todo.count + ' ' + plural(st.todo.count, 'клиент', 'клиента', 'клиентов'),
+            s: 'у каждого внесите график рассрочки или отметьте «долга нет»' }
+        : { cls: 'ok', t: 'Все клиенты разобраны', s: 'дебиторка ведомости собирается из графиков сама' };
+    var head = '<div class="card pf-head sb-thead">' + sbTabs() +
+      '<div class="pf-verdict ' + v.cls + '"><div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div></div></div>';
+    var stats = statBar(d.states.map(function (x) {
+      return { label: x.label, value: String(x.count), lead: x.key === 'late' && x.count > 0,
+               sub: x.key === 'late' || x.key === 'wait' ? 'на ' + smRub(x.rub)
+                 : x.key === 'todo' ? 'нет графика и отметки' : 'закрыт график или отметка' };
+    }), 'compact');
+    var rows = d.rows.filter(function (r) { return !f || r.state === f; });
+    var body = rows.map(dbtRow).join('');
+    var fl = f ? st[f].label : 'Все клиенты';
+    view.innerHTML = '<div class="dash sb dbt">' + head + '<div class="dbt-bar">' + stats + '</div>' +
+      '<div class="card sp12"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
+        '</span><div><div class="t">' + esc(fl) + ' · <span class="num">' + rows.length + '</span></div>' +
+        '<div class="s">строка открывает карточку на «Оплатах», стрелками в карточке дальше по списку</div></div>' +
+        (f ? '<button class="qchip dbt-all" data-dbtf="">Показать всех</button>' : '') + '</div>' +
+        (body ? '<div class="dbt-lh"><span>Клиент</span><span>Ведет</span><span>Оплачено</span><span>Следующий взнос</span></div>' +
+          '<div class="dbt-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') +
+      '</div></div>';
+    sbTabsBind(view);
+    // Плитки счетчиков и есть фильтр; повторное нажатие возвращает всех.
+    Array.prototype.forEach.call(view.querySelectorAll('.dbt-bar .stat'), function (b, i) {
+      var k = d.states[i].key;
+      b.classList.toggle('on', f === k);
+      b.setAttribute('aria-pressed', f === k ? 'true' : 'false');
+      b.addEventListener('click', function () { state.dbtF = f === k ? '' : k; renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dbtf]'), function (b) {
+      b.addEventListener('click', function () { state.dbtF = ''; renderView(); });
+    });
+    var ids = rows.map(function (r) { return r.id; });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dbtlead]'), function (b) {
+      b.addEventListener('click', function () {
+        openDrawer(b.getAttribute('data-dbtlead'), ids);
+        state.modalSection = 'pay';
+        renderDrawer(true);
+      });
     });
   }
 
@@ -40682,7 +40820,7 @@
     // Одно окно звонилки на всю смену: следующий номер подставляется в него же.
     Array.prototype.forEach.call(view.querySelectorAll('[data-mscall]'), function (b) {
       b.addEventListener('click', function () {
-        window.open(location.origin + '/zvonilka/#n=' + encodeURIComponent(b.getAttribute('data-mscall')), 'es-zvonilka');
+        pcDial(b.getAttribute('data-mscall'));
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mslead]'), function (b) {
@@ -41922,7 +42060,7 @@
     if (c.cabinet) tags.push('<span class="idup-t">есть кабинет</span>');
     var contact = [c.contact, c.email].filter(Boolean).join(' · ');
     return '<div class="idup-c' + (isMain ? ' main' : '') + '">' +
-      '<div class="idup-c-t">' + esc(c.name || 'Без имени') + mark + '</div>' +
+      '<div class="idup-c-t">' + esc(c.name || c.label || 'Без имени') + mark + '</div>' +
       (contact ? '<div class="idup-c-s">' + esc(contact) + '</div>' : '') +
       '<div class="idup-c-s">заведена ' + esc(idupWhen(c.created_at)) +
         (c.from ? ' · пришла: ' + esc(c.from) : '') + '</div>' +
@@ -42039,7 +42177,7 @@
         var g = find(b.getAttribute('data-cfam')), side = g ? cdupParSide(g) : null;
         if (!g || side == null) return;
         var ppl = g.kin.people, nm = {};
-        g.cards.forEach(function (c) { nm[c.id] = c.name || 'без имени'; });
+        g.cards.forEach(function (c) { nm[c.id] = c.name || c.label || 'без имени'; });
         var par = ppl[side][0], kid = ppl[1 - side][0];
         if (!confirm('Связать семьей: «' + nm[kid] + '» ребенок, «' + nm[par] + '» родитель? ' +
                      'Карточки останутся разными, ребенок перестанет считаться новым лидом.')) return;
@@ -49642,6 +49780,8 @@
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
     { id: 'mail',   label: 'Почта',      icon: 'mail' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
+    // Звонки стоят рядом с перепиской: это тот же разговор с семьей, только голосом.
+    { id: 'calls',  label: 'Звонки',     icon: 'calls' },
     { id: 'dialog', label: 'Переписка',  icon: 'chat' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
   ];
@@ -50762,7 +50902,7 @@
     var navHtml = MODAL_SECTIONS.filter(function (sct) {
       if (sct.id === 'pay') return can('finance|pay_create');
       // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
-      if (sct.id === 'consult' || sct.id === 'projects') return can('clients');
+      if (sct.id === 'consult' || sct.id === 'projects' || sct.id === 'calls') return can('clients');
       // Переписка закрыта тем же правом, что и раздел «Диалоги»: пункт, который
       // открывается только отказом, хуже отсутствующего пункта. У тьютора право
       // своё (`inbox_own`) — он пишет семье, но потока продаж не видит.
@@ -50778,6 +50918,7 @@
       // Курс открыт — зеленая точка на разделе. Без нее «он у нас учится китайскому»
       // видно только внутри вкладки, куда без повода не заходят.
       else if (sct.id === 'course' && lead && lead.course && lead.course.has_access) extra = '<span class="doto"></span>';
+      else if (sct.id === 'calls' && pcList(id).length) extra = '<span class="cnt num">' + pcList(id).length + '</span>';
       else if (sct.id === 'notes' && openTasks) extra = '<span class="cnt num">' + openTasks + '</span>';
       else if (sct.id === 'docs' && d && d.docs && d.docs.length) extra = '<span class="cnt num">' + d.docs.length + '</span>';
       else if (sct.id === 'pay' && d && d.payments && d.payments.length) extra = '<span class="cnt num">' + d.payments.length + '</span>';
@@ -50819,6 +50960,7 @@
           '<div class="m-name-row">' +
             '<div class="m-name' + (nm ? '' : ' anon') + '" id="m-name" data-raw="' + esc(nm) + '">' + esc(nm || 'Без имени') + '</div>' +
             '<button class="m-edit" id="m-name-edit" title="Изменить имя">' + ic('note', 14) + '</button>' +
+            '<span id="m-callslot">' + pcButton(id) + '</span>' +
           '</div>' +
           // Ведет клиента — в шапке, а не спрятан во вкладке «Сейчас»: процент продаж
           // капает именно на ответственного, значит он должен быть на виду. Клик ведет
@@ -50847,6 +50989,14 @@
       '</div>';
 
     el('m-close').addEventListener('click', closeDrawer);
+    pcWireButton(id);
+    if (can('clients')) pcLoad(id);
+    // На телефоне разделы идут лентой вбок, и открытый («Звонки», «Переписка») уезжал
+    // за край: человек не видел, где он. Подкручиваем ленту к открытому разделу.
+    var navOn = modal.querySelector('.m-ni.on');
+    if (navOn && navOn.parentNode.scrollWidth > navOn.parentNode.clientWidth) {
+      navOn.parentNode.scrollLeft = navOn.offsetLeft - (navOn.parentNode.clientWidth - navOn.offsetWidth) / 2;
+    }
     var ownJump = el('m-own-jump');
     if (ownJump) ownJump.addEventListener('click', function () { setModalSection('now'); });
     var hideBtn = el('m-hide');
@@ -50895,11 +51045,13 @@
     if (s === 'mail' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'points' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
+    if (s === 'calls' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'consult') host.innerHTML = buildConsultSection(id);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
+    else if (s === 'calls') host.innerHTML = buildCallsSection(id);
     else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
     else if (s === 'apply') host.innerHTML = buildApplySection(ctx);
     else if (s === 'points') host.innerHTML = buildPointsSection(ctx);
@@ -51036,6 +51188,160 @@
     else text = 'Рассылка: согласия нет — рекламные письма не отправляются';
     return '<div class="mail-off">' + text + '</div>';
   }
+
+  /* ── ЗВОНКИ В КАРТОЧКЕ ─────────────────────────────────────────────────────
+     Вера 13.11.2026: «кнопка Позвонить — нажал и звонишь, без набора номера; номеров
+     несколько — выбор; звонки с записью и конспектом рядом с перепиской». Номера
+     собирает сервер (контакт, заявка, анкета, кабинет — только российские: звонилка
+     за границу не звонит), звонки он же отдает вместе с конспектом разбора.
+     Звонит звонилка в одном окне es-zvonilka на всю смену; &go=1 говорит ей набрать
+     сразу, как только она подключится. Без личного права phone кнопки нет: карточку
+     видят и тьюторы, а звонок идет с номера компании. Послушать запись может тот же,
+     кто ведет семью (право clients). */
+  var PCALLS = {};      // id лида -> {phones, calls} с бэка, или 'none'
+  var PCALLS_AT = {};   // id лида -> когда загрузили: раздел перечитывает старое
+  var PCALLS_BUSY = {};
+
+  function pcList(id) { var b = PCALLS[id]; return (b && b !== 'none' && b.calls) || []; }
+  function pcPhones(id) { var b = PCALLS[id]; return (b && b !== 'none' && b.phones) || []; }
+
+  function pcLoad(id, force) {
+    if (PCALLS_BUSY[id]) return;
+    if (!force && PCALLS[id] && Date.now() - (PCALLS_AT[id] || 0) < 20000) return;
+    PCALLS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/phone-calls').then(function (r) {
+      PCALLS_BUSY[id] = false; PCALLS[id] = r || { phones: [], calls: [] }; PCALLS_AT[id] = Date.now();
+      if (state.drawerId !== id) return;
+      pcPaintButton(id);
+      var cnt = document.querySelector('.m-ni[data-s="calls"]');
+      if (cnt) {
+        var old = cnt.querySelector('.cnt'); if (old) old.remove();
+        if (pcList(id).length) cnt.insertAdjacentHTML('beforeend', '<span class="cnt num">' + pcList(id).length + '</span>');
+      }
+      if (state.modalSection === 'calls') renderModalContent();
+    }).catch(function (e) {
+      PCALLS_BUSY[id] = false;
+      if (e.message !== '403') { PCALLS[id] = 'none'; PCALLS_AT[id] = Date.now(); if (state.drawerId === id && state.modalSection === 'calls') renderModalContent(); }
+    });
+  }
+
+  // Набор номера: одно окно звонилки на смену, следующий номер встает в него же.
+  function pcDial(num) {
+    window.open(location.origin + '/zvonilka/#n=' + encodeURIComponent(num) + '&go=1', 'es-zvonilka');
+  }
+
+  function pcButton(id) {
+    if (!can('phone') || !pcPhones(id).length) return '';
+    var many = pcPhones(id).length > 1;
+    return '<button class="m-call" id="m-call" title="' + (many ? 'Выбрать номер и позвонить' : 'Позвонить через звонилку') + '">' +
+      ic('phone', 14) + '<span>Позвонить</span>' + (many ? ic('chev', 12) : '') + '</button>';
+  }
+  function pcPaintButton(id) {
+    var slot = el('m-callslot');
+    if (!slot) return;
+    slot.innerHTML = pcButton(id);
+    pcWireButton(id);
+  }
+  function pcWireButton(id) {
+    var b = el('m-call');
+    // stopPropagation: иначе тот же клик долетает до документа и закрывает выпадашку
+    if (b) b.addEventListener('click', function (e) { e.stopPropagation(); pcPick(id, b); });
+  }
+  function pcPick(id, anchor) {
+    var ph = pcPhones(id);
+    if (!ph.length) return;
+    if (ph.length === 1) return pcDial(ph[0].number);
+    openDropdown(anchor, ph.map(function (p) {
+      return { v: p.number, label: msPhone(p.number) + ' · ' + p.from };
+    }), '', pcDial);
+    // карточка лежит поверх страницы, меню обычной высоты легло бы под нее
+    var m = el('smenu');
+    if (m) m.classList.add('ddmenu--over-modal');
+  }
+
+  function pcDur(sec) {
+    if (!sec) return '';
+    if (sec < 60) return sec + ' с';
+    return Math.floor(sec / 60) + ' мин' + (sec % 60 ? ' ' + (sec % 60) + ' с' : '');
+  }
+
+  function pcRow(id, c) {
+    var miss = !c.answered;
+    var kind = miss ? 'miss' : c.direction;
+    var what = c.direction === 'in'
+      ? (miss ? 'Пропущенный' : 'Входящий')
+      : (miss ? 'Не дозвонились' : 'Исходящий');
+    var meta = [fmtWhen(c.started_at), c.answered ? pcDur(c.talk_sec) : '', c.staff_login || '']
+      .filter(Boolean).map(esc).join(' · ');
+    var body = (c.summary || '').trim();
+    var note = '';
+    if (body) note = '<div class="cl-sum">' + callSummaryHtml(body) + '</div>';
+    else if (c.notes_status === 'transcribing') note = '<div class="cl-empty">Слушаем запись, конспект появится через пару минут.</div>';
+    else if (c.notes_status === 'failed') note = '<div class="cl-empty">Конспект не получился. Запись можно послушать.</div>';
+    else if (c.answered && (c.talk_sec || 0) < 20) note = '<div class="cl-empty">Короткий разговор, конспект не делаем.</div>';
+    return '<div class="cl-row pc-row">' +
+      '<div class="cl-h">' +
+        '<span class="pc-ic ' + kind + '">' + ic(c.direction === 'in' ? (miss ? 'callmiss' : 'callin') : 'callout', 15) + '</span>' +
+        '<div class="cl-m"><b class="pc-what' + (miss ? ' miss' : '') + '">' + what + '</b>' + (meta ? ' · ' + meta : '') + '</div>' +
+        (can('phone') && c.number ? '<button class="icobtn" data-pcdial="' + esc(c.number) + '" title="Перезвонить на ' + esc(msPhone(c.number)) + '">' + ic('phone', 14) + '</button>' : '') +
+      '</div>' +
+      (c.audio ? '<audio class="pc-audio" controls preload="metadata" src="' +
+        esc(API + '/admin/api/leads/' + id + '/phone-calls/' + c.id + '/audio?k=' + encodeURIComponent(getKey())) + '"></audio>' : '') +
+      note +
+    '</div>';
+  }
+
+  function buildCallsSection(id) {
+    pcLoad(id);
+    var b = PCALLS[id];
+    var head = '<div class="m-ctitle">Звонки</div>' +
+      '<div class="m-csub">Все звонки через звонилку: запись хранится 90 дней, разговор дольше 20 секунд разбирается в конспект сам.</div>';
+    if (!b) return head + '<div class="sk-rows"><div class="sk row"></div><div class="sk row"></div></div>';
+    if (b === 'none') return head + '<div class="field-empty">Не удалось загрузить звонки. Откройте раздел заново.</div>';
+    var nums = '';
+    if (can('phone') && pcPhones(id).length) {
+      nums = '<div class="pc-nums">' + pcPhones(id).map(function (p) {
+        return '<button class="pc-num" data-pcdial="' + esc(p.number) + '">' + ic('phone', 13) +
+          '<span class="num">' + esc(msPhone(p.number)) + '</span><small>' + esc(p.from) + '</small></button>';
+      }).join('') + '</div>';
+    } else if (can('phone')) {
+      nums = '<div class="field-empty">Российского номера в карточке нет. Впишите его в «Контакт» на вкладке «Главное», и кнопка появится.</div>';
+    }
+    var list = pcList(id);
+    var rows = list.length
+      ? '<div class="pc-list">' + list.map(function (c) { return pcRow(id, c); }).join('') + '</div>'
+      : '<div class="field-empty">Звонков пока не было.</div>';
+    return head + nums + rows;
+  }
+
+  function pcWire(id, host) {
+    Array.prototype.forEach.call(host.querySelectorAll('[data-pcdial]'), function (b) {
+      b.addEventListener('click', function () { pcDial(b.getAttribute('data-pcdial')); });
+    });
+    // Пока конспект считается, раздел сам перечитывает список: иначе человек видит
+    // «слушаем запись» до тех пор, пока не закроет и не откроет карточку.
+    if (pcList(id).some(function (c) { return c.notes_status === 'transcribing'; })) {
+      clearTimeout(PCALLS._t);
+      PCALLS._t = setTimeout(function () {
+        if (state.drawerId === id && state.modalSection === 'calls') pcLoad(id, true);
+      }, 15000);
+    }
+  }
+
+  /* Любая ссылка tel: в CRM у того, у кого есть звонилка, звонит через нее: контакт
+     в карточке, «Связаться» в «Сейчас», колонка контакта в списке. Иначе ноутбук
+     предлагает открыть FaceTime или Skype, и звонок уходит мимо записи. Иностранный
+     номер звонилка не берет — такой остается обычной ссылкой. */
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest && e.target.closest('a[href^="tel:"]');
+    if (!a || !can('phone')) return;
+    var d = a.getAttribute('href').slice(4).replace(/\D/g, '');
+    if (d.length === 11 && (d.charAt(0) === '8' || d.charAt(0) === '7')) d = '7' + d.slice(1);
+    else if (d.length === 10) d = '7' + d;
+    if (!/^7\d{10}$/.test(d)) return;
+    e.preventDefault();
+    pcDial(d);
+  }, true);
 
   function buildMailSection(id) {
     var b = MAIL[id];
@@ -52523,6 +52829,34 @@
           '<button class="bp ghost sm potc-no" data-potc-mark="no" title="Встреча была, но покупать не будут">Не потенциал</button>';
     return '<div class="potc"><span class="ql-l">Чат с семьей</span>' + chat + form +
       '<span class="potc-sep"></span><span class="ql-l">Потенциал</span>' + mark + '</div>';
+  }
+  /* «Долга нет» в «Оплатах» (Павел 12.11.2026, дебиторка с ведомости 11.11). Клиент
+     без графика рассрочки висит на «Продажах → Дебиторка» неразобранным, пока ему не
+     внесут график или не отметят, что платить больше нечего. Отметка лежит в
+     overrides.debt, просроченный взнос по графику ее перебивает (sales_money.debt_state). */
+  function buildDebtMark(ctx) {
+    if ((ctx.crm || {}).status !== 'client') return '';
+    var none = (((ctx.crm || {}).overrides) || {}).debt === 'none';
+    return '<div class="dbt-mark' + (none ? ' on' : '') + '">' + (none
+      ? '<span class="dbt-mt">' + ic('check', 13) + 'Долга нет: клиент оплатил полностью</span>' +
+        '<button class="bp ghost sm" data-dbt="">Снять отметку</button>'
+      : '<span class="dbt-mt">Платежи впереди есть? Заведите счет с рассрочкой ниже, взносы сами попадут в дебиторку ведомости.</span>' +
+        '<button class="bp ghost sm" data-dbt="none">Долга нет, оплачено полностью</button>') +
+    '</div>';
+  }
+  function wireDebtMark(host, id) {
+    var b = host.querySelector('[data-dbt]');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var v = b.getAttribute('data-dbt');
+      var ov = Object.assign({}, ((findLead(id) || {}).crm || {}).overrides || {}, { debt: v });
+      b.disabled = true;
+      patch(id, { overrides: ov }, null, function () {
+        showToast(v ? 'Отметил: долга нет' : 'Отметку снял');
+        state._dbt = null;
+        if (state.drawerId === id) renderModalContent();
+      });
+    });
   }
   function wirePotChat(host, id) {
     var box = host.querySelector('.potc');
@@ -54933,6 +55267,7 @@
         '</div></div>' +
       '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
         '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        buildDebtMark(ctx) +
         '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
         '<div class="ord-b">' +
           '<div class="ord-newh">Новый счет</div>' +
@@ -55464,6 +55799,7 @@
     // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
     if (state.modalSection === 'course') wireCourse(id);
     if (state.modalSection === 'mail') wireMail(id, host);
+    if (state.modalSection === 'calls') pcWire(id, host);
 
     // ── ПРОЕКТ: доступ, тема, решения по шагам ──
     if (state.modalSection === 'projects') wireProject(id, host);
@@ -55953,6 +56289,7 @@
 
     // оплаты: добавить (статус-сегмент + дата)
     /* ── Счета ЮKassa (заказы) ── */
+    wireDebtMark(host, id);
     var ordList = el('ord-list');
     if (ordList) {
       var ORD_ST = {
