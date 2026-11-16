@@ -15215,9 +15215,17 @@ video.cs-media { background: #000; }
 .lrn-hero .bp { margin-top: 4px; }
 .lrn-row { cursor: pointer; }
 .lrn-row.open { background: #FBFBFC; }
-.lrn-day { font-size: 11.5px; font-weight: 600; color: var(--ink-2); background: var(--fill); border-radius: 6px;
-  padding: 2px 8px; white-space: nowrap; }
-.lrn-day.now { background: var(--blue-tint); color: var(--blue-d); }
+/* Название занятия — его содержание: переносим целиком, без многоточия. Это
+   кнопка-переключатель (Enter/Space раскрывает), поэтому сбрасываем вид кнопки. */
+.lrn-row .dy-ttl.lrn-tg { white-space: normal; overflow: visible; text-overflow: clip; text-align: left;
+  display: block; -webkit-line-clamp: unset;
+  background: none; border: 0; padding: 0; font-family: inherit; font-size: 14.5px; letter-spacing: -.01em;
+  line-height: 1.35; font-weight: 600; color: var(--ink); cursor: pointer; }
+.lrn-row.closed .dy-ttl.lrn-tg { color: var(--ink-3); font-weight: 500; text-decoration: line-through; }
+.lrn-row .lrn-tg:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+.lrn-row .dy-r .sev.mini { margin-left: 0; }
+.tsk-chk.done.lrn-undo { cursor: pointer; }
+.tsk-chk.done.lrn-undo:hover { border-color: var(--line-2); color: var(--ink-2); }
 .dy-meta .lrn-take { white-space: normal; color: var(--ink-2); }
 .lrn-body { grid-column: 1 / -1; padding: 2px 0 6px 31px; display: grid; gap: 10px; font-size: 13px;
   line-height: 1.55; color: var(--ink-2); cursor: default; }
@@ -15227,11 +15235,13 @@ video.cs-media { background: #000; }
 .lrn-body .lnk:hover { text-decoration: underline; }
 .lrn-say { display: flex; gap: 8px; align-items: center; max-width: 560px; }
 .lrn-say .al-in { flex: 1 1 auto; min-width: 0; }
-.lrn-say .bp { flex: none; height: 36px; padding-top: 0; padding-bottom: 0; }
+.lrn-say .bp { flex: none; }
 .lrn-add { display: flex; gap: 8px; align-items: center; padding: 4px 18px 10px; }
 .lrn-add .al-in { flex: 1 1 auto; min-width: 0; }
 .lrn-foot { padding: 10px 20px 14px; border-top: 1px solid var(--line); line-height: 1.5; }
-.lrn-inb .dy-ttl { font-weight: 500; }
+.trow.lrn-inb { cursor: default; }
+.trow.lrn-inb:hover { background: none; box-shadow: none; }
+.lrn-inb .dy-ttl { font-weight: 500; white-space: normal; }
 .lrn-inb .lnk { color: var(--blue); text-decoration: none; }
 .lrn-ach { padding: 9px 18px; border-top: 1px solid var(--line); }
 .lrn-ach:first-child { border-top: 0; }

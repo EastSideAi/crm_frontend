@@ -3607,7 +3607,12 @@
         var ld = li.filter(function (x) { return x.status === 'done'; }).length;
         tphr = !lp ? 'Смотрю план обучения.'
           : !li.length ? 'На этой неделе занятий нет. Агент соберет план по теме недели.'
-          : 'Обучение: пройдено <b>' + ld + '</b> из <b>' + li.length + '</b> ' + plural(li.length, 'занятия', 'занятий', 'занятий') + ' недели.';
+          : (function () {
+              var tday = lrnToday();
+              var now = li.filter(function (x) { return x.day === tday && x.status !== 'done'; })[0];
+              return now ? 'Сегодня: <b>' + esc(now.title) + '</b>, ' + now.minutes + ' мин.'
+                : 'Пройдено <b>' + ld + '</b> из <b>' + li.length + '</b> ' + plural(li.length, 'занятия', 'занятий', 'занятий') + ' недели.';
+            })();
       }
       // Пришли из табло по человеку: «на тебе задач нет» рядом с чужим списком
       // читается как ошибка системы.
@@ -7573,6 +7578,7 @@
     var d = new Date(iso + 'T12:00:00');
     return LRN_DOW[d.getDay()] + ' ' + d.getDate();
   }
+  function lrnHost(u) { var m = String(u || '').match(/^https?:\/\/(?:www\.)?([^\/?#]+)/); return m ? m[1] : 'материал'; }
   function lrnToday() {
     var d = new Date();
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
@@ -7583,19 +7589,19 @@
     var meta = ['<span class="dy-m">' + (it.kind === 'practice' ? 'практика' : 'теория') + ', ' + it.minutes + ' мин</span>'];
     if (done && it.takeaway) meta.push('<span class="dy-m lrn-take">' + esc(it.takeaway) + '</span>');
     var chk = done
-      ? '<span class="tsk-chk done">' + ic('check', 12) + '</span>'
+      ? '<button class="tsk-chk done lrn-undo" data-lrn-undo="' + it.id + '" title="Снять отметку" aria-label="Снять отметку «прошел»">' + ic('check', 12) + '</button>'
       : '<button class="tsk-chk" data-lrn-done="' + it.id + '" title="Прошел">' + ic('check', 12) + '</button>';
     var body = open
       ? '<div class="lrn-body">' + (it.body ? '<p>' + esc(it.body) + '</p>' : '') +
           (it.url ? '<a class="lnk" href="' + esc(it.url) + '" target="_blank" rel="noopener">' + ic('ext', 12) + ' Открыть материал</a>' : '') +
-          (!done ? '<div class="lrn-say"><input class="al-in sm" data-lrn-take="' + it.id + '" maxlength="1000" placeholder="Что вынес, одной строкой">' +
-            '<button class="bp" data-lrn-save="' + it.id + '">Прошел</button></div>' : '') +
+          (!done ? '<div class="lrn-say"><input class="al-in sm" data-lrn-take="' + it.id + '" maxlength="1000" placeholder="Что вынес, одной строкой" aria-label="Что вынес из занятия">' +
+            '<button class="bp sm" data-lrn-save="' + it.id + '">Прошел</button></div>' : '') +
         '</div>'
       : '';
     return '<div class="trow dy-row lrn-row has-meta' + (done ? ' closed' : '') + (today ? ' lrn-now' : '') + (open ? ' open' : '') + '" data-lrn="' + it.id + '">' +
-      '<div class="dy-t">' + chk + '<div class="dy-main"><span class="dy-ttl">' + esc(it.title) + '</span>' +
+      '<div class="dy-t">' + chk + '<div class="dy-main"><button class="dy-ttl lrn-tg" data-lrn-tg="' + it.id + '" aria-expanded="' + (open ? 'true' : 'false') + '">' + esc(it.title) + '</button>' +
         '<div class="dy-meta">' + meta.join('') + '</div></div></div>' +
-      '<div class="dy-r"><span class="lrn-day' + (today ? ' now' : '') + '">' + (today ? 'сегодня' : esc(lrnDay(it.day))) + '</span></div>' +
+      '<div class="dy-r"><span class="sev mini ' + (today ? 'ms-when' : 'ms-ok') + '">' + (today ? 'сегодня' : esc(lrnDay(it.day))) + '</span></div>' +
       body + '</div>';
   }
   function renderLearn(view) {
@@ -7622,11 +7628,11 @@
       : '<div class="wk-empty"><div class="wk-empty-t">На эту неделю занятий нет</div>' +
         '<div class="wk-empty-s">Агент собирает план по теме недели. Свое можно положить в копилку справа: ссылку, статью или задачу на практику.</div></div>';
     var box = '<div class="card dy-card"><div class="dy-h"><span class="t">Копилка</span><span class="dy-h-n">' + inbox.length + '</span></div>' +
-      '<div class="lrn-add"><input class="al-in sm" id="lrn-new" maxlength="300" placeholder="Что изучить: тема или ссылка">' +
+      '<div class="lrn-add"><input class="al-in sm" id="lrn-new" maxlength="300" placeholder="Что изучить: тема или ссылка" aria-label="Что изучить: тема или ссылка">' +
       '<button class="icobtn" id="lrn-add" title="Положить в копилку" aria-label="Положить в копилку">' + ic('plus', 14) + '</button></div>' +
       '<div class="dy-body">' + (inbox.length ? inbox.map(function (x) {
         return '<div class="trow dy-row lrn-inb"><div class="dy-t"><div class="dy-main"><span class="dy-ttl">' + esc(x.title) + '</span>' +
-          (x.url ? '<div class="dy-meta"><a class="dy-m lnk" href="' + esc(x.url) + '" target="_blank" rel="noopener">' + ic('ext', 11) + ' материал</a></div>' : '') +
+          (x.url ? '<div class="dy-meta"><a class="dy-m lnk" href="' + esc(x.url) + '" target="_blank" rel="noopener">' + ic('ext', 11) + ' ' + esc(lrnHost(x.url)) + '</a></div>' : '') +
           '</div></div></div>';
       }).join('') : '<div class="dy-empty">Пусто. Сюда ложится то, что ты прислал боту или добавил сам. Агент поставит это в ближайшую подходящую неделю.</div>') + '</div></div>';
     var ach = state.learn.ach || [];
@@ -7661,24 +7667,41 @@
       apiSend('/admin/api/learning/week', 'PUT', { week_starts: state.learn.plan.week_starts, topic: w.topic, why: w.why, result: w.result, approve: true },
         function () { w.approved_at = new Date().toISOString(); showToast('Тема утверждена'); redraw(); });
     };
+    var adding = false;
     var add = function () {
       var inp = view.querySelector('#lrn-new'), v = (inp.value || '').trim();
       if (!v) { inp.focus(); return; }
+      if (adding) return;
+      adding = true;
       var url = /^https?:\/\/\S+$/.test(v) ? v : '';
-      apiSend('/admin/api/learning/items', 'POST', { title: url ? 'Материал по ссылке' : v, url: url, source: 'user' }, function (r) {
+      apiSend('/admin/api/learning/items', 'POST', { title: url ? 'Материал: ' + lrnHost(url) : v, url: url, source: 'user' }, function (r) {
         if (r && r.item) state.learn.plan.inbox = [r.item].concat(state.learn.plan.inbox || []);
         showToast('В копилке'); redraw();
-      });
+      }, function () { adding = false; showToast('Не сохранилось, проверь сеть'); });
     };
     view.querySelector('#lrn-add').onclick = add;
     view.querySelector('#lrn-new').onkeydown = function (e) { if (e.key === 'Enter') add(); };
+    var toggle = function (id) {
+      state.learnOpen = state.learnOpen === id ? null : id;
+      renderLearn(view);
+      var inp = view.querySelector('[data-lrn-take="' + id + '"]');
+      if (inp) inp.focus();
+      else { var tg = view.querySelector('[data-lrn-tg="' + id + '"]'); if (tg) tg.focus(); }
+    };
     view.querySelectorAll('.lrn-row').forEach(function (row) {
       row.onclick = function (e) {
-        if (e.target.closest('button, input, a')) return;
-        var id = +row.getAttribute('data-lrn');
-        state.learnOpen = state.learnOpen === id ? null : id;
-        renderLearn(view);
-        var inp = view.querySelector('[data-lrn-take="' + id + '"]'); if (inp) inp.focus();
+        // Раскрытая часть живет внутри строки: клик по описанию или полю не
+        // должен сворачивать занятие и стирать набранное.
+        if (e.target.closest('button, input, a, .lrn-body')) return;
+        toggle(+row.getAttribute('data-lrn'));
+      };
+    });
+    view.querySelectorAll('[data-lrn-tg]').forEach(function (b) {
+      b.onclick = function () { toggle(+b.getAttribute('data-lrn-tg')); };
+    });
+    view.querySelectorAll('[data-lrn-undo]').forEach(function (b) {
+      b.onclick = function () {
+        lrnPatch(+b.getAttribute('data-lrn-undo'), { status: 'plan' }, function () { showToast('Отметку снял'); redraw(); });
       };
     });
     view.querySelectorAll('[data-lrn-done]').forEach(function (b) {
