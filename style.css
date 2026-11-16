@@ -13973,10 +13973,12 @@ body.office-full { overflow: hidden; }
 /* серая поверхность значит одно: исполнитель по ТЗ, а не ступень иерархии */
 .org-node.k-agent, .org-node.k-crew { background: var(--fill); border-color: transparent; }
 .org-node.k-agent:hover, .org-node.k-crew:hover { background: var(--card); border-color: #CFE0FF; }
-/* голова второй доски повторяет карточку с первой — здесь она тихая подпись,
-   а не вторая такая же кнопка с тем же счетчиком */
+/* голова второй доски: серая подложка. Если у руководителя есть задачи, она
+   кнопка со счетчиком (а в общем ряду та же карточка тихая), иначе подпись */
 .org-node.head { background: var(--fill); border-color: transparent; cursor: default; }
 .org-node.head:hover { background: var(--fill); border-color: transparent; }
+button.org-node.head { cursor: pointer; }
+button.org-node.head:hover { background: var(--card); border-color: #CFE0FF; }
 .org-cnt { margin-top: auto; padding-top: 8px; display: inline-flex; align-items: center; gap: 4px;
   font-size: 11.5px; font-weight: 600; color: var(--blue-d); }
 .org-cnt svg { transition: .14s var(--ease); }
