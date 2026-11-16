@@ -7592,7 +7592,7 @@
       ? '<button class="tsk-chk done lrn-undo" data-lrn-undo="' + it.id + '" title="Снять отметку" aria-label="Снять отметку «прошел»">' + ic('check', 12) + '</button>'
       : '<button class="tsk-chk" data-lrn-done="' + it.id + '" title="Прошел">' + ic('check', 12) + '</button>';
     var body = open
-      ? '<div class="lrn-body">' + (it.body ? '<p>' + esc(it.body) + '</p>' : '') +
+      ? '<div class="lrn-body">' + (it.body ? '<div class="fkb-body lrn-md">' + kbMd(it.body) + '</div>' : '') +
           (it.url ? '<a class="lnk" href="' + esc(it.url) + '" target="_blank" rel="noopener">' + ic('ext', 12) + ' Открыть материал</a>' : '') +
           (!done ? '<div class="lrn-say"><input class="al-in sm" data-lrn-take="' + it.id + '" maxlength="1000" placeholder="Что вынес, одной строкой" aria-label="Что вынес из занятия">' +
             '<button class="bp sm" data-lrn-save="' + it.id + '">Прошел</button></div>' : '') +
