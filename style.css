@@ -12495,8 +12495,6 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .mkd-nm small .sb-cv { display: inline; font-size: inherit; color: inherit; }
 .mkd-nm small .sb-cv.weak { color: var(--red-ink); }
 .mkd-nm small .sb-cv.good { color: var(--green-ink); }
-.sb-pathwrap .stat { cursor: pointer; }
-.sb-pathwrap .stat.on { background: var(--blue-tint); }
 
 .sb-people .pf-sec { padding: 20px 24px 14px; }
 .sb-people .pf-sec .icobtn { margin-left: auto; }
@@ -15142,13 +15140,6 @@ video.cs-media { background: #000; }
 /* Переход «Самозанятые ⇄ Моя работа» у руководителя-исполнителя: отдельно от пунктов
    раздела, потому что ведет в другое пространство, а не на экран внутри. */
 .navi.nav-sw { margin-top: 14px; }
-
-/* Вердикт отрезка на «Продажах» — кнопка к людям (Павел 09.11.2026). */
-.sb-vbtn { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer;
-  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px;
-  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
-.sb-vbtn:hover, .sb-vbtn.on { text-decoration-color: currentColor; }
-.sb-vbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
 
 /* ── Звонки в карточке ──
    «Позвонить» в шапке — единственная залитая кнопка шапки: это главное действие с
