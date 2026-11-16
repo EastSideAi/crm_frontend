@@ -38669,10 +38669,23 @@
         var ld = lead[k] || ever[k] || l || {};
         if (!bot[k] || d < bot[k].d) bot[k] = {i: ld.i || null, nm: ld.nm || (l && l.nm) || '', s: ld.s || '', d: d, how: 'консультация в боте'};
       });
+      // Ольга 16.11.2026: «квал» в чистке — квалифицированный руками, на дату прихода.
+      // Стоит еще «из семьи лида» — квалифицированным считается родитель-лид.
+      var man = {};
+      (cc.leads || []).forEach(function (l) {
+        if (!l.q || l.d < a || l.d > b) return;
+        var pa = l.fo && card[l.fo];
+        if (l.nl && !(l.nl === 'family' && pa)) return;
+        var k = l.nl ? key(pa) : key(l);
+        if (!ever[k]) return;
+        var ld = lead[k] || ever[k];
+        if (!man[k] || l.d < man[k].d) man[k] = {i: ld.i, nm: ld.nm || '', s: ld.s || '', d: l.d, how: 'отметили квал'};
+      });
       var all = {};
+      Object.keys(man).forEach(function (k) { all[k] = man[k]; });
       Object.keys(plat).forEach(function (k) { all[k] = plat[k]; });
       Object.keys(bot).forEach(function (k) {
-        all[k] = all[k] ? Object.assign({}, all[k], {how: 'платформа и бот'}) : bot[k];
+        all[k] = plat[k] ? Object.assign({}, all[k], {how: 'платформа и бот'}) : bot[k];
       });
       // Ольга 13.11.2026: пришедшие сразу на платформу, минуя бота и формы, — отдельная
       // строка. Контакт у них только в аккаунте платформы (поле ac сервера), в лиды выше
@@ -38715,6 +38728,12 @@
     };
     qualOf(cur, o.cur[0], o.cur[1]);
     qualOf(prv, o.prv[0], o.prv[1]);
+    // Ольга 16.11.2026: «Всего» перед лидами — лиды и пришедшие на платформу мимо бота.
+    // Пришедшие мимо бота в лиды не входят (pon отсекает лидов), поэтому сумма без повторов.
+    [cur, prv].forEach(function (x) {
+      x.total = (x.leads || 0) + (x.platOnly || 0);
+      x._ql.total = ((x.who || {}).leads || []).concat(x._ql.platOnly || []);
+    });
     // Ольга 13.11.2026: «цифры все должны быть кликабельные». Список под цифрой —
     // из того же прохода, что и цифра; людей больше одного раза не показываем.
     var whoOf = function (x, k) {
@@ -38738,8 +38757,9 @@
       return '<button class="mg-nb' + (on ? ' on' : '') + '" data-mgq="' + k + ':' + side + '" title="Кто за этой цифрой">' + txt + '</button>';
     };
     var rows = [
-      ['Лиды', 'карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads'],
-      ['Пришли на платформу, минуя бота', 'контакт только в аккаунте платформы, в лиды выше не входят', 'platOnly', null],
+      ['Всего', 'лиды и пришедшие на платформу мимо бота, человек один раз', 'total', null],
+      ['Лиды', 'из них: карточки с контактом, без отмеченных «не новый лид»', 'leads', 'leads', false, true],
+      ['Пришли на платформу, минуя бота', 'из них: контакт только в аккаунте платформы', 'platOnly', null, false, true],
       ['Квалифицированные лиды', 'прошли в этом периоде разбор на платформе (лиды) или консультацию в боте (все), человек один раз', 'qual', null, false, false, 'leads', 'от лидов'],
       ['Разбор на платформе', 'из них: анкета и разбор шансов на сайте', 'platQ', null, false, true, 'qual', 'от квалифицированных'],
       ['Диагностика в боте', 'из них: прошли консультацию в боте до окна записи к тьютору, с телефоном или без', 'consBook', null, false, true, 'qual', 'от квалифицированных'],
@@ -38766,7 +38786,7 @@
         var dl = c - p, cls = !dl || r[2] === 'spend' ? '' : dl > 0 ? 'up' : 'down';
         var pl = pv != null && pv > 0 ? (c >= pv ? 'ok' : c >= pv * .7 ? 'risk' : 'miss') : '';
         // Ольга 15.11.2026: пришедшие на платформу мимо лидов — красным, это потерянные лиды
-        if (r[2] === 'platOnly' && c > 0) pl = 'miss';
+        if ((r[2] === 'platOnly' || r[2] === 'total') && c > 0) pl = 'miss';
         // Виталий 02.11.2026: «меня интересует отношение к плановым показателям» — процент рядом с цифрой.
         var pct = function (v) { return Math.round(c / v * 100) + '%'; };
         return '<div class="mg-tr' + (r[5] ? ' sub' : '') + '"><span class="mg-l">' + esc(r[0]) + '<small>' + esc(r[1]) + '</small></span>' +
@@ -39046,9 +39066,12 @@
   function mgRows(d, R, today) {
     var team = d.team || [];
     return '<div class="mg-list">' + d.leads.map(function (l) {
+      // Ольга 16.11.2026: плашки ставятся по нескольку, «квал» первой
+      var marks = l.marks || (l.not_lead ? [l.not_lead] : []);
       var chips = Object.keys(R).map(function (k) {
-        return '<button class="qchip' + (l.not_lead === k ? ' on' : '') + (!l.not_lead && l.hint === k ? ' hint' : '') +
-          '" aria-pressed="' + (l.not_lead === k) + '" data-mgnl="' + esc(l.id) + '" data-r="' + k + '">' + esc(R[k]) + '</button>';
+        var on = marks.indexOf(k) >= 0;
+        return '<button class="qchip' + (on ? ' on' : '') + (!l.not_lead && l.hint === k ? ' hint' : '') +
+          '" aria-pressed="' + on + '" data-mgnl="' + esc(l.id) + '" data-r="' + k + '">' + esc(R[k]) + '</button>';
       }).join('');
       return '<div class="mg-lead' + (l.not_lead ? ' off' : '') + '">' +
         '<div class="mg-hb"><div class="mg-ht"><a href="#lead/' + esc(l.id) + '" data-mglead="' + esc(l.id) + '">' + esc(l.name || 'Без имени') + '</a></div>' +
@@ -39173,12 +39196,12 @@
       b.addEventListener('click', function () {
         var d = mgTab() === 'today' ? state._mgToday : state._mgLeads, id = b.dataset.mgnl;
         var l = (d.leads || []).filter(function (x) { return x.id === id; })[0];
-        var reason = l && l.not_lead === b.dataset.r ? null : b.dataset.r;
-        api('/admin/api/rnp/leads/' + id + '/not-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason }) })
-          .then(function () {
-            l.not_lead = reason;
+        var mk = b.dataset.r, had = (l.marks || (l.not_lead ? [l.not_lead] : [])).indexOf(mk) >= 0;
+        api('/admin/api/rnp/leads/' + id + '/mark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mark: mk, on: !had }) })
+          .then(function (r) {
+            l.marks = r.marks; l.not_lead = r.not_lead;
             // «наш / тест» уходит из списка вниз, к убранным: вдруг промахнулись
-            if (reason === 'team') {
+            if (r.not_lead === 'team') {
               d.leads = d.leads.filter(function (x) { return x.id !== id; });
               d.team = (d.team || []).concat([{ id: id, name: l.name }]);
             }
