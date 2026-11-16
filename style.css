@@ -15229,7 +15229,8 @@ video.cs-media { background: #000; }
 .dy-meta .lrn-take { white-space: normal; color: var(--ink-2); }
 .lrn-body { grid-column: 1 / -1; padding: 2px 0 6px 31px; display: grid; gap: 10px; font-size: 13px;
   line-height: 1.55; color: var(--ink-2); cursor: default; }
-.lrn-body p { margin: 0; max-width: 680px; }
+.lrn-body .lrn-md { margin-top: 0; max-width: 680px; color: var(--ink); }
+.lrn-body .lrn-md > :first-child { margin-top: 0; }
 .lrn-body .lnk { display: inline-flex; align-items: center; gap: 6px; color: var(--blue); font-weight: 600;
   text-decoration: none; }
 .lrn-body .lnk:hover { text-decoration: underline; }
