@@ -43506,19 +43506,22 @@
      которая ничего не открывает, — обещание, которого экран не держит. */
   function orgNodeHtml(n, head) {
     var d = orgDuty(n.duties), cnt = d ? orgCount(d) : 0;
-    /* голова второй доски — та же карточка, что стояла рядом на первой. Второй
-       раз подряд она не кнопка и не повторяет подпись, которую уже несет
-       заголовок доски над ней: иначе человек видит один и тот же узел дважды */
+    /* голова второй доски — та же карточка, что стояла рядом на первой. Задачи
+       руководителя открываются с нее, на доске его отдела (Ольга 16.11.2026);
+       в общем ряду направлений та же карточка — без счетчика, чтобы один и тот
+       же список не висел на двух кнопках. Подпись, которую уже несет заголовок
+       доски, голова не повторяет */
+    var ownBoard = !!(n.person && ((n.children || []).length || n.crew));
     var inner = '<b>' + esc(head ? (n.headRole || n.title) : n.title) + '</b>' +
       (n.person ? '<i>' + esc(n.person) + '</i>' : '') +
       (n.role && !head ? '<small>' + esc(n.role) + '</small>' : '') +
       (n.from ? '<span class="org-from">' + esc(n.from) + '</span>' : '') +
       (n.note && !n.role ? '<small>' + esc(n.note) + '</small>' : '');
-    if (head) return '<div class="org-node head k-' + esc(n.kind || 'role') + '">' + inner + '</div>';
-    if (!d) {
+    if (head && !d) return '<div class="org-node head k-' + esc(n.kind || 'role') + '">' + inner + '</div>';
+    if (!d || (ownBoard && !head)) {
       return '<div class="org-node k-' + esc(n.kind || 'role') + ' flat">' + inner + '</div>';
     }
-    return '<button type="button" class="org-node k-' + esc(n.kind || 'role') + '" data-org="' + esc(n.duties) + '">' +
+    return '<button type="button" class="org-node' + (head ? ' head' : '') + ' k-' + esc(n.kind || 'role') + '" data-org="' + esc(n.duties) + '">' +
       inner + '<span class="org-cnt">' + cnt + ' ' + plural(cnt, 'задача', 'задачи', 'задач') + ic('go', 12) + '</span>' +
       '</button>';
   }
