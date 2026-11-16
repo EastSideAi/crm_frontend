@@ -14973,6 +14973,9 @@ video.cs-media { background: #000; }
   .mg-tbl.pf:not(.noplan) .mg-tr .c-pl { display: block; }
   .mg-tbl.pf:not(.noplan) .mg-tr .c-pv { display: none; }
   .mg-tr .num.big { font-size: 17px; }
+  /* подписи под цифрой («из них вернулись 1», «87% от записавшихся») в колонке 72px
+     переносятся, иначе уходят за край экрана */
+  .mg-tr .num small { white-space: normal; hyphens: auto; overflow-wrap: anywhere; }
   .mg-hyp, .mg-dec, .mg-lead { padding: 12px 16px; flex-wrap: wrap; }
   .mg-hyp.sub, .mg-dec.sub { padding-left: 32px; }
   /* Текст гипотезы на всю ширину, статус и «Итог» уходят строкой ниже под текст:
