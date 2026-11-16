@@ -8754,7 +8754,12 @@
       right = '<button class="bp ghost sm" data-mopen="' + m.import_id + '">' + ic('task', 13) + 'Разобрать' +
         (m.goals ? ' <span class="num">' + m.goals + '</span>' : '') + '</button>';
     } else if (m.state === 'applied') {
-      right = '<button class="qchip" data-mopen="' + m.import_id + '"><span class="sev st-done">задачи заведены</span></button>';
+      // Снятые пункты видны рядом с заведенными, причина — в подсказке: встреча
+      // разобрана, когда каждый пункт стал задачей или снят с причиной (16.11.2026).
+      right = (m.skipped
+        ? '<span class="sev n-off mt-skip" title="' + esc(m.skip_reason || 'причина не записана') + '">снято ' + m.skipped + '</span>'
+        : '') +
+        '<button class="qchip" data-mopen="' + m.import_id + '"><span class="sev st-done">задачи заведены</span></button>';
     } else if (m.state === 'call') {
       right = '<button class="qchip" data-mcard="' + esc(m.session_id || '') + '">' + ic('card', 13) +
         (m.client_name ? esc(m.client_name) : 'карточка ученика') + '</button>';
@@ -17448,6 +17453,15 @@
         '<div class="al-body mi-body">' +
           (common ? '<div class="mi-note">' + esc(common) + '</div>' : '') +
           imps.map(one).join('') + '</div>' +
+        // Снять пункт молча нельзя (Виталий 16.11.2026): встреча разобрана, когда
+        // каждый пункт стал задачей или снят с причиной. Причина одна на разбор и
+        // видна в журнале встреч рядом с «снято N».
+        '<div class="mi-why" id="mi-why" hidden>' +
+          '<label class="mi-why-l" for="mi-reason">Почему не заводим снятое</label>' +
+          '<input class="al-in" id="mi-reason" maxlength="500" autocomplete="off" ' +
+            'placeholder="Например: уже есть в плане месяца" value="' +
+            esc((imps.filter(function (x) { return x.skip_reason; })[0] || {}).skip_reason || '') + '">' +
+        '</div>' +
         '<div class="al-foot mi-foot">' +
           '<span class="mi-count" id="mi-count"></span>' +
           '<button class="al-cancel" id="mi-cancel">Закрыть</button>' +
@@ -17462,6 +17476,8 @@
       });
 
       var save = el('mi-save'), count = el('mi-count');
+      var why = el('mi-why'), reason = el('mi-reason');
+      reason.addEventListener('input', function () { reason.classList.remove('al-err'); });
       var itemsLeft = function () {
         return card.querySelectorAll('.mi-item:not(.made):not(.off)').length;
       };
@@ -17494,8 +17510,10 @@
           : 'Все пункты сняты';
         // Новых пунктов нет, но заведенные можно править — кнопка остается,
         // только называется по делу.
-        save.disabled = !n && !made;
-        save.classList.toggle('off', !n && !made);
+        // Сняли все — сохранить все равно можно: снятое с причиной и есть разбор.
+        why.hidden = !off;
+        save.disabled = !n && !made && !off;
+        save.classList.toggle('off', !n && !made && !off);
         save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить';
         count.classList.toggle('warn', !!(n && nob));
       };
@@ -17580,6 +17598,16 @@
             ' ничьими: их никто не увидит в своем плане';
           return;
         }
+        var offNow = card.querySelectorAll('.mi-item.off:not(.made)').length;
+        var why_ = (reason.value || '').trim();
+        if (offNow && !why_) {
+          reason.classList.add('al-err');
+          reason.focus();
+          count.classList.add('warn');
+          count.textContent = 'Напиши одной строкой, почему не заводим ' + offNow + ' ' +
+            plural(offNow, 'пункт', 'пункта', 'пунктов');
+          return;
+        }
         save.disabled = true; save.classList.add('loading');
         // Заводим по протоколу за раз и в том же порядке, что на экране: пакет
         // из трех файлов — это три независимых разбора, и упавший третий не
@@ -17603,7 +17631,7 @@
           }
           var box = boxes[i];
           apiSend('/admin/api/meetings/' + box.getAttribute('data-id') + '/apply', 'POST',
-            { goals: collect(box) },
+            { goals: collect(box), skip_reason: why_ },
             function (r) {
               total += ((r && r.goals) || 0) + ((r && r.steps) || 0);
               upd += (r && r.updated) || 0;
@@ -31430,6 +31458,8 @@
     idle:   { cls: 'mr-wait',  label: 'ждет' },
     draft:  { cls: 'st-block', label: 'черновик' },
     done:   { cls: 'st-done',  label: 'задачи заведены' },
+    // Разбор встречи приходит статусом черновика: applied — «Завести» нажали.
+    applied: { cls: 'st-done', label: 'задачи заведены' },
     call:   { cls: 'st-done',  label: 'в карточке ученика' },
     failed: { cls: 'st-return', label: 'не разобралась' },
     new:    { cls: 'mr-wait',  label: 'без разбора' },
@@ -31472,6 +31502,10 @@
        читалось как два разных счета. */
     if (m.agreements) marks += tag('tasks', ic('task', 11) + m.agreements + ' ' +
       plural(m.agreements, 'задача', 'задачи', 'задач') + ' со встречи');
+    /* Снятые при разборе пункты: встреча разобрана, когда каждый пункт стал
+       задачей или снят с причиной (Виталий 16.11.2026). Причина в подсказке. */
+    if (m.skipped) marks += '<span class="mx-tag" title="' + esc(m.skip_reason || 'причина не записана') + '">' +
+      'снято ' + m.skipped + '</span>';
     if (m.has_text) marks += tag('text', ic('mic', 11) + 'расшифровка');
     if (m.has_notes) marks += tag('sum', ic('doc', 11) + 'конспект');
     /* Сама запись разговора лежит в Фатоме. Ссылка на нее была только внутри
