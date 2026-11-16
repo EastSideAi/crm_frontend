@@ -3482,6 +3482,7 @@
           today: 'Кто пришел к нам <b>сегодня</b>, по всем каналам. Список обновляется сам раз в минуту.',
           leads: 'Новые лиды недели. Отметь текущих клиентов, дубли и спам: они уйдут из счета сквозной и план-факта, карточка останется.',
           day: 'Сверка дня: <b>вчерашние цифры против плана дня</b>. Зеленое — план сделан, желтое — близко, красное — сильно ниже.',
+          span: 'Цифры за <b>свои даты</b>. Рядом столько же дней перед ними.',
           month: 'Месяц против плана. Идущий месяц сверяется <b>с тем, что должны были сделать к этой дате</b>, а не со всем планом сразу.'
         })[mgTab()] || 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
         '</span></div></div>';
@@ -38277,6 +38278,8 @@
     { id: 'day', label: 'День', cap: 'marketing' },
     { id: 'rnp', label: 'Неделя' },
     { id: 'month', label: 'Месяц', cap: 'marketing' },
+    // Ольга 16.11.2026: «чтобы можно было выбрать свою дату»
+    { id: 'span', label: 'Период', cap: 'marketing' },
     { id: 'leads', label: 'Чистка лидов', cap: 'marketing' },
   ];
   var MG_WD = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
@@ -38376,9 +38379,9 @@
     '</div>';
     if (tab === 'leads') { view.innerHTML = '<div class="dash mg">' + head + mgLeadsHtml() + '</div>'; mgBind(view); return; }
     if (tab === 'today') { view.innerHTML = '<div class="dash mg">' + head + mgTodayHtml() + '</div>'; mgBind(view); return; }
-    if (tab === 'day' || tab === 'month') {
+    if (tab === 'day' || tab === 'month' || tab === 'span') {
       mgCross();
-      view.innerHTML = '<div class="dash mg">' + head + (tab === 'day' ? mgDayHtml() : mgMonthHtml()) + '</div>';
+      view.innerHTML = '<div class="dash mg">' + head + (tab === 'day' ? mgDayHtml() : tab === 'span' ? mgSpanHtml() : mgMonthHtml()) + '</div>';
       mgBind(view); return;
     }
 
@@ -38410,6 +38413,13 @@
     if (tab === 'day') {
       var sh = state.mgDayShift || 0;
       return n('mgdw', 'Днем раньше', sh < 1 ? 'Днем позже' : '', mgDayLabel(mgDay()), sh !== 0, 'Вчера');
+    }
+    if (tab === 'span') {
+      var sp = mgSpanDates(), mx = mgIso(new Date());
+      return '<div class="brd-nav mg-span">' +
+        '<input class="al-in mg-dt" type="date" data-mgfrom="1" max="' + mx + '" value="' + sp[0] + '" aria-label="С">' +
+        '<span class="mg-dash">–</span>' +
+        '<input class="al-in mg-dt" type="date" data-mgto="1" max="' + mx + '" value="' + sp[1] + '" aria-label="По"></div>';
     }
     if (tab === 'today') return '<div class="brd-nav"><span class="brd-label">' + esc(mgDayLabel(mgIso(new Date()))) + '</span></div>';
     if (tab === 'month') {
@@ -38694,6 +38704,27 @@
     });
   }
 
+  // Свой отрезок: по умолчанию последние 7 дней по сегодня. «С» позже «по» — меняем местами.
+  function mgSpanDates() {
+    var t = mgIso(new Date());
+    var a = state.mgFrom || mgAdd(t, -6), b = state.mgTo || t;
+    if (b > t) b = t;
+    if (a > b) { var x = a; a = b; b = x; }
+    return [a, b];
+  }
+  function mgSpanHtml() {
+    var sp = mgSpanDates(), a = sp[0], b = sp[1];
+    var n = Math.round((mgDate(b) - mgDate(a)) / 864e5) + 1;
+    var pb = mgAdd(a, -1), pa = mgAdd(a, -n);
+    return mgLadder({
+      title: 'Цифры за ' + mgSpan(a, b),
+      sub: 'рядом ' + mgSpan(pa, pb) + ', столько же дней перед ними',
+      cur: [a, b], prv: [pa, pb], plan: mgPlan(a, b), full: null, pf: true,
+      planLbl: 'План', curLbl: mgSpan(a, b), prvLbl: mgSpan(pa, pb),
+      note: 'План отрезка: доля месячного плана, которая приходится на эти дни.'
+    });
+  }
+
   /* Месяц: идущий — с первого числа по сегодня, план «к этой дате» и под ним цель
      месяца, рядом прошлый месяц за те же дни. Закрытый — целиком против прошлого. */
   function mgMonthHtml() {
@@ -38971,6 +39002,14 @@
           state[k[1]] = v === 'now' ? 0 : (state[k[1]] || 0) + Number(v);
           renderView();
         });
+      });
+    });
+    view.querySelectorAll('[data-mgfrom],[data-mgto]').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        if (!inp.value) return;
+        if (inp.dataset.mgfrom) state.mgFrom = inp.value; else state.mgTo = inp.value;
+        state._mgQ = null;
+        renderView();
       });
     });
     view.querySelectorAll('[data-mgdept]').forEach(function (b) {
