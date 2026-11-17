@@ -24594,11 +24594,15 @@
     var offers = (p.offerings || []).length
       ? '<div class="card fin-block">' +
         '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
-          '<div><div class="t">По услугам</div><div class="s">где сколько заработали</div></div></div>' +
+          '<div><div class="t">По услугам</div><div class="s">выручка, что осталось после трат на клиентов и после команды услуги</div></div></div>' +
         '<div class="fin-list">' + p.offerings.map(function (o) {
+          // Две ступеньки: траты на клиентов (кураторы, преподаватели, процент с договора)
+          // и команда услуги на окладе. Общее (реклама, CEO, сервисы) по услугам не делим.
+          var sub = 'после трат на клиентов ' + finRub(o.gross) + ' · ' + finPct(o.margin_pct);
+          if (o.team) sub += ' · после команды ' + finRub(o.after_team);
           return '<div class="fl-row fl-2"><div class="fl-main">' +
             '<span class="fl-name">' + esc(o.name) + '</span>' +
-            '<span class="fl-sub">валовая ' + finRub(o.gross) + ' · маржа ' + finPct(o.margin_pct) + '</span></div>' +
+            '<span class="fl-sub">' + sub + '</span></div>' +
             '<div class="fl-v num">' + finRub(o.revenue) + '</div></div>';
         }).join('') + '</div></div>'
       : '';
@@ -29400,16 +29404,21 @@
       over: '60 ₽ за каждый платеж сверх 30 в месяц.',
       src: { label: 'Тариф «Самое важное» на сайте ВТБ',
         url: 'https://www.vtb.ru/malyj-biznes/otkryt-schet/pakety-uslug/samoe-vazhnoe/' } },
-    { name: 'Сбер', limit: '500 000 ₽', unit: 'в месяц без комиссии',
+    { name: 'Сбер', limit: '500 000 ₽', unit: 'с 22-го по 21-е без комиссии',
       use: 'Выплаты самозанятым и физическим лицам.',
       rules: [
-        'До 500 000 ₽ в месяц переводов самозанятым и физлицам без комиссии.',
+        'До 500 000 ₽ переводов самозанятым и физлицам без комиссии. Лимит считается ' +
+          'не с 1-го числа, а с 22-го по 21-е, обновляется 22-го.',
         'С 1 октября пакет «Лёгкий старт»: обслуживание бесплатное при поступлениях ' +
           'от 50 000 ₽ в месяц, иначе 490 ₽ в месяц.',
       ],
       over: '2,5% на платежи в Сбер, 3,5% на платежи в другие банки.',
       note: 'Каждый месяц заводим <b>50 000 ₽ с ВТБ на Сбер</b> — чтобы поступлений ' +
-        'набралось от 50 000 ₽ и не было абонентской платы 490 ₽.' },
+        'набралось от 50 000 ₽ и не было абонентской платы 490 ₽.',
+      // Публичной страницы тарифа у Сбера нет (на сайте другой пакет с лимитом 300 000),
+      // поэтому первоисточник — скрины из кабинета, приложенные к задаче по банкам.
+      src: { label: 'Скрины тарифа «Лёгкий старт» из кабинета СберБизнес',
+        url: '#task/6473' } },
     { name: 'Альфа', limit: '1 000 000 ₽', unit: 'в месяц без комиссии',
       use: 'Выплаты самозанятым и физическим лицам.',
       rules: [
@@ -29769,9 +29778,11 @@
         (b.over ? '<div class="fb-over"><span>Сверх лимита</span> ' + esc(b.over) + '</div>' : '') +
         (b.note ? '<div class="fb-rule">' + b.note + '</div>' : '') +
         // Лимит без ссылки на тариф банка — чьи-то слова, а не правило (Виталий 12.11).
-        (b.src
-          ? '<a class="fb-src" href="' + esc(b.src.url) + '" target="_blank" rel="noopener">' +
+        (b.src && b.src.url
+          ? '<a class="fb-src" href="' + esc(b.src.url) + '"' +
+              (b.src.url.charAt(0) === '#' ? '' : ' target="_blank" rel="noopener"') + '>' +
               ic('ext', 13) + '<span>' + esc(b.src.label) + '</span></a>'
+          : b.src ? '<div class="fb-src fb-src-wait">Источник: ' + esc(b.src.label) + '</div>'
           : '<div class="fb-src fb-src-wait">Официальный тариф уточняем у банка</div>') +
       '</div>';
     }).join('');
