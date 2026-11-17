@@ -7441,6 +7441,36 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fkv b.neg { color: var(--red-ink); }
 
 .fin-block { padding: 20px 24px 22px; }
+
+/* P&L: три главные доли сверху — якорь экрана. Та же плитка .kpi, что на сводке,
+   в три колонки; под числом словами, что оно значит, термин мелко внизу. */
+.kpis.k3 { grid-template-columns: repeat(3, 1fr); }
+.pnl-casc .fc-why { max-width: 64ch; }
+.pnl-kpis .kpi { display: flex; flex-direction: column; }
+.pnl-kpis .kn { flex-wrap: wrap; row-gap: 2px; }
+.pnl-kpis .kw { margin-top: 6px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.pnl-kpis .ks { margin-top: 12px; flex-wrap: wrap; row-gap: 6px; color: var(--ink-2); }
+.pnl-kpis .kt { margin-top: auto; padding-top: 12px; font-size: 11px; color: var(--ink-3); }
+.pnl-kpis .kpi.hot .kn { color: var(--red-ink); }
+
+/* По услугам — таблица: услуги сравнивают по колонкам. Убыток — красным, общее тише. */
+.svc-wrap { margin-top: 12px; overflow-x: auto; }
+.svc-tbl { width: 100%; border-collapse: collapse; min-width: 640px; font-size: 13.5px; }
+.svc-tbl th { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); text-align: left; padding: 0 0 10px; white-space: nowrap; }
+.svc-tbl td { padding: 12px 0; border-top: 1px solid var(--line); color: var(--ink); white-space: nowrap; }
+.svc-tbl th + th, .svc-tbl td + td { padding-left: 16px; }
+.svc-tbl .r { text-align: right; }
+.svc-tbl .svc-n { font-weight: 600; white-space: normal; }
+.svc-tbl .b { font-weight: 700; }
+.svc-tbl tr.loss td { color: var(--red-ink); }
+.svc-tbl tr.loss { background: var(--red-soft); }
+.svc-tbl tr.common td { color: var(--ink-2); }
+.svc-tbl tr.common .svc-n { font-weight: 500; }
+@media (max-width: 760px) {
+  .kpis.k3 { grid-template-columns: 1fr; gap: 10px; }
+  .pnl-kpis .kn { font-size: 28px; }
+}
 .fin-block + .fin-block, .fin-casc + .fin-block { margin-top: 16px; }
 .fin-list { margin-top: 12px; }
 .fl-row { display: grid; grid-template-columns: 1fr 84px auto; align-items: center;
@@ -7771,7 +7801,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fg-v { font-weight: 700; letter-spacing: -.02em; text-align: right; white-space: nowrap; }
 
 /* Карта операций — плотная таблица: тут читают глазами вниз по колонке сумм. */
-.fin-grid { grid-template-columns: 92px 2.1fr 118px 152px 132px 88px; }
+.fin-grid { grid-template-columns: 84px minmax(170px, 2fr) 100px 150px 130px 120px 76px; }
+/* Услуга строки: по ней считается «По услугам» в P&L. Пустая — общее, тише. */
+.fo-off { font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fo-off.none { color: var(--ink-3); }
 .fo-date { font-size: 12.5px; color: var(--ink-2); }
 .fo-what { min-width: 0; }
 .fo-what b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
@@ -8176,9 +8209,15 @@ button.fsp-via { cursor: pointer; }
   .fl-row.fsv-row .fsv-date { grid-column: 2; grid-row: 2; justify-self: end; }
 }
 
+/* Счет прячем уже на ноутбуке: с колонкой «Услуга» на ноутбуке иначе
+   сжимается «Что», а именно его читают. */
+@media (max-width: 1440px) {
+  .trow.fin-grid { grid-template-columns: 84px minmax(170px, 2fr) 100px 150px 120px 76px !important; }
+  .fin-grid > .fo-acc, .fin-grid > .th-acc { display: none; }
+}
 @media (max-width: 1100px) {
-  .trow.fin-grid { grid-template-columns: 84px 1.4fr 140px 122px 84px !important; }
-  .fin-grid > .fo-acc { display: none; }
+  .trow.fin-grid { grid-template-columns: 84px 1.4fr 100px 130px 116px 76px !important; }
+  .fin-grid > .fo-acc, .fin-grid > .th-acc { display: none; }
 }
 @media (max-width: 760px) {
   /* На телефоне строка операции — карточка: слева что и откуда, справа сумма. */
@@ -8188,6 +8227,8 @@ button.fsp-via { cursor: pointer; }
   .fo-date { grid-column: 1; grid-row: 1; }
   .fo-what { grid-column: 1; grid-row: 2; }
   .fo-src { grid-column: 1; grid-row: 3; }
+  .fo-off { grid-column: 1; grid-row: 4; }
+  .fo-off::before { content: 'услуга: '; color: var(--ink-3); }
   .fo-sum { grid-column: 2; grid-row: 1 / span 2; text-align: right; font-size: 15px; }
   .fo-st { grid-column: 2; grid-row: 3; text-align: right; }
   .fc-row.total .fc-v { font-size: 26px; }
