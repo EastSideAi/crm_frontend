@@ -39743,6 +39743,87 @@
       note: month ? 'План к дате: доля месячного плана на прошедшие дни, под ним цель месяца.' : ''
     });
   }
+  /* Регистрации периода (Павел 17.11.2026: «у нас были столько-то регистраций, далее из
+     них какие это регистрации и видеть, с кем связались»). Регистрация — новый человек
+     с любого входа: карточка заведена в отрезке ИЛИ человек записался на эфир в отрезке
+     (на октябрьский интенсив записались и те, кто был у нас раньше, их тоже считаем).
+     Человек один раз; вход — эфир, если запись на эфир попала в отрезок, иначе событие,
+     с которого карточка началась (поле k сквозной). Дети, привязанные к родителю,
+     не считаются: их регистрация — та же семья. Считается из той же сквозной, что
+     лестница, списки людей — тем же компонентом, со связями и историей. */
+  var SB_REG_KINDS = [
+    {k: 'efir', t: 'Эфир или интенсив', s: 'записались на эфир в этом отрезке'},
+    {k: 'bot', t: 'Бот', s: 'написали в бота'},
+    {k: 'plat', t: 'Платформа', s: 'кабинет, тренажеры, диагностика на сайте'},
+    {k: 'book', t: 'Заявка с сайта', s: 'оставили заявку на консультацию'},
+    {k: 'manual', t: 'Вручную', s: 'карточку завел менеджер'},
+    {k: 'other', t: 'Прочее', s: 'вход не записан'}
+  ];
+  var SB_REG_DOOR = {lead_created_bot: 'bot', lead_name_bot: 'bot', cabinet_entered: 'plat',
+    det_test_started: 'plat', hsk_guest: 'plat', hsk_signup: 'plat', course_free_guest: 'plat',
+    csca_guest: 'plat', csca_guest_test: 'plat', nexis_result: 'plat', lead_submitted: 'book',
+    lead_created_manual: 'manual', webinar_registered: 'efir'};
+  function sbRegCalc(cc, a, b) {
+    var out = {total: 0, contact: 0, by: {}, list: {}};
+    SB_REG_KINDS.forEach(function (x) { out.by[x.k] = {n: 0, c: 0}; out.list[x.k] = []; });
+    out.list.all = [];
+    (cc.leads || []).forEach(function (l) {
+      if (l.nl === 'family') return;
+      // ra — все записи на эфиры [дата, слаг, смотрел]; без него (старый ответ сервера) только интенсивы
+      var all = l.ra ? l.ra.map(function (r) { return [r[0], r[2], r[1]]; })
+        : (l.rg || (l.reg ? [[l.reg, l.w ? 1 : 0]] : [])).map(function (r) { return [r[0], r[1], 'intensive']; });
+      var regs = all.filter(function (r) { return r[0] >= a && r[0] <= b; });
+      var fresh = l.d >= a && l.d <= b;
+      if (!fresh && !regs.length) return;
+      var k = regs.length ? 'efir' : (SB_REG_DOOR[l.k] || 'other');
+      var has = !!(l.c || l.ac);
+      var what = regs.some(function (r) { return String(r[2] || '').indexOf('intensive') === 0; }) ? 'интенсив' : 'эфир';
+      var how = regs.length
+        ? (fresh ? 'записался на ' : 'был у нас раньше, записался на ') + what +
+          (regs.some(function (r) { return r[1]; }) ? ', смотрел' : '')
+        : k === 'efir' ? 'записался на эфир'
+        : (SB_REG_KINDS.filter(function (x) { return x.k === k; })[0] || {}).t;
+      var p = {i: l.i, nm: l.nm, s: l.s, d: regs.length ? regs[regs.length - 1][0] : l.d,
+               how: how + (has ? '' : ' · нет контакта')};
+      out.total++; out.by[k].n++; out.list[k].push(p); out.list.all.push(p);
+      if (has) { out.contact++; out.by[k].c++; }
+    });
+    return out;
+  }
+  function sbReg() {
+    var cc = state._mkCross;
+    if (!cc || cc === 'none' || !window.CROSSCUT) return '';
+    var r = sbLadderSpan();
+    if (sbSpan() === 'month' && r.a > mgIso(new Date())) return '';
+    var g = sbRegCalc(cc, r.a, r.b), x = mgCalc(cc, r.a, r.b);
+    var open = state._sbReg || '';
+    var tile = function (key, t, n, sub, cls) {
+      return '<button class="sb-rt' + (cls ? ' ' + cls : '') + (open === key ? ' on' : '') + '" data-sbreg="' + key + '" aria-expanded="' + (open === key) + '">' +
+        '<span class="sb-rl">' + esc(t) + '</span><span class="sb-rn num">' + fmtMoney(n) + '</span>' +
+        '<span class="sb-rs">' + esc(sub) + '</span></button>';
+    };
+    var kinds = SB_REG_KINDS.filter(function (k) { return g.by[k.k].n; }).map(function (k) {
+      return tile(k.k, k.t, g.by[k.k].n, 'с контактом ' + g.by[k.k].c, '');
+    }).join('');
+    var list = '';
+    if (open && g.list[open]) {
+      var lbl = open === 'all' ? 'Все регистрации' : (SB_REG_KINDS.filter(function (k) { return k.k === open; })[0] || {}).t;
+      list = mgWhoCard([[lbl, '', 'reg_' + open]], {k: 'reg_' + open}, g.list[open], mgSpan(r.a, r.b))
+        .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
+    }
+    return '<div class="card sp12 sb-reg"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
+      '<div><div class="t">Регистрации и консультации <span class="sb-rdate">· ' + esc(mgSpan(r.a, r.b)) + '</span></div>' +
+      '<div class="s">новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру, чтобы увидеть людей</div></div></div>' +
+      '<div class="sb-rtop">' +
+        tile('all', 'Регистраций', g.total, 'с контактом ' + g.contact + ', без контакта ' + (g.total - g.contact), 'big') +
+        '<button class="sb-rt big cons" data-sbcons="' + esc(r.a + ',' + r.b) + '">' +
+          '<span class="sb-rl">Провели продающих консультаций</span><span class="sb-rn num">' + fmtMoney(x.meeting || 0) + '</span>' +
+          '<span class="sb-rs">записались ' + (x.signed || 0) + ', из них пришли ' +
+          (x.signed ? Math.min(100, Math.round((x.meeting || 0) / x.signed * 100)) + '%' : '—') + '</span></button>' +
+      '</div>' +
+      (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
+  }
+
   // Цифры отрезка той же функцией, что лестница: вердикт шапки не спорит с ней.
   function sbLadderNums() {
     var cc = state._mkCross;
@@ -40246,7 +40327,7 @@
     // Статусы лидов — первым блоком под шапкой: это то, ради чего экран открывают каждый день.
     potLoad();
     view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + potCard(8) +
-      sbLadder(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
+      sbReg() + sbLadder(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
       sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
     sbTabsBind(view);
     sbBind(view, d);
@@ -40301,8 +40382,29 @@
     // кнопка закрытия одного рецепта, поэтому закрываем тот, внутри которого нажали.
     Array.prototype.forEach.call(view.querySelectorAll('#sb-pclose'), function (c) {
       c.addEventListener('click', function () {
-        if (c.closest('.mg-who')) state._mgQ = null; else state._sbQ = null;
+        if (c.closest('.sb-regwho')) state._sbReg = null;
+        else if (c.closest('.mg-who')) state._mgQ = null; else state._sbQ = null;
         renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbreg]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-sbreg');
+        state._sbReg = state._sbReg === k ? null : k;
+        state._mgTf = '';
+        renderView();
+        var w = view.querySelector('.sb-regwho');
+        if (w) w.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+      });
+    });
+    // «Провели продающих консультаций» открывает тот же список, что строка лестницы.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbcons]'), function (b) {
+      b.addEventListener('click', function () {
+        state._mgQ = {k: 'meeting', s: 'c', at: b.getAttribute('data-sbcons')};
+        state._mgTf = '';
+        renderView();
+        var w = view.querySelector('.mg-who:not(.sb-regwho)');
+        if (w) w.scrollIntoView({block: 'center', behavior: 'smooth'});
       });
     });
     // Цифры лестницы — тот же обработчик, что в «Управлении»: список под строкой.
