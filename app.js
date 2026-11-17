@@ -2695,7 +2695,11 @@
     /* Плановый налог АУСН 8% по месяцам за год — сколько отложить. Год, а не период:
        у налога свои границы. Считается из дохода ведомости сам (база — до эквайринга). */
     { id: 'fintax', label: 'Плановый налог', icon: 'coins', cap: 'finmodel', space: 'fin' },
-    { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
+    /* Сервисы и долги — два раздела, а не один экран: регулярные списания живут по своему
+       календарю, а долг гасится частями и едет из ведомости в ведомость. Вместе они
+       мешали читать оба (Виталий и Роман, задача 6366, 11–12.11.2026). Данные одни. */
+    { id: 'finref', label: 'Сервисы', icon: 'clock', cap: 'finmodel', space: 'fin' },
+    { id: 'findebt', label: 'Долги и кредиты', icon: 'coins', cap: 'finmodel', space: 'fin' },
     /* Свой расчетный лист открывается и тому, у кого нет права смотреть ведомость
        целиком: правило владельца от 11.08.2026 — править только свое. У такого
        человека это единственный раздел «Финансов». Раздел держит больше, чем листы:
@@ -2794,7 +2798,7 @@
     { label: 'Сводка', ids: ['finboss'] },
     { label: 'Ведомость периода',
       ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect',
-            'finedit', 'reward', 'finpartners', 'finref', 'finfund'] },
+            'finedit', 'reward', 'finpartners', 'finref', 'findebt', 'finfund'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
     { label: 'Отчеты', ids: ['finpnl', 'finmetrics', 'finops'] },
     { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb', 'finreglament'] },
@@ -3356,7 +3360,7 @@
       tb.innerHTML = '';
     } else if (state.page === 'finboss' || state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finfund' ||
-               state.page === 'finedit' || state.page === 'finref' ||
+               state.page === 'finedit' || state.page === 'finref' || state.page === 'findebt' ||
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finspend' || state.page === 'finmetrics' ||
@@ -3877,7 +3881,7 @@
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
       var titles = { finboss: 'Сводка руководителя', reward: 'Вознаграждение',
                      finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
-                     finops: 'Карта операций', finref: 'Сервисы и долги',
+                     finops: 'Карта операций', finref: 'Сервисы', findebt: 'Долги и кредиты',
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы по фондам и выплаты', findirect: 'Прямые расходы',
                      finspend: 'Расходы', finpayouts: 'Выплаты подрядчикам',
@@ -3902,8 +3906,10 @@
           'вопросом с причиной и в сумму не идет.';
       }
       else if (state.page === 'finref') {
-        ph = 'Что списывается само и что мы должны. Сервис с наступившим сроком ' +
-          'проставляется фактом сам — сумму потом проверьте. Остаток долга едет в ' +
+        ph = 'Что списывается само: подписки, связь, банк. Сервис с наступившим сроком ' +
+          'проставляется фактом сам — сумму потом проверьте.';
+      } else if (state.page === 'findebt') {
+        ph = 'Что мы должны и сколько платим за эту ведомость. Остаток долга едет в ' +
           'следующий период, пока не погашен.';
       } else if (state.page === 'finmetrics') {
         ph = 'Здоровье центра, откуда берется прибыль и куда уходят деньги со счета. ' +
@@ -4199,7 +4205,8 @@
     else if (state.page === 'finspend') renderFinSpend(view);
     else if (state.page === 'finreestr') renderFinReestr(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
-    else if (state.page === 'finref') renderFinRefs(view);
+    else if (state.page === 'finref') renderFinRefs(view, 'svc');
+    else if (state.page === 'findebt') renderFinRefs(view, 'debt');
     else if (state.page === 'finbanks') renderFinBanks(view);
     else if (state.page === 'finpaycheck') renderFinPayCheck(view);
     else if (state.page === 'finsup') renderFinSuppliers(view);
@@ -24536,13 +24543,24 @@
       { name: 'Выручка', v: t.revenue, cls: 'in' },
       { name: 'Переменные расходы', v: -t.variable, cls: 'out' },
       { name: 'Валовая прибыль', v: t.gross, cls: 'sum', pct: t.gross_pct, pctName: 'валовая рентабельность' },
+      // Постоянные делятся на коммерческие (реклама, продажи) и управленческие (команда,
+      // сервисы), как в управленческом P&L (задача 513, 17.11.2026). Старый бэкенд
+      // этих полей не отдает — тогда одна строка, как было.
+    ].concat(t.commercial !== undefined && t.admin !== undefined ? [
+      { name: 'Коммерческие расходы', v: -t.commercial, cls: 'out' },
+      { name: 'Управленческие расходы', v: -t.admin, cls: 'out' },
+    ] : [
       { name: 'Постоянные расходы', v: -t.fixed, cls: 'out' },
+    ]).concat([
       { name: 'Операционная прибыль', v: t.operating, cls: 'sum', pct: t.margin_pct, pctName: 'маржинальность' },
       { name: 'Налоги', v: -t.taxes, cls: 'out' },
       { name: 'Чистая прибыль', v: t.net, cls: 'total', pct: t.net_pct, pctName: 'чистая рентабельность' },
-    ];
-    if (t.other_income) ladder.splice(5, 0, { name: 'Прочие доходы', v: t.other_income, cls: 'in' });
-    if (t.other_expense) ladder.splice(5, 0, { name: 'Прочие расходы', v: -t.other_expense, cls: 'out' });
+    ]);
+    // Прочие — сразу под операционной прибылью; место считаем, а не держим числом:
+    // постоянные бывают одной строкой или двумя.
+    var afterOp = ladder.map(function (r) { return r.name; }).indexOf('Операционная прибыль') + 1;
+    if (t.other_income) ladder.splice(afterOp, 0, { name: 'Прочие доходы', v: t.other_income, cls: 'in' });
+    if (t.other_expense) ladder.splice(afterOp, 0, { name: 'Прочие расходы', v: -t.other_expense, cls: 'out' });
     if (t.interest) ladder.splice(ladder.length - 1, 0, { name: 'Проценты по кредитам', v: -t.interest, cls: 'out' });
 
     var lad = '<div class="card fin-casc">' +
@@ -24576,11 +24594,15 @@
     var offers = (p.offerings || []).length
       ? '<div class="card fin-block">' +
         '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
-          '<div><div class="t">По услугам</div><div class="s">где сколько заработали</div></div></div>' +
+          '<div><div class="t">По услугам</div><div class="s">выручка, что осталось после трат на клиентов и после команды услуги</div></div></div>' +
         '<div class="fin-list">' + p.offerings.map(function (o) {
+          // Две ступеньки: траты на клиентов (кураторы, преподаватели, процент с договора)
+          // и команда услуги на окладе. Общее (реклама, CEO, сервисы) по услугам не делим.
+          var sub = 'после трат на клиентов ' + finRub(o.gross) + ' · ' + finPct(o.margin_pct);
+          if (o.team) sub += ' · после команды ' + finRub(o.after_team);
           return '<div class="fl-row fl-2"><div class="fl-main">' +
             '<span class="fl-name">' + esc(o.name) + '</span>' +
-            '<span class="fl-sub">валовая ' + finRub(o.gross) + ' · маржа ' + finPct(o.margin_pct) + '</span></div>' +
+            '<span class="fl-sub">' + sub + '</span></div>' +
             '<div class="fl-v num">' + finRub(o.revenue) + '</div></div>';
         }).join('') + '</div></div>'
       : '';
@@ -29379,24 +29401,32 @@
         'Первые 30 платежей в месяц идут без комиссии.',
         'С карты ВТБ Виталия оплачиваются фонды, дивиденды и мотивация команды.',
       ],
-      over: '60 ₽ за каждый платеж сверх 30 в месяц.' },
-    { name: 'Сбер', limit: '500 000 ₽', unit: 'в месяц без комиссии',
+      over: '60 ₽ за каждый платеж сверх 30 в месяц.',
+      src: { label: 'Тариф «Самое важное» на сайте ВТБ',
+        url: 'https://www.vtb.ru/malyj-biznes/otkryt-schet/pakety-uslug/samoe-vazhnoe/' } },
+    { name: 'Сбер', limit: '500 000 ₽', unit: 'с 22-го по 21-е без комиссии',
       use: 'Выплаты самозанятым и физическим лицам.',
       rules: [
-        'До 500 000 ₽ в месяц переводов самозанятым и физлицам без комиссии.',
+        'До 500 000 ₽ переводов самозанятым и физлицам без комиссии. Лимит считается ' +
+          'не с 1-го числа, а с 22-го по 21-е, обновляется 22-го.',
         'С 1 октября пакет «Лёгкий старт»: обслуживание бесплатное при поступлениях ' +
           'от 50 000 ₽ в месяц, иначе 490 ₽ в месяц.',
       ],
       over: '2,5% на платежи в Сбер, 3,5% на платежи в другие банки.',
       note: 'Каждый месяц заводим <b>50 000 ₽ с ВТБ на Сбер</b> — чтобы поступлений ' +
-        'набралось от 50 000 ₽ и не было абонентской платы 490 ₽.' },
+        'набралось от 50 000 ₽ и не было абонентской платы 490 ₽.',
+      // Публичной страницы тарифа у Сбера нет (на сайте другой пакет с лимитом 300 000),
+      // поэтому первоисточник — скрины из кабинета, приложенные к задаче по банкам.
+      src: { label: 'Скрины тарифа «Лёгкий старт» из кабинета СберБизнес',
+        url: '#task/6473' } },
     { name: 'Альфа', limit: '1 000 000 ₽', unit: 'в месяц без комиссии',
       use: 'Выплаты самозанятым и физическим лицам.',
       rules: [
         'До 1 000 000 ₽ в месяц переводов самозанятым и физлицам без комиссии.',
         'Запас больше, чем у Сбера, — крупные выплаты удобнее вести отсюда.',
       ],
-      over: '2,5% + 99 ₽ внутри Альфы, 2,8% + 99 ₽ на платежи в другие банки.' },
+      over: '2,5% + 99 ₽ внутри Альфы, 2,8% + 99 ₽ на платежи в другие банки.',
+      src: { label: 'Тариф «Простой» на сайте Альфы', url: 'https://alfabank.ru/sme/tariffs/' } },
   ];
 
   /* ── БАЗА ЗНАНИЙ ФИНАНСОВ ──────────────────────────────────────────────────
@@ -29747,6 +29777,13 @@
         }).join('') + '</ul>' +
         (b.over ? '<div class="fb-over"><span>Сверх лимита</span> ' + esc(b.over) + '</div>' : '') +
         (b.note ? '<div class="fb-rule">' + b.note + '</div>' : '') +
+        // Лимит без ссылки на тариф банка — чьи-то слова, а не правило (Виталий 12.11).
+        (b.src && b.src.url
+          ? '<a class="fb-src" href="' + esc(b.src.url) + '"' +
+              (b.src.url.charAt(0) === '#' ? '' : ' target="_blank" rel="noopener"') + '>' +
+              ic('ext', 13) + '<span>' + esc(b.src.label) + '</span></a>'
+          : b.src ? '<div class="fb-src fb-src-wait">Источник: ' + esc(b.src.label) + '</div>'
+          : '<div class="fb-src fb-src-wait">Официальный тариф уточняем у банка</div>') +
       '</div>';
     }).join('');
     view.innerHTML =
@@ -30145,7 +30182,7 @@
     });
   }
 
-  function renderFinRefs(view) {
+  function renderFinRefs(view, mode) {
     if (!FIN.refs) {
       if (FIN.err) return finErrView(view);
       view.innerHTML = dashSkeleton(); finLoadRefs(); return;
@@ -30165,15 +30202,19 @@
     var left = 0;
     debts.forEach(function (o) { left += o.remaining; });
 
-    var bar = statBar([
+    var opaid = 0;
+    orows.forEach(function (x) { if (x.status === 'факт') opaid += x.amount; });
+    var bar = mode === 'debt' ? statBar([
+      { label: 'Долгов к погашению', value: finRub(left),
+        sub: debts.length + ' ' + plural(debts.length, 'обязательство', 'обязательства', 'обязательств') },
+      { label: 'Платеж в эту ведомость', value: finRub(oplan), sub: 'еще не оплачено' },
+      { label: 'Уже оплатили', value: finRub(opaid), sub: 'в этой ведомости' },
+    ]) : statBar([
       { label: 'Сервисов в работе', value: String(live.length),
         sub: 'списываются сами по сроку' },
       { label: 'План на ведомость', value: finRub(plan), sub: 'сколько ждем к списанию' },
       { label: 'Уже списалось', value: finRub(paid),
         sub: paid > plan ? 'дороже плана на ' + finRub(paid - plan) : 'по факту' },
-      { label: 'Долгов к погашению', value: finRub(left),
-        sub: debts.length + ' ' + plural(debts.length, 'обязательство', 'обязательства', 'обязательств') +
-             ' · платеж ' + finRub(oplan) },
     ]);
 
     /* Платежи ведомости: план и факт правятся раздельно и на месте. Пока факт пуст,
@@ -30291,7 +30332,7 @@
       '</div>';
     }).join('');
 
-    view.innerHTML = bar + '<div class="grid">' +
+    var svcHtml =
       '<div class="sp7">' +
         '<div class="card listcard">' +
           '<div class="list-tools sec-head"><span class="ic">' + ic('clock', 14) + '</span>' +
@@ -30300,6 +30341,8 @@
             'сервис в расход не идет</div></div></div>' +
           (pay || '<div class="empty">Сервисов в этой ведомости нет.</div>') +
         '</div>' +
+      '</div>' +
+      '<div class="sp5">' +
         '<div class="card listcard">' +
           '<div class="list-tools sec-head"><span class="ic">' + ic('refresh', 14) + '</span>' +
             '<div><div class="t">Справочник сервисов</div>' +
@@ -30310,8 +30353,9 @@
             '<div class="empty">Сервисов пока нет. Заведите первый — он появится строкой ' +
             'в каждой ведомости.</div>') + '</div>' +
         '</div>' +
-      '</div>' +
-      '<div class="sp5">' +
+      '</div>';
+    var debtHtml =
+      '<div class="sp7">' +
         '<div class="card listcard">' +
           '<div class="list-tools sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
             '<div><div class="t">Долги и кредиты</div>' +
@@ -30321,13 +30365,17 @@
           '<div class="fin-list">' + (oblList || '<div class="empty">Обязательств нет.</div>') +
           '</div>' +
         '</div>' +
+      '</div>' +
+      '<div class="sp5">' +
         '<div class="card listcard">' +
           '<div class="list-tools sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
             '<div><div class="t">Платежи по обязательствам</div>' +
             '<div class="s">плановые платежи этой ведомости</div></div></div>' +
           (oblPay || '<div class="empty">Плановых платежей нет.</div>') +
         '</div>' +
-      '</div></div>';
+      '</div>';
+    view.innerHTML = bar + '<div class="grid">' +
+      (mode === 'debt' ? debtHtml : svcHtml) + '</div>';
 
     finPaidBind(view);
     var add = el('sv-add');
