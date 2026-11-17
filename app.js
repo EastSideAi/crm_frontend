@@ -39854,21 +39854,33 @@
       '</div>';
   }
 
-  function sbPathRow(name, sub, p, by, paid, cls) {
+  function sbPathRow(name, sub, p, by, paid, cls, calls) {
     return '<div class="mkd-tr sb-tr' + (cls ? ' ' + cls : '') + '">' +
       '<div class="mkd-nm"><b>' + esc(name) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' +
       '<span class="sb-cell" data-l="Пришли">' + sbBtn(p.steps.lead, 'lead', by, name, { label: 'пришли' }) + '</span>' +
       SB_STEPS.map(function (k) {
         return sbStep(p.steps[k], p.conv[k], k, by, name, SB_STEP_COL[k]);
-      }).join('') +
+      }).join('') + (calls || '') +
       '<span class="sb-cell" data-l="Деньги">' + sbBtn(paid, 'paid', by, name,
         { label: 'деньги', text: paid ? fmtMoney(paid) + ' ₽' : '—' }) + '</span>' +
     '</div>';
   }
-  function sbHead(first, money) {
+  function sbHead(first, money, calls) {
     return '<div class="mkd-th"><span>' + first + '</span><span>Пришли</span>' +
       SB_STEPS.map(function (k) { return '<span>' + SB_STEP_COL[k] + '</span>'; }).join('') +
-      '<span>' + money + '</span></div>';
+      (calls ? '<span>Звонки</span>' : '') + '<span>' + money + '</span></div>';
+  }
+  /* Звонки через звонилку за тот же отрезок (Павел 17.11.2026: «нужно чтобы Костя звонил
+     обязательно»). Крупно разговоры, мелко все попытки; ноль у продающего — красный,
+     у строки «никто не взял» звонков не бывает. Списка людей у цифры нет: звонок чаще
+     всего еще не привязан к карточке. */
+  function sbCalls(m, nobody) {
+    if (nobody) return '<span class="sb-cell" data-l="Звонки"></span>';
+    var n = m.calls || 0, all = m.calls_all || 0;
+    return '<span class="sb-cell" data-l="Звонки" title="' +
+      esc('разговоров ' + n + ', всего попыток ' + all) + '">' +
+      '<b class="sb-calls num' + (n ? '' : ' none') + '">' + n + '</b>' +
+      (all > n ? '<i>из ' + all + '</i>' : '<i></i>') + '</span>';
   }
 
   function sbChannels(d) {
@@ -39887,12 +39899,12 @@
     var rows = (d.managers || []).map(function (m) {
       var nobody = m.name === SB_NOBODY;
       return sbPathRow(m.name, nobody ? 'лиды без ответственного' : '', m.path, 'who', m.paid,
-        nobody ? 'sb-nobody' : '');
+        nobody ? 'sb-nobody' : '', sbCalls(m, nobody));
     }).join('');
     return '<div class="card sp12 sb-tbl-card"><div class="sec-head pf-sec"><span class="ic">' + ic('team', 14) +
       '</span><div><div class="t">Менеджеры</div>' +
-      '<div class="s">его новые лиды месяца по шагам, тем же счетом, что каналы; деньги — где он продавец</div></div></div>' +
-      (rows ? '<div class="mkd-tbl sb-grid">' + sbHead('Кто ведет', 'Деньги') + rows + '</div>'
+      '<div class="s">его новые лиды месяца по шагам, тем же счетом, что каналы; звонки — разговоры через систему; деньги — где он продавец</div></div></div>' +
+      (rows ? '<div class="mkd-tbl sb-grid sb-mgrid">' + sbHead('Кто ведет', 'Деньги', true) + rows + '</div>'
         : '<div class="empty">За месяц никто ничего не вел.</div>') + '</div>';
   }
 
