@@ -24594,11 +24594,15 @@
     var offers = (p.offerings || []).length
       ? '<div class="card fin-block">' +
         '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
-          '<div><div class="t">По услугам</div><div class="s">где сколько заработали</div></div></div>' +
+          '<div><div class="t">По услугам</div><div class="s">выручка, что осталось после трат на клиентов и после команды услуги</div></div></div>' +
         '<div class="fin-list">' + p.offerings.map(function (o) {
+          // Две ступеньки: траты на клиентов (кураторы, преподаватели, процент с договора)
+          // и команда услуги на окладе. Общее (реклама, CEO, сервисы) по услугам не делим.
+          var sub = 'после трат на клиентов ' + finRub(o.gross) + ' · ' + finPct(o.margin_pct);
+          if (o.team) sub += ' · после команды ' + finRub(o.after_team);
           return '<div class="fl-row fl-2"><div class="fl-main">' +
             '<span class="fl-name">' + esc(o.name) + '</span>' +
-            '<span class="fl-sub">валовая ' + finRub(o.gross) + ' · маржа ' + finPct(o.margin_pct) + '</span></div>' +
+            '<span class="fl-sub">' + sub + '</span></div>' +
             '<div class="fl-v num">' + finRub(o.revenue) + '</div></div>';
         }).join('') + '</div></div>'
       : '';
