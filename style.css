@@ -14904,6 +14904,48 @@ video.cs-media { background: #000; }
 .mg-who { margin: 4px 0 8px; }
 .mg-who .sb-people { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
 .mg-who .sb-pr.none { cursor: default; }
+/* Связались ли и история человека под цифрой лестницы (Павел 17.11.2026) */
+.mg-tf { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.mg-tc { display: flex; flex-direction: column; min-width: 0; }
+.mg-who .sb-pr { grid-template-columns: minmax(160px, 1fr) minmax(260px, 2fr) auto; }
+.mg-tfail { font-size: 13px; color: var(--ink-2); align-self: center; }
+.mg-tc small { font-size: 11px; color: var(--ink-3); font-weight: 500; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mg-tw { color: var(--ink-3); }
+.mg-chev { display: inline-flex; color: var(--ink-3); transition: transform .18s var(--ease); }
+.mg-chev.on { transform: rotate(180deg); color: var(--blue); }
+.mg-who .sb-pr.open { background: #FBFBFC; }
+.mg-who .sb-pr.open::before { opacity: 1; }
+.mg-hist { padding: 6px 24px 18px 40px; border-bottom: 1px solid var(--line); background: #FBFBFC;
+  animation: mgHistIn .2s var(--ease); }
+@keyframes mgHistIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.mg-hnote { padding: 14px 24px; font-size: 13px; color: var(--ink-3); }
+.mg-hist .mg-hnote { padding: 8px 0 12px; }
+.mg-hl { list-style: none; margin: 0 0 14px; padding: 0; position: relative; }
+.mg-hl::before { content: ''; position: absolute; left: 4px; top: 10px; bottom: 10px; width: 1px;
+  background: var(--line); }
+.mg-hi { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 7px 0 7px 20px;
+  position: relative; font-size: 13px; }
+.mg-hi::before { content: ''; position: absolute; left: 0; top: 12px; width: 9px; height: 9px; border-radius: 50%;
+  background: #fff; box-shadow: inset 0 0 0 2px var(--ink-3); }
+.mg-hi.b::before { box-shadow: inset 0 0 0 2px var(--blue); }
+.mg-hi.n::before { background: var(--navy); box-shadow: none; }
+.mg-hi.ok::before { background: var(--green); box-shadow: none; }
+.mg-hi.r::before { box-shadow: inset 0 0 0 2px var(--red); }
+.mg-hw { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 12px; padding-top: 1px; }
+.mg-ht b { display: block; font-weight: 600; color: var(--ink); }
+.mg-ht small { display: block; font-size: 12px; color: var(--ink-2); margin-top: 2px; line-height: 1.45;
+  overflow-wrap: anywhere; }
+.mg-ht small.mg-hwho { color: var(--ink-3); }
+@media (max-width: 760px) {
+  .mg-hist { padding: 4px 16px 16px; }
+  .mg-hi { grid-template-columns: 1fr; gap: 2px; }
+  .mg-tf { padding: 10px 16px; }
+  /* на телефоне стрелка уезжала отдельной строкой: раскрытие видно по подсветке строки */
+  .mg-chev { display: none; }
+  .mg-who .sb-pr { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .mg-who .sb-pm:not(:has(em)) { display: none; }
+}
 .mg-who .sb-pr.none::before { display: none; }
 .mg-d.down { background: var(--red-soft); color: var(--red-ink); }
 

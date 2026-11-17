@@ -38838,27 +38838,137 @@
   var MG_WHO_N = {invN: 'счет', payers: 'платеж', revenue: 'платеж'};
   // мелкие пункты раскрывают список под строкой, к которой относятся
   var MG_WHO_ROW = {back: 'leads', qualEarly: 'qual', platEarly: 'platOnly'};
+  /* Связались ли и как, история человека (Павел 17.11.2026: «видеть с кем связались
+     уже, как связались, история по каждому клиенту»). Под цифрой лестницы встает список
+     людей; у каждого первый контакт (когда, чем, кто), клик раскрывает ленту от прихода
+     до оплаты. Считает сервер (routers/sales_history.py), здесь только кэш и рисование. */
+  var MG_TOUCH = {}, MG_TOUCH_WAIT = {}, MG_HIST = {};
+  function mgTouchLoad(ids) {
+    if (!can('clients')) return;
+    var need = ids.filter(function (id) { return !MG_TOUCH[id] && !MG_TOUCH_WAIT[id]; });
+    if (!need.length) return;
+    need.forEach(function (id) { MG_TOUCH_WAIT[id] = 1; });
+    var parts = [];
+    for (var n = 0; n < need.length; n += 500) parts.push(need.slice(n, n + 500));
+    Promise.all(parts.map(function (part) {
+      return api('/admin/api/sales/touches', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ids: part})}).then(function (r) {
+        var it = (r && r.items) || {};
+        part.forEach(function (id) { MG_TOUCH[id] = it[id] || {first: null, n: 0}; });
+      });
+    })).catch(function () {
+      need.forEach(function (id) { MG_TOUCH[id] = MG_TOUCH[id] || 'err'; });
+    }).then(function () {
+      need.forEach(function (id) { delete MG_TOUCH_WAIT[id]; });
+      if (document.querySelector('.mg-who')) renderView();
+    });
+  }
+  function mgWhen(iso, withTime) {
+    if (!iso) return '';
+    var o = {timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit'};
+    if (withTime) { o.hour = '2-digit'; o.minute = '2-digit'; }
+    return new Date(iso).toLocaleString('ru-RU', o).replace(',', '');
+  }
+  function mgTouchCell(id) {
+    var t = MG_TOUCH[id];
+    if (!can('clients') || t === 'err') return '<span></span>';
+    if (!t) return '<span class="sb-po calm mg-tw">проверяю…</span>';
+    var own = t.owner ? '<small>ведет ' + esc(t.owner) + '</small>' : '<small>без ведущего</small>';
+    if (!t.first) return '<span class="mg-tc"><span class="sb-po none">не связались</span>' + own + '</span>';
+    var txt = 'связались ' + mgWhen(t.first.at) + ' · ' + t.first.how + (t.first.by ? ' · ' + t.first.by : '');
+    return '<span class="mg-tc"><span class="sb-po calm" title="' + esc(txt) + '">' + esc(txt) + '</span>' + own + '</span>';
+  }
+  var MG_HK = {come: 'g', web: 'g', card: 'g', touch: 'b', chat: 'b', chat_in: 'g', call: 'b',
+               call_miss: 'r', meet: 'n', pay: 'ok'};
+  function mgHistHtml(id) {
+    var h = MG_HIST[id];
+    var open = '<button class="bp ghost sm" data-sblead="' + esc(id) + '">Открыть карточку</button>';
+    if (!h) return '<div class="mg-hist"><div class="mg-hnote">Собираю историю…</div></div>';
+    if (h === 'err') return '<div class="mg-hist"><div class="mg-hnote">История не открылась.</div>' +
+      '<button class="bp ghost sm" data-mgretry="' + esc(id) + '">Повторить</button> ' + open + '</div>';
+    var items = (h.items || []).map(function (e) {
+      return '<li class="mg-hi ' + (MG_HK[e.kind] || 'g') + '"><span class="mg-hw">' + esc(mgWhen(e.at, true)) + '</span>' +
+        '<span class="mg-ht"><b>' + esc(e.t) + '</b>' + (e.s ? '<small>' + esc(e.s) + '</small>' : '') +
+        (e.who ? '<small class="mg-hwho">' + esc(e.who) + '</small>' : '') + '</span></li>';
+    }).join('');
+    return '<div class="mg-hist"><ol class="mg-hl">' + items + '</ol>' + open + '</div>';
+  }
+  function mgHistLoad(id) {
+    if (MG_HIST[id] && MG_HIST[id] !== 'err') return;
+    delete MG_HIST[id];
+    api('/admin/api/sales/history/' + encodeURIComponent(id)).then(function (r) {
+      MG_HIST[id] = r || 'err';
+    }).catch(function () { MG_HIST[id] = 'err'; }).then(function () {
+      if (state._mgOpen === id) renderView();
+    });
+  }
+  // Общая привязка списка людей под лестницей: «Управление» и «Продажи» рисуют его одним кодом.
+  function mgWhoBind(view) {
+    view.querySelectorAll('[data-mghist]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-mghist');
+        state._mgOpen = state._mgOpen === id ? null : id;
+        if (state._mgOpen) mgHistLoad(id);
+        renderView();
+      });
+    });
+    view.querySelectorAll('[data-mgretry]').forEach(function (b) {
+      b.addEventListener('click', function () { var id = b.getAttribute('data-mgretry'); delete MG_HIST[id]; mgHistLoad(id); renderView(); });
+    });
+    var tr = view.querySelector('[data-mgtretry]');
+    if (tr) tr.addEventListener('click', function () {
+      Object.keys(MG_TOUCH).forEach(function (id) { if (MG_TOUCH[id] === 'err') delete MG_TOUCH[id]; });
+      renderView();
+    });
+    view.querySelectorAll('[data-mgtf]').forEach(function (b) {
+      b.addEventListener('click', function () { state._mgTf = b.getAttribute('data-mgtf') || ''; renderView(); });
+    });
+  }
+
   function mgWhoCard(rows, q, list, lbl) {
     var row = rows.filter(function (r) { return r[2] === q.k; })[0];
     list = (list || []).slice().sort(function (a, b) {
       return q.k === 'revenue' ? (b.v || 0) - (a.v || 0) : String(b.d || '').localeCompare(String(a.d || ''));
     });
-    var body = list.slice(0, 300).map(function (p) {
+    var hist = can('clients');
+    if (hist) mgTouchLoad(list.filter(function (p) { return p.i; }).map(function (p) { return p.i; }));
+    var known = list.filter(function (p) { return p.i && MG_TOUCH[p.i] && MG_TOUCH[p.i] !== 'err'; });
+    var met = known.filter(function (p) { return MG_TOUCH[p.i].first; }).length;
+    var tf = hist ? (state._mgTf || '') : '';
+    var shown = !tf ? list : list.filter(function (p) {
+      var t = p.i && MG_TOUCH[p.i];
+      if (!t || t === 'err') return false;
+      return tf === 'no' ? !t.first : !!t.first;
+    });
+    var body = shown.slice(0, 300).map(function (p) {
       var sub = [p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
       var mark = p.v ? fmtMoney(Math.round(p.v)) + ' ₽' : '';
       if (p.n > 1 && MG_WHO_N[q.k]) mark = (mark ? mark + ' · ' : '') + p.n + ' ' + (q.k === 'invN' ? 'счета' : 'платежа');
+      var on = p.i && state._mgOpen === p.i;
       var inner = '<span class="sb-pn"><b>' + esc(p.nm || (p.i ? 'карточка без имени' : 'в боте, карточки нет')) + '</b>' +
-        '<small>' + esc(sub) + '</small></span><span></span>' +
-        '<span class="sb-pm">' + (mark ? '<em class="sev s-client">' + esc(mark) + '</em>' : '') + '</span>';
-      return p.i ? '<button class="sb-pr" data-sblead="' + esc(p.i) + '">' + inner + '</button>'
-        : '<div class="sb-pr none">' + inner + '</div>';
+        '<small>' + esc(sub) + '</small></span>' + (p.i && hist ? mgTouchCell(p.i) : '<span></span>') +
+        '<span class="sb-pm">' + (mark ? '<em class="sev s-client">' + esc(mark) + '</em>' : '') +
+        (p.i && hist ? '<span class="mg-chev' + (on ? ' on' : '') + '">' + ic('chev', 14) + '</span>' : '') + '</span>';
+      if (!p.i) return '<div class="sb-pr none">' + inner + '</div>';
+      if (!hist) return '<button class="sb-pr" data-sblead="' + esc(p.i) + '">' + inner + '</button>';
+      return '<button class="sb-pr' + (on ? ' open' : '') + '" data-mghist="' + esc(p.i) + '" aria-expanded="' + on + '">' +
+        inner + '</button>' + (on ? mgHistHtml(p.i) : '');
     }).join('');
-    var sub = 'нажми на человека, откроется карточка';
+    var sub = hist ? 'нажми на человека, раскроется история' : 'нажми на человека, откроется карточка';
+    if (hist && known.length) sub = 'связались с ' + met + ' из ' + known.length + ' · ' + sub;
     if (q.k === 'invN') {
       var cnt = list.reduce(function (s, p) { return s + (p.n || 1); }, 0);
       if (cnt !== list.length) sub = cnt + ' счетов у ' + list.length + ' человек; ' + sub;
     }
-    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : q.k === 'qualEarly' ? 'Квалифицированные, пришедшие раньше' : q.k === 'platEarly' ? 'Пришли на платформу, были у нас раньше' : '') + ', ' + lbl, list.length, body, sub) + '</div>';
+    var bar = hist && known.length ? '<div class="mg-tf">' + [['', 'Все'], ['no', 'Не связались · ' + (known.length - met)],
+      ['yes', 'Связались · ' + met]].map(function (x) {
+        return '<button class="qchip' + (x[0] === tf ? ' on' : '') + '" data-mgtf="' + x[0] + '">' + esc(x[1]) + '</button>';
+      }).join('') + '</div>' : '';
+    var failed = hist && list.some(function (p) { return p.i && MG_TOUCH[p.i] === 'err'; });
+    if (failed) bar += '<div class="mg-tf"><span class="mg-tfail">Не удалось проверить, связались ли.</span>' +
+      '<button class="bp ghost sm" data-mgtretry="1">Повторить</button></div>';
+    if (bar && !shown.length) body = '<div class="mg-hnote">По этому фильтру никого.</div>';
+    return '<div class="mg-who">' + sbPeopleCard((row ? row[0] : q.k === 'back' ? 'Вернувшиеся лиды' : q.k === 'qualEarly' ? 'Квалифицированные, пришедшие раньше' : q.k === 'platEarly' ? 'Пришли на платформу, были у нас раньше' : '') + ', ' + lbl, list.length, bar + body, sub) + '</div>';
   }
 
   /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
@@ -39222,6 +39332,7 @@
     view.querySelectorAll('[data-sblead]').forEach(function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
     });
+    mgWhoBind(view);
     var rl = view.querySelector('[data-mgreload]'); if (rl) rl.addEventListener('click', mgReload);
     var nw = view.querySelector('[data-mgnew]'); if (nw) nw.addEventListener('click', mgNew);
     view.querySelectorAll('[data-mgcheck]').forEach(function (b) {
@@ -40101,6 +40212,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
     });
+    mgWhoBind(view);
 
     /* План правится на месте, тем же приемом, что в План-факте; пишет в тот же план. */
     Array.prototype.forEach.call(view.querySelectorAll('[data-pfset]'), function (b) {
