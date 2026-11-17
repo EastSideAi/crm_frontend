@@ -50310,6 +50310,27 @@
     return u;
   }
   /* скрыть лид (мягко, в архив) / вернуть из архива — затем обновить список */
+  // Запуск возврата по семье. Спрашиваем одно: что уже известно (дата письма,
+  // причина) — это ляжет в цель, и Павлу не придется переспрашивать. Отмена окна
+  // ничего не запускает: действие тянет за собой задачи пяти людям.
+  function rmStartRefund(id, btn) {
+    var note = window.prompt('Семья отказывается от договора — запускаем возврат. ' +
+      'Первая задача встанет Павлу, следующие пойдут сами.\n\n' +
+      'Что известно: когда пришел отказ, причина (можно оставить пустым)', '');
+    if (note === null) return;
+    btn.disabled = true;
+    api('/admin/api/refund-flow', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: id, note: note }),
+    }).then(function (r) {
+      showToast(r.created ? 'Возврат запущен' : 'Возврат по этой семье уже идет',
+        r.created ? 'первая задача у Павла, цель «' + ((r.task && r.task.title) || 'Возврат') + '» в задачнике'
+                  : 'цель «' + ((r.task && r.task.title) || 'Возврат') + '» в задачнике');
+    }).catch(function (e) {
+      if (e && e.message !== '403') showToast('Не получилось запустить возврат — проверь сеть');
+    }).then(function () { btn.disabled = false; });
+  }
+
   function rmHideLead(id, hidden) {
     api('/admin/api/leads/' + id, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -51267,6 +51288,13 @@
           ? '<button class="m-archive" id="m-sublogin" title="Открыть кабинет глазами клиента — то же, что видит он. Только просмотр: менять там ничего нельзя">' +
             ic('ext', 14) + 'Войти как</button>'
           : '') +
+        // Отказ семьи от договора запускает цепочку задач процесса «Возврат денег
+        // семье»: первая встает Павлу, дальше сами (бэкенд services/refund_flow.py).
+        // Жмут Павел и продажи — те же, кто выставляет семье счет (Роман 17.11.2026).
+        (can('pay_create')
+          ? '<button class="m-archive" id="m-refund" title="Семья отказывается от договора: запустить возврат. Первая задача встанет Павлу, следующие пойдут сами, когда сдают предыдущую">' +
+            ic('coins', 14) + 'Семья отказывается</button>'
+          : '') +
         (crm.hidden
           ? '<button class="m-archive" id="m-unhide" title="Вернуть лида из архива">' + ic('refresh', 14) + 'Вернуть из архива</button>'
           : '<button class="m-archive" id="m-hide" title="Скрыть лида в архив (мягко, данные останутся)">' + ic('x', 14) + 'Скрыть</button>') +
@@ -51289,6 +51317,8 @@
     });
     var unhideBtn = el('m-unhide');
     if (unhideBtn) unhideBtn.addEventListener('click', function () { rmHideLead(id, false); });
+    var refundBtn = el('m-refund');
+    if (refundBtn) refundBtn.addEventListener('click', function () { rmStartRefund(id, refundBtn); });
     var slBtn = el('m-sublogin');
     if (slBtn) {
       // stopPropagation: общий обработчик документа гасит всплывающие меню по клику
