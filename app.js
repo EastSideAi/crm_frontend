@@ -24575,6 +24575,10 @@
           '</div><div class="fc-v num' + (r.v < 0 && r.cls !== 'out' ? ' neg' : '') + '">' + finRub(r.v) + '</div></div>';
       }).join('') + '</div>' +
       breakEven(t) +
+      // Январь–июль перенесены из Excel сводными суммами: прибыль по ним ориентировочная.
+      (p.approx_before ? '<div class="fin-note calm">' + ic('info', 13) +
+        'До ' + finDate(p.approx_before) + ' данные сводные из Excel, прибыль за эти месяцы ориентировочная. Точные цифры с ' +
+        finDate(p.approx_before) + ', их и сравнивайте месяц к месяцу.</div>' : '') +
       (t.unsorted ? '<div class="fin-note">' + ic('alert', 13) +
         'Без статьи осталось ' + finRub(t.unsorted) + ' — эти операции в отчет не попали и их надо разнести.</div>' : '') +
     '</div>';
