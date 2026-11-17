@@ -7938,6 +7938,10 @@ a.fin-rcp.off:hover { text-decoration: underline; }
   font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
 .fb-over span { color: var(--red-ink); font-weight: 700; }
 .fb-note { margin: 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+.fb-src { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+  font-size: 12.5px; color: var(--blue); text-decoration: none; line-height: 1.4; }
+.fb-src:hover span { text-decoration: underline; }
+.fb-src-wait { color: var(--ink-3); }
 /* На телефоне statbar.three встаёт в 2 колонки, а крупные суммы лимитов (500 000 ₽,
    1 000 000 ₽) в половину ширины не влезают и наезжают — поэтому в плашке банков
    на узком экране одна колонка. */
