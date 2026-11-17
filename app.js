@@ -4014,9 +4014,11 @@
               '«Перед закрытием периода».'
             : '');
       } else if (state.page === 'finpnl') {
-        ph = 'Нарастающим итогом. Доходы и расходы — только факт, отчисления в фонды — ' +
-          'по расчету периода, даже пока они планом. Ниже — лента операций, из которых ' +
-          'цифры сложились.';
+        // Подзаголовок отвечает на «зачем этот экран», а не описывает механику
+        // (Роман 17.11.2026: «нужно понимать, что все означает»).
+        ph = 'Заработали ли мы и на чем. Сверху главное в трех цифрах, ниже отчет по шагам, ' +
+          'разрез по услугам и операции, из которых все сложилось. Считается только факт; ' +
+          'перевод в фонд не расход, расход — трата из фонда.';
       } else if (state.page === 'finincome') {
         ph = 'Что пришло на расчетный счет за ведомость <b>' + esc(per.name) + '</b>. ' +
           'Дубль платежа из кассы снимите галочкой «в доход» — строка останется видна, ' +
@@ -24539,42 +24541,50 @@
     }
     if (FIN.pnl === 'none') return finErrView(view);
     var p = FIN.pnl, t = p.totals || {};
+    // У каждой ступеньки подпись, что в нее входит: экран должен читаться без памятки
+    // (Роман 17.11.2026: «нужно понимать, что все означает»).
     var ladder = [
-      { name: 'Выручка', v: t.revenue, cls: 'in' },
-      { name: 'Переменные расходы', v: -t.variable, cls: 'out' },
-      { name: 'Валовая прибыль', v: t.gross, cls: 'sum', pct: t.gross_pct, pctName: 'валовая рентабельность' },
+      { name: 'Выручка', v: t.revenue, cls: 'in', why: 'все, что заплатили клиенты; возвраты уже вычтены' },
+      { name: 'Переменные расходы', v: -t.variable, cls: 'out',
+        why: 'траты на работу с клиентами: кураторы, преподаватели, подрядчики, комиссия банка' },
+      { name: 'Валовая прибыль', v: t.gross, cls: 'sum', pct: t.gross_pct, why: 'что остается с клиентов после работы на них' },
       // Постоянные делятся на коммерческие (реклама, продажи) и управленческие (команда,
       // сервисы), как в управленческом P&L (задача 513, 17.11.2026). Старый бэкенд
       // этих полей не отдает — тогда одна строка, как было.
     ].concat(t.commercial !== undefined && t.admin !== undefined ? [
-      { name: 'Коммерческие расходы', v: -t.commercial, cls: 'out' },
-      { name: 'Управленческие расходы', v: -t.admin, cls: 'out' },
+      { name: 'Коммерческие расходы', v: -t.commercial, cls: 'out', why: 'привлечение клиентов: реклама, маркетинг, отдел продаж' },
+      { name: 'Управленческие расходы', v: -t.admin, cls: 'out', why: 'содержание компании: руководство, команда, бухгалтер, сервисы' },
     ] : [
-      { name: 'Постоянные расходы', v: -t.fixed, cls: 'out' },
+      { name: 'Постоянные расходы', v: -t.fixed, cls: 'out', why: 'реклама, команда, сервисы' },
     ]).concat([
-      { name: 'Операционная прибыль', v: t.operating, cls: 'sum', pct: t.margin_pct, pctName: 'маржинальность' },
-      { name: 'Налоги', v: -t.taxes, cls: 'out' },
-      { name: 'Чистая прибыль', v: t.net, cls: 'total', pct: t.net_pct, pctName: 'чистая рентабельность' },
+      { name: 'Операционная прибыль', v: t.operating, cls: 'sum', pct: t.margin_pct, why: 'заработок самого бизнеса до налогов' },
+      { name: 'Налоги', v: -t.taxes, cls: 'out', why: 'налоги, начисленные за этот срок' },
+      { name: 'Чистая прибыль', v: t.net, cls: 'total', pct: t.net_pct, why: 'что остается компании после всех расходов и налогов' },
     ]);
     // Прочие — сразу под операционной прибылью; место считаем, а не держим числом:
     // постоянные бывают одной строкой или двумя.
     var afterOp = ladder.map(function (r) { return r.name; }).indexOf('Операционная прибыль') + 1;
-    if (t.other_income) ladder.splice(afterOp, 0, { name: 'Прочие доходы', v: t.other_income, cls: 'in' });
-    if (t.other_expense) ladder.splice(afterOp, 0, { name: 'Прочие расходы', v: -t.other_expense, cls: 'out' });
+    if (t.other_income) ladder.splice(afterOp, 0, { name: 'Прочие доходы', v: t.other_income, cls: 'in', why: 'деньги не от основной работы' });
+    if (t.other_expense) ladder.splice(afterOp, 0, { name: 'Прочие расходы', v: -t.other_expense, cls: 'out', why: 'траты не на основную работу' });
     if (t.interest) ladder.splice(ladder.length - 1, 0, { name: 'Проценты по кредитам', v: -t.interest, cls: 'out' });
 
-    var lad = '<div class="card fin-casc">' +
+    var lad = '<div class="card fin-casc pnl-casc">' +
       '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
         '<div><div class="t">Отчет о прибылях и убытках</div>' +
         '<div class="s">' + (p.from ? finDate(p.from) + ' — ' + finDate(p.to) : 'за все время') +
-        ', факт плюс отчисления в фонды за период</div></div></div>' +
+        ', сверху вниз: из выручки по шагу вычитаются расходы</div></div></div>' +
       '<div class="fc-rows">' + ladder.map(function (r) {
+        var why = [r.why || '', r.pct !== undefined ? finPct(r.pct) + ' от выручки' : ''].filter(Boolean).join(' · ');
         return '<div class="fc-row ' + r.cls + '">' +
           '<div class="fc-l"><span class="fc-name">' + esc(r.name) + '</span>' +
-            (r.pct !== undefined ? '<span class="fc-why">' + esc(r.pctName) + ' ' + finPct(r.pct) + '</span>' : '') +
+            (why ? '<span class="fc-why">' + esc(why) + '</span>' : '') +
           '</div><div class="fc-v num' + (r.v < 0 && r.cls !== 'out' ? ' neg' : '') + '">' + finRub(r.v) + '</div></div>';
       }).join('') + '</div>' +
       breakEven(t) +
+      // Январь–июль перенесены из Excel сводными суммами: прибыль по ним ориентировочная.
+      (p.approx_before ? '<div class="fin-note calm">' + ic('info', 13) +
+        'До ' + finDate(p.approx_before) + ' данные сводные из Excel, прибыль за эти месяцы ориентировочная. Точные цифры с ' +
+        finDate(p.approx_before) + ', их и сравнивайте месяц к месяцу.</div>' : '') +
       (t.unsorted ? '<div class="fin-note">' + ic('alert', 13) +
         'Без статьи осталось ' + finRub(t.unsorted) + ' — эти операции в отчет не попали и их надо разнести.</div>' : '') +
     '</div>';
@@ -24591,20 +24601,36 @@
         }).join('') + '</div>';
     }).join('');
 
-    var offers = (p.offerings || []).length
+    // По услугам — таблица, а не список: сравнивают услуги между собой по колонкам
+    // (Роман 17.11.2026: «чтобы было видно, где считалось по услугам»). Две ступеньки:
+    // траты на клиентов (кураторы, преподаватели, процент с договора) и команда услуги
+    // на окладе. Общее (реклама, руководство, сервисы) по услугам не делим.
+    var offs = p.offerings || [];
+    var offers = offs.length
       ? '<div class="card fin-block">' +
         '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
-          '<div><div class="t">По услугам</div><div class="s">выручка, что осталось после трат на клиентов и после команды услуги</div></div></div>' +
-        '<div class="fin-list">' + p.offerings.map(function (o) {
-          // Две ступеньки: траты на клиентов (кураторы, преподаватели, процент с договора)
-          // и команда услуги на окладе. Общее (реклама, CEO, сервисы) по услугам не делим.
-          var sub = 'после трат на клиентов ' + finRub(o.gross) + ' · ' + finPct(o.margin_pct);
-          if (o.team) sub += ' · после команды ' + finRub(o.after_team);
-          return '<div class="fl-row fl-2"><div class="fl-main">' +
-            '<span class="fl-name">' + esc(o.name) + '</span>' +
-            '<span class="fl-sub">' + sub + '</span></div>' +
-            '<div class="fl-v num">' + finRub(o.revenue) + '</div></div>';
-        }).join('') + '</div></div>'
+          '<div><div class="t">По услугам</div><div class="s">сколько каждая услуга оставляет компании после трат на своих клиентов и своей команды</div></div></div>' +
+        '<div class="svc-wrap"><table class="svc-tbl"><thead><tr>' +
+          '<th>Услуга</th><th class="r">Выручка</th><th class="r">Траты на клиентов</th>' +
+          '<th class="r">Команда услуги</th><th class="r">Осталось</th><th class="r">Из 100 ₽</th>' +
+        '</tr></thead><tbody>' + offs.map(function (o) {
+          var common = o.id === '—';
+          var left = o.after_team !== undefined ? o.after_team : o.gross;
+          var per = o.revenue ? left / o.revenue * 100 : null;
+          var loss = !common && left < 0;
+          return '<tr class="' + (common ? 'common' : loss ? 'loss' : '') + '">' +
+            '<td class="svc-n">' + esc(o.name) + '</td>' +
+            '<td class="r num">' + finRub(o.revenue, 0) + '</td>' +
+            '<td class="r num">' + (o.variable ? finRub(-o.variable, 0) : '—') + '</td>' +
+            '<td class="r num">' + (o.team ? finRub(-o.team, 0) : '—') + '</td>' +
+            '<td class="r num b">' + finRub(left, 0) + '</td>' +
+            '<td class="r num">' + (common || per === null ? '—' : finRub(per, 2)) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<div class="fin-note calm">' + ic('info', 13) +
+          'Красным — услуга, которая тратит на клиентов больше, чем приносит. «Общее, без услуги» — реклама, руководство, сервисы' +
+          (p.approx_before ? ' и суммы до ' + finDate(p.approx_before) + ' из Excel' : '') +
+          ': по услугам они не делятся и вычитаются в отчете выше.</div>' +
+        '</div>'
       : '';
 
     // Под P&L — лента операций: те самые движения, из которых цифры сложились (владелец
@@ -24617,10 +24643,38 @@
     // Лестница P&L во всю ширину — это якорь экрана; блок «Статьи» убран, его роль
     // (из чего сложились цифры) теперь играет лента операций ниже, иначе одно и то же
     // в двух видах. «По услугам» оставляем — это разрез, которого в ленте нет.
-    view.innerHTML = lad + offers + opsHead + '<div id="pnl-ops"></div>';
+    view.innerHTML = pnlKpis(t, p.prev) + lad + offers + opsHead + '<div id="pnl-ops"></div>';
     pageAnim(view);
     var opsBox = el('pnl-ops');
     if (opsBox) renderFinOpsInto(opsBox);
+  }
+
+  /* Три главные цифры P&L сверху экрана: крупно рубли, сколько реально осталось,
+     под ними доля выручки и сравнение с прошлым отрезком (Роман 17.11.2026: «нужно
+     понимать, что все означает»; вариант «с каждых 100 ₽» не прочитался). Сравниваем
+     доли, а не рубли: текущий месяц еще идет, рубли в нем всегда меньше. */
+  function pnlKpis(t, prev) {
+    if (!t || !t.revenue) return '';
+    var tiles = [
+      ['gross', 'gross_pct', 'Остается с клиентов', 'после работы на них: кураторы, преподаватели, подрядчики', 'валовая прибыль'],
+      ['operating', 'margin_pct', 'Зарабатывает бизнес', 'после рекламы, команды и сервисов, до налогов', 'операционная прибыль'],
+      ['net', 'net_pct', 'Остается чистыми', 'после всех расходов и налогов', 'чистая прибыль'],
+    ];
+    return '<div class="kpis k3 pnl-kpis">' + tiles.map(function (k) {
+      var v = t[k[0]] || 0, pct = t[k[1]] || 0, was = prev ? prev[k[1]] : null, cmp = '';
+      if (was !== null && was !== undefined) {
+        var d = pct - was;
+        var cls = Math.abs(d) < 0.5 ? 'mid' : d > 0 ? 'good' : 'bad';
+        cmp = '<div class="ks"><span class="kd ' + cls + '">' +
+          (Math.abs(d) < 0.5 ? 'как было' : d > 0 ? 'лучше' : 'хуже') + '</span>' +
+          '<span>' + esc(prev.label) + ' было ' + finPct(was) + '</span></div>';
+      }
+      return '<div class="kpi' + (v < 0 ? ' hot' : '') + '">' +
+        '<div class="kl">' + esc(k[2]) + '</div>' +
+        '<div class="kn num">' + finRub(v, 0) + '<small>' + finPct(pct) + ' выручки</small></div>' +
+        '<div class="kw">' + esc(k[3]) + '</div>' + cmp +
+        '<div class="kt">в отчете ниже: ' + esc(k[4]) + '</div></div>';
+    }).join('') + '</div>';
   }
 
   /* Точка безубыточности — последняя строка структуры отчета, как владелец ее
@@ -24679,6 +24733,10 @@
                    FIN.opsScope === 'all' ? (it.sheet || '') : '',
                    it.comment || ''].filter(Boolean).map(esc).join(' · ') + '</i></span>' +
         '<span class="fo-src">' + esc(it.source || '—') + '</span>' +
+        // Услуга строки — по ней считается блок «По услугам» в P&L. У переводов ее нет,
+        // доход или расход без услуги — общий (реклама, руководство, сервисы).
+        '<span class="fo-off' + (it.offering ? '' : ' none') + '">' +
+          esc(it.offering || (it.kind === 'перевод' ? '—' : 'общее')) + '</span>' +
         '<span class="fo-acc">' + esc(it.account || '—') +
           (it.account_to ? ' → ' + esc(it.account_to) : '') + '</span>' +
         '<span class="num fo-sum' + (neg ? ' neg' : '') + '">' + finRub(neg ? -it.amount : it.amount) + '</span>' +
@@ -24702,8 +24760,8 @@
       '</div>' +
       '<div class="list-quick">' + chips + '</div>' +
       '<div class="trow fin-grid thead">' +
-        '<span class="th">Дата</span><span class="th">Что</span><span class="th">Раздел</span>' +
-        '<span class="th">Счет</span><span class="th">Сумма</span><span class="th">Статус</span>' +
+        '<span class="th">Дата</span><span class="th">Что</span><span class="th">Раздел</span><span class="th">Услуга</span>' +
+        '<span class="th th-acc">Счет</span><span class="th">Сумма</span><span class="th">Статус</span>' +
       '</div>' +
       (rows || '<div class="empty">Под эти условия операций не нашлось.</div>') +
       ((o.items || []).length >= o.limit
@@ -50459,6 +50517,27 @@
     return u;
   }
   /* скрыть лид (мягко, в архив) / вернуть из архива — затем обновить список */
+  // Запуск возврата по семье. Спрашиваем одно: что уже известно (дата письма,
+  // причина) — это ляжет в цель, и Павлу не придется переспрашивать. Отмена окна
+  // ничего не запускает: действие тянет за собой задачи пяти людям.
+  function rmStartRefund(id, btn) {
+    var note = window.prompt('Семья отказывается от договора — запускаем возврат. ' +
+      'Первая задача встанет Павлу, следующие пойдут сами.\n\n' +
+      'Что известно: когда пришел отказ, причина (можно оставить пустым)', '');
+    if (note === null) return;
+    btn.disabled = true;
+    api('/admin/api/refund-flow', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: id, note: note }),
+    }).then(function (r) {
+      showToast(r.created ? 'Возврат запущен' : 'Возврат по этой семье уже идет',
+        r.created ? 'первая задача у Павла, цель «' + ((r.task && r.task.title) || 'Возврат') + '» в задачнике'
+                  : 'цель «' + ((r.task && r.task.title) || 'Возврат') + '» в задачнике');
+    }).catch(function (e) {
+      if (e && e.message !== '403') showToast('Не получилось запустить возврат — проверь сеть');
+    }).then(function () { btn.disabled = false; });
+  }
+
   function rmHideLead(id, hidden) {
     api('/admin/api/leads/' + id, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -51416,6 +51495,13 @@
           ? '<button class="m-archive" id="m-sublogin" title="Открыть кабинет глазами клиента — то же, что видит он. Только просмотр: менять там ничего нельзя">' +
             ic('ext', 14) + 'Войти как</button>'
           : '') +
+        // Отказ семьи от договора запускает цепочку задач процесса «Возврат денег
+        // семье»: первая встает Павлу, дальше сами (бэкенд services/refund_flow.py).
+        // Жмут Павел и продажи — те же, кто выставляет семье счет (Роман 17.11.2026).
+        (can('pay_create')
+          ? '<button class="m-archive" id="m-refund" title="Семья отказывается от договора: запустить возврат. Первая задача встанет Павлу, следующие пойдут сами, когда сдают предыдущую">' +
+            ic('coins', 14) + 'Семья отказывается</button>'
+          : '') +
         (crm.hidden
           ? '<button class="m-archive" id="m-unhide" title="Вернуть лида из архива">' + ic('refresh', 14) + 'Вернуть из архива</button>'
           : '<button class="m-archive" id="m-hide" title="Скрыть лида в архив (мягко, данные останутся)">' + ic('x', 14) + 'Скрыть</button>') +
@@ -51438,6 +51524,8 @@
     });
     var unhideBtn = el('m-unhide');
     if (unhideBtn) unhideBtn.addEventListener('click', function () { rmHideLead(id, false); });
+    var refundBtn = el('m-refund');
+    if (refundBtn) refundBtn.addEventListener('click', function () { rmStartRefund(id, refundBtn); });
     var slBtn = el('m-sublogin');
     if (slBtn) {
       // stopPropagation: общий обработчик документа гасит всплывающие меню по клику
