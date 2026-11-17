@@ -24543,13 +24543,24 @@
       { name: 'Выручка', v: t.revenue, cls: 'in' },
       { name: 'Переменные расходы', v: -t.variable, cls: 'out' },
       { name: 'Валовая прибыль', v: t.gross, cls: 'sum', pct: t.gross_pct, pctName: 'валовая рентабельность' },
+      // Постоянные делятся на коммерческие (реклама, продажи) и управленческие (команда,
+      // сервисы), как в управленческом P&L (задача 513, 17.11.2026). Старый бэкенд
+      // этих полей не отдает — тогда одна строка, как было.
+    ].concat(t.commercial !== undefined && t.admin !== undefined ? [
+      { name: 'Коммерческие расходы', v: -t.commercial, cls: 'out' },
+      { name: 'Управленческие расходы', v: -t.admin, cls: 'out' },
+    ] : [
       { name: 'Постоянные расходы', v: -t.fixed, cls: 'out' },
+    ]).concat([
       { name: 'Операционная прибыль', v: t.operating, cls: 'sum', pct: t.margin_pct, pctName: 'маржинальность' },
       { name: 'Налоги', v: -t.taxes, cls: 'out' },
       { name: 'Чистая прибыль', v: t.net, cls: 'total', pct: t.net_pct, pctName: 'чистая рентабельность' },
-    ];
-    if (t.other_income) ladder.splice(5, 0, { name: 'Прочие доходы', v: t.other_income, cls: 'in' });
-    if (t.other_expense) ladder.splice(5, 0, { name: 'Прочие расходы', v: -t.other_expense, cls: 'out' });
+    ]);
+    // Прочие — сразу под операционной прибылью; место считаем, а не держим числом:
+    // постоянные бывают одной строкой или двумя.
+    var afterOp = ladder.map(function (r) { return r.name; }).indexOf('Операционная прибыль') + 1;
+    if (t.other_income) ladder.splice(afterOp, 0, { name: 'Прочие доходы', v: t.other_income, cls: 'in' });
+    if (t.other_expense) ladder.splice(afterOp, 0, { name: 'Прочие расходы', v: -t.other_expense, cls: 'out' });
     if (t.interest) ladder.splice(ladder.length - 1, 0, { name: 'Проценты по кредитам', v: -t.interest, cls: 'out' });
 
     var lad = '<div class="card fin-casc">' +
