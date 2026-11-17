@@ -39740,7 +39740,7 @@
     var g = sbRegCalc(cc, r.a, r.b), x = mgCalc(cc, r.a, r.b);
     var open = state._sbReg || '';
     var tile = function (key, t, n, sub, cls) {
-      return '<button class="sb-rt' + (cls ? ' ' + cls : '') + (open === key ? ' on' : '') + '" data-sbreg="' + key + '">' +
+      return '<button class="sb-rt' + (cls ? ' ' + cls : '') + (open === key ? ' on' : '') + '" data-sbreg="' + key + '" aria-expanded="' + (open === key) + '">' +
         '<span class="sb-rl">' + esc(t) + '</span><span class="sb-rn num">' + fmtMoney(n) + '</span>' +
         '<span class="sb-rs">' + esc(sub) + '</span></button>';
     };
@@ -39754,13 +39754,13 @@
         .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
     }
     return '<div class="card sp12 sb-reg"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
-      '<div><div class="t">Регистрации и консультации · ' + esc(mgSpan(r.a, r.b)) + '</div>' +
-      '<div class="s">новые люди с любого входа и записавшиеся на эфир, человек один раз; нажми на цифру, откроются люди</div></div></div>' +
+      '<div><div class="t">Регистрации и консультации <span class="sb-rdate">· ' + esc(mgSpan(r.a, r.b)) + '</span></div>' +
+      '<div class="s">новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру, чтобы увидеть людей</div></div></div>' +
       '<div class="sb-rtop">' +
         tile('all', 'Регистраций', g.total, 'с контактом ' + g.contact + ', без контакта ' + (g.total - g.contact), 'big') +
         '<button class="sb-rt big cons" data-sbcons="' + esc(r.a + ',' + r.b) + '">' +
           '<span class="sb-rl">Провели продающих консультаций</span><span class="sb-rn num">' + fmtMoney(x.meeting || 0) + '</span>' +
-          '<span class="sb-rs">записались ' + (x.signed || 0) + ', из тех, кто записался, пришли ' +
+          '<span class="sb-rs">записались ' + (x.signed || 0) + ', из них пришли ' +
           (x.signed ? Math.min(100, Math.round((x.meeting || 0) / x.signed * 100)) + '%' : '—') + '</span></button>' +
       '</div>' +
       (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
