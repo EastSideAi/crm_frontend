@@ -2695,7 +2695,11 @@
     /* Плановый налог АУСН 8% по месяцам за год — сколько отложить. Год, а не период:
        у налога свои границы. Считается из дохода ведомости сам (база — до эквайринга). */
     { id: 'fintax', label: 'Плановый налог', icon: 'coins', cap: 'finmodel', space: 'fin' },
-    { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
+    /* Сервисы и долги — два раздела, а не один экран: регулярные списания живут по своему
+       календарю, а долг гасится частями и едет из ведомости в ведомость. Вместе они
+       мешали читать оба (Виталий и Роман, задача 6366, 11–12.11.2026). Данные одни. */
+    { id: 'finref', label: 'Сервисы', icon: 'clock', cap: 'finmodel', space: 'fin' },
+    { id: 'findebt', label: 'Долги и кредиты', icon: 'coins', cap: 'finmodel', space: 'fin' },
     /* Свой расчетный лист открывается и тому, у кого нет права смотреть ведомость
        целиком: правило владельца от 11.08.2026 — править только свое. У такого
        человека это единственный раздел «Финансов». Раздел держит больше, чем листы:
@@ -2794,7 +2798,7 @@
     { label: 'Сводка', ids: ['finboss'] },
     { label: 'Ведомость периода',
       ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect',
-            'finedit', 'reward', 'finpartners', 'finref', 'finfund'] },
+            'finedit', 'reward', 'finpartners', 'finref', 'findebt', 'finfund'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
     { label: 'Отчеты', ids: ['finpnl', 'finmetrics', 'finops'] },
     { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb', 'finreglament'] },
@@ -3356,7 +3360,7 @@
       tb.innerHTML = '';
     } else if (state.page === 'finboss' || state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finfund' ||
-               state.page === 'finedit' || state.page === 'finref' ||
+               state.page === 'finedit' || state.page === 'finref' || state.page === 'findebt' ||
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finspend' || state.page === 'finmetrics' ||
@@ -3877,7 +3881,7 @@
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
       var titles = { finboss: 'Сводка руководителя', reward: 'Вознаграждение',
                      finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
-                     finops: 'Карта операций', finref: 'Сервисы и долги',
+                     finops: 'Карта операций', finref: 'Сервисы', findebt: 'Долги и кредиты',
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы по фондам и выплаты', findirect: 'Прямые расходы',
                      finspend: 'Расходы', finpayouts: 'Выплаты подрядчикам',
@@ -3902,8 +3906,10 @@
           'вопросом с причиной и в сумму не идет.';
       }
       else if (state.page === 'finref') {
-        ph = 'Что списывается само и что мы должны. Сервис с наступившим сроком ' +
-          'проставляется фактом сам — сумму потом проверьте. Остаток долга едет в ' +
+        ph = 'Что списывается само: подписки, связь, банк. Сервис с наступившим сроком ' +
+          'проставляется фактом сам — сумму потом проверьте.';
+      } else if (state.page === 'findebt') {
+        ph = 'Что мы должны и сколько платим за эту ведомость. Остаток долга едет в ' +
           'следующий период, пока не погашен.';
       } else if (state.page === 'finmetrics') {
         ph = 'Здоровье центра, откуда берется прибыль и куда уходят деньги со счета. ' +
@@ -4199,7 +4205,8 @@
     else if (state.page === 'finspend') renderFinSpend(view);
     else if (state.page === 'finreestr') renderFinReestr(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
-    else if (state.page === 'finref') renderFinRefs(view);
+    else if (state.page === 'finref') renderFinRefs(view, 'svc');
+    else if (state.page === 'findebt') renderFinRefs(view, 'debt');
     else if (state.page === 'finbanks') renderFinBanks(view);
     else if (state.page === 'finpaycheck') renderFinPayCheck(view);
     else if (state.page === 'finsup') renderFinSuppliers(view);
@@ -30145,7 +30152,7 @@
     });
   }
 
-  function renderFinRefs(view) {
+  function renderFinRefs(view, mode) {
     if (!FIN.refs) {
       if (FIN.err) return finErrView(view);
       view.innerHTML = dashSkeleton(); finLoadRefs(); return;
@@ -30165,15 +30172,19 @@
     var left = 0;
     debts.forEach(function (o) { left += o.remaining; });
 
-    var bar = statBar([
+    var opaid = 0;
+    orows.forEach(function (x) { if (x.status === 'факт') opaid += x.amount; });
+    var bar = mode === 'debt' ? statBar([
+      { label: 'Долгов к погашению', value: finRub(left),
+        sub: debts.length + ' ' + plural(debts.length, 'обязательство', 'обязательства', 'обязательств') },
+      { label: 'Платеж в эту ведомость', value: finRub(oplan), sub: 'еще не оплачено' },
+      { label: 'Уже оплатили', value: finRub(opaid), sub: 'в этой ведомости' },
+    ]) : statBar([
       { label: 'Сервисов в работе', value: String(live.length),
         sub: 'списываются сами по сроку' },
       { label: 'План на ведомость', value: finRub(plan), sub: 'сколько ждем к списанию' },
       { label: 'Уже списалось', value: finRub(paid),
         sub: paid > plan ? 'дороже плана на ' + finRub(paid - plan) : 'по факту' },
-      { label: 'Долгов к погашению', value: finRub(left),
-        sub: debts.length + ' ' + plural(debts.length, 'обязательство', 'обязательства', 'обязательств') +
-             ' · платеж ' + finRub(oplan) },
     ]);
 
     /* Платежи ведомости: план и факт правятся раздельно и на месте. Пока факт пуст,
@@ -30291,7 +30302,7 @@
       '</div>';
     }).join('');
 
-    view.innerHTML = bar + '<div class="grid">' +
+    var svcHtml =
       '<div class="sp7">' +
         '<div class="card listcard">' +
           '<div class="list-tools sec-head"><span class="ic">' + ic('clock', 14) + '</span>' +
@@ -30300,6 +30311,8 @@
             'сервис в расход не идет</div></div></div>' +
           (pay || '<div class="empty">Сервисов в этой ведомости нет.</div>') +
         '</div>' +
+      '</div>' +
+      '<div class="sp5">' +
         '<div class="card listcard">' +
           '<div class="list-tools sec-head"><span class="ic">' + ic('refresh', 14) + '</span>' +
             '<div><div class="t">Справочник сервисов</div>' +
@@ -30310,8 +30323,9 @@
             '<div class="empty">Сервисов пока нет. Заведите первый — он появится строкой ' +
             'в каждой ведомости.</div>') + '</div>' +
         '</div>' +
-      '</div>' +
-      '<div class="sp5">' +
+      '</div>';
+    var debtHtml =
+      '<div class="sp7">' +
         '<div class="card listcard">' +
           '<div class="list-tools sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
             '<div><div class="t">Долги и кредиты</div>' +
@@ -30321,13 +30335,17 @@
           '<div class="fin-list">' + (oblList || '<div class="empty">Обязательств нет.</div>') +
           '</div>' +
         '</div>' +
+      '</div>' +
+      '<div class="sp5">' +
         '<div class="card listcard">' +
           '<div class="list-tools sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
             '<div><div class="t">Платежи по обязательствам</div>' +
             '<div class="s">плановые платежи этой ведомости</div></div></div>' +
           (oblPay || '<div class="empty">Плановых платежей нет.</div>') +
         '</div>' +
-      '</div></div>';
+      '</div>';
+    view.innerHTML = bar + '<div class="grid">' +
+      (mode === 'debt' ? debtHtml : svcHtml) + '</div>';
 
     finPaidBind(view);
     var add = el('sv-add');
