@@ -1087,6 +1087,8 @@
     nocontact:     { label: 'Без контакта',     icon: 'phone', pred: function (l) { return !((l.booking || {}).contact); } },
     tasks:         { label: 'С задачами',       icon: 'task',  pred: function (l) { return (l.crm.tasks || []).some(function (t) { return !t.done; }); } },
     attention:     { label: 'Внимание',         icon: 'flame', pred: function (l) { return leadRisks(l).length; } },
+    // Павел 18.11.2026: интерес к краткосрочным программам, отметка в карточке.
+    short:         { label: 'Краткосрочка',     icon: 'flight', pred: function (l) { return hasShort(l); } },
   };
   function quickPred() {
     var q = QUICK[state.quick];
@@ -1356,7 +1358,7 @@
     var total = segArr.length;
     var shown = segLeads(state.seg).length;
 
-    var order = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention'];
+    var order = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short'];
     var chips = order.map(function (k) {
       var q = QUICK[k];
       var n = q.pred ? segArr.filter(q.pred).length : total;
@@ -39190,7 +39192,8 @@
         '<span class="mg-ht"><b>' + esc(e.t) + '</b>' + (e.s ? '<small>' + esc(e.s) + '</small>' : '') +
         (e.who ? '<small class="mg-hwho">' + esc(e.who) + '</small>' : '') + '</span></li>';
     }).join('');
-    return '<div class="mg-hist"><ol class="mg-hl">' + items + '</ol>' + open + '</div>';
+    return '<div class="mg-hist"><ol class="mg-hl">' + items + '</ol>' + open +
+      (state.page === 'sales' ? ' ' + sbMkBtn(id, h.name || '', true) : '') + '</div>';
   }
   function mgHistLoad(id) {
     if (MG_HIST[id] && MG_HIST[id] !== 'err') return;
@@ -40155,16 +40158,47 @@
     var title = (SB_WORK_TITLE[q.f] || (q.f.indexOf('w_late:') === 0 ?
       (SB_WORK_TITLE['w_' + q.f.slice(7)] || '') + ', просрочено' : '')) + (q.val ? ' · ' + q.val : '');
     var body = rows.slice(0, 300).map(function (p) {
-      return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
+      return '<div class="sb-prw"><button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
         '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
           ' · пришел ' + esc(fmtDay(p.created_at)) + '</small></span>' +
         (q.by === 'wwho' ? '<span></span>'
           : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>') +
         // Красным — только просроченный по норме шага (считает сервер, LATE_AFTER).
         '<span class="sb-pm"><span class="sb-po' + (p.late ? ' wait' : ' calm') + '">' +
-          esc(sbWorkWhen(p)) + '</span></span></button>';
+          esc(sbWorkWhen(p)) + '</span></span></button>' + sbMkBtn(p.id, p.name) + '</div>';
     }).join('');
     return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
+  }
+  /* «Кто это» у человека в списках «Продаж» (Павел 18.11.2026: «помечать, кто лид, с кем
+     можно работать, а кто просто интересовался вакансией или уже лид семьи»). Та же
+     отметка «не новый лид», что в чистке «Управления»: человек уходит из счета лидов на
+     обоих экранах одинаково. «Краткосрочка» — интерес, из лидов не убирает. */
+  var SB_MK = [['', 'Лид, работаем'], ['family', 'Из семьи лида'], ['vacancy', 'Вакансия'],
+    ['client', 'Уже клиент'], ['other', 'Не наша услуга'], ['spam', 'Спам']];
+  function sbMkBtn(id, name, big) {
+    if (!id || !(can('marketing') || can('planfact'))) return '';
+    return '<button type="button" class="' + (big ? 'bp ghost sm sb-mkb' : 'sb-mk') + '" data-sbmk="' + esc(id) +
+      '" data-sbmkn="' + esc(name || '') + '" title="Лид или нет: вакансия, семья, спам">' +
+      (big ? 'Кто это' : 'кто это') + '</button>';
+  }
+  function sbMkOpen(id, name) {
+    openSheet(name || 'Кто это', 'Все, кроме «лид», убирает человека из счета лидов на «Продажах» и в «Управлении».', [
+      ['why', 'pick', 'Кто это', SB_MK.map(function (x) { return [x[0] || 'lead', x[1]]; }), 'lead'],
+      ['short', 'pick', 'Краткосрочные программы', [['', 'не спрашивал'], ['1', 'интересуется']], ''],
+    ], function (v, close) {
+      var reason = v.why === 'lead' ? null : v.why;
+      var done = function () {
+        close();
+        state._sb = null; state._mkCross = null; state._pot = null;
+        renderView();
+        showToast(reason ? 'Убрали из лидов: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1]
+          : 'Оставили лидом');
+      };
+      apiSend('/admin/api/rnp/leads/' + encodeURIComponent(id) + '/not-lead', 'POST', { reason: reason }, function () {
+        if (!v.short) return done();
+        apiSend('/admin/api/rnp/leads/' + encodeURIComponent(id) + '/mark', 'POST', { mark: 'short', on: true }, done);
+      });
+    }, null, 'Отметка лида', 'Сохранить');
   }
   function sbPeopleCard(title, n, body, sub) {
     return '<div class="card sp12 sb-people" id="sb-people"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
@@ -40202,10 +40236,10 @@
       var who = waiting
         ? '<span class="sb-po wait">' + esc(sbWait(p)) + '</span>'
         : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>';
-      return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
+      return '<div class="sb-prw"><button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
         '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
           (p.created_at ? ' · пришел ' + esc(fmtDay(p.created_at)) : '') + '</small></span>' +
-        who + '<span class="sb-pm">' + marks.join('') + '</span></button>';
+        who + '<span class="sb-pm">' + marks.join('') + '</span></button>' + sbMkBtn(p.id, p.name) + '</div>';
     }).join('');
     return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
   }
@@ -40693,6 +40727,9 @@
         var who = view.querySelector('.mg-who');
         if (who && state._mgQ) who.scrollIntoView({block: 'nearest', behavior: 'smooth'});
       });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbmk]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); sbMkOpen(b.getAttribute('data-sbmk'), b.getAttribute('data-sbmkn')); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
@@ -53758,6 +53795,31 @@
       });
     });
   }
+  /* «Краткосрочка» (Павел 18.11.2026: «метки, кто интересуется краткосрочными
+     программами, чтобы их не потерять, и фильтр»). Плашка-интерес из lead_marks:
+     лидом быть не мешает, фильтр — в «Контактах». */
+  function hasShort(l) { return ((l && l.crm && l.crm.marks) || []).indexOf('short') >= 0; }
+  function buildShortMark(ctx) {
+    var on = hasShort(ctx);
+    return '<div class="potc shm"><span class="ql-l">Краткосрочка</span>' + (on
+      ? '<span class="potc-on">' + ic('check', 11) + 'Интересуется краткосрочными программами</span>' +
+        '<button class="bp ghost sm" data-shm="0">Снять</button>'
+      : '<button class="bp ghost sm" data-shm="1">Интересуется краткосрочными программами</button>') + '</div>';
+  }
+  function wireShortMark(host, id) {
+    var b = host.querySelector('[data-shm]');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var on = b.getAttribute('data-shm') === '1';
+      b.disabled = true;
+      apiSend('/admin/api/rnp/leads/' + encodeURIComponent(id) + '/mark', 'POST', { mark: 'short', on: on }, function (r) {
+        var l = findLead(id);
+        if (l) { l.crm = l.crm || {}; l.crm.marks = (r && r.marks) || []; }
+        showToast(on ? 'Отметил: интересуется краткосрочкой' : 'Отметку снял');
+        if (state.drawerId === id) renderModalContent();
+      }, function () { b.disabled = false; showToast('Не сохранилось, проверь сеть'); });
+    });
+  }
   function wirePotChat(host, id) {
     var box = host.querySelector('.potc');
     if (!box) return;
@@ -54032,6 +54094,7 @@
     html += buildOwn(ctx);
     html += buildFamily(ctx);
     html += buildPotChat(ctx);
+    html += buildShortMark(ctx);
 
     /* 2. СТАДИЯ — степпер воронки (поднят выше: это главное действие на экране) */
     var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
@@ -56525,6 +56588,7 @@
 
     wireFamily(host, id);
     wirePotChat(host, id);
+    wireShortMark(host, id);
 
     // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {

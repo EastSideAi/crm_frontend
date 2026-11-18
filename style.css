@@ -15480,3 +15480,20 @@ video.cs-media { background: #000; }
   border-radius: var(--r-pill); background: var(--fill); font-family: inherit; font-weight: 600; font-size: 11.5px; line-height: 1.2; font-style: normal;
   color: var(--ink); }
 @media (max-width: 640px) { .pot-sts { padding: 0 16px 12px; } }
+
+/* «Кто это» у строки списка на «Продажах» (18.11.2026). Граница строки переезжает на
+   обертку, иначе кнопка висела бы на белом поле без линии под собой. */
+.sb-prw { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  border-bottom: 1px solid var(--line); background: #fff; }
+.sb-prw:last-child { border-bottom: none; }
+.sb-prw > .sb-pr { border-bottom: 0; }
+.sb-prw:hover, .sb-prw:hover > .sb-pr { background: #FBFBFC; }
+.sb-mk { margin-right: 18px; height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-pill);
+  background: var(--card); color: var(--ink-3); font-family: inherit; font-size: 12px; font-weight: 500;
+  cursor: pointer; white-space: nowrap; opacity: .55; transition: opacity .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease); }
+.sb-prw:hover .sb-mk, .sb-mk:focus-visible { opacity: 1; }
+.sb-mk:hover { color: var(--blue); border-color: var(--blue); }
+.sb-mk:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+@media (hover: none) { .sb-mk { opacity: 1; } }
+@media (max-width: 640px) { .sb-mk { margin-right: 12px; } }
+.potc.shm { margin-top: 6px; }
