@@ -49910,9 +49910,29 @@
     var counts = {}; CHAN_ORDER.forEach(function (k) { counts[k] = 0; });
     convos.forEach(function (c) { counts[c.channel] = (counts[c.channel] || 0) + 1; });
 
+    /* Кто ведет диалог (Павел 18.11.2026: «хочу видеть, какие диалоги ведет Костя»).
+       Имя ставит бот, когда коллега отвечает из CRM (taken_by), — короткая подпись
+       «Лиана» и полная «Лиана Эванс» это один человек, сводим по началу имени. */
+    var whoOf = function (c) {
+      if (c.ai_on !== false || !c.taken_by) return '';
+      return String(c.taken_by).trim();
+    };
+    var whoN = {};
+    convos.forEach(function (c) { var w = whoOf(c); if (w) whoN[w] = (whoN[w] || 0) + 1; });
+    var whoKey = {};
+    Object.keys(whoN).forEach(function (w) {
+      var full = Object.keys(whoN).filter(function (x) { return x !== w && x.indexOf(w + ' ') === 0; });
+      whoKey[w] = full.length === 1 ? full[0] : w;
+    });
+    var whoCnt = {};
+    Object.keys(whoN).forEach(function (w) { whoCnt[whoKey[w]] = (whoCnt[whoKey[w]] || 0) + whoN[w]; });
+    var whoList = Object.keys(whoCnt).sort(function (a, b) { return whoCnt[b] - whoCnt[a] || a.localeCompare(b); });
+    if (state.inboxWho && !whoCnt[state.inboxWho]) state.inboxWho = '';
+    var whoOk = function (c) { return !state.inboxWho || whoKey[whoOf(c)] === state.inboxWho; };
     var q = (state.inboxQ || '').toLowerCase();
     var list = convos.filter(function (c) {
       if (state.inboxCh && c.channel !== state.inboxCh) return false;
+      if (!whoOk(c)) return false;
       if (q && ((c.name || '') + ' ' + (c.last_text || '')).toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
@@ -49964,6 +49984,10 @@
       '<div class="tg' + (state.inboxSel ? ' show-chat' : '') + '" id="tg">' +
         '<aside class="tg-list">' + inboxSwitch() + missBanner +
           '<div class="tg-search"><span class="searchwrap">' + ic('leads', 15) + '<input id="tg-q" class="search" type="search" placeholder="Поиск диалога" autocomplete="off"></span></div>' +
+          (whoList.length ? '<div class="tg-who"><label for="tg-who">Ведет</label><select id="tg-who" class="tg-whos">' +
+            '<option value="">Все диалоги</option>' + whoList.map(function (w) {
+              return '<option value="' + esc(w) + '"' + (state.inboxWho === w ? ' selected' : '') + '>' + esc(w) + ' · ' + whoCnt[w] + '</option>';
+            }).join('') + '</select></div>' : '') +
           '<div class="tg-fchips">' + chips + '</div>' +
           '<div class="tg-rows" id="tg-rows">' + rows + '</div>' +
         '</aside>' +
@@ -49980,6 +50004,7 @@
         var host = el('tg-rows'); if (!host) return;
         var f = convos.filter(function (c) {
           if (state.inboxCh && c.channel !== state.inboxCh) return false;
+          if (!whoOk(c)) return false;
           var qq = state.inboxQ.toLowerCase();
           return !qq || ((c.name || '') + ' ' + (c.last_text || '')).toLowerCase().indexOf(qq) !== -1;
         });
@@ -49990,6 +50015,8 @@
     Array.prototype.forEach.call(view.querySelectorAll('.tg-fch'), function (b) {
       b.addEventListener('click', function () { state.inboxCh = b.getAttribute('data-ch'); state.inboxSel = null; renderInbox(view); });
     });
+    var ws = el('tg-who');
+    if (ws) ws.addEventListener('change', function () { state.inboxWho = ws.value; state.inboxSel = null; renderInbox(view); });
     function bindRows(host, lst) {
       Array.prototype.forEach.call(host.querySelectorAll('.tg-row[data-id]'), function (n) {
         n.addEventListener('click', function () {
