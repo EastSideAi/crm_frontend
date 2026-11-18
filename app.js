@@ -40403,9 +40403,22 @@
   function potCard(max) {
     var p = state._pot;
     if (!p || p === 'none') return '';
-    var rows = p.rows || [];
-    if (!rows.length) return '';
-    var open = !!state._potAll;
+    var all = p.rows || [];
+    if (!all.length) return '';
+    // Строка статусов сверху (Павел 18.11.2026: «первую строку, на каком этапе
+    // потенциалы, сразу видеть, с кем какой статус»): число по каждому, нажатие
+    // оставляет только этих.
+    var stOf = function (r) { return CRM[r.status] ? r.status : 'new'; };
+    var cnt = {};
+    all.forEach(function (r) { cnt[stOf(r)] = (cnt[stOf(r)] || 0) + 1; });
+    var sts = Object.keys(cnt).sort(function (a, b) { return CRM[b].order - CRM[a].order; });
+    var pick = state._potSt && cnt[state._potSt] ? state._potSt : '';
+    var stRow = sts.length > 1 ? '<div class="pot-sts">' + sts.map(function (k) {
+      return '<button type="button" class="pot-st' + (pick === k ? ' on' : '') + '" data-potst="' + k + '">' +
+        '<i style="background:' + CRM[k].dot + '"></i>' + esc(CRM[k].label) + ' <b class="num">' + cnt[k] + '</b></button>';
+    }).join('') + '</div>' : '';
+    var rows = pick ? all.filter(function (r) { return stOf(r) === pick; }) : all;
+    var open = !!state._potAll || !!pick;
     var shown = open ? rows : rows.slice(0, max);
     var body = shown.map(function (r) {
       var facts = [];
@@ -40413,7 +40426,7 @@
       if (r.family && r.family.length) facts.push('<span class="pot-f"><i>Семья обещала</i>' + potList(r.family) + '</span>');
       if (r.ours && r.ours.length) facts.push('<span class="pot-f"><i>Мы обещали</i>' + potList(r.ours) + '</span>');
       if (!facts.length) facts.push('<span class="pot-f none">' + (r.about ? esc(r.about) : 'итогов встречи в карточке нет') + '</span>');
-      var st = (CRM[r.status] || {}).label || '';
+      var sk = stOf(r);
       var chat = r.chat_url
         ? '<a class="pot-chat" href="' + esc(r.chat_url) + '" target="_blank" rel="noopener">' + ic('chat', 12) +
             'чат' + (r.chat_ch ? ' · ' + esc(r.chat_ch) : '') + '</a>'
@@ -40423,18 +40436,19 @@
         return '<button class="fam-p" data-pot="' + esc(m.id) + '">' + esc(m.name) + '</button>';
       }).join('') + '</span>' : '';
       return '<div class="pot-r" role="button" tabindex="0" data-pot="' + esc(r.id) + '" title="Открыть карточку">' +
-        '<span class="pot-who"><b>' + esc(r.name) + '</b>' +
-          '<small>' + esc(r.held_at ? potWhen(r) : 'отмечен вручную') + (st ? ' · ' + esc(st.toLowerCase()) : '') + '</small>' +
+        '<span class="pot-who"><em class="pot-stc"><i style="background:' + CRM[sk].dot + '"></i>' + esc(CRM[sk].label) + '</em>' +
+          '<b>' + esc(r.name) + '</b>' +
+          '<small>' + esc(r.held_at ? potWhen(r) : 'отмечен вручную') + '</small>' +
           '<small class="pot-own' + (r.owner === SB_NOBODY ? ' none' : '') + '">' + esc(r.owner === SB_NOBODY ? 'никто не ведет' : 'ведет ' + r.owner) + '</small>' +
           chat + '</span>' +
         '<span class="pot-fs">' + facts.join('') + kin + '</span></div>';
     }).join('');
-    var more = rows.length > max
+    var more = !pick && rows.length > max
       ? '<button class="pot-more" id="pot-more">' + (open ? 'Свернуть' : 'Показать всех · ' + fmtMoney(rows.length)) + '</button>' : '';
     return '<div class="card sp12 pot"><div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) +
-      '</span><div><div class="t">Потенциалы · <span class="num">' + fmtMoney(rows.length) + '</span></div>' +
+      '</span><div><div class="t">Потенциалы · <span class="num">' + fmtMoney(all.length) + '</span></div>' +
       '<div class="s">провели консультацию или отметили в карточке, еще не купили; нажми, откроется карточка</div></div>' +
-      (p.no_notes ? '<span class="cnt pot-nn">без итогов ' + fmtMoney(p.no_notes) + '</span>' : '') + '</div>' +
+      (p.no_notes ? '<span class="cnt pot-nn">без итогов ' + fmtMoney(p.no_notes) + '</span>' : '') + '</div>' + stRow +
       '<div class="pot-list">' + body + '</div>' + more + '</div>';
   }
   function potBind(view) {
@@ -40447,6 +40461,13 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('.pot-chat[href]'), function (a) {
       a.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-potst]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-potst');
+        state._potSt = state._potSt === k ? '' : k;
+        renderView();
+      });
     });
     var m = view.querySelector('#pot-more');
     if (m) m.addEventListener('click', function () { state._potAll = !state._potAll; renderView(); });
