@@ -5776,7 +5776,7 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 
 /* ════ ТУЛБАР плана в доске «Поступление» ════ */
 .rm-plan-tb { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
-  background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 14px; margin-bottom: 14px; }
+  background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 14px; margin: 0 24px 16px; }
 .rm-pub { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
 .rm-pub-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
 .rm-pub.on { color: var(--green-ink); }
@@ -15392,3 +15392,74 @@ video.cs-media { background: #000; }
   .sb-cons { margin: 6px 14px 4px; }
   .sb-csr { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Вердикт отрезка на «Продажах» — кнопка к людям строки «Лиды» (вернули 18.11.2026). */
+.sb-vbtn { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
+.sb-vbtn:hover { text-decoration-color: currentColor; }
+.sb-vbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
+
+/* ── График смен (Расписание → Смены, 18.11.2026) ─────────────────────────── */
+.shp-part { margin-right: 6px; }
+.shp .pf-sec { padding: 20px 24px 10px; }
+.shp-nav { margin: 0 24px 12px; }
+.shp-nowl { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 14px; margin: 0 24px 16px;
+  border-radius: var(--r-lg); background: var(--green-soft); color: var(--green-ink); font-size: 13px; }
+.shp-nowl b { font-weight: 600; }
+.shp-nowl .bad { color: var(--red-ink); }
+.shp-nowl.calm { background: var(--fill); color: var(--ink-3); }
+.shp-scroll { overflow-x: auto; border-top: 1px solid var(--line); }
+.shp-tbl { min-width: 860px; }
+.shp-th, .shp-tr { display: grid; grid-template-columns: minmax(150px, 1.3fr) repeat(7, minmax(92px, 1fr)); }
+.shp-th { height: 34px; align-items: center; border-bottom: 1px solid var(--line); background: var(--fill);
+}
+.shp-th span { font-size: 11px; font-weight: 600; color: var(--ink-3); text-align: center; }
+.shp-th span:first-child { text-align: left; padding-left: 24px; }
+.shp-th span b { font-weight: 600; color: var(--ink-2); }
+.shp-th span.today, .shp-th span.today b { color: var(--blue); }
+.shp-tr { border-bottom: 1px solid var(--line); min-height: 58px; }
+.shp-tr:last-child { border-bottom: none; }
+.shp-tr.mine { background: color-mix(in srgb, var(--blue-tint) 45%, transparent); }
+.shp-nm { position: sticky; left: 0; z-index: 1; display: flex; flex-direction: column; justify-content: center;
+  gap: 2px; padding: 8px 12px 8px 24px; background: var(--card); font-size: 13px; }
+.shp-tr.mine .shp-nm { background: color-mix(in srgb, var(--blue-tint) 45%, var(--card)); }
+.shp-nm b { font-weight: 600; color: var(--ink); }
+.shp-nm small { font-size: 11px; color: var(--blue); }
+.shp-c { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  padding: 8px 4px; position: relative; }
+.shp-c.today { background: color-mix(in srgb, var(--blue) 5%, transparent); }
+.shp-c.past { opacity: .72; }
+.shp-sh { border: 0; border-radius: 7px; padding: 3px 8px; background: var(--navy-soft); color: var(--navy);
+  font: 600 12px/1.3 inherit; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default; }
+.shp-sh.now { background: var(--blue); color: #fff; }
+.shp-sh.ed { cursor: pointer; transition: background .15s var(--ease); }
+.shp-sh.ed:hover { background: var(--red-soft); color: var(--red-ink); text-decoration: line-through; }
+.shp-f { font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.shp-f.ok { color: var(--green-ink); }
+.shp-f.bad { color: var(--red-ink); font-weight: 600; }
+.shp-f.calm { color: var(--ink-3); }
+.shp-add { width: 24px; height: 22px; border: 1px dashed var(--line-2); border-radius: 7px; background: none;
+  color: var(--ink-3); display: grid; place-items: center; cursor: pointer; opacity: 0;
+  transition: opacity .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease); }
+.shp-c:hover .shp-add, .shp-add:focus-visible, .shp-tr.mine .shp-c:not(:has(.shp-sh)) .shp-add { opacity: 1; }
+.shp-add:hover { color: var(--blue); border-color: var(--blue); }
+.shp-empty { border-top: 1px solid var(--line); padding: 14px 24px 18px; font-size: 12.5px; color: var(--ink-3); line-height: 1.6; }
+.shp-who { border: 0; background: none; padding: 0; font: inherit; color: var(--ink-2); cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.shp-who:hover { color: var(--blue); }
+@media (hover: none) { .shp-add { opacity: 1; } }
+.shp-tr:last-child { border-radius: 0 0 var(--r-xl) var(--r-xl); }
+@media (max-width: 640px) {
+  .shp .pf-sec { padding: 16px 16px 8px; }
+  .shp-nav, .shp-nowl { margin-left: 16px; margin-right: 16px; }
+  .shp-tbl { min-width: 760px; }
+  .shp-th, .shp-tr { grid-template-columns: 112px repeat(7, minmax(90px, 1fr)); }
+  .shp-th span:first-child, .shp-nm { padding-left: 16px; }
+  .shp-empty { padding: 12px 16px 16px; }
+}
+.sb-shlink { margin-left: 6px; font-weight: 500; color: var(--blue); text-decoration: none; }
+.sb-shlink:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sb .pf-head .sb-shmiss { grid-column: 1 / -1; }
+.sb-shmiss { margin-top: -6px; font-size: 12.5px; color: var(--red-ink); }
+.sb-shmiss b { font-weight: 600; }

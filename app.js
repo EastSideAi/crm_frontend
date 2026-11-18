@@ -180,7 +180,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -199,6 +199,7 @@
         finOpen: state.finOpen || {},
         mxTab: state.mxTab || 'soon',
         schedScope: state.schedScope || 'my',
+        schedPart: state.schedPart || '',
         schedHide: state.schedHide || {},
         pathGran: state.pathGran || 'week',
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
@@ -8627,7 +8628,7 @@
     // Неделя на стыке месяцев: «29 сен – 5 окт», а не «29–5 окт».
     return a.getMonth() === b.getMonth()
       ? a.getDate() + '–' + b.getDate() + ' ' + MONTHS_RU[b.getMonth()]
-      : a.getDate() + ' ' + MONTHS_RU[a.getMonth()] + ' – ' + b.getDate() + ' ' + MONTHS_RU[b.getMonth()];
+      : a.getDate() + ' ' + DY_MON[a.getMonth()] + ' – ' + b.getDate() + ' ' + MONTHS_RU[b.getMonth()];
   }
   var fndTimer = null;
   /* Перерисовка, не роняя каретку: человек продолжает печатать, пока ответ
@@ -9585,7 +9586,7 @@
     return '<div class="sc-my">' + days.map(function (ymd) {
       var dt = new Date(ymd + 'T00:00:00');
       var head = '<div class="sc-my-day' + (ymd === todayKey ? ' now' : '') + '">' +
-        WDAYS_RU[dt.getDay()] + ', ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] +
+        WDAYS_RU[dt.getDay()] + ', ' + dt.getDate() + ' ' + DY_MON[dt.getMonth()] +
         (ymd === todayKey ? '<i>сегодня</i>' : '') + '</div>';
       return head + seen[ymd].map(function (r) {
         // Встречу из ленты можно открыть и поправить прямо здесь — тем же редактором,
@@ -10115,7 +10116,7 @@
     if (document.querySelector('.al-ov')) return;
     var dt = new Date(day + 'T00:00:00');
     var when = isNaN(dt.getTime()) ? day
-      : WDAYS_RU[dt.getDay()] + ' ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] + ', ' +
+      : WDAYS_RU[dt.getDay()] + ' ' + dt.getDate() + ' ' + DY_MON[dt.getMonth()] + ', ' +
         schedClock(hour * 60 + (minute || 0));
     var ov = document.createElement('div');
     ov.className = 'al-ov';
@@ -32516,10 +32517,202 @@
      сделаем его отдельным блоком»). От журнала встреч не зависит и его не ждет:
      сетка сама грузит данные и вешает обработчики, сверху только чипы
      направлений, общие с EastSide Meeting. */
+  /* «Расписание» держит два вопроса: слоты (когда к человеку можно записать семью) и
+     смены (когда он на связи). Павел 18.11.2026: «это отдельно лучше, чтобы я понимал,
+     когда кто на связи и в какое время». Переключатель стоит первым в ряду. */
+  function schedPart() { return state.schedPart === 'shifts' ? 'shifts' : 'slots'; }
+  function schedPartSeg() {
+    return '<div class="pay-seg plan-seg shp-part">' +
+      '<button type="button" class="' + (schedPart() === 'slots' ? 'on' : '') + '" data-schpart="slots">Слоты</button>' +
+      '<button type="button" class="' + (schedPart() === 'shifts' ? 'on' : '') + '" data-schpart="shifts">Смены</button>' +
+      '</div>';
+  }
   function renderSchedPage(view) {
-    view.innerHTML = mxDeptChips() + '<div id="mx-sched"></div>';
-    renderMeetings(el('mx-sched'), true);
-    mxWireTop(view);
+    if (schedPart() === 'shifts') {
+      view.innerHTML = '<div class="wk-top mx-top">' + schedPartSeg() + '</div><div id="shp-box"></div>';
+      renderShiftPlan(el('shp-box'));
+    } else {
+      view.innerHTML = mxDeptChips().replace('<div class="wk-top mx-top">', '<div class="wk-top mx-top">' + schedPartSeg()) +
+        '<div id="mx-sched"></div>';
+      renderMeetings(el('mx-sched'), true);
+      mxWireTop(view);
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-schpart]'), function (b) {
+      b.addEventListener('click', function () {
+        state.schedPart = b.getAttribute('data-schpart');
+        saveUi(); renderView();
+      });
+    });
+  }
+
+  /* ── График смен ─────────────────────────────────────────────────────────────
+     Таблица люди × дни недели: в клетке смены по графику, под ними факт из «Моей
+     смены» (вышел во столько / не вышел). Свою смену человек ставит нажатием на день,
+     чужую — руководитель (can_all). Время на сервере по Москве; у кого другой пояс,
+     видит и вводит свое, перевод делает экран (tz из «Расписания»). Данные —
+     /admin/api/shift-plan (бэкенд routers/shift_plan.py). */
+  var SHP_WD = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+  function shpHm(m) { m = ((m % 1440) + 1440) % 1440; return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2); }
+  function shpTz() { var d = state.shp; return d && d.me ? (d.me.tz || 0) * 60 : 0; }
+  function shpSpan(a, b) { var z = shpTz(); return shpHm(a + z) + '–' + (b + z === 1440 ? '24:00' : shpHm(b + z)); }
+  function shpLoad() {
+    var from = state.shpFrom || '';
+    state.shpWait = true;
+    api('/admin/api/shift-plan?days=7' + (from ? '&from=' + from : '')).then(function (r) {
+      state.shp = r; state.shpWait = false;
+      if (state.page === 'sched' && schedPart() === 'shifts') renderView();
+    }).catch(function (e) {
+      state.shpWait = false;
+      state.shp = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sched' && schedPart() === 'shifts') renderView();
+    });
+  }
+  function shpShift(days) {
+    var base = state.shp && state.shp.from ? state.shp.from : mgIso(new Date());
+    state.shpFrom = days ? mgAdd(base, days) : '';
+    state.shp = null;
+    renderView();
+  }
+  // Что было по факту в этот день у человека: первая смена и открыта ли сейчас.
+  function shpFact(p, day) { return (p.fact || []).filter(function (f) { return f.day === day; }); }
+  function shpCell(p, day, d) {
+    var plan = p.plan.filter(function (s) { return s.day === day; });
+    var fact = shpFact(p, day);
+    var edit = (p.mine || d.can_all) && day >= d.today;
+    var past = day < d.today, today = day === d.today;
+    var started = plan.some(function (s) { return past || (today && s.start <= d.now_min); });
+    var out = plan.map(function (s) {
+      var now = today && s.start <= d.now_min && d.now_min < s.end;
+      return '<button type="button" class="shp-sh' + (now ? ' now' : '') + (edit ? ' ed' : '') +
+        '" data-shpid="' + s.id + '" data-shpser="' + (s.series ? 1 : 0) + '"' + (edit ? '' : ' disabled') +
+        ' title="' + (edit ? 'Снять смену' : '') + '">' + shpSpan(s.start, s.end) + '</button>';
+    }).join('');
+    if (fact.length) {
+      var f = fact[0];
+      out += '<span class="shp-f ' + (plan.length ? 'ok' : 'calm') + '">' +
+        (f.open ? 'на смене с ' : 'вышел ') + shpHm(f.start + shpTz()) + (plan.length ? '' : ', без графика') + '</span>';
+    } else if (started) {
+      out += '<span class="shp-f bad">не вышел</span>';
+    }
+    if (edit) out += '<button type="button" class="shp-add" data-shpadd="' + day + '" data-shpuid="' + p.id +
+      '" title="Поставить смену" aria-label="Поставить смену">' + ic('plus', 13) + '</button>';
+    return '<div class="shp-c' + (today ? ' today' : '') + (past ? ' past' : '') + '">' + out + '</div>';
+  }
+  function shpNow(d) {
+    if (d.days.indexOf(d.today) < 0) return '';
+    var on = [], late = [];
+    d.people.forEach(function (p) {
+      p.plan.forEach(function (s) {
+        if (s.day !== d.today || !(s.start <= d.now_min && d.now_min < s.end)) return;
+        var came = shpFact(p, d.today).some(function (f) { return f.open; });
+        (came ? on : late).push(esc(p.name.split(' ')[0]) + ' до ' + shpHm(s.end + shpTz()));
+      });
+    });
+    if (!on.length && !late.length) return '<div class="shp-nowl calm">Сейчас по графику никого нет на связи</div>';
+    return '<div class="shp-nowl">' +
+      (on.length ? '<span><b>На связи:</b> ' + on.join(', ') + '</span>' : '') +
+      (late.length ? '<span class="bad"><b>По графику, но смену не открыли:</b> ' + late.join(', ') + '</span>' : '') +
+      '</div>';
+  }
+  function renderShiftPlan(box) {
+    var d = state.shp;
+    if (!d) { box.innerHTML = dashSkeleton(); if (!state.shpWait) shpLoad(); return; }
+    if (d === 'none' || d === 'acl') {
+      box.innerHTML = '<div class="card"><div class="empty">' + (d === 'acl'
+        ? 'График смен открыт тем, кто работает с клиентами.' : 'Не удалось загрузить график. Обнови страницу.') + '</div></div>';
+      return;
+    }
+    var has = function (p) { return p.mine || p.plan.length || p.fact.length; };
+    var rows = d.people.filter(has).sort(function (a, b) {
+      return (b.mine - a.mine) || a.name.localeCompare(b.name, 'ru');
+    });
+    var empty = d.people.filter(function (p) { return !has(p); });
+    var tz = shpTz();
+    var a = mgDate(d.days[0]), z = mgDate(d.days[d.days.length - 1]);
+    var thisWeek = d.days.indexOf(d.today) >= 0;
+    var head = '<div class="shp-th"><span>Кто</span>' + d.days.map(function (day, i) {
+      return '<span class="' + (day === d.today ? 'today' : '') + '">' + SHP_WD[i] + ' <b class="num">' +
+        mgDate(day).getDate() + '</b></span>';
+    }).join('') + '</div>';
+    var body = rows.map(function (p) {
+      return '<div class="shp-tr' + (p.mine ? ' mine' : '') + '"><div class="shp-nm"><b>' + esc(p.name) + '</b>' +
+        (p.mine ? '<small>это ты</small>' : '') + '</div>' +
+        d.days.map(function (day) { return shpCell(p, day, d); }).join('') + '</div>';
+    }).join('');
+    box.innerHTML = '<div class="card sp12 shp"><div class="sec-head pf-sec"><span class="ic">' + ic('cal', 14) +
+      '</span><div><div class="t">График смен</div><div class="s">когда кто на связи; ' +
+      (tz ? 'время твое, Москва ' + (tz > 0 ? '+' : '') + tz / 60 : 'время по Москве') +
+      '. Нажми плюс в своем дне, чтобы поставить смену</div></div></div>' +
+      '<div class="brd-nav shp-nav"><button class="icobtn sm brd-arrow prev" data-shpgo="-7" title="Прошлая неделя">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + a.getDate() + ' ' + DY_MON[a.getMonth()] + ' – ' + z.getDate() + ' ' + DY_MON[z.getMonth()] + '</span>' +
+      '<button class="icobtn sm brd-arrow" data-shpgo="7" title="Следующая неделя">' + ic('go', 15) + '</button>' +
+      (thisWeek ? '' : '<button class="qchip" data-shpgo="0">Эта неделя</button>') + '</div>' +
+      shpNow(d) +
+      '<div class="shp-scroll"><div class="shp-tbl">' + head + body + '</div></div>' +
+      (empty.length ? '<div class="shp-empty">Еще не поставили смены на эту неделю: ' +
+        empty.map(function (p) {
+          return d.can_all ? '<button type="button" class="shp-who" data-shpwho="' + p.id + '">' + esc(p.name) + '</button>' : esc(p.name);
+        }).join(', ') + '</div>' : '') +
+      '</div>';
+    shpBind(box, d);
+  }
+  function shpAddForm(day, uid, d) {
+    var p = d.people.filter(function (x) { return x.id === uid; })[0] || {};
+    var tz = shpTz();
+    var dt = mgDate(day);
+    openSheet('Смена ' + SHP_WD[(dt.getDay() + 6) % 7] + ', ' + dt.getDate() + ' ' + DY_MON[dt.getMonth()],
+      (p.mine ? '' : p.name + '. ') + (tz ? 'Время твое, на сервер уйдет по Москве.' : 'Время по Москве.'), [
+        ['start', 'time', 'С', '10:00'],
+        ['end', 'time', 'До', '18:00'],
+        ['weeks', 'pick', 'Повторять', [['1', 'только этот день'], ['4', 'этот день недели 4 недели'],
+          ['8', '8 недель'], ['12', '12 недель']], '1'],
+      ], function (v, close) {
+        var mm = function (t) { var x = String(t || '').split(':'); return x.length < 2 ? NaN : parseInt(x[0], 10) * 60 + parseInt(x[1], 10); };
+        var s = mm(v.start), e = mm(v.end);
+        if (isNaN(s) || isNaN(e)) return 'Укажи время начала и конца';
+        if (e === 0) e = 1440;
+        if (e <= s) return 'Конец смены должен быть позже начала';
+        s -= tz; e -= tz;
+        if (s < 0 || e > 1440) return 'По Москве смена переходит через полночь, поставь ее двумя частями';
+        apiSend('/admin/api/shift-plan', 'POST',
+          { day: day, start: s, end: e, weeks: parseInt(v.weeks, 10) || 1, user_id: uid },
+          function () { close(); state.shp = null; renderView(); showToast('Смена в графике'); },
+          function (code, err) {
+            var det = err && err.body && err.body.detail;
+            el('sh-err').textContent = typeof det === 'string' ? det : 'Не сохранилось, проверь сеть';
+          });
+      }, null, 'График смен', 'Поставить');
+  }
+  function shpBind(box, d) {
+    Array.prototype.forEach.call(box.querySelectorAll('[data-shpgo]'), function (b) {
+      b.addEventListener('click', function () { shpShift(parseInt(b.getAttribute('data-shpgo'), 10)); });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-shpadd]'), function (b) {
+      b.addEventListener('click', function () {
+        shpAddForm(b.getAttribute('data-shpadd'), parseInt(b.getAttribute('data-shpuid'), 10), d);
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-shpwho]'), function (b) {
+      b.addEventListener('click', function () {
+        var day = d.days.indexOf(d.today) >= 0 ? d.today : d.days[0];
+        shpAddForm(day, parseInt(b.getAttribute('data-shpwho'), 10), d);
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('.shp-sh.ed'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-shpid'), ser = b.getAttribute('data-shpser') === '1';
+        var del = function (all) {
+          apiSend('/admin/api/shift-plan/' + id + (all ? '?series=1' : ''), 'DELETE', null, function (r) {
+            state.shp = null; renderView();
+            showToast(r && r.removed > 1 ? 'Сняли смен: ' + r.removed : 'Смену сняли');
+          });
+        };
+        if (!ser) { if (window.confirm('Снять смену ' + b.textContent + '?')) del(false); return; }
+        openSheet('Снять смену ' + b.textContent, 'Смена стоит повтором по неделям.', [
+          ['what', 'pick', 'Что снять', [['one', 'только эту'], ['all', 'эту и все следующие']], 'one'],
+        ], function (v, close) { close(); del(v.what === 'all'); }, null, 'График смен', 'Снять');
+      });
+    });
   }
   function renderMeetx(view) {
     if (state.meetRooms === null || state.meetRooms === undefined) loadMeetRooms();
@@ -40025,7 +40218,16 @@
     var line = '<div class="sb-shift' + (on.length ? '' : ' none') + '"><span class="sb-dot"></span>' +
       (on.length ? 'На смене: ' + on.map(function (s) {
         return esc(s.name) + (s.consult ? ' (на консультации)' : '');
-      }).join(', ') : 'Сейчас на смене никого') + '</div>';
+      }).join(', ') : 'Сейчас на смене никого') +
+      '<a class="sb-shlink" href="#page/sched/shifts">График смен</a></div>';
+    // По графику должен быть на связи, а смену не открыл (Павел 18.11.2026: «чтобы я
+    // понимал, когда кто на связи»). Кто вышел, уже стоит строкой выше.
+    var miss = (d.shift_plan || []).filter(function (s) { return s.now && !s.came; });
+    if (miss.length) {
+      line += '<div class="sb-shmiss">По графику на связи, но смену не открыли: ' + miss.map(function (s) {
+        return '<b>' + esc(s.name) + '</b> ' + shpHm(s.start) + '–' + (s.end === 1440 ? '24:00' : shpHm(s.end));
+      }).join(', ') + '</div>';
+    }
     if (done.length) {
       line += '<div class="sb-done">' + done.map(function (s) {
         return '<span><b>' + esc(s.name) + '</b> закрыл смену' + (s.note ? ': ' + esc(s.note) : '') + '</span>';
@@ -40344,7 +40546,11 @@
       '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '">' +
         // Павел 09.11.2026: «все лиды в цифрах должны быть кликабельные» — вердикт
         // отрезка открывает тех же людей, что плитка «Пришли».
-        '<div class="pf-vt">' + esc(v.t) + '</div>' +
+        // С 18.11.2026 счет тот же, что у лестницы, поэтому и люди — ее строка «Лиды».
+        (short && sbLadderNums() && sbLadderNums().total
+          ? '<button class="pf-vt sb-vbtn" data-sbleads="' + esc(sbLadderSpan().a + ',' + sbLadderSpan().b) +
+            '" title="Показать этих людей поименно">' + esc(v.t) + '</button>'
+          : '<div class="pf-vt">' + esc(v.t) + '</div>') +
         '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
       (short ? '' : '<div class="pf-days">' +
         '<div class="pf-dtrack"><span style="width:' + dayPct + '%"></span></div>' +
@@ -40434,6 +40640,17 @@
         renderView();
         var w = view.querySelector('.sb-regwho');
         if (w) w.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+      });
+    });
+    // Вердикт отрезка «Всего N» открывает строку «Лиды» лестницы: тот же счет, те же люди.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbleads]'), function (b) {
+      b.addEventListener('click', function () {
+        var at = b.getAttribute('data-sbleads'), q = state._mgQ;
+        state._mgQ = q && q.k === 'leads' && q.s === 'c' && q.at === at ? null : {k: 'leads', s: 'c', at: at};
+        state._mgTf = '';
+        renderView();
+        var w = view.querySelector('.mg-who:not(.sb-regwho)');
+        if (w && state._mgQ) w.scrollIntoView({block: 'center', behavior: 'smooth'});
       });
     });
     // «Провели продающих консультаций» открывает тот же список, что строка лестницы.
@@ -52725,7 +52942,7 @@
 
   /* ════ ПРОЕКТНАЯ ДЕЯТЕЛЬНОСТЬ ════
      Услуга: ученик с командой делает свой проект. У него в кабинете дорожная карта
-     из шести шагов (#/learn/projects на платформе), здесь — пульт команды: открыть
+     из семи шагов (#/learn/projects на платформе), здесь — пульт команды: открыть
      услугу, вписать тему, принять описание или вернуть с обратной связью, ответить
      по любому шагу. Ученик видит ответы в кабинете и получает уведомление.
      Бэк: eastside-backend app/routers/projects.py. */
@@ -59402,6 +59619,8 @@
     // Встречи из задач и вкладка расписания из EastSide Meeting — теперь раздел
     // «Расписание» (02.11.2026).
     if ((pg === 'tasks' && seg === 'meet') || (pg === 'meetx' && seg === 'sched')) return ['sched', ''];
+    // График смен открывается ссылкой из «Продаж» и из чата: #page/sched/shifts.
+    if (pg === 'sched' && (seg === 'shifts' || seg === 'slots')) { state.schedPart = seg; return ['sched', '']; }
     if (pg === 'attestations' && can('academy_review')) { state.acTab = 'att'; return ['academy', '']; }
     // Воркшопы стали курсом Академии (Павел 28.09.2026), но ссылки на раздел
     // ходят по чатам — ведем их в тот же курс, а не на пустую страницу.
