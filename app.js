@@ -40344,7 +40344,11 @@
       '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '">' +
         // Павел 09.11.2026: «все лиды в цифрах должны быть кликабельные» — вердикт
         // отрезка открывает тех же людей, что плитка «Пришли».
-        '<div class="pf-vt">' + esc(v.t) + '</div>' +
+        // С 18.11.2026 счет тот же, что у лестницы, поэтому и люди — ее строка «Лиды».
+        (short && sbLadderNums() && sbLadderNums().total
+          ? '<button class="pf-vt sb-vbtn" data-sbleads="' + esc(sbLadderSpan().a + ',' + sbLadderSpan().b) +
+            '" title="Показать этих людей поименно">' + esc(v.t) + '</button>'
+          : '<div class="pf-vt">' + esc(v.t) + '</div>') +
         '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
       (short ? '' : '<div class="pf-days">' +
         '<div class="pf-dtrack"><span style="width:' + dayPct + '%"></span></div>' +
@@ -40434,6 +40438,17 @@
         renderView();
         var w = view.querySelector('.sb-regwho');
         if (w) w.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+      });
+    });
+    // Вердикт отрезка «Всего N» открывает строку «Лиды» лестницы: тот же счет, те же люди.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbleads]'), function (b) {
+      b.addEventListener('click', function () {
+        var at = b.getAttribute('data-sbleads'), q = state._mgQ;
+        state._mgQ = q && q.k === 'leads' && q.s === 'c' && q.at === at ? null : {k: 'leads', s: 'c', at: at};
+        state._mgTf = '';
+        renderView();
+        var w = view.querySelector('.mg-who:not(.sb-regwho)');
+        if (w && state._mgQ) w.scrollIntoView({block: 'center', behavior: 'smooth'});
       });
     });
     // «Провели продающих консультаций» открывает тот же список, что строка лестницы.

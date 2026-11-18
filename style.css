@@ -15392,3 +15392,10 @@ video.cs-media { background: #000; }
   .sb-cons { margin: 6px 14px 4px; }
   .sb-csr { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Вердикт отрезка на «Продажах» — кнопка к людям строки «Лиды» (вернули 18.11.2026). */
+.sb-vbtn { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
+.sb-vbtn:hover { text-decoration-color: currentColor; }
+.sb-vbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
