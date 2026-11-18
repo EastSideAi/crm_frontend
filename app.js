@@ -40137,10 +40137,37 @@
       (lt ? '<button class="qchip sb-wlate' + (sbIsOn('w_late', '', '') ? ' on' : '') + '" data-sbf="w_late">' +
         'Просрочено <span class="num">' + fmtMoney(lt) + '</span></button>'
         : '<span class="cnt sb-wok">все в сроках</span>') + '</div>' +
-      '<div class="sb-wbar">' + statBar(items, 'five') + '</div>' +
+      '<div class="sb-wbar">' + statBar(items, 'five') + '</div>' + sbConsRow(d) +
       (rows ? '<div class="mkd-tbl sb-grid sb-wgrid"><div class="mkd-th"><span>Кто ведет</span>' +
         mst.map(function (s) { return '<span>' + esc(s.label) + '</span>'; }).join('') +
         '<span>Всего</span><span>Просрочено</span></div>' + rows + '</div>' : '') + '</div>';
+  }
+
+  /* Консультации за отрезок прямо в статусах (Павел 18.11.2026: «сколько проведено, сколько
+     записано и конверсия из контакта»). Счет — путь лидов отрезка, тот же, что в таблице
+     менеджеров: из связавшихся сколько записали, из записанных сколько провели. Все встречи
+     отрезка вместе с лидами прошлых месяцев стоят ниже, в «Регистрациях и консультациях»;
+     здесь их не дублируем, иначе на одном экране две разные цифры «записались». */
+  function sbConsRow(d) {
+    var p = d.path;
+    if (!p || !p.steps) return '';
+    var st = p.steps, month = sbSpan() === 'month';
+    var pc = function (a, b) { return b ? Math.round(a / b * 100) + '%' : '—'; };
+    var cell = function (n, k, label, sub) {
+      return '<div class="sb-cs"><span class="sb-csl">' + label + '</span>' +
+        sbBtn(n, k, 'cs', '', { label: label }) +
+        '<span class="sb-css">' + (sub || '&nbsp;') + '</span></div>';
+    };
+    return '<div class="sb-cons"><div class="sb-cst">Консультации ' + (month ? 'за месяц' : 'за отрезок') +
+        '<span>по лидам, пришедшим ' + (month ? 'в этом месяце' : 'в этот отрезок') + '</span></div>' +
+      '<div class="sb-csr">' +
+        cell(st.contact || 0, 'contact', 'Связались', 'из ' + (st.lead || 0) + ' лидов') +
+        cell(st.c_booked || 0, 'c_booked', 'Записали', pc(st.c_booked || 0, st.contact || 0) + ' от связавшихся') +
+        cell(st.c_held || 0, 'c_held', 'Провели', pc(st.c_held || 0, st.c_booked || 0) + ' от записанных') +
+        '<div class="sb-cs sb-csk"><span class="sb-csl">Из контакта в консультацию</span>' +
+          '<b class="num">' + pc(st.c_held || 0, st.contact || 0) + '</b>' +
+          '<span class="sb-css">провели от связавшихся</span></div>' +
+      '</div></div>';
   }
 
   /* Потенциалы (Павел 09.11.2026: «вывести в продажи и дашборд, чтобы я их не потерял»;
@@ -40335,7 +40362,7 @@
 
     // Список людей встает под тем блоком, где нажали цифру: «В работе» стоит высоко,
     // и уводить за ним на конец экрана значит потерять таблицу, из которой пришли.
-    var wq = state._sbQ && state._sbQ.f.indexOf('w_') === 0;
+    var wq = state._sbQ && (state._sbQ.f.indexOf('w_') === 0 || state._sbQ.by === 'cs') && !!(d.work && d.current);
     // Статусы лидов — первым блоком под шапкой: это то, ради чего экран открывают каждый день.
     potLoad();
     view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + potCard(8) +
