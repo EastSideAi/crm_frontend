@@ -27850,11 +27850,12 @@
       var rcpBox = '';
       var batches = (p.payouts || []).slice(0, 4);
       if (batches.length) {
-        rcpBox = '<div class="fin-note' + ((p.receipts_missing || 0) > 0 ? ' fpt-warn' : ' calm') +
-          ' fpt-rcp">' + ic((p.receipts_missing || 0) > 0 ? 'alert' : 'doc', 15) +
+        // Чек пока не требуем (Роман 18.11.2026, обсуждает с Верой): блок справочный.
+        rcpBox = '<div class="fin-note calm' +
+          ' fpt-rcp">' + ic('doc', 15) +
           '<span>' + ((p.receipts_missing || 0) > 0
-            ? 'Нет чека из «Мой налог» по выплате. По оферте следующую можно придержать, пока партнёр его не пришлёт.'
-            : 'Чеки по выплатам на месте.') +
+            ? 'Выплаты партнёру. Чек из «Мой налог» есть не по всем.'
+            : 'Выплаты партнёру, чеки на месте.') +
           '<span class="fpt-rcp-list">' + batches.map(function (b) {
             return '<span class="fpt-rcp-i">' + esc(finDate(b.paid_at)) + ' · ' + finRub(b.total) + ' ' +
               (b.has_receipt
