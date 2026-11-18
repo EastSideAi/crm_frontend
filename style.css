@@ -8298,6 +8298,11 @@ button.fsp-via { cursor: pointer; }
   align-items: center; min-height: 22px; flex-wrap: wrap; row-gap: 5px; }
 /* Метка переплаты (возврат клиента после выплаты) — мелкая, рядом с «выплачено». */
 .fpt-claw { font-size: 11px; }
+/* Чеки по выплатам партнёру: дата · сумма · кнопка — строкой под пояснением. */
+.fpt-rcp > span { display: flex; flex-direction: column; gap: 6px; }
+.fpt-rcp-list { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.fpt-rcp-i { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
 .fpt-right { margin-left: auto; }
 .fpt-req { color: var(--ink-3); font-weight: 600; }
 /* Нижняя полоса карточки (реквизиты + кнопка выплаты) переносится, когда в строку не
