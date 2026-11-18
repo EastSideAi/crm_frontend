@@ -15502,3 +15502,122 @@ video.cs-media { background: #000; }
 @media (hover: none) { .sb-mk { opacity: 1; } }
 @media (max-width: 640px) { .sb-mk { margin-right: 12px; } }
 .potc.shm { margin-top: 6px; }
+
+/* Потенциалы: запись в окно прошла, итог не отмечен (18.11.2026). Амбер — «нужно
+   действие», как просрочка; две кнопки отмечают исход прямо в списке. */
+.pot-st.pend { border-color: var(--amber-soft); background: var(--amber-soft); color: var(--amber-ink); }
+.pot-st.pend b { color: var(--amber-ink); }
+.pot-st.pend.on { background: var(--amber-ink); border-color: var(--amber-ink); color: #fff; }
+.pot-st.pend.on b { color: #fff; }
+.pot-pend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pot-pend em { font-style: normal; font-weight: 600; font-size: 12px; color: var(--amber-ink);
+  background: var(--amber-soft); border-radius: var(--r-pill); padding: 4px 10px; }
+.pot-pb { height: 28px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--navy);
+  background: var(--navy); color: #fff; font-family: inherit; font-weight: 600; font-size: 12px; cursor: pointer;
+  transition: opacity .15s var(--ease), background .15s var(--ease); }
+.pot-pb.ghost { background: var(--card); color: var(--ink-2); border-color: var(--line); }
+.pot-pb.ghost:hover { border-color: var(--line-2); background: var(--fill); }
+.pot-pb:hover { opacity: .9; }
+.pot-pb:disabled { opacity: .5; cursor: default; }
+.pot-pb:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* Диалоги: кто ведет (18.11.2026, Павел: «какие диалоги ведет Костя»). Строка над
+   чипами каналов, нижняя линия общая у блока фильтров. */
+.tg-who { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+.tg-who label { font-weight: 600; font-size: 12px; color: var(--ink-3); flex: none; }
+.tg-whos { flex: 1; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--card); font-family: inherit; font-weight: 600; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.tg-whos:hover { border-color: var(--line-2); }
+.tg-whos:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+/* Обзвон (18.11.2026, Павел: «сколько прозвонили и кого еще нет, у кого есть телефон»).
+   Плитки — фильтры списка, амбер у «не звонили»: это и есть работа на сегодня. */
+.dl-ts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding: 0 24px 16px; }
+.dl-t { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card); text-align: left; cursor: pointer;
+  font-family: inherit; transition: border-color .15s var(--ease), background .15s var(--ease); }
+.dl-t:hover { border-color: var(--line-2); background: var(--fill); }
+.dl-t:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.dl-tl { font-weight: 600; font-size: 12px; color: var(--ink-2); }
+.dl-t b { font-weight: 650; font-size: 24px; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.dl-th { font-weight: 500; font-size: 11.5px; line-height: 1.35; color: var(--ink-3); }
+.dl-t.todo { background: var(--amber-soft); border-color: var(--amber-soft); }
+.dl-t.todo b, .dl-t.todo .dl-tl { color: var(--amber-ink); }
+.dl-t.reached b { color: var(--green-ink); }
+.dl-t.bad b { color: var(--red-ink); }
+.dl-t.on { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); }
+
+.dl-mt { margin: 0 24px 16px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.dl-mh, .dl-mr { display: grid; grid-template-columns: minmax(150px, 1.6fr) repeat(4, minmax(70px, 1fr)); gap: 10px;
+  align-items: center; padding: 0 16px; }
+.dl-mh { height: 34px; background: var(--fill); border-bottom: 1px solid var(--line);
+  font-weight: 600; font-size: 11.5px; color: var(--ink-3); }
+.dl-mh span:not(:first-child), .dl-mr .num { text-align: right; }
+.dl-mr { width: 100%; min-height: 44px; border: 0; border-bottom: 1px solid var(--line); background: var(--card);
+  font-family: inherit; font-size: 13px; color: var(--ink); cursor: pointer; text-align: left;
+  transition: background .15s var(--ease); }
+.dl-mr:last-child { border-bottom: 0; }
+.dl-mr:hover { background: var(--fill); }
+.dl-mr.on { background: var(--blue-tint); }
+.dl-mr:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.dl-mn { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-mr .num { font-variant-numeric: tabular-nums; font-weight: 600; }
+.dl-mr .num i { font-style: normal; font-weight: 500; color: var(--ink-3); margin-left: 4px; }
+.dl-hint { padding: 0 24px 18px; font-size: 12.5px; color: var(--ink-3); }
+
+.dl-list { border-top: 1px solid var(--line); }
+.dl-r { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(160px, 1fr) auto; gap: 14px; align-items: center;
+  padding: 10px 24px; border-bottom: 1px solid var(--line); }
+.dl-who { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 0; border: 0;
+  background: none; font-family: inherit; text-align: left; cursor: pointer; }
+.dl-who b { font-weight: 600; font-size: 13.5px; color: var(--ink); }
+.dl-who:hover b { color: var(--blue); }
+.dl-who small { font-weight: 500; font-size: 11.5px; color: var(--ink-3); }
+.dl-who:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+.dl-sum { display: flex; flex-direction: column; gap: 2px; font-weight: 500; font-size: 12.5px; color: var(--ink-2); }
+.dl-sum small { font-size: 11.5px; color: var(--ink-3); }
+.dl-sum.todo { color: var(--amber-ink); font-weight: 600; }
+
+/* Кнопки исхода звонка: одна строка тихих чипов, цвет только у текста. */
+.dl-mk { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.dl-b { height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--card);
+  font-family: inherit; font-weight: 600; font-size: 11.5px; color: var(--ink-2); cursor: pointer;
+  transition: border-color .15s var(--ease), background .15s var(--ease); }
+.dl-b:hover { background: var(--fill); border-color: var(--line-2); }
+.dl-b.reached { color: var(--green-ink); }
+.dl-b.bad_number { color: var(--red-ink); }
+.dl-b:disabled { opacity: .5; cursor: default; }
+.dl-b:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* «Моя смена»: звонки под именем строки. */
+.ms-dl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; }
+.ms-dls { font-weight: 500; font-size: 11.5px; color: var(--ink-3); }
+.ms-dls.todo { color: var(--amber-ink); font-weight: 600; }
+
+/* Карточка → «Звонки»: отметка звонка со своего телефона и ее история. */
+.pc-mk { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--fill); }
+.pc-mkh { display: flex; flex-direction: column; gap: 2px; }
+.pc-mkh b { font-weight: 600; font-size: 13px; color: var(--ink); }
+.pc-mkh span { font-size: 12px; color: var(--ink-3); }
+.pc-mks { display: flex; flex-direction: column; margin-bottom: 12px; }
+.pc-mkr { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.pc-mkr:last-child { border-bottom: 0; }
+.pc-mkres { font-weight: 600; color: var(--ink-2); }
+.pc-mkres.reached { color: var(--green-ink); }
+.pc-mkres.bad_number { color: var(--red-ink); }
+.pc-mkby { color: var(--ink-3); flex: 1; min-width: 0; }
+.pc-mkx { padding: 0; border: 0; background: none; font-family: inherit; font-size: 12px; color: var(--ink-3); cursor: pointer; }
+.pc-mkx:hover { color: var(--red-ink); }
+
+@media (max-width: 900px) {
+  .dl-ts { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 16px 14px; }
+  .dl-mt { margin: 0 16px 14px; }
+  .dl-mh { display: none; }
+  .dl-mr { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; padding: 10px 14px; }
+  .dl-mn { grid-column: 1 / -1; }
+  .dl-mr .num { text-align: left; font-size: 12px; }
+  .dl-mr .num::before { content: attr(data-l) ' '; font-weight: 500; color: var(--ink-3); }
+  .dl-r { grid-template-columns: 1fr; gap: 6px; padding: 10px 16px; }
+  .dl-hint { padding: 0 16px 16px; }
+}
