@@ -40529,7 +40529,7 @@
         Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = true; });
         apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/call-mark', 'POST', { result: res }, function (r) {
           showToast('Отметил: ' + DIAL_RES[res]);
-          state._dial = null; state._sb = null;
+          state._dial = null; state._sb = null; state._cb = null;
           if (done) done(r); else renderView();
         }, function () {
           showToast('Не сохранилось, проверь интернет');
@@ -40607,6 +40607,68 @@
       (mrows ? '<div class="dl-mt"><div class="dl-mh"><span>Кто ведет</span><span>Лидов</span><span>С телефоном</span>' +
         '<span>Звонили</span><span>Дозвонились</span></div>' + mrows + '</div>' : '') +
       (list || '<div class="dl-hint">Нажми плитку или продавца, откроется список людей с кнопками отметки звонка.</div>') + '</div>';
+  }
+
+  /* ── ПЕРЕЗВОНИТЬ ─────────────────────────────────────────────────────────────
+     Павел 18.11.2026: «кто звонил нам на рабочие, и чтобы мы могли тут же перезвонить.
+     Или же оставил заявку на звонок». Оба повода — обещание «перезвоним»: робот АТС
+     говорит его на пропущенном, лендинг — «за 15 минут». Список и статус считает сервер
+     (sales_dial.callbacks), человек уходит из него только после разговора. Очередь
+     общая: на «Продажах» ее видит руководитель, в «Моей смене» — каждый продавец. */
+  function cbLoad() {
+    if (state._cb && Date.now() - (state._cbAt || 0) < 60000) return;
+    if (state._cbBusy) return;
+    state._cbBusy = true;
+    state._cbAt = Date.now();
+    api('/admin/api/sales/callbacks').then(function (r) {
+      state._cb = r || 'none';
+    }).catch(function () {
+      state._cb = state._cb || 'none';
+    }).then(function () {
+      state._cbBusy = false;
+      if (state.page === 'sales' || state.page === 'myshift') renderView();
+    });
+  }
+  function cbWhy(x) {
+    var when = msWhen(x.since);
+    if (x.kind === 'ask') return 'оставил заявку на звонок · ' + when;
+    var t = x.times > 1 ? 'звонил нам ' + x.times + ' ' + plural(x.times, 'раз', 'раза', 'раз') : 'звонил нам, не взяли';
+    return t + (x.kind === 'both' ? ' и оставил заявку' : '') + ' · ' + when;
+  }
+  function cbRow(x) {
+    var tag = x.state === 'wait'
+      ? '<span class="sev ' + (x.late ? 'ms-late' : 'ms-ok') + '">ждет ' + msAge(x.wait_min) + '</span>'
+      : '<span class="sev cb-tried">не дозвонились · ' + x.tries + '</span>';
+    var last = x.state === 'tried' && x.last_at
+      ? '<span class="cb-last">последняя попытка ' + esc(msWhen(x.last_at)) + (x.last_by ? ', ' + esc(x.last_by) : '') + '</span>' : '';
+    var call = x.phone
+      ? '<a class="bp' + (x.state === 'wait' ? '' : ' ghost') + ' ms-call" href="tel:+' + esc(x.phone) + '">' +
+        ic('phone', 13) + (can('phone') ? 'Позвонить' : msPhone(x.phone)) + '</a>' : '';
+    return '<div class="ms-row cb-r">' +
+      '<div class="ms-nm"><b>' + esc(x.name || msPhone(x.phone) || 'без имени') + '</b>' +
+        '<small>' + esc(cbWhy(x)) + (x.name && x.phone && can('phone') ? ' · ' + esc(msPhone(x.phone)) : '') + '</small>' + last +
+        (x.id ? '<span class="ms-dl">' + dialMarks(x.id) + '</span>' : '<span class="cb-last">карточки по этому номеру нет</span>') +
+      '</div>' + tag +
+      '<div class="ms-acts">' + call + (x.id ? '<button class="icobtn sm" data-dllead="' + esc(x.id) + '" title="Открыть карточку">' +
+        ic('ext', 14) + '</button>' : '') + '</div></div>';
+  }
+  // place: 'sales' рисует блок всегда (руководитель следит и за пустой очередью),
+  // 'shift' — только когда есть кого перезвонить: пустой блок наверху смены — шум.
+  function cbCard(place) {
+    var d = state._cb;
+    if (!d || d === 'none') return '';
+    var items = d.items || [];
+    if (place === 'shift' && !items.length) return '';
+    var late = items.filter(function (x) { return x.late; }).length;
+    var cnt = [d.waiting ? 'ждут ' + d.waiting : '', late ? 'дольше ' + d.late_min + ' мин: ' + late : '',
+      d.done_today ? 'перезвонили сегодня ' + d.done_today : ''].filter(Boolean).join(' · ');
+    return '<div class="card sp12 cb" id="ms-cb"><div class="sec-head pf-sec"><span class="ic">' + ic('phone', 14) +
+      '</span><div><div class="t">Перезвонить' + (items.length ? ' · <span class="num">' + items.length + '</span>' : '') + '</div>' +
+      '<div class="s">не дозвонились до нас или оставили заявку; обещаем перезвонить за ' + d.late_min +
+      ' минут, из списка уходят после разговора</div></div>' +
+      (cnt ? '<span class="cnt">' + esc(cnt) + '</span>' : '') + '</div>' +
+      (items.length ? '<div class="ms-list">' + items.map(cbRow).join('') + '</div>'
+        : '<div class="empty">Перезванивать некому' + (d.done_today ? ', сегодня перезвонили всем' : '') + '.</div>') + '</div>';
   }
 
   /* Потенциалы (Павел 09.11.2026: «вывести в продажи и дашборд, чтобы я их не потерял»;
@@ -40866,7 +40928,8 @@
     // Статусы лидов — первым блоком под шапкой: это то, ради чего экран открывают каждый день.
     potLoad();
     dialLoad();
-    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + dialCard() + potCard(8) +
+    cbLoad();
+    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + cbCard('sales') + dialCard() + potCard(8) +
       sbReg() + sbLadder(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
       sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
     sbTabsBind(view);
@@ -41869,6 +41932,7 @@
   function renderMyShift(view) {
     shLoad();
     msLoad();
+    cbLoad();
     var d = MS.d, sh = SH.cur;
     if (!d || !sh) { view.innerHTML = dashSkeleton(); return; }
     if (d === 'none' || sh.failed) {
@@ -41903,7 +41967,7 @@
           ic('ext', 14) + '</button></div>' : '<div class="ms-acts"></div>') + '</div>';
     }).join('');
 
-    view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + msPlan(d, !!open) + msClose(d, open) + stats +
+    view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + cbCard('shift') + msPlan(d, !!open) + msClose(d, open) + stats +
       (cc ? '<div class="card ms-dial"><span>' + ic('phone', 15) + 'Звонилка открывается отдельным окном на всю смену: ' +
         'держи его открытым, туда приходят и входящие.</span>' +
         '<button class="bp ghost" id="ms-dial">Открыть звонилку</button></div>'

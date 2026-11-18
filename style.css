@@ -15621,3 +15621,8 @@ video.cs-media { background: #000; }
   .dl-r { grid-template-columns: 1fr; gap: 6px; padding: 10px 16px; }
   .dl-hint { padding: 0 16px 16px; }
 }
+
+/* «Перезвонить»: пропущенные на номер компании и заявки на звонок (Павел 18.11.2026).
+   Строки — рецепт «Моей смены». */
+.sev.cb-tried { color: var(--amber-ink); background: var(--amber-soft); }
+.cb-last { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
