@@ -40429,7 +40429,35 @@
     var d = new Date(r.held_at);
     var day = d.getDate() + ' ' + SB_MON_GEN[d.getMonth()];
     var n = r.days || 0;
-    return 'встреча ' + day + ' · ' + (n ? n + ' ' + plural(n, 'день', 'дня', 'дней') + ' назад' : 'сегодня');
+    return (r.pending ? 'записан на ' : 'встреча ') + day + ' · ' +
+      (n ? n + ' ' + plural(n, 'день', 'дня', 'дней') + ' назад' : 'сегодня');
+  }
+  /* Запись в окно прошла, а исход не отмечен (Павел 18.11.2026: потенциалов Лианы и
+     Алены не было видно). Две кнопки пишут обычную консультацию в карточку: «была» —
+     проведена, «не пришел» — неявка, и человек уходит из списка. */
+  function potPend(r) {
+    if (!r.pending) return '';
+    return '<span class="pot-pend"><em>итог не отмечен' + (r.with ? ' · окно: ' + esc(r.with) : '') + '</em>' +
+      '<button type="button" class="pot-pb" data-potmeet="held" data-potid="' + esc(r.id) + '">Встреча была</button>' +
+      '<button type="button" class="pot-pb ghost" data-potmeet="no_show" data-potid="' + esc(r.id) + '">Не пришел</button></span>';
+  }
+  function potMeet(b) {
+    var id = b.getAttribute('data-potid');
+    var p = state._pot, r = null;
+    ((p && p.rows) || []).forEach(function (x) { if (x.id === id) r = x; });
+    if (!r) return;
+    var held = b.getAttribute('data-potmeet') === 'held';
+    var body = { scheduled_at: r.slot_at, status: held ? 'held' : 'no_show' };
+    if (r.with_id) body.lead_user_id = r.with_id;
+    Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = true; });
+    apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/consultations', 'POST', body, function () {
+      showToast(held ? 'Отметил: встреча была' : 'Отметил неявку, из потенциалов убрал');
+      state._pot = null; state._sb = null;
+      renderView();
+    }, function () {
+      showToast('Не сохранилось, проверь интернет');
+      Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = false; });
+    });
   }
   function potList(xs) {
     return xs.slice(0, 3).map(function (x) { return esc(x); }).join('; ') + (xs.length > 3 ? ' и еще ' + (xs.length - 3) : '');
@@ -40446,12 +40474,17 @@
     var cnt = {};
     all.forEach(function (r) { cnt[stOf(r)] = (cnt[stOf(r)] || 0) + 1; });
     var sts = Object.keys(cnt).sort(function (a, b) { return CRM[b].order - CRM[a].order; });
-    var pick = state._potSt && cnt[state._potSt] ? state._potSt : '';
-    var stRow = sts.length > 1 ? '<div class="pot-sts">' + sts.map(function (k) {
+    var npend = all.filter(function (r) { return r.pending; }).length;
+    var pick = state._potSt && (cnt[state._potSt] || (state._potSt === 'pend' && npend)) ? state._potSt : '';
+    var stRow = sts.length > 1 || npend ? '<div class="pot-sts">' +
+      (npend ? '<button type="button" class="pot-st pend' + (pick === 'pend' ? ' on' : '') + '" data-potst="pend">' +
+        'Итог не отмечен <b class="num">' + npend + '</b></button>' : '') +
+      sts.map(function (k) {
       return '<button type="button" class="pot-st' + (pick === k ? ' on' : '') + '" data-potst="' + k + '">' +
         '<i style="background:' + CRM[k].dot + '"></i>' + esc(CRM[k].label) + ' <b class="num">' + cnt[k] + '</b></button>';
     }).join('') + '</div>' : '';
-    var rows = pick ? all.filter(function (r) { return stOf(r) === pick; }) : all;
+    var rows = pick === 'pend' ? all.filter(function (r) { return r.pending; })
+      : (pick ? all.filter(function (r) { return stOf(r) === pick; }) : all);
     var open = !!state._potAll || !!pick;
     var shown = open ? rows : rows.slice(0, max);
     var body = shown.map(function (r) {
@@ -40459,7 +40492,7 @@
       if (r.offer) facts.push('<span class="pot-f"><i>Предложили</i>' + esc(r.offer) + '</span>');
       if (r.family && r.family.length) facts.push('<span class="pot-f"><i>Семья обещала</i>' + potList(r.family) + '</span>');
       if (r.ours && r.ours.length) facts.push('<span class="pot-f"><i>Мы обещали</i>' + potList(r.ours) + '</span>');
-      if (!facts.length) facts.push('<span class="pot-f none">' + (r.about ? esc(r.about) : 'итогов встречи в карточке нет') + '</span>');
+      if (!facts.length && !r.pending) facts.push('<span class="pot-f none">' + (r.about ? esc(r.about) : 'итогов встречи в карточке нет') + '</span>');
       var sk = stOf(r);
       var chat = r.chat_url
         ? '<a class="pot-chat" href="' + esc(r.chat_url) + '" target="_blank" rel="noopener">' + ic('chat', 12) +
@@ -40475,13 +40508,13 @@
           '<small>' + esc(r.held_at ? potWhen(r) : 'отмечен вручную') + '</small>' +
           '<small class="pot-own' + (r.owner === SB_NOBODY ? ' none' : '') + '">' + esc(r.owner === SB_NOBODY ? 'никто не ведет' : 'ведет ' + r.owner) + '</small>' +
           chat + '</span>' +
-        '<span class="pot-fs">' + facts.join('') + kin + '</span></div>';
+        '<span class="pot-fs">' + potPend(r) + facts.join('') + kin + '</span></div>';
     }).join('');
     var more = !pick && rows.length > max
       ? '<button class="pot-more" id="pot-more">' + (open ? 'Свернуть' : 'Показать всех · ' + fmtMoney(rows.length)) + '</button>' : '';
     return '<div class="card sp12 pot"><div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) +
       '</span><div><div class="t">Потенциалы · <span class="num">' + fmtMoney(all.length) + '</span></div>' +
-      '<div class="s">провели консультацию или отметили в карточке, еще не купили; нажми, откроется карточка</div></div>' +
+      '<div class="s">провели консультацию, записались в окно или отмечены в карточке, еще не купили; нажми, откроется карточка</div></div>' +
       (p.no_notes ? '<span class="cnt pot-nn">без итогов ' + fmtMoney(p.no_notes) + '</span>' : '') + '</div>' + stRow +
       '<div class="pot-list">' + body + '</div>' + more + '</div>';
   }
@@ -40495,6 +40528,9 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('.pot-chat[href]'), function (a) {
       a.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-potmeet]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); potMeet(b); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-potst]'), function (b) {
       b.addEventListener('click', function () {

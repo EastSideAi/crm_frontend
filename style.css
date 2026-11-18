@@ -15497,3 +15497,21 @@ video.cs-media { background: #000; }
 @media (hover: none) { .sb-mk { opacity: 1; } }
 @media (max-width: 640px) { .sb-mk { margin-right: 12px; } }
 .potc.shm { margin-top: 6px; }
+
+/* Потенциалы: запись в окно прошла, итог не отмечен (18.11.2026). Амбер — «нужно
+   действие», как просрочка; две кнопки отмечают исход прямо в списке. */
+.pot-st.pend { border-color: var(--amber-soft); background: var(--amber-soft); color: var(--amber-ink); }
+.pot-st.pend b { color: var(--amber-ink); }
+.pot-st.pend.on { background: var(--amber-ink); border-color: var(--amber-ink); color: #fff; }
+.pot-st.pend.on b { color: #fff; }
+.pot-pend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pot-pend em { font-style: normal; font-weight: 600; font-size: 12px; color: var(--amber-ink);
+  background: var(--amber-soft); border-radius: var(--r-pill); padding: 4px 10px; }
+.pot-pb { height: 28px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--navy);
+  background: var(--navy); color: #fff; font-family: inherit; font-weight: 600; font-size: 12px; cursor: pointer;
+  transition: opacity .15s var(--ease), background .15s var(--ease); }
+.pot-pb.ghost { background: var(--card); color: var(--ink-2); border-color: var(--line); }
+.pot-pb.ghost:hover { border-color: var(--line-2); background: var(--fill); }
+.pot-pb:hover { opacity: .9; }
+.pot-pb:disabled { opacity: .5; cursor: default; }
+.pot-pb:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
