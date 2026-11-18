@@ -3949,8 +3949,8 @@
       // Партнёрские выплаты идут сквозь периоды: начисление считает партнёрская
       // программа, период тут не контекст — ветка до !per, иначе повисло бы «Загружаю».
       else if (state.page === 'finpartners') {
-        ph = 'Кому и сколько начислено партнёрам и за каких клиентов. Платим 5% только ' +
-          'за грант, с каждой оплаты. Выплата по кнопке падает расходом в фонд ' +
+        ph = 'Кому и сколько начислено партнёрам и за каких клиентов. Платим 5% за грант ' +
+          'и поездки от 150 000 ₽, с каждой оплаты. Выплата по кнопке падает расходом в фонд ' +
           'маркетинга строкой на клиента, видно кому и за кого ушло. Вкладка «История»: ' +
           'что выплачивали раньше.';
       }
@@ -27710,7 +27710,7 @@
       { label: 'Партнёров', value: String(waiting),
         sub: waiting ? 'ждут выплаты' : 'к оплате никого' },
       { label: 'Клиентов', value: String(clientsDue), sub: 'приведено, к оплате' },
-      { label: 'Ставка', value: finGrantLabel(grant), sub: 'только за грант' },
+      { label: 'Ставка', value: finGrantLabel(grant), sub: 'грант и поездки' },
     ];
 
     // Полоса ставки: платим только за грант. Якорь-предупреждение, пока ставка гранта
@@ -27723,9 +27723,9 @@
             ic('plus', 12) + 'Задать ставку</button></div></div>'
       : '<div class="card listcard"><div class="fin-note calm fpt-foot">' + ic('coins', 15) +
           '<span>Платим <b>' + esc(finGrantLabel(grant)) +
-          '</b> только за грант (поступление в вузы КНР), с каждой оплаты. За остальное — ' +
-          'языки, программы, консультации, документы — партнёрские не платим. ' +
-          'Оплату без метки продукта отметь грантом прямо в строке клиента.</span>' +
+          '</b> и столько же за поездки от 150 000 ₽, с каждой оплаты, когда по ней прошли ' +
+          '14 дней без возврата (оферта п. 7.3). За языки, курсы, консультации и документы ' +
+          'партнёрские не платим. Оплату без метки продукта отметь прямо в строке клиента.</span>' +
           '<button class="qchip fpt-right" id="fpt-rate">изменить</button></div></div>';
 
     var ruleLabel = { percent: 'процент от оплат', fixed: 'фикс за клиента' };
@@ -27746,24 +27746,26 @@
       // грант это или нет. Деньги по догадке не считаем (решение rev2). Подпись
       // «это грант?» уходит в строку описания, чтобы кнопки стояли ровным столбцом.
       if (c.needs_product) {
-        var subA = 'продукт не указан · это грант?' +
+        var subA = 'продукт не указан · это грант или поездка?' +
           (c.gross ? ' оплат на ' + finRub(c.gross) : '');
         return '<div class="trow fpt-crow fpt-ask">' +
           '<span class="fo-what">' + nm + '<i>' + esc(subA) + '</i></span>' +
           '<span class="fo-st fpt-choose">' +
             '<button class="qchip ok fpt-pk" data-pk="grant" data-sid="' + esc(c.session_id) +
-              '">грант 5%</button>' +
+              '">платим 5%</button>' +
             '<button class="qchip fpt-pk" data-pk="other" data-sid="' + esc(c.session_id) +
-              '">не грант</button></span>' +
+              '">не платим</button></span>' +
           '<span class="num fo-sum fpt-dash">—</span>' +
         '</div>';
       }
 
       var sub = c.product_kind === 'other'
-        ? 'не грант · партнёрские не платим'
+        ? 'партнёрские не платим'
         : [ruleText(c.rule),
            (c.rule === 'percent' && c.gross) ? 'с ' + finRub(c.gross) : '',
-           c.suggested ? 'распознано: грант' : '']
+           c.suggested ? 'распознано по описанию' : '',
+           // Рассрочка и окно возврата (оферта п. 7.1, 7.3): «доплата…», «ещё N ₽ с даты».
+           c.note || '']
           .filter(Boolean).join(' · ');
       var st = c.paid
         ? '<span class="fst doc">' + ic('check', 11) + 'выплачено</span>' +
@@ -27779,15 +27781,18 @@
             ? '<span class="fst ok">к выплате</span>' +
               (c.suggested
                 ? '<button class="qchip fpt-pk-min fpt-pk" data-pk="other" data-sid="' +
-                    esc(c.session_id) + '">не грант</button>'
+                    esc(c.session_id) + '">не платим</button>'
                 : '')
             : (c.product_kind === 'other'
                 ? '<button class="qchip fpt-pk-min fpt-pk" data-pk="grant" data-sid="' +
-                    esc(c.session_id) + '">отметить грантом</button>'
+                    esc(c.session_id) + '">платим 5%</button>'
+                : (c.pending || 0) > 0
+                ? '<span class="fst wait">ждёт 14 дней</span>'
                 : '<span class="fst wait">' +
                     esc(!c.rule || ruleLabel[c.rule] ? 'нет оплат' : c.rule) + '</span>'));
       return '<div class="trow fpt-crow' +
-        ((c.paid || c.product_kind === 'other') ? ' muted' : '') + '">' +
+        ((c.paid || c.product_kind === 'other' || (!c.payable && (c.pending || 0) > 0))
+          ? ' muted' : '') + '">' +
         '<span class="fo-what">' + nm +
           (sub ? '<i>' + esc(sub) + '</i>' : '') + '</span>' +
         '<span class="fo-st">' + st + '</span>' +
@@ -27840,6 +27845,25 @@
           '<span>Клиент вернул деньги уже после выплаты: удержать ' + finRub(p.hold) +
           '. ' + esc(tail) + '</span></div>';
       }
+      // Чеки самозанятого (оферта п. 10.2–10.3): по каждой выплате — свой чек. Нет чека
+      // по прошлой — следующую можно придержать, поэтому строка горит до выплаты.
+      var rcpBox = '';
+      var batches = (p.payouts || []).slice(0, 4);
+      if (batches.length) {
+        // Чек пока не требуем (Роман 18.11.2026, обсуждает с Верой): блок справочный.
+        rcpBox = '<div class="fin-note calm' +
+          ' fpt-rcp">' + ic('doc', 15) +
+          '<span>' + ((p.receipts_missing || 0) > 0
+            ? 'Выплаты партнёру. Чек из «Мой налог» есть не по всем.'
+            : 'Выплаты партнёру, чеки на месте.') +
+          '<span class="fpt-rcp-list">' + batches.map(function (b) {
+            return '<span class="fpt-rcp-i">' + esc(finDate(b.paid_at)) + ' · ' + finRub(b.total) + ' ' +
+              (b.has_receipt
+                ? '<button class="qchip fpt-pk-min" data-rcp-get="' + esc(b.batch_id) + '">чек</button>'
+                : '<button class="qchip fpt-pk-min add" data-rcp-put="' + esc(b.batch_id) + '">положить чек</button>') +
+              '</span>';
+          }).join('') + '</span></span></div>';
+      }
       // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
       // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
       var foot;
@@ -27860,6 +27884,12 @@
           : '';
         foot = '<div class="fin-note calm fpt-foot">' +
           '<button class="qchip" data-req="' + p.id + '">Реквизиты</button>' +
+          // Клиент-реферер (оферта п. 7.8): родитель или наш клиент. За его клиентов
+          // Главному и Инициатору не платим. Система узнаёт сама по почте и телефону,
+          // кнопка — чтобы поправить руками.
+          '<button class="qchip' + (p.client_referrer ? ' on' : '') + '" data-refr="' + p.id +
+            '" title="Родитель или наш клиент: за его клиентов платим только ему">' +
+            (p.client_referrer ? ic('check', 11) : '') + 'клиент-реферер</button>' +
           reqLine + payBtn + '</div>';
       }
       return '<div class="card listcard fs-seller">' +
@@ -27873,6 +27903,7 @@
         p.clients.map(clientRow).join('') +
         warnBox +
         holdBox +
+        rcpBox +
         foot +
       '</div>';
     }).join('');
@@ -27973,6 +28004,53 @@
         finPartnerCancelForm(b.getAttribute('data-cancel'), b.getAttribute('data-pname'));
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-refr]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = partners.filter(function (x) { return String(x.id) === b.getAttribute('data-refr'); })[0];
+        if (!p) return;
+        // Снятая пометка возвращает решение системе (null), а не «точно нет».
+        czSend('/admin/api/partners/' + p.id + '/referrer', 'PUT',
+               { value: p.client_referrer ? null : true })
+          .then(function () {
+            FIN.partners = null; renderAll();
+            showToast(p.client_referrer ? 'Пометку сняли' : 'Отмечен клиентом-реферером');
+          }).catch(function (e) { showToast(finLineErr(e)); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-get]'), function (b) {
+      b.addEventListener('click', function () {
+        var w = window.open('', '_blank');
+        if (w) try { w.opener = null; } catch (e) {}
+        xfetch('/admin/api/partners/receipts/' + b.getAttribute('data-rcp-get'))
+          .then(function (r) { return r.ok ? r.blob() : null; })
+          .then(function (bl) {
+            if (!bl) { if (w) w.close(); showToast('Чек не открылся, обнови страницу'); return; }
+            var url = URL.createObjectURL(bl);
+            if (w) w.location.replace(url); else window.open(url, '_blank', 'noopener');
+          })
+          .catch(function () { if (w) w.close(); showToast('Чек не открылся, проверь сеть'); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-put]'), function (b) {
+      b.addEventListener('click', function () {
+        var inp = document.createElement('input');
+        inp.type = 'file'; inp.accept = 'application/pdf,image/jpeg,image/png';
+        inp.addEventListener('change', function () {
+          var f = inp.files && inp.files[0];
+          if (!f) return;
+          if (f.size > 5 * 1024 * 1024) { showToast('Чек больше 5 МБ — сожми или пришли PDF'); return; }
+          var fr = new FileReader();
+          fr.onload = function () {
+            czSend('/admin/api/partners/receipts/' + b.getAttribute('data-rcp-put'), 'POST',
+                   { file_name: f.name || 'чек', file_mime: f.type || '', file_data: String(fr.result) })
+              .then(function () { FIN.partners = null; renderAll(); showToast('Чек сохранён'); })
+              .catch(function (e) { showToast(finLineErr(e)); });
+          };
+          fr.readAsDataURL(f);
+        });
+        inp.click();
+      });
+    });
     // Клик по имени клиента ведёт в его карточку новой вкладкой (как в Доходах).
     Array.prototype.forEach.call(view.querySelectorAll('.fin-lead[data-lead]'), function (n) {
       n.addEventListener('click', function () {
@@ -28032,7 +28110,7 @@
     czSend('/admin/api/partners/clients/' + sid + '/product', 'POST', { kind: kind })
       .then(function () {
         FIN.partners = null; renderAll();
-        showToast(kind === 'grant' ? 'Грант — начислили 5%' : 'Отмечено: не грант');
+        showToast(kind === 'grant' ? 'Отмечено: платим 5%' : 'Отмечено: не платим');
       }).catch(function (e) { showToast(finLineErr(e)); });
   }
 
