@@ -55,7 +55,11 @@ def leads():
         ov = {"tariff": tariff}
         if track:
             ov["track"] = track
+        # Кто ведет: в «Сопровождении» имя тьютора стоит на месте плашки статуса.
+        tutors = ["Элиза Аюпова", "Александр Сердотецков", "Лиана Эванс", None]
+        tutor = tutors[i % 4]
         crm = {"status": "client", "note": note, "overrides": ov,
+               "owner": ({"id": 100 + i, "name": tutor} if tutor else None),
                "tasks": [], "comms": []}
         # Разнобой ради срезов воронки: без него у всех карточек одинаковые
         # признаки, ряд чипов схлопывается в одно «Все», и разницу вкладок

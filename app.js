@@ -48618,6 +48618,9 @@
     }).join('') + '</div>';
   }
 
+  /* Колонка «Тьютор» вместо «Статуса» — только в «Сопровождении» (Мария 19.11.2026). */
+  function tutorCol() { return trackTab(); }
+  function ownerName(l) { return (((l.crm || {}).owner) || {}).name || ''; }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
@@ -48639,7 +48642,11 @@
       var risks = leadRisks(l);
       var hot = l.booking && l.crm.status === 'new';
       return '<div class="trow lr-grid' + (hot ? ' r-crit' : '') + '" data-id="' + l.id + '">' +
-        '<span class="pill-st" data-stop="1" data-pid="' + l.id + '">' + sevPill(l) + '</span>' +
+        /* В «Сопровождении» на месте статуса стоит тьютор (Мария 19.11.2026): там у
+           всех одна и та же плашка «клиент», а живой вопрос к строке — кто ведет. */
+        (tutorCol()
+          ? '<div class="t-tutor' + (ownerName(l) ? '' : ' none') + '">' + esc(ownerName(l) || 'не назначен') + '</div>'
+          : '<span class="pill-st" data-stop="1" data-pid="' + l.id + '">' + sevPill(l) + '</span>') +
         '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' +
           (isNewLead(l) ? '<span class="nveo"></span>' : '') + esc(leadName(l)) +
           (risks.length ? '<span class="minib warn" title="' + esc(risks[0].label) + '">' + ic('flame', 9) + '</span>' : '') +
@@ -48660,7 +48667,7 @@
 
     host.innerHTML =
       '<div class="trow lr-grid thead">' +
-        thCell('crm', 'Статус', '') +
+        (tutorCol() ? '<span class="th">Тьютор</span>' : thCell('crm', 'Статус', '')) +
         thCell('name', 'Лид', '') +
         thCell('score', 'Балл', ' hidem') +
         '<span class="th hidem">Контакт</span>' +

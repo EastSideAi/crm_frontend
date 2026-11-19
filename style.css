@@ -294,6 +294,9 @@ a { color: inherit; text-decoration: none; }
 .list-trk .qchip:hover { background: #EDEFF3; }
 /* Классы школьников стоят в том же ряду, что направления (Мария 19.11.2026), но это
    другой вопрос к списку — отделяем их волоском, а не вторым рядом. */
+/* Имя тьютора на месте плашки статуса в «Сопровождении»: там у всех «клиент». */
+.t-tutor { font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+.t-tutor.none { color: var(--ink-3); }
 .list-trk .qsep { flex: none; align-self: center; width: 1px; height: 16px; margin: 0 4px; background: var(--line-2); }
 .qchip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
 .qchip.on svg, .qchip.on .qn { color: rgba(255,255,255,.75); }

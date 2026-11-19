@@ -14,6 +14,8 @@ const patched = src.replace(marker, marker +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
   ' keys: function (seg) { return quickKeys(seg); },' +
   ' clsHit: function (l, seg) { return classHit(l, seg); },' +
+  ' tutorCol: function () { return tutorCol(); },' +
+  ' owner: function (l) { return ownerName(l); },' +
   ' pred: function (seg) { return quickPred(seg); },' +
   ' setTracks: function (t) { DOC_TRACKS = t; }, state: state };');
 
@@ -138,6 +140,16 @@ check('«Бакалавриат» и «9 класс» вместе дают од
 check('на чужой вкладке класс не режет список', klassy.filter(l => L.clsHit(l, 'clients')).length === 5, '');
 L.state.trk = '';
 L.state.cls = 0;
+
+/* Колонка «Тьютор» вместо «Статуса» — только в «Сопровождении». */
+L.state.seg = 'support';
+check('в «Сопровождении» колонка отдана тьютору', L.tutorCol() === true, '');
+L.state.seg = 'clients';
+check('в «Клиентах» остается статус', L.tutorCol() === false, '');
+check('имя ведущего берется из карточки',
+  L.owner({ crm: { owner: { id: 1, name: 'Элиза Аюпова' } } }) === 'Элиза Аюпова', '');
+check('без ответственного имени нет, а не «undefined»', L.owner({ crm: {} }) === '', JSON.stringify(L.owner({ crm: {} })));
+L.state.seg = 'support';
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);
