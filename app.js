@@ -8431,7 +8431,11 @@
     }
     marks += agMark(t, closed);
     var quick = '';
-    if (!closed && own && !opts.readOnly) {
+    // «Тебе сдали»: принять прямо из строки. Строка была read-only, и приемка
+    // стоила двух лишних шагов (Павел 20.11.2026).
+    if (!closed && opts.accept && (isAuthorOf(t) || can('tasks_all'))) {
+      quick = '<button class="tsk-chk take" data-done="' + t.id + '" title="Принять">' + ic('check', 12) + '</button>';
+    } else if (!closed && own && !opts.readOnly) {
       quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
     }
     return '<div class="trow tsk-grid mine wk-row' + (t.parent_title ? ' has-goal' : '') +
@@ -8785,7 +8789,11 @@
     // «На сегодня» у своей завтрашней задачи: раньше исполнитель двигает сам.
     var mine = !!(me && t.assignee_id === me);
     if (opts.today && mine && !closed) right += '<button class="qchip dy-today" data-today="' + t.id + '">на сегодня</button>';
-    var canTick = !closed && !opts.readOnly && (own || (opts.boss && can('tasks_all')));
+    // «Тебе сдали»: принять прямо из строки, не открывая карточку. Раньше
+    // строка была read-only, и приемка требовала двух лишних шагов — поэтому
+    // сданное лежало неделями (20.11.2026: 75 задач ждали приемки).
+    var canAcceptHere = !!(opts.accept && (isAuthorOf(t) || can('tasks_all')));
+    var canTick = !closed && (canAcceptHere || (!opts.readOnly && (own || (opts.boss && can('tasks_all')))));
     // Исполнитель чужой задачи галочкой сдает ее на проверку: «где сдать» не
     // должно требовать открывать карточку (Павел 04.09.2026).
     var doer = !!(me && !own && (t.assignee_id === me || (t.executors || []).some(function (x) { return x.id === me; })));
@@ -8793,7 +8801,7 @@
     var quick = closed
       ? '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>'
       : (canTick
-          ? '<button class="tsk-chk" data-done="' + t.id + '" title="' + (doer || own ? 'Сделано' : 'Принять и закрыть') + '">' + ic('check', 12) + '</button>'
+          ? '<button class="tsk-chk' + (canAcceptHere ? ' take' : '') + '" data-done="' + t.id + '" title="' + (canAcceptHere ? 'Принять' : (doer || own ? 'Сделано' : 'Принять и закрыть')) + '">' + ic('check', 12) + '</button>'
           : (canSubmit
               ? '<button class="tsk-chk submit" data-submit="' + t.id + '" title="Сдать на проверку">' + ic('check', 12) + '</button>'
               : (opts.tickSlot !== false && !opts.readOnly ? '<span class="tsk-chk quiet"></span>' : '')));
@@ -12430,7 +12438,7 @@
       ? '<div class="tsk-band wk-accept"><span class="tsk-band-t">Тебе сдали</span>' +
           '<span class="tsk-band-h">прими или верни, пока человек ждет</span>' +
           '<span class="tsk-band-n num">' + w.accept.length + '</span></div>' +
-        w.accept.map(function (t) { return wkRow(t, { readOnly: true }); }).join('')
+        w.accept.map(function (t) { return wkRow(t, { readOnly: true, accept: true }); }).join('')
       : '';
 
     var body;
@@ -16214,6 +16222,12 @@
         if (btn) btn.disabled = true;
         apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: to, text: why || '' }, function () {
           state.tasks = null;
+          // Те же списки, что сбрасывает галочка в строке (taskDone). Без этого
+          // принятая из карточки задача оставалась и в «Тебе сдали», и в дне:
+          // экран перерисовывался из старых данных (Павел 20.11.2026: «принимаю
+          // задачи, а они никуда не уходят»).
+          state.myweek = null; state.myboard = null; state.stuck = null;
+          state.teamWeek = null; state.mymonth = null;
           // Результат поиска держит прежний статус задачи — он устарел.
           state.fndFound = null; state.fndAsked = null;
           loadTaskSummary();

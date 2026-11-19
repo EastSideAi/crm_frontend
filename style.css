@@ -11304,6 +11304,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Галочка «сдать»: тот же кружок, но синий контур — это не «сделано», а «отдать на проверку». */
 .tsk-chk.submit { border-color: var(--blue); color: var(--blue); }
 .tsk-chk.submit:hover { background: var(--blue-tint); }
+/* «Принять» в строке сданной задачи — единственное действие строки, поэтому
+   залитая, а не контурная: контурная читается как «уже отмечено». */
+.tsk-chk.take { background: var(--blue); border-color: var(--blue); color: #fff; }
+.tsk-chk.take:hover { filter: brightness(1.06); color: #fff; }
 /* Ученики: группы по этапам плана, строки те же, что в целях. */
 .stu-g .dy-row { padding-left: 0; padding-right: 0; }
 .stu-g .stu-gl { margin-bottom: 2px; }
