@@ -48876,7 +48876,8 @@
       '<div class="s">клик по строке открывает этот период</div></div></div>' +
       '<div class="mkd-tbl">' + thead + trows + '</div></div>';
 
-    view.innerHTML = emb ? head + list + trend + pay : '<div class="dash">' + head + list + pay + trend + '</div>';
+    // в «Продажах» пустую карточку оплат не ставим: «оплат нет» уже видно по плитке
+    view.innerHTML = emb ? head + list + trend + (r.products.length ? pay : '') : '<div class="dash">' + head + list + pay + trend + '</div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('.pth-stats .stat'), function (b) {
       b.addEventListener('click', function () {
