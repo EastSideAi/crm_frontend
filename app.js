@@ -39436,7 +39436,9 @@
     var t = MG_TOUCH[id];
     if (!can('clients') || t === 'err') return '<span></span>';
     if (!t) return '<span class="sb-po calm mg-tw">проверяю…</span>';
-    var own = t.owner ? '<small>ведет ' + esc(t.owner) + '</small>' : '<small>без ведущего</small>';
+    var own = (t.owner ? '<small>ведет ' + esc(t.owner) + '</small>' : '<small>без ведущего</small>') +
+      // попытки звонка и последний исход (Павел 19.11.2026), тем же счетом, что «Обзвон»
+      (t.dial && t.dial.tries ? '<small class="mg-dl' + (t.dial.bad ? ' bad' : '') + '">' + esc(dialSum(t.dial)) + '</small>' : '');
     if (!t.first) return '<span class="mg-tc"><span class="sb-po none">не связались</span>' + own + '</span>';
     var txt = 'связались ' + mgWhen(t.first.at) + ' · ' + t.first.how + (t.first.by ? ' · ' + t.first.by : '');
     return '<span class="mg-tc"><span class="sb-po calm" title="' + esc(txt) + '">' + esc(txt) + '</span>' + own + '</span>';
@@ -39446,7 +39448,7 @@
   function mgHistHtml(id) {
     var h = MG_HIST[id];
     var open = '<button class="bp ghost sm" data-sblead="' + esc(id) + '">Открыть карточку</button>';
-    if (!h) return '<div class="mg-hist"><div class="mg-hnote">Собираю историю…</div></div>';
+    if (!h || h === 'wait') { mgHistLoad(id); return '<div class="mg-hist"><div class="mg-hnote">Собираю историю…</div></div>'; }
     if (h === 'err') return '<div class="mg-hist"><div class="mg-hnote">История не открылась.</div>' +
       '<button class="bp ghost sm" data-mgretry="' + esc(id) + '">Повторить</button> ' + open + '</div>';
     var items = (h.items || []).map(function (e) {
@@ -39454,12 +39456,13 @@
         '<span class="mg-ht"><b>' + esc(e.t) + '</b>' + (e.s ? '<small>' + esc(e.s) + '</small>' : '') +
         (e.who ? '<small class="mg-hwho">' + esc(e.who) + '</small>' : '') + '</span></li>';
     }).join('');
-    return '<div class="mg-hist"><ol class="mg-hl">' + items + '</ol>' + open +
-      (state.page === 'sales' ? ' ' + sbMkBtn(id, h.name || '', true) : '') + '</div>';
+    return '<div class="mg-hist">' +
+      (state.page === 'sales' ? '<div class="mg-hcall"><span>Звонил со своего телефона? Отметь исход</span>' + dialMarks(id) + '</div>' : '') +
+      '<ol class="mg-hl">' + items + '</ol>' + open + (state.page === 'sales' ? ' ' + sbMkBtn(id, h.name || '', true) : '') + '</div>';
   }
   function mgHistLoad(id) {
     if (MG_HIST[id] && MG_HIST[id] !== 'err') return;
-    delete MG_HIST[id];
+    MG_HIST[id] = 'wait';
     api('/admin/api/sales/history/' + encodeURIComponent(id)).then(function (r) {
       MG_HIST[id] = r || 'err';
     }).catch(function () { MG_HIST[id] = 'err'; }).then(function () {
@@ -40798,6 +40801,7 @@
         apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/call-mark', 'POST', { result: res }, function (r) {
           showToast('Отметил: ' + DIAL_RES[res]);
           state._dial = null; state._sb = null; state._cb = null; state._mt = null;
+          delete MG_TOUCH[id]; delete MG_HIST[id];   // строка и история человека перечитаются
           if (done) done(r); else renderView();
         }, function () {
           showToast('Не сохранилось, проверь интернет');

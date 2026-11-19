@@ -15663,3 +15663,8 @@ video.cs-media { background: #000; }
   .sb-rtop.three { grid-template-columns: 1fr; }
   .sb-rnote { padding: 10px 16px 0; }
 }
+/* звонки в строке человека и отметка исхода в его истории (19.11.2026) */
+.mg-tc small.mg-dl { color: var(--amber-ink, var(--ink-2)); }
+.mg-tc small.mg-dl.bad { color: var(--red-ink); }
+.mg-hcall { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 4px 0 12px;
+  font-size: 12px; color: var(--ink-3); }
