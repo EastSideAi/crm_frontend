@@ -58991,8 +58991,54 @@
     var opts = { method: 'POST' };
     if (body) { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
     return api('/admin/api/shift/' + path, opts)
-      .then(function () { shLoad(true); })
+      .then(function (r) {
+        shLoad(true);
+        // Закрыли смену — сразу показываем, сколько начислено и за что (Павел 19.11.2026).
+        if (path === 'close' && r && r.pay) shPayShow(r.pay, r.shift);
+        return r;
+      })
       .catch(function () { shLoad(true); });
+  }
+  /* Итог закрытой смены: число смен × ставка × коэффициент качества и три строки
+     баллов, чтобы было видно, за что сняли. Считает сервер (services/shift_quality.py). */
+  function shPayShow(pay, sh) {
+    if (document.querySelector('.al-ov')) return;
+    var q = pay.quality || {}, sp = q.speed || {}, ms = q.missed || {}, cv = q.conv || {};
+    var k = String(pay.coef).replace('.', ',');
+    var span = sh ? fmtTime(sh.started_at) + '–' + fmtTime(sh.ended_at) : '';
+    var line = function (t, pts, max, why) {
+      return '<div class="shq-r' + (pts < max ? ' lost' : '') + '"><span class="shq-t">' + esc(t) + '<small>' + esc(why) + '</small></span>' +
+        '<b class="num">' + pts + ' из ' + max + '</b></div>';
+    };
+    var missN = (ms.chats || 0) + (ms.calls || 0);
+    var body = pay.short
+      ? '<div class="shq-sum"><b class="num">0 ₽</b><span>смена ' + esc(span) + ' короче двух часов и в оплату не идет</span></div>'
+      : '<div class="shq-sum"><b class="num">' + fmtMoney(pay.rub) + ' ₽</b><span>' + esc(span) + ' · ' + pay.units + ' ' +
+          plural(pay.units, 'смена', 'смены', 'смен') + ' × ' + fmtMoney(pay.rate) + ' ₽ × ' + k + '</span></div>' +
+        '<div class="shq-list">' +
+          line('Скорость первого ответа', sp.points, 40, sp.leads
+            ? 'новых за смену ' + sp.leads + (sp.median_min != null ? ', половине ответили за ' + sp.median_min + ' мин' : ', половине не ответили') + '; норма 15 мин'
+            : 'новых лидов за смену не было') +
+          line('Без пропущенных', ms.points, 30, missN
+            ? [ms.chats ? ms.chats + ' ' + plural(ms.chats, 'диалог', 'диалога', 'диалогов') + ' без ответа' : '',
+               ms.calls ? ms.calls + ' ' + plural(ms.calls, 'звонок', 'звонка', 'звонков') + ' без перезвона' : ''].filter(Boolean).join(', ') + '; минус 10 за каждый'
+            : 'всем, кто ждал человека, ответили') +
+          line('Из контакта в запись', cv.points, 30, cv.rate != null
+            ? 'за месяц ' + cv.rate + '%, норма ' + cv.norm + '%' : 'в месяце пока не с кем сравнить') +
+        '</div>' +
+        '<div class="shq-k">' + q.points + ' баллов, коэффициент ' + k + (q.points < 45 ? '. Ниже 45 баллов разбираем смену с руководителем' : '') + '</div>';
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';
+    ov.innerHTML = '<div class="al-card shq" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Смена закрыта</div><div class="al-title">Начислено за смену</div></div>' +
+      '<button class="al-x" id="shq-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-body">' + body + '</div>' +
+      '<div class="al-foot"><button class="bp al-save" id="shq-ok">Понятно</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () { ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180); };
+    el('shq-x').onclick = el('shq-ok').onclick = close;
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
   }
   function shDur(ms) {
     var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);

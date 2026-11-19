@@ -15692,3 +15692,17 @@ video.cs-media { background: #000; }
 
 /* список людей под цифрой не прячется под шапкой страницы при прокрутке к нему */
 #sb-people, .mg-who { scroll-margin-top: 100px; }
+
+/* Итог закрытой смены: сколько начислено и за что (19.11.2026) */
+.al-card.shq { width: min(480px, calc(100vw - 32px)); }
+.shq-sum { display: flex; flex-direction: column; gap: 4px; }
+.shq-sum b { font-size: 40px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); line-height: 1.05; }
+.shq-sum span { font-size: 13px; color: var(--ink-2); }
+.shq-list { display: flex; flex-direction: column; border-radius: var(--r-lg); background: var(--fill); padding: 4px 14px; }
+.shq-r { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; }
+.shq-r + .shq-r { border-top: 1px solid var(--line); }
+.shq-t { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.shq-t small { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.shq-r b { font-size: 13px; color: var(--green-ink); white-space: nowrap; }
+.shq-r.lost b { color: var(--red-ink); }
+.shq-k { font-size: 12.5px; color: var(--ink-2); }
