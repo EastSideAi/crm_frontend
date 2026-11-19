@@ -1087,6 +1087,8 @@
     nocontact:     { label: 'Без контакта',     icon: 'phone', pred: function (l) { return !((l.booking || {}).contact); } },
     tasks:         { label: 'С задачами',       icon: 'task',  pred: function (l) { return (l.crm.tasks || []).some(function (t) { return !t.done; }); } },
     attention:     { label: 'Внимание',         icon: 'flame', pred: function (l) { return leadRisks(l).length; } },
+    // Павел 18.11.2026: интерес к краткосрочным программам, отметка в карточке.
+    short:         { label: 'Краткосрочка',     icon: 'flight', pred: function (l) { return hasShort(l); } },
   };
   function quickPred() {
     var q = QUICK[state.quick];
@@ -1356,7 +1358,7 @@
     var total = segArr.length;
     var shown = segLeads(state.seg).length;
 
-    var order = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention'];
+    var order = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short'];
     var chips = order.map(function (k) {
       var q = QUICK[k];
       var n = q.pred ? segArr.filter(q.pred).length : total;
@@ -39377,7 +39379,8 @@
         '<span class="mg-ht"><b>' + esc(e.t) + '</b>' + (e.s ? '<small>' + esc(e.s) + '</small>' : '') +
         (e.who ? '<small class="mg-hwho">' + esc(e.who) + '</small>' : '') + '</span></li>';
     }).join('');
-    return '<div class="mg-hist"><ol class="mg-hl">' + items + '</ol>' + open + '</div>';
+    return '<div class="mg-hist"><ol class="mg-hl">' + items + '</ol>' + open +
+      (state.page === 'sales' ? ' ' + sbMkBtn(id, h.name || '', true) : '') + '</div>';
   }
   function mgHistLoad(id) {
     if (MG_HIST[id] && MG_HIST[id] !== 'err') return;
@@ -40342,16 +40345,47 @@
     var title = (SB_WORK_TITLE[q.f] || (q.f.indexOf('w_late:') === 0 ?
       (SB_WORK_TITLE['w_' + q.f.slice(7)] || '') + ', просрочено' : '')) + (q.val ? ' · ' + q.val : '');
     var body = rows.slice(0, 300).map(function (p) {
-      return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
+      return '<div class="sb-prw"><button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
         '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
           ' · пришел ' + esc(fmtDay(p.created_at)) + '</small></span>' +
         (q.by === 'wwho' ? '<span></span>'
           : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>') +
         // Красным — только просроченный по норме шага (считает сервер, LATE_AFTER).
         '<span class="sb-pm"><span class="sb-po' + (p.late ? ' wait' : ' calm') + '">' +
-          esc(sbWorkWhen(p)) + '</span></span></button>';
+          esc(sbWorkWhen(p)) + '</span></span></button>' + sbMkBtn(p.id, p.name) + '</div>';
     }).join('');
     return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
+  }
+  /* «Кто это» у человека в списках «Продаж» (Павел 18.11.2026: «помечать, кто лид, с кем
+     можно работать, а кто просто интересовался вакансией или уже лид семьи»). Та же
+     отметка «не новый лид», что в чистке «Управления»: человек уходит из счета лидов на
+     обоих экранах одинаково. «Краткосрочка» — интерес, из лидов не убирает. */
+  var SB_MK = [['', 'Лид, работаем'], ['family', 'Из семьи лида'], ['vacancy', 'Вакансия'],
+    ['client', 'Уже клиент'], ['other', 'Не наша услуга'], ['spam', 'Спам']];
+  function sbMkBtn(id, name, big) {
+    if (!id || !(can('marketing') || can('planfact'))) return '';
+    return '<button type="button" class="' + (big ? 'bp ghost sm sb-mkb' : 'sb-mk') + '" data-sbmk="' + esc(id) +
+      '" data-sbmkn="' + esc(name || '') + '" title="Лид или нет: вакансия, семья, спам">' +
+      (big ? 'Кто это' : 'кто это') + '</button>';
+  }
+  function sbMkOpen(id, name) {
+    openSheet(name || 'Кто это', 'Все, кроме «лид», убирает человека из счета лидов на «Продажах» и в «Управлении».', [
+      ['why', 'pick', 'Кто это', SB_MK.map(function (x) { return [x[0] || 'lead', x[1]]; }), 'lead'],
+      ['short', 'pick', 'Краткосрочные программы', [['', 'не спрашивал'], ['1', 'интересуется']], ''],
+    ], function (v, close) {
+      var reason = v.why === 'lead' ? null : v.why;
+      var done = function () {
+        close();
+        state._sb = null; state._mkCross = null; state._pot = null;
+        renderView();
+        showToast(reason ? 'Убрали из лидов: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1]
+          : 'Оставили лидом');
+      };
+      apiSend('/admin/api/rnp/leads/' + encodeURIComponent(id) + '/not-lead', 'POST', { reason: reason }, function () {
+        if (!v.short) return done();
+        apiSend('/admin/api/rnp/leads/' + encodeURIComponent(id) + '/mark', 'POST', { mark: 'short', on: true }, done);
+      });
+    }, null, 'Отметка лида', 'Сохранить');
   }
   function sbPeopleCard(title, n, body, sub) {
     return '<div class="card sp12 sb-people" id="sb-people"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) +
@@ -40389,10 +40423,10 @@
       var who = waiting
         ? '<span class="sb-po wait">' + esc(sbWait(p)) + '</span>'
         : '<span class="sb-po' + (p.owner ? '' : ' none') + '">' + esc(p.owner || 'никто не взял') + '</span>';
-      return '<button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
+      return '<div class="sb-prw"><button class="sb-pr" data-sblead="' + esc(p.id) + '">' +
         '<span class="sb-pn"><b>' + esc(p.name) + '</b><small>' + esc(p.ch + (p.sub ? ' · ' + p.sub : '')) +
           (p.created_at ? ' · пришел ' + esc(fmtDay(p.created_at)) : '') + '</small></span>' +
-        who + '<span class="sb-pm">' + marks.join('') + '</span></button>';
+        who + '<span class="sb-pm">' + marks.join('') + '</span></button>' + sbMkBtn(p.id, p.name) + '</div>';
     }).join('');
     return sbPeopleCard(title, rows.length, body, 'это те же люди, что посчитаны в цифре; нажми на человека, откроется карточка');
   }
@@ -40559,6 +40593,193 @@
       '</div></div>';
   }
 
+  /* ── ОБЗВОН ────────────────────────────────────────────────────────────────
+     Павел 18.11.2026: «как организовать, чтобы смотреть, сколько прозвонили и кого еще
+     нет, и у кого есть номер телефона». Звонок считается двумя путями: звонилка CRM пишет
+     его сама, звонок со своего телефона продавец отмечает кнопкой «дозвонился / не взял /
+     номер не тот». Состояние человека считает сервер (sales_dial.dial_state), одно на
+     «Продажи», «Мою смену» и карточку. */
+  var DIAL_RES = { reached: 'дозвонился', no_answer: 'не взял', bad_number: 'номер не тот' };
+  var DIAL_STAGE = { free: 'без менеджера', respond: 'ждет касания', follow: 'дожимаем',
+                     meet: 'ждет встречи', decide: 'думает' };
+  function dialLoad() {
+    if (state._dial && Date.now() - (state._dialAt || 0) < 60000) return;
+    if (state._dialBusy) return;
+    state._dialBusy = true;
+    state._dialAt = Date.now();
+    api('/admin/api/sales/dial').then(function (r) {
+      state._dial = r || 'none';
+    }).catch(function () {
+      state._dial = state._dial || 'none';
+    }).then(function () {
+      state._dialBusy = false;
+      if (state.page === 'sales') renderView();
+    });
+  }
+  // Строка «что было со звонками»: сколько попыток и последний исход.
+  function dialSum(d) {
+    if (!d || !d.tries) return 'еще не звонили';
+    return 'звонили ' + d.tries + ' ' + plural(d.tries, 'раз', 'раза', 'раз') +
+      (d.last ? ' · ' + DIAL_RES[d.last] + (d.last_at ? ', ' + msWhen(d.last_at) : '') : '');
+  }
+  // Три кнопки исхода звонка со своего телефона. Нажал — звонок засчитан.
+  function dialMarks(id) {
+    return '<span class="dl-mk" role="group" aria-label="Отметить звонок">' +
+      ['reached', 'no_answer', 'bad_number'].map(function (k) {
+        return '<button type="button" class="dl-b ' + k + '" data-dlmark="' + k + '" data-dlid="' + esc(id) + '">' +
+          DIAL_RES[k] + '</button>';
+      }).join('') + '</span>';
+  }
+  function dialBind(root, done) {
+    Array.prototype.forEach.call(root.querySelectorAll('[data-dlmark]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var res = b.getAttribute('data-dlmark'), id = b.getAttribute('data-dlid');
+        Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = true; });
+        apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/call-mark', 'POST', { result: res }, function (r) {
+          showToast('Отметил: ' + DIAL_RES[res]);
+          state._dial = null; state._sb = null; state._cb = null;
+          if (done) done(r); else renderView();
+        }, function () {
+          showToast('Не сохранилось, проверь интернет');
+          Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = false; });
+        });
+      });
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-dlst]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-dlst');
+        state._dlSt = state._dlSt === k ? '' : k;
+        state._dlMore = false;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-dlown]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-dlown');
+        state._dlOwn = state._dlOwn === k ? '' : k;
+        state._dlMore = false;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-dllead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-dllead')); });
+    });
+    var m = root.querySelector('#dl-more');
+    if (m) m.addEventListener('click', function () { state._dlMore = true; renderView(); });
+  }
+  function dialCard() {
+    var d = state._dial;
+    if (!d || d === 'none' || !d.total) return '';
+    var t = d.tiles || {};
+    var tiles = (d.states || []).map(function (s) {
+      return '<button type="button" class="dl-t ' + s.key + (state._dlSt === s.key ? ' on' : '') + '" data-dlst="' + s.key + '">' +
+        '<span class="dl-tl">' + esc(s.label) + '</span><b class="num">' + fmtMoney(t[s.key] || 0) + '</b>' +
+        '<span class="dl-th">' + esc(s.hint) + '</span></button>';
+    }).join('');
+    var pc = function (a, b) { return b ? Math.round(a / b * 100) + '%' : '—'; };
+    var mrows = (d.managers || []).map(function (m) {
+      var on = state._dlOwn === m.name;
+      return '<button type="button" class="dl-mr' + (on ? ' on' : '') + '" data-dlown="' + esc(m.name) + '">' +
+        '<span class="dl-mn">' + esc(m.name === SB_NOBODY ? 'Без менеджера' : m.name) + '</span>' +
+        '<span class="num" data-l="Лидов">' + m.total + '</span>' +
+        '<span class="num" data-l="С телефоном">' + m.phone + '</span>' +
+        '<span class="num" data-l="Звонили">' + m.tried + ' <i>' + pc(m.tried, m.phone) + '</i></span>' +
+        '<span class="num" data-l="Дозвонились">' + m.reached + ' <i>' + pc(m.reached, m.tried) + '</i></span></button>';
+    }).join('');
+    var list = '';
+    if (state._dlSt || state._dlOwn) {
+      var ppl = (d.people || []).filter(function (p) {
+        if (state._dlSt && p.state !== state._dlSt) return false;
+        if (state._dlOwn && (p.owner || SB_NOBODY) !== state._dlOwn) return false;
+        return true;
+      });
+      var shown = state._dlMore ? ppl : ppl.slice(0, 30);
+      list = '<div class="dl-list">' + (shown.length ? shown.map(function (p) {
+        return '<div class="dl-r">' +
+          '<button type="button" class="dl-who" data-dllead="' + esc(p.id) + '" title="Открыть карточку">' +
+            '<b>' + esc(p.name) + '</b><small>' + esc([p.owner || 'без менеджера',
+            p.owner || p.stage !== 'free' ? DIAL_STAGE[p.stage] : '', p.phone ? '' : 'телефона нет']
+            .filter(Boolean).join(' · ')) + '</small></button>' +
+          '<span class="dl-sum' + (p.state === 'todo' ? ' todo' : '') + '">' + esc(dialSum(p)) +
+            (p.last_by ? '<small>' + esc(p.last_by) + '</small>' : '') + '</span>' +
+          dialMarks(p.id) + '</div>';
+      }).join('') : '<div class="empty">Здесь никого</div>') +
+      (shown.length < ppl.length ? '<button type="button" class="pot-more" id="dl-more">Показать всех · ' + fmtMoney(ppl.length) + '</button>' : '') +
+      '</div>';
+    }
+    return '<div class="card sp12 dl"><div class="sec-head pf-sec"><span class="ic">' + ic('phone', 14) +
+      '</span><div><div class="t">Обзвон · <span class="num">' + fmtMoney(d.total) + '</span></div>' +
+      '<div class="s">все живые лиды в работе: кому звонили и кому нет; звонок со своего телефона отмечают кнопкой</div></div>' +
+      '<span class="cnt">звонили ' + fmtMoney(d.called) + ' из ' + fmtMoney(d.with_phone) + ' с телефоном</span></div>' +
+      '<div class="dl-ts">' + tiles + '</div>' +
+      (mrows ? '<div class="dl-mt"><div class="dl-mh"><span>Кто ведет</span><span>Лидов</span><span>С телефоном</span>' +
+        '<span>Звонили</span><span>Дозвонились</span></div>' + mrows + '</div>' : '') +
+      (list || '<div class="dl-hint">Нажми плитку или продавца, откроется список людей с кнопками отметки звонка.</div>') + '</div>';
+  }
+
+  /* ── ПЕРЕЗВОНИТЬ ─────────────────────────────────────────────────────────────
+     Павел 18.11.2026: «кто звонил нам на рабочие, и чтобы мы могли тут же перезвонить.
+     Или же оставил заявку на звонок». Оба повода — обещание «перезвоним»: робот АТС
+     говорит его на пропущенном, лендинг — «за 15 минут». Список и статус считает сервер
+     (sales_dial.callbacks), человек уходит из него только после разговора. Очередь
+     общая: на «Продажах» ее видит руководитель, в «Моей смене» — каждый продавец. */
+  function cbLoad() {
+    if (state._cb && Date.now() - (state._cbAt || 0) < 60000) return;
+    if (state._cbBusy) return;
+    state._cbBusy = true;
+    state._cbAt = Date.now();
+    api('/admin/api/sales/callbacks').then(function (r) {
+      state._cb = r || 'none';
+    }).catch(function () {
+      state._cb = state._cb || 'none';
+    }).then(function () {
+      state._cbBusy = false;
+      if (state.page === 'sales' || state.page === 'myshift') renderView();
+    });
+  }
+  function cbWhy(x) {
+    var when = msWhen(x.since);
+    if (x.kind === 'ask') return 'оставил заявку на звонок · ' + when;
+    var t = x.times > 1 ? 'звонил нам ' + x.times + ' ' + plural(x.times, 'раз', 'раза', 'раз') : 'звонил нам, не взяли';
+    return t + (x.kind === 'both' ? ' и оставил заявку' : '') + ' · ' + when;
+  }
+  function cbRow(x) {
+    var tag = x.state === 'wait'
+      ? '<span class="sev ' + (x.late ? 'ms-late' : 'ms-ok') + '">ждет ' + msAge(x.wait_min) + '</span>'
+      : '<span class="sev cb-tried">не дозвонились · ' + x.tries + '</span>';
+    var last = x.state === 'tried' && x.last_at
+      ? '<span class="cb-last">последняя попытка ' + esc(msWhen(x.last_at)) + (x.last_by ? ', ' + esc(x.last_by) : '') + '</span>' : '';
+    var call = x.phone
+      ? '<a class="bp' + (x.state === 'wait' ? '' : ' ghost') + ' ms-call" href="tel:+' + esc(x.phone) + '">' +
+        ic('phone', 13) + (can('phone') ? 'Позвонить' : msPhone(x.phone)) + '</a>' : '';
+    return '<div class="ms-row cb-r">' +
+      '<div class="ms-nm"><b>' + esc(x.name || msPhone(x.phone) || 'без имени') + '</b>' +
+        '<small>' + esc(cbWhy(x)) + (x.name && x.phone && can('phone') ? ' · ' + esc(msPhone(x.phone)) : '') + '</small>' + last +
+        (x.id ? '<span class="ms-dl">' + dialMarks(x.id) + '</span>' : '<span class="cb-last">карточки по этому номеру нет</span>') +
+      '</div>' + tag +
+      '<div class="ms-acts">' + call + (x.id ? '<button class="icobtn sm" data-dllead="' + esc(x.id) + '" title="Открыть карточку">' +
+        ic('ext', 14) + '</button>' : '') + '</div></div>';
+  }
+  // place: 'sales' рисует блок всегда (руководитель следит и за пустой очередью),
+  // 'shift' — только когда есть кого перезвонить: пустой блок наверху смены — шум.
+  function cbCard(place) {
+    var d = state._cb;
+    if (!d || d === 'none') return '';
+    var items = d.items || [];
+    if (place === 'shift' && !items.length) return '';
+    var late = items.filter(function (x) { return x.late; }).length;
+    var cnt = [d.waiting ? 'ждут ' + d.waiting : '', late ? 'дольше ' + d.late_min + ' мин: ' + late : '',
+      d.done_today ? 'перезвонили сегодня ' + d.done_today : ''].filter(Boolean).join(' · ');
+    return '<div class="card sp12 cb" id="ms-cb"><div class="sec-head pf-sec"><span class="ic">' + ic('phone', 14) +
+      '</span><div><div class="t">Перезвонить' + (items.length ? ' · <span class="num">' + items.length + '</span>' : '') + '</div>' +
+      '<div class="s">не дозвонились до нас или оставили заявку; обещаем перезвонить за ' + d.late_min +
+      ' минут, из списка уходят после разговора</div></div>' +
+      (cnt ? '<span class="cnt">' + esc(cnt) + '</span>' : '') + '</div>' +
+      (items.length ? '<div class="ms-list">' + items.map(cbRow).join('') + '</div>'
+        : '<div class="empty">Перезванивать некому' + (d.done_today ? ', сегодня перезвонили всем' : '') + '.</div>') + '</div>';
+  }
+
   /* Потенциалы (Павел 09.11.2026: «вывести в продажи и дашборд, чтобы я их не потерял»;
      «те, с кем провели консультацию, и есть итоги, договоренности»). Список и выжимку
      конспекта собирает сервер (sales_board.load_potentials), здесь только рисуем. */
@@ -40582,7 +40803,35 @@
     var d = new Date(r.held_at);
     var day = d.getDate() + ' ' + SB_MON_GEN[d.getMonth()];
     var n = r.days || 0;
-    return 'встреча ' + day + ' · ' + (n ? n + ' ' + plural(n, 'день', 'дня', 'дней') + ' назад' : 'сегодня');
+    return (r.pending ? 'записан на ' : 'встреча ') + day + ' · ' +
+      (n ? n + ' ' + plural(n, 'день', 'дня', 'дней') + ' назад' : 'сегодня');
+  }
+  /* Запись в окно прошла, а исход не отмечен (Павел 18.11.2026: потенциалов Лианы и
+     Алены не было видно). Две кнопки пишут обычную консультацию в карточку: «была» —
+     проведена, «не пришел» — неявка, и человек уходит из списка. */
+  function potPend(r) {
+    if (!r.pending) return '';
+    return '<span class="pot-pend"><em>итог не отмечен' + (r.with ? ' · окно: ' + esc(r.with) : '') + '</em>' +
+      '<button type="button" class="pot-pb" data-potmeet="held" data-potid="' + esc(r.id) + '">Встреча была</button>' +
+      '<button type="button" class="pot-pb ghost" data-potmeet="no_show" data-potid="' + esc(r.id) + '">Не пришел</button></span>';
+  }
+  function potMeet(b) {
+    var id = b.getAttribute('data-potid');
+    var p = state._pot, r = null;
+    ((p && p.rows) || []).forEach(function (x) { if (x.id === id) r = x; });
+    if (!r) return;
+    var held = b.getAttribute('data-potmeet') === 'held';
+    var body = { scheduled_at: r.slot_at, status: held ? 'held' : 'no_show' };
+    if (r.with_id) body.lead_user_id = r.with_id;
+    Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = true; });
+    apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/consultations', 'POST', body, function () {
+      showToast(held ? 'Отметил: встреча была' : 'Отметил неявку, из потенциалов убрал');
+      state._pot = null; state._sb = null;
+      renderView();
+    }, function () {
+      showToast('Не сохранилось, проверь интернет');
+      Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = false; });
+    });
   }
   function potList(xs) {
     return xs.slice(0, 3).map(function (x) { return esc(x); }).join('; ') + (xs.length > 3 ? ' и еще ' + (xs.length - 3) : '');
@@ -40590,17 +40839,35 @@
   function potCard(max) {
     var p = state._pot;
     if (!p || p === 'none') return '';
-    var rows = p.rows || [];
-    if (!rows.length) return '';
-    var open = !!state._potAll;
+    var all = p.rows || [];
+    if (!all.length) return '';
+    // Строка статусов сверху (Павел 18.11.2026: «первую строку, на каком этапе
+    // потенциалы, сразу видеть, с кем какой статус»): число по каждому, нажатие
+    // оставляет только этих.
+    var stOf = function (r) { return CRM[r.status] ? r.status : 'new'; };
+    var cnt = {};
+    all.forEach(function (r) { cnt[stOf(r)] = (cnt[stOf(r)] || 0) + 1; });
+    var sts = Object.keys(cnt).sort(function (a, b) { return CRM[b].order - CRM[a].order; });
+    var npend = all.filter(function (r) { return r.pending; }).length;
+    var pick = state._potSt && (cnt[state._potSt] || (state._potSt === 'pend' && npend)) ? state._potSt : '';
+    var stRow = sts.length > 1 || npend ? '<div class="pot-sts">' +
+      (npend ? '<button type="button" class="pot-st pend' + (pick === 'pend' ? ' on' : '') + '" data-potst="pend">' +
+        'Итог не отмечен <b class="num">' + npend + '</b></button>' : '') +
+      sts.map(function (k) {
+      return '<button type="button" class="pot-st' + (pick === k ? ' on' : '') + '" data-potst="' + k + '">' +
+        '<i style="background:' + CRM[k].dot + '"></i>' + esc(CRM[k].label) + ' <b class="num">' + cnt[k] + '</b></button>';
+    }).join('') + '</div>' : '';
+    var rows = pick === 'pend' ? all.filter(function (r) { return r.pending; })
+      : (pick ? all.filter(function (r) { return stOf(r) === pick; }) : all);
+    var open = !!state._potAll || !!pick;
     var shown = open ? rows : rows.slice(0, max);
     var body = shown.map(function (r) {
       var facts = [];
       if (r.offer) facts.push('<span class="pot-f"><i>Предложили</i>' + esc(r.offer) + '</span>');
       if (r.family && r.family.length) facts.push('<span class="pot-f"><i>Семья обещала</i>' + potList(r.family) + '</span>');
       if (r.ours && r.ours.length) facts.push('<span class="pot-f"><i>Мы обещали</i>' + potList(r.ours) + '</span>');
-      if (!facts.length) facts.push('<span class="pot-f none">' + (r.about ? esc(r.about) : 'итогов встречи в карточке нет') + '</span>');
-      var st = (CRM[r.status] || {}).label || '';
+      if (!facts.length && !r.pending) facts.push('<span class="pot-f none">' + (r.about ? esc(r.about) : 'итогов встречи в карточке нет') + '</span>');
+      var sk = stOf(r);
       var chat = r.chat_url
         ? '<a class="pot-chat" href="' + esc(r.chat_url) + '" target="_blank" rel="noopener">' + ic('chat', 12) +
             'чат' + (r.chat_ch ? ' · ' + esc(r.chat_ch) : '') + '</a>'
@@ -40610,18 +40877,19 @@
         return '<button class="fam-p" data-pot="' + esc(m.id) + '">' + esc(m.name) + '</button>';
       }).join('') + '</span>' : '';
       return '<div class="pot-r" role="button" tabindex="0" data-pot="' + esc(r.id) + '" title="Открыть карточку">' +
-        '<span class="pot-who"><b>' + esc(r.name) + '</b>' +
-          '<small>' + esc(r.held_at ? potWhen(r) : 'отмечен вручную') + (st ? ' · ' + esc(st.toLowerCase()) : '') + '</small>' +
+        '<span class="pot-who"><em class="pot-stc"><i style="background:' + CRM[sk].dot + '"></i>' + esc(CRM[sk].label) + '</em>' +
+          '<b>' + esc(r.name) + '</b>' +
+          '<small>' + esc(r.held_at ? potWhen(r) : 'отмечен вручную') + '</small>' +
           '<small class="pot-own' + (r.owner === SB_NOBODY ? ' none' : '') + '">' + esc(r.owner === SB_NOBODY ? 'никто не ведет' : 'ведет ' + r.owner) + '</small>' +
           chat + '</span>' +
-        '<span class="pot-fs">' + facts.join('') + kin + '</span></div>';
+        '<span class="pot-fs">' + potPend(r) + facts.join('') + kin + '</span></div>';
     }).join('');
-    var more = rows.length > max
+    var more = !pick && rows.length > max
       ? '<button class="pot-more" id="pot-more">' + (open ? 'Свернуть' : 'Показать всех · ' + fmtMoney(rows.length)) + '</button>' : '';
     return '<div class="card sp12 pot"><div class="sec-head pf-sec"><span class="ic">' + ic('target', 14) +
-      '</span><div><div class="t">Потенциалы · <span class="num">' + fmtMoney(rows.length) + '</span></div>' +
-      '<div class="s">провели консультацию или отметили в карточке, еще не купили; нажми, откроется карточка</div></div>' +
-      (p.no_notes ? '<span class="cnt pot-nn">без итогов ' + fmtMoney(p.no_notes) + '</span>' : '') + '</div>' +
+      '</span><div><div class="t">Потенциалы · <span class="num">' + fmtMoney(all.length) + '</span></div>' +
+      '<div class="s">провели консультацию, записались в окно или отмечены в карточке, еще не купили; нажми, откроется карточка</div></div>' +
+      (p.no_notes ? '<span class="cnt pot-nn">без итогов ' + fmtMoney(p.no_notes) + '</span>' : '') + '</div>' + stRow +
       '<div class="pot-list">' + body + '</div>' + more + '</div>';
   }
   function potBind(view) {
@@ -40634,6 +40902,16 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('.pot-chat[href]'), function (a) {
       a.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-potmeet]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); potMeet(b); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-potst]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-potst');
+        state._potSt = state._potSt === k ? '' : k;
+        renderView();
+      });
     });
     var m = view.querySelector('#pot-more');
     if (m) m.addEventListener('click', function () { state._potAll = !state._potAll; renderView(); });
@@ -40758,12 +41036,15 @@
     var wq = state._sbQ && (state._sbQ.f.indexOf('w_') === 0 || state._sbQ.by === 'cs') && !!(d.work && d.current);
     // Статусы лидов — первым блоком под шапкой: это то, ради чего экран открывают каждый день.
     potLoad();
-    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + potCard(8) +
+    dialLoad();
+    cbLoad();
+    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + cbCard('sales') + dialCard() + potCard(8) +
       sbReg() + sbLadder(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
       sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
     sbTabsBind(view);
     sbBind(view, d);
     potBind(view);
+    dialBind(view);
     animBars(view);
   }
 
@@ -40859,6 +41140,9 @@
         var who = view.querySelector('.mg-who');
         if (who && state._mgQ) who.scrollIntoView({block: 'nearest', behavior: 'smooth'});
       });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbmk]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); sbMkOpen(b.getAttribute('data-sbmk'), b.getAttribute('data-sbmkn')); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
@@ -41645,7 +41929,8 @@
           ic('phone', 13) + 'Позвонить</button>'
         : '<a class="bp ghost ms-call" href="tel:+' + esc(p.phone) + '">' + ic('phone', 13) + msPhone(p.phone) + '</a>');
     }
-    if (kind === 'respond' || (kind === 'hot' && !p.free)) out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '">Связался</button>');
+    // «Связался» — касание не звонком (написал в мессенджер); звонок отмечают кнопками под именем.
+    if (kind === 'respond' || (kind === 'hot' && !p.free)) out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '" title="Связался не звонком: написал, ответил в диалоге">Написал</button>');
     if (kind === 'pool') out.push('<button class="bp" data-mstake="' + esc(p.id) + '">Взять себе</button>');
     out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
     return '<div class="ms-acts">' + out.join('') + '</div>';
@@ -41680,8 +41965,12 @@
       tag = '<span class="sev ' + (p.next_in_days != null && p.next_in_days <= 0.5 ? 'ms-late' : 'ms-ok') + '">касание ' +
         p.touch + ' из 5 · день ' + p.day + '</span>';
     }
+    // Звонки по человеку и отметка звонка со своего телефона (Павел 18.11.2026).
+    var dl = kind !== 'after' && (p.phone || (p.dial && p.dial.tries))
+      ? '<span class="ms-dl"><span class="ms-dls' + (p.dial && p.dial.tries ? '' : ' todo') + '">' + esc(dialSum(p.dial)) + '</span>' +
+        dialMarks(p.id) + '</span>' : '';
     return '<div class="ms-row">' +
-      '<div class="ms-nm"><b>' + esc(p.name) + '</b><small>' + meta.join(' · ') + '</small></div>' +
+      '<div class="ms-nm"><b>' + esc(p.name) + '</b><small>' + meta.join(' · ') + '</small>' + dl + '</div>' +
       tag + msActs(p, kind, canCall) + '</div>';
   }
 
@@ -41752,6 +42041,7 @@
   function renderMyShift(view) {
     shLoad();
     msLoad();
+    cbLoad();
     var d = MS.d, sh = SH.cur;
     if (!d || !sh) { view.innerHTML = dashSkeleton(); return; }
     if (d === 'none' || sh.failed) {
@@ -41786,7 +42076,7 @@
           ic('ext', 14) + '</button></div>' : '<div class="ms-acts"></div>') + '</div>';
     }).join('');
 
-    view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + msPlan(d, !!open) + msClose(d, open) + stats +
+    view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + cbCard('shift') + msPlan(d, !!open) + msClose(d, open) + stats +
       (cc ? '<div class="card ms-dial"><span>' + ic('phone', 15) + 'Звонилка открывается отдельным окном на всю смену: ' +
         'держи его открытым, туда приходят и входящие.</span>' +
         '<button class="bp ghost" id="ms-dial">Открыть звонилку</button></div>'
@@ -41809,6 +42099,7 @@
       msSection('calls', 'Звонки сегодня', 'твои звонки через звонилку CRM', calls, 'Сегодня звонков еще не было.') +
       '</div>';
     msBind(view);
+    dialBind(view, function () { MS.d = null; msLoad(true); shLoad(true); });
     if (open) shStartTimer(Date.parse(open.started_at));
   }
 
@@ -49925,9 +50216,29 @@
     var counts = {}; CHAN_ORDER.forEach(function (k) { counts[k] = 0; });
     convos.forEach(function (c) { counts[c.channel] = (counts[c.channel] || 0) + 1; });
 
+    /* Кто ведет диалог (Павел 18.11.2026: «хочу видеть, какие диалоги ведет Костя»).
+       Имя ставит бот, когда коллега отвечает из CRM (taken_by), — короткая подпись
+       «Лиана» и полная «Лиана Эванс» это один человек, сводим по началу имени. */
+    var whoOf = function (c) {
+      if (c.ai_on !== false || !c.taken_by) return '';
+      return String(c.taken_by).trim();
+    };
+    var whoN = {};
+    convos.forEach(function (c) { var w = whoOf(c); if (w) whoN[w] = (whoN[w] || 0) + 1; });
+    var whoKey = {};
+    Object.keys(whoN).forEach(function (w) {
+      var full = Object.keys(whoN).filter(function (x) { return x !== w && x.indexOf(w + ' ') === 0; });
+      whoKey[w] = full.length === 1 ? full[0] : w;
+    });
+    var whoCnt = {};
+    Object.keys(whoN).forEach(function (w) { whoCnt[whoKey[w]] = (whoCnt[whoKey[w]] || 0) + whoN[w]; });
+    var whoList = Object.keys(whoCnt).sort(function (a, b) { return whoCnt[b] - whoCnt[a] || a.localeCompare(b); });
+    if (state.inboxWho && !whoCnt[state.inboxWho]) state.inboxWho = '';
+    var whoOk = function (c) { return !state.inboxWho || whoKey[whoOf(c)] === state.inboxWho; };
     var q = (state.inboxQ || '').toLowerCase();
     var list = convos.filter(function (c) {
       if (state.inboxCh && c.channel !== state.inboxCh) return false;
+      if (!whoOk(c)) return false;
       if (q && ((c.name || '') + ' ' + (c.last_text || '')).toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
@@ -49979,6 +50290,10 @@
       '<div class="tg' + (state.inboxSel ? ' show-chat' : '') + '" id="tg">' +
         '<aside class="tg-list">' + inboxSwitch() + missBanner +
           '<div class="tg-search"><span class="searchwrap">' + ic('leads', 15) + '<input id="tg-q" class="search" type="search" placeholder="Поиск диалога" autocomplete="off"></span></div>' +
+          (whoList.length ? '<div class="tg-who"><label for="tg-who">Ведет</label><select id="tg-who" class="tg-whos">' +
+            '<option value="">Все диалоги</option>' + whoList.map(function (w) {
+              return '<option value="' + esc(w) + '"' + (state.inboxWho === w ? ' selected' : '') + '>' + esc(w) + ' · ' + whoCnt[w] + '</option>';
+            }).join('') + '</select></div>' : '') +
           '<div class="tg-fchips">' + chips + '</div>' +
           '<div class="tg-rows" id="tg-rows">' + rows + '</div>' +
         '</aside>' +
@@ -49995,6 +50310,7 @@
         var host = el('tg-rows'); if (!host) return;
         var f = convos.filter(function (c) {
           if (state.inboxCh && c.channel !== state.inboxCh) return false;
+          if (!whoOk(c)) return false;
           var qq = state.inboxQ.toLowerCase();
           return !qq || ((c.name || '') + ' ' + (c.last_text || '')).toLowerCase().indexOf(qq) !== -1;
         });
@@ -50005,6 +50321,8 @@
     Array.prototype.forEach.call(view.querySelectorAll('.tg-fch'), function (b) {
       b.addEventListener('click', function () { state.inboxCh = b.getAttribute('data-ch'); state.inboxSel = null; renderInbox(view); });
     });
+    var ws = el('tg-who');
+    if (ws) ws.addEventListener('change', function () { state.inboxWho = ws.value; state.inboxSel = null; renderInbox(view); });
     function bindRows(host, lst) {
       Array.prototype.forEach.call(host.querySelectorAll('.tg-row[data-id]'), function (n) {
         n.addEventListener('click', function () {
@@ -52377,12 +52695,48 @@
     var rows = list.length
       ? '<div class="pc-list">' + list.map(function (c) { return pcRow(id, c); }).join('') + '</div>'
       : '<div class="field-empty">Звонков пока не было.</div>';
-    return head + nums + rows;
+    return head + nums + pcMarksBlock(id) + rows;
+  }
+
+  /* Звонок со своего телефона (Павел 18.11.2026): звонилка у большинства не подключена,
+     и такой звонок система не видела. Отметка одной кнопкой засчитывает его в «Обзвон»,
+     «Дозвонился» еще и ставит касание. История отметок — тут же, у всех, кто открыл
+     карточку. */
+  var PCMARKS = {};
+  function pcMarksLoad(id, force) {
+    if (!force && PCMARKS[id]) return;
+    PCMARKS[id] = PCMARKS[id] || 'wait';
+    api('/admin/api/leads/' + id + '/call-marks').then(function (r) {
+      PCMARKS[id] = (r && r.marks) || [];
+    }).catch(function () { PCMARKS[id] = []; }).then(function () {
+      if (state.drawerId === id && state.modalSection === 'calls') renderModalContent();
+    });
+  }
+  function pcMarksBlock(id) {
+    pcMarksLoad(id);
+    var ms = PCMARKS[id];
+    var hist = Array.isArray(ms) && ms.length ? '<div class="pc-mks">' + ms.map(function (m) {
+      return '<div class="pc-mkr"><span class="pc-mkres ' + esc(m.result) + '">' + esc(m.label) + '</span>' +
+        '<span class="pc-mkby">' + esc((m.by || 'без имени') + ', ' + msWhen(m.at)) + '</span>' +
+        (m.mine ? '<button type="button" class="pc-mkx" data-pcmkx="' + m.id + '" title="Снять ошибочную отметку">убрать</button>' : '') +
+        '</div>';
+    }).join('') + '</div>' : '';
+    return '<div class="pc-mk"><div class="pc-mkh"><b>Звонил со своего телефона?</b>' +
+      '<span>Отметь, чем кончилось, и звонок засчитается</span></div>' + dialMarks(id) + '</div>' + hist;
   }
 
   function pcWire(id, host) {
     Array.prototype.forEach.call(host.querySelectorAll('[data-pcdial]'), function (b) {
       b.addEventListener('click', function () { pcDial(b.getAttribute('data-pcdial')); });
+    });
+    dialBind(host, function () { pcMarksLoad(id, true); });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-pcmkx]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        apiSend('/admin/api/call-marks/' + b.getAttribute('data-pcmkx'), 'DELETE', null, function () {
+          state._dial = null; pcMarksLoad(id, true);
+        }, function () { b.disabled = false; showToast('Не получилось, проверь интернет'); });
+      });
     });
     // Пока конспект считается, раздел сам перечитывает список: иначе человек видит
     // «слушаем запись» до тех пор, пока не закроет и не откроет карточку.
@@ -53924,6 +54278,31 @@
       });
     });
   }
+  /* «Краткосрочка» (Павел 18.11.2026: «метки, кто интересуется краткосрочными
+     программами, чтобы их не потерять, и фильтр»). Плашка-интерес из lead_marks:
+     лидом быть не мешает, фильтр — в «Контактах». */
+  function hasShort(l) { return ((l && l.crm && l.crm.marks) || []).indexOf('short') >= 0; }
+  function buildShortMark(ctx) {
+    var on = hasShort(ctx);
+    return '<div class="potc shm"><span class="ql-l">Краткосрочка</span>' + (on
+      ? '<span class="potc-on">' + ic('check', 11) + 'Интересуется краткосрочными программами</span>' +
+        '<button class="bp ghost sm" data-shm="0">Снять</button>'
+      : '<button class="bp ghost sm" data-shm="1">Интересуется краткосрочными программами</button>') + '</div>';
+  }
+  function wireShortMark(host, id) {
+    var b = host.querySelector('[data-shm]');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      var on = b.getAttribute('data-shm') === '1';
+      b.disabled = true;
+      apiSend('/admin/api/rnp/leads/' + encodeURIComponent(id) + '/mark', 'POST', { mark: 'short', on: on }, function (r) {
+        var l = findLead(id);
+        if (l) { l.crm = l.crm || {}; l.crm.marks = (r && r.marks) || []; }
+        showToast(on ? 'Отметил: интересуется краткосрочкой' : 'Отметку снял');
+        if (state.drawerId === id) renderModalContent();
+      }, function () { b.disabled = false; showToast('Не сохранилось, проверь сеть'); });
+    });
+  }
   function wirePotChat(host, id) {
     var box = host.querySelector('.potc');
     if (!box) return;
@@ -54198,6 +54577,7 @@
     html += buildOwn(ctx);
     html += buildFamily(ctx);
     html += buildPotChat(ctx);
+    html += buildShortMark(ctx);
 
     /* 2. СТАДИЯ — степпер воронки (поднят выше: это главное действие на экране) */
     var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
@@ -56691,6 +57071,7 @@
 
     wireFamily(host, id);
     wirePotChat(host, id);
+    wireShortMark(host, id);
 
     // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {
