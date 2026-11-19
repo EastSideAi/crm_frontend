@@ -48621,6 +48621,20 @@
   /* Колонка «Тьютор» вместо «Статуса» — только в «Сопровождении» (Мария 19.11.2026). */
   function tutorCol() { return trackTab(); }
   function ownerName(l) { return (((l.crm || {}).owner) || {}).name || ''; }
+  /* Цвет тьютора. Четверых, кто ведет сопровождение, Мария 19.11.2026 назвала сама:
+     Саше желтый, Насте зеленый, Алене розовый, Элизе голубой. Ключ — ФАМИЛИЯ, а не
+     полное имя: в карточках команды встречается и «Аюпова Элиза», и «Элиза Аюпова».
+     Остальным цвет дается от имени, но из спокойной части палитры, чтобы не спорить
+     с четырьмя названными. */
+  var TUTOR_TONE = { сердотецков: 'amber', мишина: 'green', малахова: 'pink', аюпова: 'blue' };
+  var TUTOR_TONES_REST = ['violet', 'teal', 'olive', 'brown', 'slate'];
+  function tutorTone(name) {
+    var n = String(name || '').toLowerCase().replace(/ё/g, 'е');
+    for (var k in TUTOR_TONE) { if (n.indexOf(k) >= 0) return TUTOR_TONE[k]; }
+    var h = 0;
+    for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+    return TUTOR_TONES_REST[h % TUTOR_TONES_REST.length];
+  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
@@ -48645,7 +48659,10 @@
         /* В «Сопровождении» на месте статуса стоит тьютор (Мария 19.11.2026): там у
            всех одна и та же плашка «клиент», а живой вопрос к строке — кто ведет. */
         (tutorCol()
-          ? '<div class="t-tutor' + (ownerName(l) ? '' : ' none') + '">' + esc(ownerName(l) || 'не назначен') + '</div>'
+          ? (ownerName(l)
+              ? '<div class="t-tutor"><span class="t-chip tn-' + tutorTone(ownerName(l)) + '">' +
+                esc(ownerName(l)) + '</span></div>'
+              : '<div class="t-tutor none">не назначен</div>')
           : '<span class="pill-st" data-stop="1" data-pid="' + l.id + '">' + sevPill(l) + '</span>') +
         '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' +
           (isNewLead(l) ? '<span class="nveo"></span>' : '') + esc(leadName(l)) +
