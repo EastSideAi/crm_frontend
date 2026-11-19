@@ -49194,6 +49194,39 @@
     for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
     return TUTOR_TONES_REST[h % TUTOR_TONES_REST.length];
   }
+  /* ЭТАП МАРШРУТА В СТРОКЕ (Мария 20.11.2026, вместо балла в «Сопровождении»).
+     Полоска по всем 16 этапам плюс название словом: «где человек сейчас» —
+     единственный вопрос к клиенту в работе, а балл отвечал на вопрос о лиде.
+     Полоску убирали на вечер («слишком захламленно») и вернули по ее картинке
+     («сделай только пунктиром как тут»): без нее видно этап, но не видно, далеко
+     ли человек прошел, а это и есть вопрос к строке. Состояния считает сервер
+     (`client_views.lead_stage`, тот же код, что у доски «Карта»), браузер рисует.
+     Нажатие открывает КАРТОЧКУ ученика сразу на «Поступлении» (Мария 20.11.2026:
+     «надо чтобы он открывал их карточку и этап поступление»): весь маршрут с
+     задачами лежит там, и второго окна с тем же маршрутом быть не должно. */
+  var STAGE_STATE = { done: 'done', now: 'now', open: 'open' };
+  function stageCell(l) {
+    /* Поля stage нет вовсе — это старый ответ сервера (бэкенд еще не выкачен), а не
+       «плана нет». Разные вещи: во втором случае план надо собрать, в первом надо
+       дождаться выкатки, и звать человека собирать план было бы враньем. */
+    if (!('stage' in l)) return '<div class="t-stage unknown">—</div>';
+    var st = l.stage || {};
+    var has = !!(st.steps && st.steps.length);
+    var bar = has ? '<div class="stbar">' + st.steps.map(function (p) {
+      return '<i class="sg ' + (STAGE_STATE[p.s] || '') + '"></i>';
+    }).join('') + '</div>' : '';
+    /* Плана нет — ячейка все равно кнопка: собирают план на той же вкладке карточки,
+       куда она и ведет. */
+    return '<div class="t-stage' + (has ? '' : ' none') + '" data-stop="1" data-stid="' + l.id + '"' +
+      ' role="button" tabindex="0" aria-label="' + (has
+        ? 'Поступление: ' + esc(st.short || 'этап') + ', этап ' + (st.pos || '?') + ' из ' + st.total
+        : 'Поступление: план не собран') + '">' + bar +
+      '<div class="stlab">' + (has
+        ? '<span class="stn">' + esc(st.short || '—') + '</span>' +
+          (st.pos ? '<span class="stp num">' + st.pos + '/' + st.total + '</span>' : '')
+        : '<span class="stn">план не собран</span>') + '</div>' +
+    '</div>';
+  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
@@ -49214,7 +49247,7 @@
       var overdue = openTasks.some(function (t) { return t.due && t.due < todayISO(0); });
       var risks = leadRisks(l);
       var hot = l.booking && l.crm.status === 'new';
-      return '<div class="trow lr-grid' + (hot ? ' r-crit' : '') + '" data-id="' + l.id + '">' +
+      return '<div class="trow lr-grid' + (tutorCol() ? ' sup' : '') + (hot ? ' r-crit' : '') + '" data-id="' + l.id + '">' +
         /* В «Сопровождении» на месте статуса стоит тьютор (Мария 19.11.2026): там у
            всех одна и та же плашка «клиент», а живой вопрос к строке — кто ведет. */
         (tutorCol()
@@ -49229,25 +49262,34 @@
           (openTasks.length ? '<span class="minib' + (overdue ? ' warn' : '') + '">' + ic('task', 10) + openTasks.length + '</span>' : '') +
         '</div>' +
           '<div class="t-sub">' + (profileBits.join(' · ') || FUNNEL[l.status]) + (l.crm.note ? ' · ' + esc(l.crm.note) : '') + '</div></div>' +
-        '<div class="score hidem">' + (l.score != null
-          ? '<b class="num" style="color:' + tone.c + '">' + l.score + '</b>' +
-            '<span class="strack"><i style="width:' + l.score + '%; background:' + tone.c + '"></i></span>'
-          : '<span style="color:var(--ink-3)">—</span>') + '</div>' +
-        '<div class="t-contact hidem">' + (contact
-          ? (act ? '<a href="' + esc(act.href) + '" target="_blank" rel="noopener" data-stop="1">' + esc(contact) + '</a>' : esc(contact))
-          : '<span class="none">—</span>') + '</div>' +
-        '<div class="t-when num' + (isToday(l.created_at) ? ' today' : '') + '">' + fmtWhen(l.created_at) + '</div>' +
+        (tutorCol()
+          /* В «Сопровождении» на месте балла — этап маршрута (Мария 20.11.2026): балл
+             это оценка лида на входе, а у клиента в работе вопрос один, где он сейчас.
+             Контакт там же убран по ее просьбе: клиенту пишут из карточки и из бота,
+             а не копируя почту из списка. */
+          ? stageCell(l)
+          : '<div class="score hidem">' + (l.score != null
+              ? '<b class="num" style="color:' + tone.c + '">' + l.score + '</b>' +
+                '<span class="strack"><i style="width:' + l.score + '%; background:' + tone.c + '"></i></span>'
+              : '<span style="color:var(--ink-3)">—</span>') + '</div>' +
+            '<div class="t-contact hidem">' + (contact
+              ? (act ? '<a href="' + esc(act.href) + '" target="_blank" rel="noopener" data-stop="1">' + esc(contact) + '</a>' : esc(contact))
+              : '<span class="none">—</span>') + '</div>') +
+        '<div class="t-when num' + (tutorCol() ? ' hidem' : '') + (isToday(l.created_at) ? ' today' : '') + '">' + fmtWhen(l.created_at) + '</div>' +
         '<div class="t-go hidem">' + ic('go', 13) + '</div>' +
       '</div>';
     }).join('');
 
     host.innerHTML =
-      '<div class="trow lr-grid thead">' +
+      '<div class="trow lr-grid thead' + (tutorCol() ? ' sup' : '') + '">' +
         (tutorCol() ? '<span class="th">Тьютор</span>' : thCell('crm', 'Статус', '')) +
         thCell('name', 'Лид', '') +
-        thCell('score', 'Балл', ' hidem') +
-        '<span class="th hidem">Контакт</span>' +
-        thCell('created', 'Пришел', ' r') +
+        (tutorCol()
+          ? '<span class="th th-stage">Этап</span>'
+          : thCell('score', 'Балл', ' hidem') + '<span class="th hidem">Контакт</span>') +
+        /* В «Сопровождении» на телефоне дата прихода уступает место этапу: у клиента
+           в работе вопрос один — где он сейчас, а не когда он пришел. */
+        thCell('created', 'Пришел', tutorCol() ? ' r hidem' : ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
 
@@ -49270,6 +49312,16 @@
         openDrawer(tr.getAttribute('data-id'), ids);
       });
       tr.addEventListener('mouseenter', function () { warm(tr.getAttribute('data-id')); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.t-stage[data-stid]'), function (c) {
+      var open = function (e) {
+        e.stopPropagation();
+        openDrawer(c.getAttribute('data-stid'), ids, 'admission');
+      };
+      c.addEventListener('click', open);
+      c.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); }
+      });
     });
     Array.prototype.forEach.call(host.querySelectorAll('.pill-st'), function (p) {
       p.addEventListener('click', function (e) {
@@ -52908,11 +52960,15 @@
     return planToolbar(id) + html;
   }
 
-  function openDrawer(id, listIds) {
+  /* Третий аргумент — секция, с которой карточка открывается. Нужен колонке «Этап»
+     в «Сопровождении»: там нажатие ведет сразу в «Поступление», к маршруту ученика. */
+  function openDrawer(id, listIds, sec) {
     if (!state._portal) fetchPortal();   // поле «Тариф» берет список из портала
     state.drawerId = id;
     if (listIds && listIds.length) state.drawerList = listIds;
-    state.modalSection = 'main';
+    state.modalSection = sec || 'main';
+    // статус публикации плана всегда свежий с бэка — как при обычном заходе в секцию
+    if (state.modalSection === 'admission') ensurePlanStatus(id, true);
     RM_CHAT = null;
     syncHash(id);
     renderDrawer(false);
@@ -52926,10 +52982,10 @@
     if (!state.assignees || !peopleFresh(state._assigneesAt)) {
       fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
     }
-    if (toMainCard(id)) return;
+    if (toMainCard(id, sec)) return;
     if (!state.details[id]) fetchDetail(id, function (got) {
       if (state.drawerId !== id) return;
-      if (got && toMainCard(id)) return;
+      if (got && toMainCard(id, sec)) return;
       if (got) renderDrawer(true);
       // пришли по ссылке на клиента, которого уже нет (или нет прав) — честно скажем
       else if (!findLead(id)) { closeDrawer(); showToast('Клиент не найден — возможно, ссылка устарела'); }
@@ -52939,11 +52995,11 @@
      открывает главную. Как есть его открывает только кнопка «Открыть» в разделе
      «Склеено» — там дубль смотрят нарочно, чтобы проверить или расклеить. */
   var DUP_AS_IS = null;
-  function toMainCard(id) {
+  function toMainCard(id, sec) {
     var d = state.details[id], main = d && d.crm && d.crm.merged_into;
     if (!main || main === id || DUP_AS_IS === id) return false;
     showToast('Это дубль — открыта главная карточка клиента');
-    openDrawer(main);
+    openDrawer(main, null, sec);
     return true;
   }
   function closeDrawer() {

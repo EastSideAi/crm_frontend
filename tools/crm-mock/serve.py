@@ -49,6 +49,35 @@ PEOPLE = [
     ("Марк Тихонов (папа Денис)", "", "prem", 44, "mark@demo.local", "направление пока не проставлено"),
 ]
 
+# Этап маршрута: сервер считает его из плана дела (client_views.lead_stage) и
+# отдает строкой списка — шестнадцать этапов с состоянием каждого. Тут собираем
+# правдоподобный ответ: кому-то план не собран вовсе (поле None), остальные стоят
+# на разных этапах.
+STAGE_NAMES = ["Доступ", "Диагностика", "Подбор", "Документы", "Портфолио", "Письма",
+               "Методы", "Язык", "CSCA", "Интервью", "Подача", "Зачисление", "Виза",
+               "Адаптация", "Прием", "Первые месяцы"]
+STAGE_KEYS = ["access", "diag", "pick", "docs", "folio", "letters", "study", "lang",
+              "csca", "interview", "apply", "offer", "visa", "adapt", "meet", "settle"]
+
+def stage_of(i):
+    if i in (3, 9):           # плана нет — так и пишем, это не «первый этап»
+        return None
+    pos = [1, 3, 4, 0, 8, 11, 2, 4, 0, 0, 6, 13][i % 12]
+    steps = []
+    for n, (k, nm) in enumerate(zip(STAGE_KEYS, STAGE_NAMES)):
+        if n < pos:
+            st, d, t = "done", 3, 3
+        elif n == pos:
+            st, d, t = "now", 4, 9
+        elif n == pos + 1:
+            st, d, t = "open", 0, 2
+        else:
+            st, d, t = "none", 0, 0
+        steps.append({"k": k, "n": nm, "s": st, "d": d, "t": t})
+    return {"key": STAGE_KEYS[pos], "short": STAGE_NAMES[pos],
+            "title": STAGE_NAMES[pos], "pos": pos + 1, "total": len(steps),
+            "steps": steps}
+
 def leads():
     out = []
     for i, (name, track, tariff, score, contact, note) in enumerate(PEOPLE):
@@ -81,6 +110,7 @@ def leads():
             "id": "demo-%02d" % i,
             "name": name,
             "school_class": klass,
+            "stage": stage_of(i),
             "score": score,
             "status": "diagnosed",
             "grade": "11 класс" if i % 2 else "10 класс",
