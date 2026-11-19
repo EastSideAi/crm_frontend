@@ -42264,7 +42264,7 @@
       return '<div class="ms-acts">' + out.join('') + '</div>';
     }
     if (kind === 'hot' && p.free) out.push('<button class="bp ghost" data-mstake="' + esc(p.id) + '">Взять себе</button>');
-    if (p.phone && kind !== 'pool') {
+    if (p.phone) {
       out.push(canCall
         ? '<button class="bp ms-call' + (kind === 'respond' || kind === 'hot' ? '' : ' ghost') + '" data-mscall="' + esc(p.phone) + '">' +
           ic('phone', 13) + 'Позвонить</button>'
@@ -42273,6 +42273,10 @@
     // «Связался» — касание не звонком (написал в мессенджер); звонок отмечают кнопками под именем.
     if (kind === 'respond' || (kind === 'hot' && !p.free)) out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '" title="Связался не звонком: написал, ответил в диалоге">Написал</button>');
     if (kind === 'pool') out.push('<button class="bp" data-mstake="' + esc(p.id) + '">Взять себе</button>');
+    // Переписка рядом со звонком (Павел 19.11.2026: «ссылочки на диалог»): диалог бота
+    // открывается в «Диалогах» CRM, чат из карточки — у мессенджера.
+    if (p.chat && p.chat.bot) out.push('<a class="bp ghost ms-chat" href="' + esc(dialogUrl(p.chat.bot)) + '">' + ic('chat', 13) + 'Диалог</a>');
+    else if (p.chat && p.chat.url) out.push('<a class="bp ghost ms-chat" href="' + esc(p.chat.url) + '" target="_blank" rel="noopener">' + ic('chat', 13) + 'Чат</a>');
     out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
     return '<div class="ms-acts">' + out.join('') + '</div>';
   }
@@ -42301,6 +42305,8 @@
     } else if (kind === 'hot') {
       tag = '<span class="sev ms-when">консультация ' + esc(msWhen(p.meet_at)) + '</span>';
     } else if (kind === 'after') {
+      tag = '<span class="sev ms-ok">встреча ' + esc(fmtDay(p.meet_at)) + '</span>';
+    } else if (kind === 'decide') {
       tag = '<span class="sev ms-ok">встреча ' + esc(fmtDay(p.meet_at)) + '</span>';
     } else if (kind === 'follow') {
       tag = '<span class="sev ' + (p.next_in_days != null && p.next_in_days <= 0.5 ? 'ms-late' : 'ms-ok') + '">касание ' +
@@ -42331,8 +42337,9 @@
       { n: 4, t: 'Встречи', s: d.meets.length ? d.meets.length + ' на ближайшие дни' : 'встреч нет', done: false, go: 'meets' },
       { n: 5, t: 'Отметить итог', s: d.after.length ? d.after.length + ' после встречи' : 'все отмечены', done: !d.after.length, go: 'after' },
       { n: 6, t: 'Дожать до записи', s: d.follow.length ? d.follow.length + ' на связи без записи' : 'никого', done: !d.follow.length, go: 'follow' },
-      { n: 7, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
-      { n: 8, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
+      { n: 7, t: 'Думают', s: (d.decide || []).length ? d.decide.length + ' после встречи без решения' : 'никого', done: !(d.decide || []).length, go: 'decide' },
+      { n: 8, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
+      { n: 9, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
     ];
     return '<div class="card ms-plan">' + steps.map(function (st) {
       return '<button class="ms-step' + (st.done ? ' done' : '') + (st.hot ? ' hot' : '') + '"' +
@@ -42433,6 +42440,8 @@
         d.after.map(function (p) { return msRow(p, 'after', cc); }).join(''), 'По всем встречам итог отмечен.') +
       msSection('follow', 'Дожать до записи', 'на связи, но не записались; пять касаний за 14 дней: +1, +3, +7, +14 день',
         d.follow.map(function (p) { return msRow(p, 'follow', cc); }).join(''), 'Всех довел до записи или до отказа.') +
+      msSection('decide', 'Думают после встречи', 'консультация прошла, договора нет; держи связь до решения: через 1, 3, 7 и 14 дней',
+        (d.decide || []).map(function (p) { return msRow(p, 'decide', cc); }).join(''), 'Никто не думает: все решили.') +
       msSection('pool', 'Свободные лиды', d.pool_total > d.pool.length
           ? 'никто не взял; сверху теплые с эфира, показаны ' + d.pool.length + ' из ' + d.pool_total
           : 'никто не взял; сверху теплые с эфира, взял — лид твой',

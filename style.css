@@ -12970,7 +12970,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
    шести шагов: где ты по дню, видно одним взглядом; шаг с людьми, которые ждут
    ответа, единственный горит красным. Ниже те же шаги списками людей. */
 .ms .ms-head { margin-bottom: 0; }
-.ms-plan { display: grid; grid-template-columns: repeat(8, 1fr); padding: 6px; gap: 2px; }
+.ms-plan { display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px; gap: 2px; }
 .ms-step { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 14px 14px;
   border: 0; background: none; border-radius: var(--r-lg); cursor: pointer; font: inherit;
   transition: background .14s var(--ease); min-width: 0; }
@@ -13024,8 +13024,8 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .ms-sum b { display: block; font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
 .ms-cbtns { display: flex; gap: 10px; margin-top: 14px !important; }
 
-@media (max-width: 1360px) {
-  .ms-plan { grid-template-columns: repeat(4, 1fr); }
+@media (min-width: 1800px) {
+  .ms-plan { grid-template-columns: repeat(9, 1fr); }
 }
 @media (max-width: 960px) {
   .ms-plan { grid-template-columns: repeat(3, 1fr); }
