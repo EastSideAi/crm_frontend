@@ -13,6 +13,11 @@ const patched = src.replace(marker, marker +
   '\n  globalThis.__L = { chips: function (a) { return trackChips(a); },' +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
   ' keys: function (seg) { return quickKeys(seg); },' +
+  ' clsHit: function (l, seg) { return classHit(l, seg); },' +
+  ' tutorCol: function () { return tutorCol(); },' +
+  ' klassy: function () { return qlClasses(); },' +
+  ' klassLabel: function (y) { return qlClassLabel(y); },' +
+  ' owner: function (l) { return ownerName(l); },' +
   ' pred: function (seg) { return quickPred(seg); },' +
   ' setTracks: function (t) { DOC_TRACKS = t; }, state: state };');
 
@@ -104,6 +109,61 @@ L.state.quick = 'mql';
 check('чужой срез не режет «Сопровождение»', L.pred('support')({ crm: {} }) === true, '');
 check('тот же срез на «Клиентах» работает', L.pred('clients')({ crm: {} }) === false, '');
 L.state.quick = '';
+
+/* Класс школьника: чипы стоят в том же ряду, что направления, и работают вместе
+   с ними. Сам класс считает сервер (school_class), CRM только раскладывает. */
+const klassy = [
+  lead('Аня', 'bachelor'), lead('Боря', 'bachelor'),
+  lead('Вера', 'lang_grant'), lead('Гена', 'master_direct'), lead('Дина', ''),
+];
+klassy[0].school_class = 9;
+klassy[1].school_class = 10;
+klassy[2].school_class = 9;
+klassy[3].school_class = null;
+klassy[4].school_class = 8;
+
+L.state.seg = 'support';
+L.state.trk = '';
+L.state.cls = 0;
+const hk = L.chips(klassy);
+check('в ряду есть чип «9 класс» со счетчиком 2', /9 класс<span class="qn num">2<\/span>/.test(hk), hk.slice(-400));
+check('чипы классов отделены волоском', /qsep/.test(hk), hk.slice(-300));
+check('классов, которых нет у людей, в ряду нет', !/11 класс/.test(hk), '');
+check('направления в том же ряду остались', /Бакалавриат<span/.test(hk), '');
+
+L.state.cls = 9;
+check('фильтр «9 класс» дает двоих', klassy.filter(l => L.clsHit(l, 'support')).map(l => l.id).join(',') === 'Аня,Вера',
+  klassy.filter(l => L.clsHit(l, 'support')).map(l => l.id).join(','));
+check('класс складывается с направлением, а не спорит с ним',
+  klassy.filter(l => L.hit(l, 'support') && L.clsHit(l, 'support')).map(l => l.id).join(',') === 'Аня,Вера', '');
+L.state.trk = 'bachelor';
+check('«Бакалавриат» и «9 класс» вместе дают одного',
+  klassy.filter(l => L.hit(l, 'support') && L.clsHit(l, 'support')).map(l => l.id).join(',') === 'Аня', '');
+check('на чужой вкладке класс не режет список', klassy.filter(l => L.clsHit(l, 'clients')).length === 5, '');
+L.state.trk = '';
+L.state.cls = 0;
+
+/* Колонка «Тьютор» вместо «Статуса» — только в «Сопровождении». */
+L.state.seg = 'support';
+check('в «Сопровождении» колонка отдана тьютору', L.tutorCol() === true, '');
+L.state.seg = 'clients';
+check('в «Клиентах» остается статус', L.tutorCol() === false, '');
+check('имя ведущего берется из карточки',
+  L.owner({ crm: { owner: { id: 1, name: 'Элиза Аюпова' } } }) === 'Элиза Аюпова', '');
+check('без ответственного имени нет, а не «undefined»', L.owner({ crm: {} }) === '', JSON.stringify(L.owner({ crm: {} })));
+L.state.seg = 'support';
+
+/* Поле «Класс» в карточке пишет ГОД окончания школы, а не класс. */
+const opts = L.klassy();
+const god = (n) => (opts.filter(o => o[1] === n + ' класс')[0] || [])[0];
+const now = new Date();
+const konec = now.getMonth() + 1 >= 9 ? now.getFullYear() + 1 : now.getFullYear();
+check('в списке семь классов, с 5 по 11', opts.length === 7 && opts[0][1] === '5 класс' && opts[6][1] === '11 класс',
+  opts.map(o => o[1]).join(','));
+check('одиннадцатый выпускается в этом учебном году', god(11) === String(konec), String(god(11)));
+check('восьмой выпускается через три года', god(8) === String(konec + 3), String(god(8)));
+check('прошлый год выпуска подписан отдельно, а не теряется',
+  L.klassLabel(konec - 2) === 'выпуск ' + (konec - 2), L.klassLabel(konec - 2));
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);

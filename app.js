@@ -179,10 +179,11 @@
     ptSeg: 'my', ptOpen: null, ptDay: '', ptTrack: '',
     // «Контакты» → вкладка «Сопровождение»: выбранное направление подачи
     trk: '',
+    cls: 0,
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack', 'trk'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack', 'trk', 'cls'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -208,6 +209,7 @@
         rwDept: state.rwDept || '',
         ptTrack: state.ptTrack || '',
         trk: state.trk || '',
+        cls: state.cls || 0,
       }));
     } catch (e) {}
   }
@@ -1123,6 +1125,7 @@
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
       if (!trackHit(l, seg)) return false;
+      if (!classHit(l, seg)) return false;
       return true;
     });
     if (state.sort) {
@@ -1386,6 +1389,16 @@
     if (!trackTab(seg) || !state.trk) return true;
     return state.trk === 'none' ? !leadTrack(l) : leadTrack(l) === state.trk;
   }
+  /* Класс школьника приходит с сервера полем school_class (считается из года
+     окончания школы — сам класс меняется у всех разом 1 сентября). Чипы стоят в том
+     же ряду, что направления, и работают ВМЕСТЕ с ними: «Бакалавриат» и «9 класс»
+     дают девятиклассников на бакалавриате (Мария 19.11.2026). Классы только эти три:
+     она попросила 8, 9 и 10 — тех, кто поступает не в эту волну. */
+  var CLASS_CHIPS = [8, 9, 10];
+  function classHit(l, seg) {
+    if (!trackTab(seg) || !state.cls) return true;
+    return l.school_class === state.cls;
+  }
   function trackChips(arr) {
     if (!trackTab()) return '';
     var by = {}, none = 0;
@@ -1402,10 +1415,18 @@
         '" data-trk="' + esc(k) + '">' + esc(label) +
         '<span class="qn num">' + n + '</span></button>';
     };
+    var byCls = {};
+    arr.forEach(function (l) { if (l.school_class) byCls[l.school_class] = (byCls[l.school_class] || 0) + 1; });
+    var clsChips = CLASS_CHIPS.filter(function (n) { return byCls[n]; }).map(function (n) {
+      return '<button type="button" class="qchip' + (state.cls === n ? ' on' : '') +
+        '" data-cls="' + n + '">' + n + ' класс' +
+        '<span class="qn num">' + byCls[n] + '</span></button>';
+    }).join('');
     return '<div class="list-quick list-trk">' +
       chip('', 'Все направления', arr.length) +
       keys.map(function (k) { return chip(k, trackName(k), by[k]); }).join('') +
       (none ? chip('none', 'Без направления', none) : '') +
+      (clsChips ? '<span class="qsep"></span>' + clsChips : '') +
       '</div>';
   }
 
@@ -1492,8 +1513,13 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll('.list-trk .qchip'), function (b) {
       b.addEventListener('click', function () {
-        var k = b.getAttribute('data-trk') || '';
-        state.trk = (state.trk || '') === k ? '' : k;
+        if (b.hasAttribute('data-cls')) {
+          var n = Number(b.getAttribute('data-cls'));
+          state.cls = state.cls === n ? 0 : n;
+        } else {
+          var k = b.getAttribute('data-trk') || '';
+          state.trk = (state.trk || '') === k ? '' : k;
+        }
         saveUi(); renderView();
       });
     });
@@ -48743,6 +48769,9 @@
     }).join('') + '</div>';
   }
 
+  /* Колонка «Тьютор» вместо «Статуса» — только в «Сопровождении» (Мария 19.11.2026). */
+  function tutorCol() { return trackTab(); }
+  function ownerName(l) { return (((l.crm || {}).owner) || {}).name || ''; }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
@@ -48764,7 +48793,11 @@
       var risks = leadRisks(l);
       var hot = l.booking && l.crm.status === 'new';
       return '<div class="trow lr-grid' + (hot ? ' r-crit' : '') + '" data-id="' + l.id + '">' +
-        '<span class="pill-st" data-stop="1" data-pid="' + l.id + '">' + sevPill(l) + '</span>' +
+        /* В «Сопровождении» на месте статуса стоит тьютор (Мария 19.11.2026): там у
+           всех одна и та же плашка «клиент», а живой вопрос к строке — кто ведет. */
+        (tutorCol()
+          ? '<div class="t-tutor' + (ownerName(l) ? '' : ' none') + '">' + esc(ownerName(l) || 'не назначен') + '</div>'
+          : '<span class="pill-st" data-stop="1" data-pid="' + l.id + '">' + sevPill(l) + '</span>') +
         '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' +
           (isNewLead(l) ? '<span class="nveo"></span>' : '') + esc(leadName(l)) +
           (risks.length ? '<span class="minib warn" title="' + esc(risks[0].label) + '">' + ic('flame', 9) + '</span>' : '') +
@@ -48785,7 +48818,7 @@
 
     host.innerHTML =
       '<div class="trow lr-grid thead">' +
-        thCell('crm', 'Статус', '') +
+        (tutorCol() ? '<span class="th">Тьютор</span>' : thCell('crm', 'Статус', '')) +
         thCell('name', 'Лид', '') +
         thCell('score', 'Балл', ' hidem') +
         '<span class="th hidem">Контакт</span>' +
@@ -54389,6 +54422,23 @@
 
   /* Ближайшие шесть волн от сегодня. Зашитый список годов через год врет, поэтому
      считаем от даты: прошедшие в этом году наборы пропускаем. */
+  /* Класс школьника в карточке. Менеджер выбирает КЛАСС, а в базу уходит ГОД
+     ОКОНЧАНИЯ школы (qual.school_end): класс меняется у всех разом 1 сентября, и
+     записанный однажды превратился бы во вранье к весне. Тот же перевод делает
+     сервер в обратную сторону, когда считает school_class для чипов. */
+  function qlSchoolEnd() {
+    var d = new Date();
+    return d.getMonth() + 1 >= 9 ? d.getFullYear() + 1 : d.getFullYear();
+  }
+  function qlClasses() {
+    var end = qlSchoolEnd(), out = [];
+    for (var n = 5; n <= 11; n++) out.push([String(end + (11 - n)), n + ' класс']);
+    return out;
+  }
+  function qlClassLabel(year) {
+    var opt = qlClasses().filter(function (o) { return o[0] === String(year || ''); })[0];
+    return opt ? opt[1] : (year ? 'выпуск ' + year : '');
+  }
   function qlWaves() {
     var now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
     var out = [];
@@ -54721,6 +54771,10 @@
 
     // в селекте показываем то, что уже знаем из анкеты (приглушенно), а выбор
     // менеджера пишем в карточку — он сильнее анкеты
+    var klassy = qlClasses();
+    if (q.school_end && !klassy.some(function (o) { return o[0] === String(q.school_end); })) {
+      klassy = [[String(q.school_end), qlClassLabel(q.school_end)]].concat(klassy);
+    }
     var waves = qlWaves();
     var wave = q.wave || '';
     if (wave && wave !== 'later' && !waves.some(function (w) { return w[0] === wave; })) {
@@ -54731,6 +54785,10 @@
         qlSelect('grade', q.grade || mql.grade || '', QL_GRADES, 'не знаем', !q.grade && !!mql.grade) + '</label>' +
       '<label class="ql-f"><span class="ql-l">Цель</span>' +
         qlSelect('goal', q.goal || mql.goal || '', QL_GOALS, 'не знаем', !q.goal && !!mql.goal) + '</label>' +
+      /* Школьник уже не школьник — год выпуска прошел; такой год в списке классов
+         не найдется, поэтому показываем его отдельной строкой, а не теряем молча. */
+      '<label class="ql-f"><span class="ql-l">Класс</span>' +
+        qlSelect('school_end', q.school_end || '', klassy, 'не знаем', false) + '</label>' +
       '<label class="ql-f"><span class="ql-l">Волна подачи</span>' +
         qlSelect('wave', wave, waves.concat([['later', 'позже']]), 'не названа', false) + '</label>' +
       /* Тариф ставится руками: в платежах у нас свободные названия («1/2 платеж за
