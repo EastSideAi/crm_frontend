@@ -177,10 +177,12 @@
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
     // раздел «Сопровождение»: вкладка (my | all | pay), раскрытый ученик, дата выплаты
     ptSeg: 'my', ptOpen: null, ptDay: '', ptTrack: '',
+    // «Контакты» → вкладка «Сопровождение»: выбранное направление подачи
+    trk: '',
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack', 'trk'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -205,6 +207,7 @@
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
         rwDept: state.rwDept || '',
         ptTrack: state.ptTrack || '',
+        trk: state.trk || '',
       }));
     } catch (e) {}
   }
@@ -1041,6 +1044,13 @@
      Ручная отметка (overrides.support) сильнее правила в обе стороны: правило не
      поймает того, кому тариф еще не проставили, и не отпустит уехавшего. */
   var SUPPORT_TARIFFS = ['std', 'plus', 'prem'];
+  /* Направления подачи: ПОРЯДОК один на всю CRM — им пользуются и доска
+     «Сопровождение», и чипы на вкладке «Сопровождение» в Контактах. Ключи те же,
+     что в `doc_checklist.TRACKS` бэкенда; НАЗВАНИЯ берутся с сервера (DOC_TRACKS,
+     ручка /admin/api/docs/kinds), своего словаря в CRM нет — он разъехался бы с
+     чек-листом документов, а направление как раз и решает пакет семьи. */
+  var TRACK_ORDER = ['lang_grant', 'lang_paid', 'bachelor', 'master',
+                     'master_after_lang', 'bachelor_after_lang', 'master_direct'];
   function supportByRule(l) {
     if (!isClient(l)) return false;
     var o = (l.crm && l.crm.overrides) || {};
@@ -1102,6 +1112,7 @@
       if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
+      if (!trackHit(l, seg)) return false;
       return true;
     });
     if (state.sort) {
@@ -1347,6 +1358,47 @@
   }
 
   /* ── панель инструментов «Клиенты»: поиск + фильтры + срезы + вид ── */
+  /* Чипы направлений на вкладке «Сопровождение» (просьба Марии 19.11.2026:
+     «сделай фильтры по направлениям и туда всех этих учеников занеси»). Ряд стоит
+     только там: на «Новых» и «В работе» направление еще не проставлено, и ряд был
+     бы одним чипом «Без направления» на весь экран. Фильтр тоже действует только
+     на своей вкладке — иначе человек ушел бы в «Клиентов» и не понял, почему там
+     половина списка. */
+  function leadTrack(l) { return ((l.crm && l.crm.overrides) || {}).track || ''; }
+  function trackTab(seg) { return (seg || state.seg) === 'support'; }
+  function trackName(key) {
+    for (var i = 0; i < (DOC_TRACKS || []).length; i++) {
+      if (DOC_TRACKS[i].key === key) return DOC_TRACKS[i].name;
+    }
+    return key;
+  }
+  function trackHit(l, seg) {
+    if (!trackTab(seg) || !state.trk) return true;
+    return state.trk === 'none' ? !leadTrack(l) : leadTrack(l) === state.trk;
+  }
+  function trackChips(arr) {
+    if (!trackTab()) return '';
+    var by = {}, none = 0;
+    arr.forEach(function (l) {
+      var t = leadTrack(l);
+      if (t) by[t] = (by[t] || 0) + 1; else none++;
+    });
+    var keys = TRACK_ORDER.filter(function (k) { return by[k]; })
+      .concat(Object.keys(by).filter(function (k) { return TRACK_ORDER.indexOf(k) < 0; }));
+    if (!keys.length && !none) return '';
+    var cur = state.trk || '';
+    var chip = function (k, label, n) {
+      return '<button type="button" class="qchip' + (cur === k ? ' on' : '') +
+        '" data-trk="' + esc(k) + '">' + esc(label) +
+        '<span class="qn num">' + n + '</span></button>';
+    };
+    return '<div class="list-quick list-trk">' +
+      chip('', 'Все направления', arr.length) +
+      keys.map(function (k) { return chip(k, trackName(k), by[k]); }).join('') +
+      (none ? chip('none', 'Без направления', none) : '') +
+      '</div>';
+  }
+
   function leadsToolbar() {
     var funnelLabel = state.filters.funnel ? FUNNEL[state.filters.funnel] : 'Этап: все';
     var periodLabels = { '': 'За все время', today: 'Сегодня', week: '7 дней', month: '30 дней' };
@@ -1386,7 +1438,8 @@
         '</div>' +
         '<button class="bp sm lead-add" id="lead-add" title="Завести клиента вручную">' + ic('plus', 14) + '<span>Добавить</span></button>' +
       '</div>' +
-      '<div class="list-quick">' + chips + '</div>';
+      '<div class="list-quick">' + chips + '</div>' +
+      trackChips(segArr);
   }
   function attachToolbarHandlers() {
     var search = el('search'), wrap = search && search.closest('.searchwrap');
@@ -1428,6 +1481,20 @@
         renderView();
       });
     });
+    Array.prototype.forEach.call(document.querySelectorAll('.list-trk .qchip'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-trk') || '';
+        state.trk = (state.trk || '') === k ? '' : k;
+        saveUi(); renderView();
+      });
+    });
+    /* На телефоне ряд направлений едет вбок одной строкой, и выбранный чип может
+       оказаться за краем: человек видит короткий список и не понимает, почему. */
+    setTimeout(function () {
+      var trkRow = document.querySelector('.list-trk');
+      var trkOn = trkRow && trkRow.querySelector('.qchip.on');
+      if (trkOn && trkOn.getAttribute('data-trk')) trkRow.scrollLeft = Math.max(0, trkOn.offsetLeft - 16);
+    }, 0);
     Array.prototype.forEach.call(document.querySelectorAll('.list-tools .vseg button'), function (b) {
       b.addEventListener('click', function () { state.viewMode = b.getAttribute('data-v'); saveUi(); renderView(); });
     });
@@ -48364,6 +48431,9 @@
   }
   function renderLeads(view) {
     if (state.seg === 'new' && state.loaded) return renderProspects(view);
+    /* Названия направлений живут на бэкенде. Если их еще не забирали, тянем и
+       перерисовываем экран один раз: до ответа чипы показали бы ключи (bachelor). */
+    if (trackTab() && !DOC_TRACKS.length) loadDocKinds(function () { renderView(); });
     view.innerHTML = '<div class="card listcard">' + leadsToolbar() + '<div class="list-body" id="list-body"></div></div>';
     attachToolbarHandlers();
     renderListBody();
@@ -58725,8 +58795,7 @@
      ответа сервера, а не из этого списка: два словаря разъедутся на первом же новом
      направлении. Здесь ключи нужны только чтобы чипы стояли в осмысленном порядке —
      от языкового года к магистратуре, а не по алфавиту. */
-  var PB_TRACKS = ['lang_grant', 'lang_paid', 'bachelor', 'master',
-                   'master_after_lang', 'bachelor_after_lang', 'master_direct'];
+  var PB_TRACKS = TRACK_ORDER;
 
   function pbTrack() { return state.ptTrack || ''; }
 
