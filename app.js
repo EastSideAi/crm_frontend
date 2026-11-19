@@ -40287,6 +40287,72 @@
   var SB_IDEA_FLAG = { taken: 'unowned', late: 'no_contact', contact: 'x_contact',
     booked: 'x_booked', held: 'x_held', contract: 'x_contract', seller: 'x_seller', channel: 'lead' };
 
+  /* Главные конверсии (Павел 19.11.2026: «конверсия из контакта диалога в консультацию
+     главная», и «кто записался и кто пришел — разделять»). Две цифры отдела крупно, по
+     лидам выбранного отрезка; числа — кнопки к людям, как везде на экране. Заменил строку
+     «Консультации за месяц», что стояла внутри статусов: те же цифры, но главная
+     конверсия теперь разделена на запись и явку. Люди по цифре встают под статусами. */
+  function sbConv(d) {
+    var st = (d.path || {}).steps || {};
+    var c = st.contact || 0, b = st.c_booked || 0, h = st.c_held || 0;
+    var pc = function (a, z) { return z ? Math.round(a / z * 100) : null; };
+    var tile = function (t, a, af, al, z, zf, zl, hint) {
+      var v = pc(a, z);
+      return '<div class="cv-t"><span class="cv-l">' + t + '</span>' +
+        '<b class="cv-n num sb-cv ' + sbCvCls(v) + '">' + sbPct(v) + '</b>' +
+        '<span class="cv-s">' + sbBtn(a, af, 'cs', '', { label: al }) + ' из ' + sbBtn(z, zf, 'cs', '', { label: zl }) +
+        ' · ' + hint + '</span></div>';
+    };
+    return '<div class="card sp12 cv"><div class="sec-head pf-sec"><span class="ic">' + ic('funnel', 14) +
+      '</span><div><div class="t">Главные конверсии</div>' +
+      '<div class="s">' + (sbSpan() !== 'month' ? 'лиды отрезка' : 'лиды месяца') +
+      ': связались ' + c + ' из ' + (st.lead || 0) + '; запись решает первая линия, явку — напоминание до встречи</div></div></div>' +
+      '<div class="cv-ts">' +
+        tile('Из контакта в запись', b, 'c_booked', 'записались', c, 'contact', 'связались', 'записались после звонка или диалога') +
+        tile('Из записи в пришедших', h, 'c_held', 'пришли', b, 'c_booked', 'записались', 'дошли до консультации') +
+      '</div></div>';
+  }
+
+  /* Консультации ближайших дней (Павел 19.11.2026): из записавшихся доходит каждый
+     четвертый, а явку лечат до встречи. Список и «связались ли после записи» считает
+     сервер (sales_board.load_meets); звонок-подтверждение отмечают теми же кнопками. */
+  function mtLoad() {
+    if (state._mt && Date.now() - (state._mtAt || 0) < 60000) return;
+    if (state._mtBusy) return;
+    state._mtBusy = true;
+    state._mtAt = Date.now();
+    api('/admin/api/sales/meets').then(function (r) {
+      state._mt = r || 'none';
+    }).catch(function () {
+      state._mt = state._mt || 'none';
+    }).then(function () {
+      state._mtBusy = false;
+      if (state.page === 'sales') renderView();
+    });
+  }
+  function mtCard() {
+    var d = state._mt;
+    if (!d || d === 'none') return '';
+    var rows = (d.rows || []).map(function (m) {
+      var tag = m.past
+        ? '<span class="sev ms-late">прошла, итог не отмечен</span>'
+        : (m.touched ? '<span class="sev ms-ok">связались ' + esc(msWhen(m.touched_at)) + '</span>'
+          : '<span class="sev cb-tried">после записи не связывались</span>');
+      var who = [m.with ? 'ведет встречу ' + m.with : '', m.owner ? 'менеджер ' + m.owner : 'без менеджера',
+        m.kind === 'slot' ? 'записался сам в окно' : 'консультация в карточке'].filter(Boolean).join(' · ');
+      return '<div class="ms-row mt-r"><div class="ms-nm"><b>' + esc(m.name || 'без имени') + '</b>' +
+        '<small>' + esc(msWhen(m.at)) + ' · ' + esc(who) + '</small>' +
+        (m.past ? '' : '<span class="ms-dl">' + dialMarks(m.id) + '</span>') + '</div>' + tag +
+        '<div class="ms-acts"><button class="icobtn sm" data-dllead="' + esc(m.id) + '" title="Открыть карточку">' +
+        ic('ext', 14) + '</button></div></div>';
+    }).join('');
+    return '<div class="card sp12 mt"><div class="sec-head pf-sec"><span class="ic">' + ic('cal', 14) +
+      '</span><div><div class="t">Консультации ближайших дней' + (d.rows.length ? ' · <span class="num">' + d.rows.length + '</span>' : '') + '</div>' +
+      '<div class="s">сегодня и еще ' + d.days + ' дня; подтверди звонком накануне и напомни за пару часов, дозвонился — отметь</div></div>' +
+      (d.untouched ? '<span class="cnt">не связывались после записи: ' + d.untouched + '</span>' : '') + '</div>' +
+      (rows ? '<div class="ms-list">' + rows + '</div>' : '<div class="empty">На ближайшие дни никто не записан.</div>') + '</div>';
+  }
+
   function sbIdeas(d) {
     var list = (d.ideas || []).map(function (it) {
       var f = SB_IDEA_FLAG[it.kind];
@@ -40298,8 +40364,8 @@
         '<div class="sb-if">' + esc(it.fix) + '</div>' + act + '</div>';
     });
     return '<div class="card sb-ideas"><div class="sec-head pf-sec"><span class="ic">' + ic('alert', 14) +
-      '</span><div><div class="t">Что не так и что делать</div>' +
-      '<div class="s">по месту в воронке: сначала то, что раньше рвет путь</div></div></div>' +
+      '</span><div><div class="t">Гипотезы: что не так и что улучшить</div>' +
+      '<div class="s">по месту в воронке: сначала то, что раньше рвет путь; «Кто это» открывает людей</div></div></div>' +
       (list.length ? '<div class="sb-ilist">' + list.join('') + '</div>'
         : '<div class="empty">Провалов не видно: шаги держат норму, лидов без ответственного нет.</div>') +
       '</div>';
@@ -40628,37 +40694,10 @@
       (lt ? '<button class="qchip sb-wlate' + (sbIsOn('w_late', '', '') ? ' on' : '') + '" data-sbf="w_late">' +
         'Просрочено <span class="num">' + fmtMoney(lt) + '</span></button>'
         : '<span class="cnt sb-wok">все в сроках</span>') + '</div>' +
-      '<div class="sb-wbar">' + statBar(items, 'five') + '</div>' + sbConsRow(d) +
+      '<div class="sb-wbar">' + statBar(items, 'five') + '</div>' +
       (rows ? '<div class="mkd-tbl sb-grid sb-wgrid"><div class="mkd-th"><span>Кто ведет</span>' +
         mst.map(function (s) { return '<span>' + esc(s.label) + '</span>'; }).join('') +
         '<span>Всего</span><span>Просрочено</span></div>' + rows + '</div>' : '') + '</div>';
-  }
-
-  /* Консультации за отрезок прямо в статусах (Павел 18.11.2026: «сколько проведено, сколько
-     записано и конверсия из контакта»). Счет — путь лидов отрезка, тот же, что в таблице
-     менеджеров: из связавшихся сколько записали, из записанных сколько провели. Все встречи
-     отрезка вместе с лидами прошлых месяцев стоят ниже, в «Регистрациях и консультациях»;
-     здесь их не дублируем, иначе на одном экране две разные цифры «записались». */
-  function sbConsRow(d) {
-    var p = d.path;
-    if (!p || !p.steps) return '';
-    var st = p.steps, month = sbSpan() === 'month';
-    var pc = function (a, b) { return b ? Math.round(a / b * 100) + '%' : '—'; };
-    var cell = function (n, k, label, sub) {
-      return '<div class="sb-cs"><span class="sb-csl">' + label + '</span>' +
-        sbBtn(n, k, 'cs', '', { label: label }) +
-        '<span class="sb-css">' + (sub || '&nbsp;') + '</span></div>';
-    };
-    return '<div class="sb-cons"><div class="sb-cst">Консультации ' + (month ? 'за месяц' : 'за отрезок') +
-        '<span>по лидам, пришедшим ' + (month ? 'в этом месяце' : 'в этот отрезок') + '</span></div>' +
-      '<div class="sb-csr">' +
-        cell(st.contact || 0, 'contact', 'Связались', 'из ' + (st.lead || 0) + ' лидов') +
-        cell(st.c_booked || 0, 'c_booked', 'Записали', pc(st.c_booked || 0, st.contact || 0) + ' от связавшихся') +
-        cell(st.c_held || 0, 'c_held', 'Провели', pc(st.c_held || 0, st.c_booked || 0) + ' от записанных') +
-        '<div class="sb-cs sb-csk"><span class="sb-csl">Из контакта в консультацию</span>' +
-          '<b class="num">' + pc(st.c_held || 0, st.contact || 0) + '</b>' +
-          '<span class="sb-css">провели от связавшихся</span></div>' +
-      '</div></div>';
   }
 
   /* ── ОБЗВОН ────────────────────────────────────────────────────────────────
@@ -40706,7 +40745,7 @@
         Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = true; });
         apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/call-mark', 'POST', { result: res }, function (r) {
           showToast('Отметил: ' + DIAL_RES[res]);
-          state._dial = null; state._sb = null; state._cb = null;
+          state._dial = null; state._sb = null; state._cb = null; state._mt = null;
           if (done) done(r); else renderView();
         }, function () {
           showToast('Не сохранилось, проверь интернет');
@@ -41106,9 +41145,18 @@
     potLoad();
     dialLoad();
     cbLoad();
-    view.innerHTML = '<div class="dash sb">' + head + sbWork(d) + (wq ? sbPeople(d) : '') + cbCard('sales') + dialCard() + potCard(8) +
-      sbReg() + sbLadder(d) + (short ? '' : sbPace(d)) + sbIdeas(d) + (short ? '' : plan) +
-      sbChannels(d) + sbManagers(d) + (wq ? '' : sbPeople(d)) + '</div>';
+    // Порядок экрана (Павел 19.11.2026, разбор files/prodazhi-poryadok-ekrana.md): сначала
+    // план и темп, потом главные конверсии, потом что сделать сегодня и встречи ближайших
+    // дней, потенциалы, путь, продавцы, каналы. Гипотезы — своей вкладкой.
+    if (sbTab() === 'hyp') {
+      view.innerHTML = '<div class="dash sb">' + head + sbIdeas(d) + sbPeople(d) + '</div>';
+    } else {
+      mtLoad();
+      view.innerHTML = '<div class="dash sb">' + head + (short ? '' : sbPace(d) + plan) + sbConv(d) +
+        sbWork(d) + (wq ? sbPeople(d) : '') + cbCard('sales') + mtCard() + potCard(8) +
+        sbReg() + sbLadder(d) + sbManagers(d) + dialCard() + sbChannels(d) +
+        (wq ? '' : sbPeople(d)) + '</div>';
+    }
     sbTabsBind(view);
     sbBind(view, d);
     potBind(view);
@@ -41260,19 +41308,23 @@
      рядом ставит оплаты из карточек: чего нет с одной стороны, видно списком.
      Своих денег экран не считает: сумма — та же, что «доход к зачислению» в каскаде,
      сервер сверяет это сам (routers/sales_money.py). */
-  var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План периода' },
-                 { id: 'money', label: 'Деньги и сверка' }, { id: 'debts', label: 'Дебиторка' }];
+  // «Гипотезы» (Павел 19.11.2026: «что не так» — отдельной вкладкой, наравне с планом)
+  // видны всем, кому открыты «Продажи»; деньги, план и дебиторка — финансовым ролям.
+  var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План периода', fin: true },
+                 { id: 'hyp', label: 'Гипотезы' },
+                 { id: 'money', label: 'Деньги и сверка', fin: true }, { id: 'debts', label: 'Дебиторка', fin: true }];
   var SM_KIND = { new: 'новая продажа', more: 'доплата', renew: 'продление', rest: 'прочее' };
 
   function smCan() { return can('finance') || can('finmodel'); }
   function sbTab() {
+    if (state.sbTab === 'hyp') return 'hyp';
     return ['money', 'plan', 'debts'].indexOf(state.sbTab) >= 0 && smCan() ? state.sbTab : 'funnel';
   }
   function sbTabs() {
-    if (!smCan()) return '';
-    return '<div class="list-quick sb-tabs">' + SB_TABS.map(function (t) {
+    var n = state._sb && state._sb.ideas ? state._sb.ideas.length : 0;
+    return '<div class="list-quick sb-tabs">' + SB_TABS.filter(function (t) { return !t.fin || smCan(); }).map(function (t) {
       return '<button class="qchip' + (t.id === sbTab() ? ' on' : '') + '" data-sbtab="' + t.id + '">' +
-        esc(t.label) + '</button>';
+        esc(t.label) + (t.id === 'hyp' && n ? ' · ' + n : '') + '</button>';
     }).join('') + '</div>';
   }
   function sbTabsBind(view) {
