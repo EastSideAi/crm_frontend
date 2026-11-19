@@ -15,6 +15,8 @@ const patched = src.replace(marker, marker +
   ' ownOpts: function (a) { return ownerOptions(a); },' +
   ' ownLabel: function (a) { return ownerLabel(a); },' +
   ' ownHit: function (l, seg) { return ownerHit(l, seg); },' +
+  ' stCell: function (l) { return stageCell(l); },' +
+  ' stNote: function (p) { return stageNote(p); },' +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
   ' keys: function (seg) { return quickKeys(seg); },' +
   ' clsHit: function (l, seg) { return classHit(l, seg); },' +
@@ -225,6 +227,32 @@ L.state.own = 'none';
 check('«Без тьютора» дает одного', kom.filter(l => L.ownHit(l, 'support')).length === 1, '');
 L.state.own = '';
 check('без фильтра видны все семеро', kom.filter(l => L.ownHit(l, 'support')).length === 7, '');
+
+/* Колонка «Этап» вместо балла (Мария 20.11.2026). Состояния считает сервер, браузер
+   рисует: проверяем, что рисует он ровно то, что приехало. */
+const steps = [
+  { k: 'access', n: 'Доступ', s: 'done', d: 2, t: 2 },
+  { k: 'diag', n: 'Диагностика', s: 'done', d: 3, t: 3 },
+  { k: 'pick', n: 'Подбор', s: 'now', d: 4, t: 9 },
+  { k: 'docs', n: 'Документы', s: 'open', d: 0, t: 2 },
+  { k: 'lang', n: 'Язык', s: 'none', d: 0, t: 0 },
+];
+const withStage = { id: 'x', crm: { overrides: {} },
+  stage: { key: 'pick', short: 'Подбор', title: 'Подбор', pos: 3, total: 5, steps: steps } };
+const cell = L.stCell(withStage);
+check('в полоске столько насечек, сколько этапов', (cell.match(/class="sg/g) || []).length === 5,
+  String((cell.match(/class="sg/g) || []).length));
+check('пройденные, текущий и будущие помечены по-разному',
+  /sg done/.test(cell) && /sg now/.test(cell) && /sg open/.test(cell), cell);
+check('подпись называет этап словом и место в маршруте',
+  cell.indexOf('Подбор') > 0 && cell.indexOf('3 из 5') > 0, cell);
+check('плана нет — так и написано, а не первый этап',
+  L.stCell({ id: 'y', crm: { overrides: {} } }).indexOf('план не собран') > 0,
+  L.stCell({ id: 'y', crm: { overrides: {} } }));
+check('у закрытого этапа подпись «закрыт»', L.stNote(steps[0]) === 'закрыт', L.stNote(steps[0]));
+check('у текущего видно, сколько задач закрыто', L.stNote(steps[2]) === '4 из 9 задач', L.stNote(steps[2]));
+check('этап без задач не притворяется нулевым прогрессом',
+  L.stNote(steps[4]) === 'нет задач', L.stNote(steps[4]));
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);

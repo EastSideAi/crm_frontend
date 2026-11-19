@@ -48864,6 +48864,54 @@
     for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
     return TUTOR_TONES_REST[h % TUTOR_TONES_REST.length];
   }
+  /* ЭТАП МАРШРУТА В СТРОКЕ (Мария 20.11.2026, вместо балла в «Сопровождении»).
+     Полоска с насечками по числу этапов плюс подпись словом: «где человек сейчас» —
+     единственный вопрос к клиенту в работе, а балл отвечал на вопрос о лиде.
+     Состояния считает сервер (`client_views.lead_stage`, тот же код, что у доски
+     «Карта»), браузер только рисует. Плана нет — так и пишем: «план не собран» и
+     «стоит в начале» это разные вещи. */
+  var STAGE_STATE = { done: 'done', now: 'now', open: 'open' };
+  function stageCell(l) {
+    var st = l.stage;
+    if (!st || !st.steps || !st.steps.length) {
+      return '<div class="t-stage hidem none">план не собран</div>';
+    }
+    var segs = st.steps.map(function (p) {
+      return '<i class="sg ' + (STAGE_STATE[p.s] || '') + '"></i>';
+    }).join('');
+    return '<div class="t-stage hidem" data-stop="1" data-stid="' + l.id + '">' +
+      '<div class="stbar">' + segs + '</div>' +
+      '<div class="stlab"><b>' + esc(st.short || '—') + '</b>' +
+        (st.pos ? '<i>· ' + st.pos + ' из ' + st.total + '</i>' : '') + '</div>' +
+    '</div>';
+  }
+  /* Мини-карта по клику: весь маршрут списком — что закрыто, где стоим, что впереди.
+     «и типо когда на нее жмешь были этапы дорожной карты» (Мария 20.11.2026). */
+  function stageNote(p) {
+    if (p.s === 'done') return 'закрыт';
+    if (!p.t) return 'нет задач';
+    return p.d + ' из ' + p.t + (p.s === 'now' ? ' задач' : '');
+  }
+  function openStageMenu(lead, anchor) {
+    closeSmenu();
+    var st = lead.stage || {};
+    smenu = document.createElement('div');
+    smenu.id = 'smenu'; smenu.className = 'stmenu';
+    smenu.innerHTML = '<div class="st-h">' + esc(leadName(lead)) + '</div>' +
+      (st.steps || []).map(function (p, i) {
+        return '<div class="st-r ' + (STAGE_STATE[p.s] || 'wait') + '">' +
+          '<span class="st-ic">' + (p.s === 'done' ? ic('check', 11) : (i + 1)) + '</span>' +
+          '<span class="st-t">' + esc(p.n || p.k) + '</span>' +
+          '<span class="st-n">' + stageNote(p) + '</span>' +
+        '</div>';
+      }).join('');
+    document.body.appendChild(smenu);
+    var r = anchor.getBoundingClientRect();
+    smenu.style.minWidth = Math.max(r.width, 260) + 'px';
+    smenu.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - smenu.offsetHeight - 8)) + 'px';
+    smenu.style.left = Math.min(r.left, window.innerWidth - smenu.offsetWidth - 8) + 'px';
+    smenu.scrollTop = 0;   // шестнадцать этапов не влезают, и список открывался прокрученным
+  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
@@ -48884,7 +48932,7 @@
       var overdue = openTasks.some(function (t) { return t.due && t.due < todayISO(0); });
       var risks = leadRisks(l);
       var hot = l.booking && l.crm.status === 'new';
-      return '<div class="trow lr-grid' + (hot ? ' r-crit' : '') + '" data-id="' + l.id + '">' +
+      return '<div class="trow lr-grid' + (tutorCol() ? ' sup' : '') + (hot ? ' r-crit' : '') + '" data-id="' + l.id + '">' +
         /* В «Сопровождении» на месте статуса стоит тьютор (Мария 19.11.2026): там у
            всех одна и та же плашка «клиент», а живой вопрос к строке — кто ведет. */
         (tutorCol()
@@ -48899,24 +48947,31 @@
           (openTasks.length ? '<span class="minib' + (overdue ? ' warn' : '') + '">' + ic('task', 10) + openTasks.length + '</span>' : '') +
         '</div>' +
           '<div class="t-sub">' + (profileBits.join(' · ') || FUNNEL[l.status]) + (l.crm.note ? ' · ' + esc(l.crm.note) : '') + '</div></div>' +
-        '<div class="score hidem">' + (l.score != null
-          ? '<b class="num" style="color:' + tone.c + '">' + l.score + '</b>' +
-            '<span class="strack"><i style="width:' + l.score + '%; background:' + tone.c + '"></i></span>'
-          : '<span style="color:var(--ink-3)">—</span>') + '</div>' +
-        '<div class="t-contact hidem">' + (contact
-          ? (act ? '<a href="' + esc(act.href) + '" target="_blank" rel="noopener" data-stop="1">' + esc(contact) + '</a>' : esc(contact))
-          : '<span class="none">—</span>') + '</div>' +
+        (tutorCol()
+          /* В «Сопровождении» на месте балла — этап маршрута (Мария 20.11.2026): балл
+             это оценка лида на входе, а у клиента в работе вопрос один, где он сейчас.
+             Контакт там же убран по ее просьбе: клиенту пишут из карточки и из бота,
+             а не копируя почту из списка. */
+          ? stageCell(l)
+          : '<div class="score hidem">' + (l.score != null
+              ? '<b class="num" style="color:' + tone.c + '">' + l.score + '</b>' +
+                '<span class="strack"><i style="width:' + l.score + '%; background:' + tone.c + '"></i></span>'
+              : '<span style="color:var(--ink-3)">—</span>') + '</div>' +
+            '<div class="t-contact hidem">' + (contact
+              ? (act ? '<a href="' + esc(act.href) + '" target="_blank" rel="noopener" data-stop="1">' + esc(contact) + '</a>' : esc(contact))
+              : '<span class="none">—</span>') + '</div>') +
         '<div class="t-when num' + (isToday(l.created_at) ? ' today' : '') + '">' + fmtWhen(l.created_at) + '</div>' +
         '<div class="t-go hidem">' + ic('go', 13) + '</div>' +
       '</div>';
     }).join('');
 
     host.innerHTML =
-      '<div class="trow lr-grid thead">' +
+      '<div class="trow lr-grid thead' + (tutorCol() ? ' sup' : '') + '">' +
         (tutorCol() ? '<span class="th">Тьютор</span>' : thCell('crm', 'Статус', '')) +
         thCell('name', 'Лид', '') +
-        thCell('score', 'Балл', ' hidem') +
-        '<span class="th hidem">Контакт</span>' +
+        (tutorCol()
+          ? '<span class="th hidem">Этап</span>'
+          : thCell('score', 'Балл', ' hidem') + '<span class="th hidem">Контакт</span>') +
         thCell('created', 'Пришел', ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
@@ -48940,6 +48995,13 @@
         openDrawer(tr.getAttribute('data-id'), ids);
       });
       tr.addEventListener('mouseenter', function () { warm(tr.getAttribute('data-id')); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.t-stage[data-stid]'), function (c) {
+      c.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var lead = findLead(c.getAttribute('data-stid'));
+        if (lead) openStageMenu(lead, c);
+      });
     });
     Array.prototype.forEach.call(host.querySelectorAll('.pill-st'), function (p) {
       p.addEventListener('click', function (e) {
