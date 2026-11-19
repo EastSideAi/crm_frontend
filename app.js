@@ -32915,7 +32915,8 @@
     box.innerHTML = '<div class="card sp12 shp"><div class="sec-head pf-sec"><span class="ic">' + ic('cal', 14) +
       '</span><div><div class="t">График смен</div><div class="s">когда кто на связи; ' +
       (tz ? 'время твое, Москва ' + (tz > 0 ? '+' : '') + tz / 60 : 'время по Москве') +
-      '. Нажми плюс в своем дне, чтобы поставить смену</div></div></div>' +
+      '. Поставь смены сразу на неделю или две кнопкой справа, плюс в дне ставит одну</div></div>' +
+      '<button class="bp sm shp-many" data-shpmany="1">' + ic('plus', 13) + 'Поставить смены</button></div>' +
       '<div class="brd-nav shp-nav"><button class="icobtn sm brd-arrow prev" data-shpgo="-7" title="Прошлая неделя">' + ic('go', 15) + '</button>' +
       '<span class="brd-label">' + a.getDate() + ' ' + DY_MON[a.getMonth()] + ' – ' + z.getDate() + ' ' + DY_MON[z.getMonth()] + '</span>' +
       '<button class="icobtn sm brd-arrow" data-shpgo="7" title="Следующая неделя">' + ic('go', 15) + '</button>' +
@@ -32956,7 +32957,147 @@
           });
       }, null, 'График смен', 'Поставить');
   }
+  /* Смены пачкой (Павел 19.11.2026: «расставить сразу на неделю, на две, и выбрать время:
+     в эти дни с 8 до 6, или с 10 до 3, потом с 3 до 10 по Москве»). Четыре недели
+     календарем, дни отмечаются нажатием и быстрыми кнопками, окон времени до четырех.
+     Уходит одним запросом: при пересечении не встает ничего (POST /shift-plan/batch). */
+  var SHP_PRESETS = [[480, 1080], [600, 900], [900, 1320], [600, 1080]];
+  function shpManyForm(d, uid0) {
+    if (document.querySelector('.al-ov')) return;
+    var tz = shpTz();
+    var today = mgDate(d.today);
+    var mon = new Date(today); mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
+    var cal = [];
+    for (var i = 0; i < 28; i++) { var x = new Date(mon); x.setDate(mon.getDate() + i); cal.push(x); }
+    var st = { days: {}, wins: [[600 + tz, 900 + tz]], uid: uid0 || (d.people.filter(function (p) { return p.mine; })[0] || {}).id };
+    var hm = function (m) { return shpHm(m); };
+    var mm = function (t) { var x = String(t || '').split(':'); return x.length < 2 ? NaN : parseInt(x[0], 10) * 60 + parseInt(x[1], 10); };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';
+    var people = d.can_all ? d.people.slice().sort(function (a, b) { return (b.mine - a.mine) || a.name.localeCompare(b.name, 'ru'); }) : [];
+    ov.innerHTML = '<div class="al-card shm" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">График смен</div><div class="al-title">Поставить смены</div></div>' +
+        '<button class="al-x" id="shm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">' + (tz ? 'Время твое, на сервер уйдет по Москве.' : 'Время по Москве.') + '</div>' +
+      '<div class="al-body">' +
+        (people.length ? '<label class="al-f"><span class="al-l">Кому</span><select id="shm-who" class="al-in">' +
+          people.map(function (p) { return '<option value="' + p.id + '"' + (p.id === st.uid ? ' selected' : '') + '>' + esc(p.name + (p.mine ? ' (я)' : '')) + '</option>'; }).join('') +
+          '</select></label>' : '') +
+        '<div class="al-f"><span class="al-l">Дни</span>' +
+          '<div class="shm-quick">' + [['w1', 'Будни этой недели'], ['w2', 'Будни двух недель'], ['a2', 'Все дни двух недель'], ['clr', 'Очистить']].map(function (q) {
+            return '<button type="button" class="qchip" data-shmq="' + q[0] + '">' + q[1] + '</button>';
+          }).join('') + '</div>' +
+          '<div class="shm-cal"><div class="shm-wd">' + SHP_WD.map(function (w) { return '<span>' + w + '</span>'; }).join('') + '</div>' +
+            '<div class="shm-grid" id="shm-grid"></div></div></div>' +
+        '<div class="al-f"><span class="al-l">Время</span><div id="shm-wins"></div>' +
+          '<div class="shm-quick">' + SHP_PRESETS.map(function (w, j) {
+            return '<button type="button" class="qchip" data-shmp="' + j + '">' + hm(w[0] + tz) + '–' + hm(w[1] + tz) + '</button>';
+          }).join('') + '<button type="button" class="qchip" data-shmadd="1">' + ic('plus', 12) + 'Еще окно</button></div></div>' +
+        '<div class="shm-sum" id="shm-sum"></div><div class="ct-err" id="shm-err"></div>' +
+      '</div>' +
+      '<div class="al-foot"><button class="al-cancel" id="shm-cancel">Отмена</button>' +
+        '<button class="bp al-save" id="shm-ok">Поставить</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () { ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180); };
+    var picked = function () { return Object.keys(st.days).filter(function (k) { return st.days[k]; }).sort(); };
+    var paint = function () {
+      el('shm-grid').innerHTML = cal.map(function (x) {
+        var iso = mgIso(x), past = x < today, on = !!st.days[iso];
+        return '<button type="button" class="shm-d' + (on ? ' on' : '') + (iso === d.today ? ' today' : '') + '"' +
+          (past ? ' disabled' : '') + ' data-shmd="' + iso + '">' + x.getDate() +
+          (x.getDate() === 1 || x === cal[0] ? '<small>' + DY_MON[x.getMonth()] + '</small>' : '') + '</button>';
+      }).join('');
+      el('shm-wins').innerHTML = st.wins.map(function (w, j) {
+        return '<div class="shm-win"><input type="time" class="al-in" data-shmw="' + j + ',0" value="' + hm(w[0]) + '">' +
+          '<span>–</span><input type="time" class="al-in" data-shmw="' + j + ',1" value="' + (w[1] === 1440 ? '24:00' : hm(w[1])) + '">' +
+          (st.wins.length > 1 ? '<button type="button" class="icobtn sm" data-shmdel="' + j + '" title="Убрать окно">' + ic('x', 13) + '</button>' : '') + '</div>';
+      }).join('');
+      var n = picked().length, mins = st.wins.reduce(function (a, w) { return a + Math.max(0, w[1] - w[0]); }, 0);
+      el('shm-sum').textContent = n ? 'Встанет ' + (n * st.wins.length) + ' ' + plural(n * st.wins.length, 'смена', 'смены', 'смен') +
+        ': ' + n + ' ' + plural(n, 'день', 'дня', 'дней') + ' × ' + st.wins.length + ' ' + plural(st.wins.length, 'окно', 'окна', 'окон') +
+        ', всего ' + Math.round(n * mins / 6) / 10 + ' ч' : 'Отметь дни в календаре';
+      bind();
+    };
+    var bind = function () {
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-shmd]'), function (b) {
+        b.onclick = function () { var k = b.getAttribute('data-shmd'); st.days[k] = !st.days[k]; paint(); };
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-shmw]'), function (inp) {
+        inp.onchange = function () {
+          var ij = inp.getAttribute('data-shmw').split(','), v = mm(inp.value);
+          if (isNaN(v)) return;
+          if (+ij[1] === 1 && v === 0) v = 1440;
+          st.wins[+ij[0]][+ij[1]] = v; paint();
+        };
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-shmdel]'), function (b) {
+        b.onclick = function () { st.wins.splice(+b.getAttribute('data-shmdel'), 1); paint(); };
+      });
+    };
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-shmq]'), function (b) {
+      b.addEventListener('click', function () {
+        var q = b.getAttribute('data-shmq');
+        st.days = {};
+        if (q === 'clr') { paint(); return; }
+        cal.forEach(function (x, i) {
+          var wk = Math.floor(i / 7), wd = i % 7;
+          if (x < today) return;
+          if (q === 'w1' && wk === 0 && wd < 5) st.days[mgIso(x)] = true;
+          if (q === 'w2' && wk < 2 && wd < 5) st.days[mgIso(x)] = true;
+          if (q === 'a2' && wk < 2) st.days[mgIso(x)] = true;
+        });
+        paint();
+      });
+    });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-shmp]'), function (b) {
+      b.addEventListener('click', function () {
+        var w = SHP_PRESETS[+b.getAttribute('data-shmp')];
+        var nw = [w[0] + tz, w[1] + tz];
+        // нажатие пресета при одном окне меняет его, иначе добавляет еще одно
+        if (st.wins.length === 1 && !st._multi) st.wins = [nw]; else st.wins.push(nw);
+        paint();
+      });
+    });
+    ov.querySelector('[data-shmadd]').addEventListener('click', function () {
+      st._multi = true;
+      var last = st.wins[st.wins.length - 1];
+      st.wins.push([last[1], Math.min(1440, last[1] + 300)]);
+      paint();
+    });
+    el('shm-x').onclick = el('shm-cancel').onclick = close;
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    el('shm-ok').addEventListener('click', function () {
+      var days = picked(), err = el('shm-err');
+      if (!days.length) { err.textContent = 'Отметь хотя бы один день'; return; }
+      var wins = [];
+      for (var j = 0; j < st.wins.length; j++) {
+        var s0 = st.wins[j][0], e0 = st.wins[j][1];
+        if (e0 <= s0) { err.textContent = 'В окне ' + hm(s0) + '–' + hm(e0) + ' конец раньше начала'; return; }
+        var s1 = s0 - tz, e1 = e0 - tz;
+        if (s1 < 0 || e1 > 1440) { err.textContent = 'По Москве окно ' + hm(s0) + '–' + hm(e0) + ' переходит через полночь, раздели его на два'; return; }
+        wins.push({ start: s1, end: e1 });
+      }
+      var who = el('shm-who');
+      var btn = el('shm-ok'); btn.disabled = true; err.textContent = '';
+      apiSend('/admin/api/shift-plan/batch', 'POST',
+        { days: days, windows: wins, user_id: who ? parseInt(who.value, 10) : undefined },
+        function (r) {
+          close(); state.shp = null; renderView();
+          showToast('В графике ' + r.added + ' ' + plural(r.added, 'смена', 'смены', 'смен'));
+        },
+        function (code, e) {
+          btn.disabled = false;
+          var det = e && e.body && e.body.detail;
+          err.textContent = typeof det === 'string' ? det : 'Не сохранилось, проверь сеть';
+        });
+    });
+    paint();
+  }
   function shpBind(box, d) {
+    Array.prototype.forEach.call(box.querySelectorAll('[data-shpmany]'), function (b) {
+      b.addEventListener('click', function () { shpManyForm(d); });
+    });
     Array.prototype.forEach.call(box.querySelectorAll('[data-shpgo]'), function (b) {
       b.addEventListener('click', function () { shpShift(parseInt(b.getAttribute('data-shpgo'), 10)); });
     });
@@ -32967,8 +33108,7 @@
     });
     Array.prototype.forEach.call(box.querySelectorAll('[data-shpwho]'), function (b) {
       b.addEventListener('click', function () {
-        var day = d.days.indexOf(d.today) >= 0 ? d.today : d.days[0];
-        shpAddForm(day, parseInt(b.getAttribute('data-shpwho'), 10), d);
+        shpManyForm(d, parseInt(b.getAttribute('data-shpwho'), 10));
       });
     });
     Array.prototype.forEach.call(box.querySelectorAll('.shp-sh.ed'), function (b) {
