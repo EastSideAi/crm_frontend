@@ -39511,7 +39511,7 @@
       var on = p.i && state._mgOpen === p.i;
       var inner = '<span class="sb-pn"><b>' + esc(p.nm || (p.i ? 'карточка без имени' : 'в боте, карточки нет')) + '</b>' +
         '<small>' + esc(sub) + '</small></span>' + (p.i && hist ? mgTouchCell(p.i) : '<span></span>') +
-        '<span class="sb-pm">' + (mark ? '<em class="sev s-client">' + esc(mark) + '</em>' : '') +
+        '<span class="sb-pm">' + (p.i ? sbStageChip(p.i) : '') + (mark ? '<em class="sev s-client">' + esc(mark) + '</em>' : '') +
         (p.i && hist ? '<span class="mg-chev' + (on ? ' on' : '') + '">' + ic('chev', 14) + '</span>' : '') + '</span>';
       if (!p.i) return '<div class="sb-pr none">' + inner + '</div>';
       if (!hist) return '<button class="sb-pr" data-sblead="' + esc(p.i) + '">' + inner + '</button>';
@@ -40248,37 +40248,82 @@
     });
     return out;
   }
+  /* Этап человека сейчас — тем же расчетом, что «Статусы лидов» (поле work ответа,
+     шаг считает сервер). Кого там нет, тот вне работы: клиент, отказ или остыл. */
+  function sbStage(id) {
+    var d = state._sb, w = d && d.work;
+    if (!id || !w || !w.rows) return null;
+    if (!state._sbStIdx || state._sbStIdx.src !== w) {
+      var idx = {}, lab = {};
+      (w.stages || []).forEach(function (x) { lab[x.key] = x.label; });
+      w.rows.forEach(function (x) { idx[x.id] = x; });
+      state._sbStIdx = { src: w, idx: idx, lab: lab };
+    }
+    var x = state._sbStIdx.idx[id];
+    if (x) return { k: x.stage, t: state._sbStIdx.lab[x.stage] || x.stage, late: x.late, owner: x.owner };
+    var l = (state.leads || []).filter(function (q) { return q.id === id; })[0];
+    var st = l && l.crm && l.crm.status;
+    if (st === 'client') return { k: 'client', t: 'клиент', owner: '' };
+    if (st === 'rejected') return { k: 'rejected', t: 'отказ', owner: '' };
+    return { k: 'out', t: 'не в работе', owner: '' };
+  }
+  function sbStageChip(id) {
+    var st = state.page === 'sales' && sbStage(id);
+    if (!st) return '';
+    var cls = st.k === 'client' ? ' s-client' : st.late ? ' sb-stl' : st.k === 'out' || st.k === 'rejected' ? ' sb-sto' : '';
+    return '<em class="sev sb-st' + cls + '" title="этап сейчас">' + esc(st.t) + (st.late ? ' · просрочено' : '') + '</em>';
+  }
+  function sbRecon() {
+    var cc = state._mkCross;
+    if (!cc || cc === 'none' || !window.CROSSCUT) return null;
+    var r = sbLadderSpan();
+    var g = sbRegCalc(cc, r.a, r.b), own = [], free = [];
+    g.list.all.forEach(function (p) {
+      var st = sbStage(p.i);
+      if (!st) return;
+      if (st.k === 'free') free.push(p);
+      else if (st.k !== 'out' && st.k !== 'rejected') own.push(p);
+    });
+    g.list.own = own; g.list.free = free;
+    return { g: g, own: own, free: free, r: r };
+  }
   function sbReg() {
     var cc = state._mkCross;
     if (!cc || cc === 'none' || !window.CROSSCUT) return '';
     var r = sbLadderSpan();
     if (sbSpan() === 'month' && r.a > mgIso(new Date())) return '';
-    var g = sbRegCalc(cc, r.a, r.b), x = mgCalc(cc, r.a, r.b);
+    var rc = sbRecon(), g = rc.g, own = rc.own, free = rc.free;
     var open = state._sbReg || '';
     var tile = function (key, t, n, sub, cls) {
       return '<button class="sb-rt' + (cls ? ' ' + cls : '') + (open === key ? ' on' : '') + '" data-sbreg="' + key + '" aria-expanded="' + (open === key) + '">' +
         '<span class="sb-rl">' + esc(t) + '</span><span class="sb-rn num">' + fmtMoney(n) + '</span>' +
         '<span class="sb-rs">' + esc(sub) + '</span></button>';
     };
+    /* Сверка лидов (Павел 19.11.2026: «первое, с чего начинаем пятиминутку: сколько пришло
+       и сколько отдел взял в работу»). Взяли — у человека есть ведущий или он уже дальше
+       первого шага; без менеджера — тот же шаг «Без менеджера», что в статусах лидов. */
     var kinds = SB_REG_KINDS.filter(function (k) { return g.by[k.k].n; }).map(function (k) {
       return tile(k.k, k.t, g.by[k.k].n, 'с контактом ' + g.by[k.k].c, '');
     }).join('');
     var list = '';
     if (open && g.list[open]) {
-      var lbl = open === 'all' ? 'Все регистрации' : (SB_REG_KINDS.filter(function (k) { return k.k === open; })[0] || {}).t;
+      var lbl = open === 'all' ? 'Все, кто пришел' : open === 'own' ? 'Взяли в работу' : open === 'free' ? 'Без менеджера'
+        : (SB_REG_KINDS.filter(function (k) { return k.k === open; })[0] || {}).t;
       list = mgWhoCard([[lbl, '', 'reg_' + open]], {k: 'reg_' + open}, g.list[open], mgSpan(r.a, r.b))
         .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
     }
+    var rest = g.total - own.length - free.length;
     return '<div class="card sp12 sb-reg"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
-      '<div><div class="t">Регистрации и консультации <span class="sb-rdate">· ' + esc(mgSpan(r.a, r.b)) + '</span></div>' +
-      '<div class="s">новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру, чтобы увидеть людей</div></div></div>' +
-      '<div class="sb-rtop">' +
-        tile('all', 'Регистраций', g.total, 'с контактом ' + g.contact + ', без контакта ' + (g.total - g.contact), 'big') +
-        '<button class="sb-rt big cons" data-sbcons="' + esc(r.a + ',' + r.b) + '">' +
-          '<span class="sb-rl">Провели продающих консультаций</span><span class="sb-rn num">' + fmtMoney(x.meeting || 0) + '</span>' +
-          '<span class="sb-rs">записались ' + (x.signed || 0) + ', из них пришли ' +
-          (x.signed ? Math.min(100, Math.round((x.meeting || 0) / x.signed * 100)) + '%' : '—') + '</span></button>' +
+      '<div><div class="t">Сверка лидов <span class="sb-rdate">· ' + esc(mgSpan(r.a, r.b)) + '</span></div>' +
+      '<div class="s">новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру: в списке этап, кто ведет и история</div></div></div>' +
+      '<div class="sb-rtop three">' +
+        tile('all', 'Пришло', g.total, 'с контактом ' + g.contact + ', без контакта ' + (g.total - g.contact), 'big') +
+        tile('own', 'Взяли в работу', own.length, 'есть ведущий или уже связались', 'big') +
+        tile('free', 'Без менеджера', free.length, free.length ? 'никто не взял, звонить первыми' : 'всех разобрали',
+          'big' + (free.length ? ' warn' : '')) +
       '</div>' +
+      (rest > 0 ? '<div class="sb-rnote">Еще ' + rest + ' ' + plural(rest, 'человек', 'человека', 'человек') +
+        ' не в работе: без контакта, отказ, уже клиент или отмечены «не лид».</div>' : '') +
       (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
   }
 
@@ -41071,6 +41116,15 @@
   }
   // Вердикт короткого отрезка: плана нет, поэтому главное — успели ли взять пришедших.
   function sbSpanVerdict(d) {
+    /* Шапка говорит те же цифры, что сверка лидов под ней: две разные «пришло» на одном
+       экране спорили бы (Павел 19.11.2026). */
+    var rc = sbRecon();
+    if (rc && rc.g.total) {
+      var f = rc.free.length;
+      return { t: 'Пришло ' + rc.g.total + ', взяли ' + rc.own.length + ', без менеджера ' + f,
+        s: f ? 'раздать на пятиминутке: нажми «Без менеджера» в сверке ниже' : 'всех, с кем можно связаться, взяли в работу',
+        cls: f ? 'risk' : 'ok', reg: true };
+    }
     var free = (d.attention || {}).unowned || 0, x = sbLadderNums();
     if (!x) return { t: 'Считаю лиды…', s: 'цифры те же, что в «Управлении»', cls: '' };
     if (!x.total) return { t: 'Новых лидов нет', s: 'за этот отрезок никто не пришел', cls: '' };
@@ -41126,7 +41180,9 @@
         // Павел 09.11.2026: «все лиды в цифрах должны быть кликабельные» — вердикт
         // отрезка открывает тех же людей, что плитка «Пришли».
         // С 18.11.2026 счет тот же, что у лестницы, поэтому и люди — ее строка «Лиды».
-        (short && sbLadderNums() && sbLadderNums().total
+        (short && v.reg
+          ? '<button class="pf-vt sb-vbtn" data-sbreg="all" title="Показать этих людей поименно">' + esc(v.t) + '</button>'
+          : short && sbLadderNums() && sbLadderNums().total
           ? '<button class="pf-vt sb-vbtn" data-sbleads="' + esc(sbLadderSpan().a + ',' + sbLadderSpan().b) +
             '" title="Показать этих людей поименно">' + esc(v.t) + '</button>'
           : '<div class="pf-vt">' + esc(v.t) + '</div>') +
@@ -41160,10 +41216,12 @@
     } else {
       mtLoad();
       sbPathSync();
-      view.innerHTML = '<div class="dash sb">' + head + (short ? '' : sbPace(d) + plan) + sbConv(d) +
+      // Пятиминутка начинается со сверки лидов (Павел 19.11.2026), поэтому на коротком
+      // отрезке она первая под шапкой; на месяце — сразу за планом.
+      view.innerHTML = '<div class="dash sb">' + head + (short ? '' : sbPace(d) + plan) + sbReg() + sbConv(d) +
         (can('clients') ? '<div class="sb-path" id="sb-path"></div>' : '') +
         sbWork(d) + (wq ? sbPeople(d) : '') + cbCard('sales') + mtCard() + potCard(8) +
-        sbReg() + sbLadder(d) + sbManagers(d) + dialCard() + sbChannels(d) +
+        sbLadder(d) + sbManagers(d) + dialCard() + sbChannels(d) +
         (wq ? '' : sbPeople(d)) + '</div>';
     }
     sbTabsBind(view);
@@ -48813,6 +48871,9 @@
       return;
     }
     var g = r.gran;
+    // В «Продажах» «Новые люди» не повторяем: сколько пришло, считает сверка лидов выше,
+    // а у пути свой счет новых карточек, и две разные цифры «пришло» на экране спорили бы.
+    if (emb) r = Object.assign({}, r, { steps: r.steps.filter(function (x) { return x.key !== 'visited'; }) });
     // В «Продажах» список людей открывается нажатием: блок стоит высоко и без
     // нажатия не должен отодвигать остальной экран.
     var selKey = pathStep(r, state.pathStep) ? state.pathStep : (emb ? null : 'diagnosed');

@@ -15651,3 +15651,15 @@ video.cs-media { background: #000; }
 @media (max-width: 900px) {
   .cv-ts { grid-template-columns: 1fr; padding: 0 16px 16px; }
 }
+
+/* Сверка лидов на «Продажах» (19.11.2026): пришло, взяли, без менеджера; этап человека в строке */
+.sb-rtop.three { grid-template-columns: repeat(3, 1fr); }
+.sb-rt.warn .sb-rn { color: var(--red); }
+.sb-rnote { padding: 10px 20px 0; font-size: 12px; color: var(--ink-3); }
+.sev.sb-st { white-space: nowrap; font-style: normal; }
+.sev.sb-stl { color: var(--red); background: var(--red-soft); }
+.sev.sb-sto { color: var(--ink-3); }
+@media (max-width: 720px) {
+  .sb-rtop.three { grid-template-columns: 1fr; }
+  .sb-rnote { padding: 10px 16px 0; }
+}
