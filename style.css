@@ -294,9 +294,24 @@ a { color: inherit; text-decoration: none; }
 .list-trk .qchip:hover { background: #EDEFF3; }
 /* Классы школьников стоят в том же ряду, что направления (Мария 19.11.2026), но это
    другой вопрос к списку — отделяем их волоском, а не вторым рядом. */
-/* Имя тьютора на месте плашки статуса в «Сопровождении»: там у всех «клиент». */
-.t-tutor { font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+/* Имя тьютора на месте плашки статуса в «Сопровождении»: там у всех «клиент».
+   Цвет у каждого свой (Мария 19.11.2026): четверых она назвала поименно, остальные
+   берут спокойные оттенки. Текст всегда темный на светлой подложке — желтым по
+   белому имя не прочитать. */
+.t-tutor { font-size: 12px; color: var(--ink-2); overflow: hidden; padding-right: 8px; }
 .t-tutor.none { color: var(--ink-3); }
+.t-chip { display: inline-block; max-width: 100%; padding: 3px 8px; border-radius: 999px;
+          font-size: 11.5px; font-weight: 600; letter-spacing: -.01em;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tn-amber  { color: #8A6100; background: #F59F0026; }
+.tn-green  { color: #2B8A3E; background: #2B8A3E1A; }
+.tn-pink   { color: #C2255C; background: #C2255C16; }
+.tn-blue   { color: #1971C2; background: #1971C21A; }
+.tn-violet { color: #6741D9; background: #6741D916; }
+.tn-teal   { color: #0B7285; background: #0B728516; }
+.tn-olive  { color: #5C940D; background: #5C940D1A; }
+.tn-brown  { color: #B35309; background: #B3530918; }
+.tn-slate  { color: #495057; background: #4950571A; }
 .list-trk .qsep { flex: none; align-self: center; width: 1px; height: 16px; margin: 0 4px; background: var(--line-2); }
 .qchip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
 .qchip.on svg, .qchip.on .qn { color: rgba(255,255,255,.75); }
