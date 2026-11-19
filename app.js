@@ -13811,15 +13811,24 @@
             : '') +
           '<div class="om-nm' + (m.st === 'off' ? ' off' : '') + '" style="left:' + pc(p.x) +
             ';top:' + pcY(p.bottom) + '">' +
-            '<b' + (m.task ? ' class="go" tabindex="0" role="button" data-oft="' + m.task + '"' : '') +
+            /* Клик по имени ведет на страницу человека, а не на его текущую
+               задачу: имя — это человек (Павел 20.11.2026, «провалиться в
+               каждого»). Сама задача лежит на той же странице в «В работе». */
+            '<b class="go" tabindex="0" role="button" data-ouid="' + m.id + '"' +
               ' title="' + esc(m.full + (m.say ? ' — ' + m.say : '')) + '">' + esc(m.name) +
               (m.live ? '<i class="om-live" role="img" aria-label="двигал задачи сегодня"></i>' : '') +
             '</b>' + (marks ? '<i class="om-marks">' + marks + '</i>' : '') + '</div>' +
           (m.bot ? '<div class="om-bot' + (m.botAsk ? ' ask' : '') + '" style="left:' + pc(p.x) +
             ';top:' + pcY(p.botY) + '">' + m.bot + '</div>' : '');
       }).join('');
-      Array.prototype.forEach.call(lyr.querySelectorAll('[data-oft]'), function (b) {
-        function go() { openTask(+b.getAttribute('data-oft')); }
+      Array.prototype.forEach.call(lyr.querySelectorAll('[data-ouid]'), function (b) {
+        function go() {
+          var uid = +b.getAttribute('data-ouid');
+          var who = (d.people || []).filter(function (x) { return x.id === uid; })[0];
+          state.teamWho = { id: uid, name: who ? who.name : b.textContent };
+          state.person = null; state.personShift = 0; state.personPeriod = null;
+          renderView();
+        }
         b.addEventListener('click', go);
         b.addEventListener('keydown', function (e) {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
