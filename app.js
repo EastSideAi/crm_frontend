@@ -57837,6 +57837,31 @@
           var f = e.target.files && e.target.files[0];
           if (f) uploadContract(f);
         });
+        /* Договоры хранят в «Документах» карточки. Если он там уже есть — берем оттуда,
+           второй раз файл не грузим; загрузка остается для случая, когда договора нет. */
+        api('/admin/api/leads/' + id + '/deal-draft').then(function (d) {
+          var docs = (d && d.contract_docs) || [];
+          var acts = dealBox.querySelector('.deal-acts');
+          if (!docs.length || !acts || deal) return;
+          var up = el('deal-upload');
+          up.className = 'oi-mark'; up.innerHTML = 'загрузить другой файл';
+          acts.insertAdjacentHTML('afterbegin', docs.map(function (x, i) {
+            return '<button class="' + (i ? 'oi-mark' : 'bp sm') + ' deal-fromdoc" data-doc="' + x.id + '">' +
+              (i ? '' : ic('doc', 13) + 'Взять договор из документов: ') + esc(x.name) + '</button>';
+          }).join(''));
+          Array.prototype.forEach.call(acts.querySelectorAll('.deal-fromdoc'), function (b) {
+            b.addEventListener('click', function () {
+              b.disabled = true;
+              apiSend('/admin/api/leads/' + id + '/deal-contract/' + b.getAttribute('data-doc'), 'POST', null,
+                function (r) { openDeal(r); },
+                function (code, err) {
+                  b.disabled = false;
+                  var m = (err && err.body && err.body.detail) || '';
+                  showToast(typeof m === 'string' && m ? m : 'Не открылось — проверь сеть');
+                });
+            });
+          });
+        }).catch(function () {});
       };
       /* Заготовка с сервера (тарифы, продавец, номер) и поверх нее — то, что прочли из
          договора. Чего в договоре не нашли, остается из заготовки и подсвечивается. */

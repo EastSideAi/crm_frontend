@@ -15678,3 +15678,5 @@ video.cs-media { background: #000; }
    Строки — рецепт «Моей смены». */
 .sev.cb-tried { color: var(--amber-ink); background: var(--amber-soft); }
 .cb-last { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
+/* Кнопка «взять из документов» несет имя файла: длинное имя не должно распирать блок */
+.deal-fromdoc { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
