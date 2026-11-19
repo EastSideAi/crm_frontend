@@ -31,7 +31,7 @@ TRACKS = [
     {"key": "master", "name": "Магистратура"},
     {"key": "master_after_lang", "name": "Магистратура после языкового года"},
     {"key": "bachelor_after_lang", "name": "Бакалавриат после языкового года"},
-    {"key": "master_direct", "name": "Магистратура, подача напрямую в вуз"},
+    {"key": "master_direct", "name": "Магистратура (ЗАУ), подача напрямую в вуз"},
 ]
 
 PEOPLE = [
@@ -55,6 +55,18 @@ def leads():
         ov = {"tariff": tariff}
         if track:
             ov["track"] = track
+        crm = {"status": "client", "note": note, "overrides": ov,
+               "tasks": [], "comms": []}
+        # Разнобой ради срезов воронки: без него у всех карточек одинаковые
+        # признаки, ряд чипов схлопывается в одно «Все», и разницу вкладок
+        # («Сопровождение» короче «Клиентов») на экране не увидеть.
+        if i % 3 == 0:
+            crm["mql"] = {"ok": True}
+        if i % 4 == 0:
+            crm["sql"] = True
+        if i % 5 == 0:
+            crm["tasks"] = [{"text": "позвонить семье", "done": False,
+                             "due": "2026-11-10"}]
         out.append({
             "id": "demo-%02d" % i,
             "name": name,
@@ -64,9 +76,8 @@ def leads():
             "target_year": 2027,
             "paid": True,
             "created_at": "2026-10-%02dT10:00:00Z" % (i + 1),
-            "booking": {"contact": contact},
-            "crm": {"status": "client", "note": note, "overrides": ov,
-                    "tasks": [], "comms": []},
+            "booking": {} if i in (2, 7) else {"contact": contact},
+            "crm": crm,
         })
     return out
 
