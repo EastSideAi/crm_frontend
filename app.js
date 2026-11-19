@@ -23854,12 +23854,16 @@
           ? ' · при закрытии отчисления станут фактом, а остатки уедут в следующую'
           : ' · правка пометит ее как измененную после закрытия') +
         '</div></div>' +
-      (editable
-        ? '<div class="fp-act">' +
-            '<button class="qchip" id="fp-ext">' + ic('cal', 12) + 'Продлить</button>' +
-            '<button class="qchip go" id="fp-close">' + ic('lock', 12) + 'Закрыть ведомость</button>' +
-          '</div>'
-        : '') +
+      '<div class="fp-act">' +
+        /* «В таблицу» (задача 9006): привычная таблица-ведомость собирается из CRM с
+           нуля, а не копией прошлого файла — с копией уезжали и ее ошибки. Смотреть
+           может каждый, у кого есть ведомость; в общую папку кладет тот, кто правит. */
+        '<button class="qchip" id="fp-sheet">' + ic('doc', 12) + 'В таблицу</button>' +
+        (editable
+          ? '<button class="qchip" id="fp-ext">' + ic('cal', 12) + 'Продлить</button>' +
+            '<button class="qchip go" id="fp-close">' + ic('lock', 12) + 'Закрыть ведомость</button>'
+          : '') +
+      '</div>' +
     '</div>';
 
     // Порядок экрана (владелец 19.10.2026, уточнение): главные ячейки — Ведомость
@@ -23964,10 +23968,43 @@
       el('fp-ext').addEventListener('click', function () { finExtendForm(s.period); });
       el('fp-close').addEventListener('click', function () { finCloseForm(s); });
     }
+    var shBtn = el('fp-sheet');
+    if (shBtn) shBtn.addEventListener('click', function () { finSheetExport(s.period, editable, shBtn); });
     // Итоги периода внизу — после того как каркас Ведомости в DOM (контейнер существует).
     var mBox = el('sheet-metrics');
     if (mBox) renderFinMetricsInto(mBox, true);
     pageAnim(view);
+  }
+
+  /* Ведомость периода таблицей. Папка в гугле подключена и человек правит ведомость —
+     таблица ложится прямо в папку ведомостей и открывается. Иначе тот же файл
+     скачивается xlsx: его можно открыть в гугле или экселе руками. */
+  function finSheetExport(per, editable, btn) {
+    var download = function (note) {
+      var a = document.createElement('a');
+      a.href = API + '/admin/api/fin/period/sheet.xlsx?k=' + encodeURIComponent(getKey()) +
+        '&id=' + encodeURIComponent(per.id);
+      a.download = '';
+      document.body.appendChild(a); a.click(); a.remove();
+      showToast(note || 'Таблица скачивается');
+    };
+    btn.disabled = true;
+    api('/admin/api/fin/period/sheet-setup').then(function (st) {
+      if (!editable || !st.ready) {
+        btn.disabled = false;
+        return download(editable ? 'Скачиваю файл. В гугл-папку таблица пойдет сама, когда папку подключат' : null);
+      }
+      showToast('Собираю таблицу в папке ведомостей…');
+      apiSend('/admin/api/fin/period/sheet?id=' + encodeURIComponent(per.id), 'POST', null, function (r) {
+        btn.disabled = false;
+        showToast('Таблица готова — открываю');
+        window.open(r.url, '_blank', 'noopener');
+      }, function (code, err) {
+        btn.disabled = false;
+        var d = (err && err.body && err.body.detail) || '';
+        download((typeof d === 'string' && d ? d + '. ' : '') + 'Скачиваю файл вместо этого');
+      });
+    }).catch(function () { btn.disabled = false; download(); });
   }
 
   /* «Оплачен» на строке расхода (Роман 19.10.2026: «на каждый расход добавить кнопку
