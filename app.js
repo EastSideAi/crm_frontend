@@ -57826,22 +57826,69 @@
         dealSec.hidden = live;
         if (live || deal) return;
         dealBox.innerHTML = '<div class="deal-idle">' +
-          '<div class="m-csub">Тариф, сумму, график, номер договора и продавца система подставит сама — проверьте и подтвердите. ' +
-          'После этого появятся ссылка ЮKassa и QR на перевод в ВТБ, а платежи встанут в дебиторку.</div>' +
-          '<button class="bp sm" id="deal-open">' + ic('doc', 13) + 'Оформить сделку</button></div>';
-        el('deal-open').addEventListener('click', function () {
-          var b = el('deal-open'); b.disabled = true;
-          api('/admin/api/leads/' + id + '/deal-draft').then(function (d) {
-            deal = d;
-            if (!deal.tariff_id && d.tariffs.length) { deal.tariff_id = null; }
-            deal.amount_total = deal.amount_total || 0;
-            dealPlan();
-            renderDeal();
-          }).catch(function (e) {
-            b.disabled = false;
-            showToast(e.message === '403' ? 'Сделку оформляет человек с доступом к финансам' : 'Не загрузилось — проверь сеть');
-          });
+          '<div class="m-csub">Загрузите договор, который отправили семье: номер, дату, тариф, сумму и график платежей система прочитает из него сама, ' +
+          'а файл положит в документы карточки. Вам останется проверить и подтвердить. После этого появятся ссылка ЮKassa и QR на перевод в ВТБ, а платежи встанут в дебиторку.</div>' +
+          '<div class="deal-acts"><button class="bp sm" id="deal-upload">' + ic('doc', 13) + 'Загрузить договор</button>' +
+          '<button class="oi-mark off" id="deal-open">заполнить без договора</button></div>' +
+          '<input type="file" id="deal-file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden></div>';
+        el('deal-open').addEventListener('click', function () { openDeal(null); });
+        el('deal-upload').addEventListener('click', function () { el('deal-file').click(); });
+        el('deal-file').addEventListener('change', function (e) {
+          var f = e.target.files && e.target.files[0];
+          if (f) uploadContract(f);
         });
+      };
+      /* Заготовка с сервера (тарифы, продавец, номер) и поверх нее — то, что прочли из
+         договора. Чего в договоре не нашли, остается из заготовки и подсвечивается. */
+      var openDeal = function (fromDoc) {
+        var b = el('deal-open'); if (b) b.disabled = true;
+        api('/admin/api/leads/' + id + '/deal-draft').then(function (d) {
+          deal = d;
+          deal.amount_total = deal.amount_total || 0;
+          deal.missing = [];
+          if (fromDoc && fromDoc.ok !== false) {
+            ['contract_no', 'contract_date', 'tariff_id', 'amount_total', 'scheme'].forEach(function (k) {
+              if (fromDoc[k] != null) deal[k] = fromDoc[k];
+            });
+            deal.missing = fromDoc.missing || [];
+            deal.doc = fromDoc.doc_name;
+          }
+          if (fromDoc && fromDoc.installments) {
+            /* срок «в день заключения» при пустой дате в договоре — дата договора из формы */
+            deal.installments = fromDoc.installments.map(function (r) {
+              return { due_date: r.due_date || deal.contract_date, amount: r.amount, signing: !r.due_date };
+            });
+          } else {
+            dealPlan();
+          }
+          if (fromDoc && fromDoc.ok === false) {
+            deal.doc = fromDoc.doc_name; deal.scan = true;
+            deal.missing = fromDoc.missing || [];
+          }
+          renderDeal();
+        }).catch(function (e) {
+          if (b) b.disabled = false;
+          showToast(e.message === '403' ? 'Сделку оформляет человек с доступом к финансам' : 'Не загрузилось — проверь сеть');
+        });
+      };
+      var uploadContract = function (f) {
+        if (f.size > 15 * 1024 * 1024) return showToast('Файл больше 15 МБ — загрузите договор в pdf или word');
+        var b = el('deal-upload');
+        if (b) { b.disabled = true; b.textContent = 'читаю договор…'; }
+        var fr = new FileReader();
+        fr.onload = function () {
+          var b64 = String(fr.result).split(',')[1] || '';
+          apiSend('/admin/api/leads/' + id + '/deal-contract', 'POST',
+            { name: f.name, mime: f.type || null, data_base64: b64 }, function (r) {
+              openDeal(r);
+            }, function (code, err) {
+              if (b) { b.disabled = false; b.innerHTML = ic('doc', 13) + 'Загрузить договор'; }
+              var d = (err && err.body && err.body.detail) || '';
+              if (code === 403) return showToast('Сделку оформляет человек с доступом к финансам');
+              showToast(typeof d === 'string' && d ? d : 'Не загрузилось — проверь сеть');
+            });
+        };
+        fr.readAsDataURL(f);
       };
       var renderDeal = function () {
         var tars = deal.tariffs.map(function (t) {
@@ -57850,20 +57897,31 @@
         var sch = DEAL_SCHEMES.map(function (x) {
           return '<button data-v="' + x[0] + '"' + (x[0] === deal.scheme ? ' class="on"' : '') + '>' + x[1] + '</button>';
         }).join('');
-        dealBox.innerHTML = '<div class="ord-b deal-b">' +
-          '<div class="deal-f"><span class="deal-l">Тариф</span><span class="pay-seg" id="deal-tar">' + tars + '</span></div>' +
+        var miss = deal.missing || [];
+        var ML = { contract_no: 'номер договора', contract_date: 'дату договора', tariff_id: 'тариф', amount_total: 'сумму', installments: 'график платежей', scheme: 'схему оплаты' };
+        var mc = function (k) { return miss.indexOf(k) >= 0 ? ' miss' : ''; };
+        var note = '';
+        if (deal.scan) {
+          note = '<div class="deal-note warn">Договор сохранил в документы, но текста в нем нет: похоже, это фото или скан. ' +
+            'Заполните сделку по договору вручную или загрузите файл договора в pdf или word.</div>';
+        } else if (deal.doc) {
+          note = '<div class="deal-note' + (miss.length ? ' warn' : '') + '">Заполнено из «' + esc(deal.doc) + '», файл лежит в документах карточки.' +
+            (miss.length ? ' Не нашел в договоре: ' + miss.map(function (k) { return ML[k] || k; }).join(', ') + ' — впишите сами.' : ' Проверьте и подтвердите.') + '</div>';
+        }
+        dealBox.innerHTML = '<div class="ord-b deal-b">' + note +
+          '<div class="deal-f' + mc('tariff_id') + '"><span class="deal-l">Тариф</span><span class="pay-seg" id="deal-tar">' + tars + '</span></div>' +
           '<div class="deal-grid">' +
-            '<label class="deal-f"><span class="deal-l">Сумма по договору, ₽</span>' +
+            '<label class="deal-f' + mc('amount_total') + '"><span class="deal-l">Сумма по договору, ₽</span>' +
               '<input id="deal-amt" class="num" inputmode="numeric" value="' + (deal.amount_total || '') + '" placeholder="0"></label>' +
-            '<label class="deal-f"><span class="deal-l">Номер договора</span>' +
+            '<label class="deal-f' + mc('contract_no') + '"><span class="deal-l">Номер договора</span>' +
               '<input id="deal-no" class="num" value="' + esc(deal.contract_no || '') + '"></label>' +
-            '<label class="deal-f"><span class="deal-l">Дата договора</span>' +
+            '<label class="deal-f' + mc('contract_date') + '"><span class="deal-l">Дата договора</span>' +
               '<input id="deal-date" type="date" value="' + esc(deal.contract_date || '') + '"></label>' +
             '<label class="deal-f"><span class="deal-l">Кто продал</span>' +
               '<span class="pay-selwrap"><select class="ord-sel" id="deal-seller"></select></span></label>' +
           '</div>' +
-          '<div class="deal-f"><span class="deal-l">Оплата</span><span class="pay-seg" id="deal-sch">' + sch + '</span></div>' +
-          '<div class="ord-sched deal-sched" id="deal-plan"></div>' +
+          '<div class="deal-f' + mc('scheme') + '"><span class="deal-l">Оплата</span><span class="pay-seg" id="deal-sch">' + sch + '</span></div>' +
+          '<div class="ord-sched deal-sched' + mc('installments') + '" id="deal-plan"></div>' +
           '<div class="ord-foot">' +
             '<button class="oi-mark off" id="deal-cancel">отмена</button>' +
             '<button class="bp sm" id="deal-ok" style="margin-left:auto">' + ic('check', 13) + 'Подтвердить сделку</button>' +
@@ -57894,9 +57952,17 @@
         });
         el('deal-no').addEventListener('input', function (e) { deal.contract_no = e.target.value; });
         el('deal-date').addEventListener('change', function (e) {
-          deal.contract_date = e.target.value; dealPlan(); renderDealPlan();
+          deal.contract_date = e.target.value;
+          /* график из договора не пересчитываем: сдвигаем только платеж «в день заключения» */
+          if (deal.doc && !deal.scan) {
+            deal.installments.forEach(function (r) { if (r.signing) r.due_date = deal.contract_date; });
+          } else { dealPlan(); }
+          renderDealPlan();
         });
         el('deal-cancel').addEventListener('click', function () { deal = null; dealIdle([]); });
+        Array.prototype.forEach.call(dealBox.querySelectorAll('.miss input, .miss select, .miss button'), function (n) {
+          n.addEventListener('focus', function () { var w = n.closest('.miss'); if (w) w.classList.remove('miss'); });
+        });
         el('deal-ok').addEventListener('click', submitDeal);
       };
       var renderDealPlan = function () {
@@ -57932,7 +57998,8 @@
         var b = el('deal-ok'); b.disabled = true;
         apiSend('/admin/api/leads/' + id + '/deal', 'POST', {
           tariff_id: deal.tariff_id, amount_total: deal.amount_total, scheme: deal.scheme,
-          installments: deal.installments, contract_no: String(deal.contract_no || '').trim(),
+          installments: deal.installments.map(function (r) { return { due_date: r.due_date, amount: r.amount }; }),
+          contract_no: String(deal.contract_no || '').trim(),
           contract_date: deal.contract_date, seller_id: deal.seller_id,
         }, function () {
           deal = null;
