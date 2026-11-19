@@ -1101,12 +1101,22 @@
     // Павел 18.11.2026: интерес к краткосрочным программам, отметка в карточке.
     short:         { label: 'Краткосрочка',     icon: 'flight', pred: function (l) { return hasShort(l); } },
   };
-  function quickPred() {
-    var q = QUICK[state.quick];
+  /* Порядок срезов в ряду. На «Сопровождении» ряд короче (Мария 19.11.2026: «эти
+     три пункта там не нужны»): квалификация лида и «без контакта» — вопросы к
+     холодному человеку, а на этой вкладке лежат те, с кем мы уже работаем и у кого
+     контакт есть по определению. Остаются «Все», «С задачами» и «Внимание». */
+  var QUICK_ORDER = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short'];
+  var QUICK_SUPPORT = ['', 'tasks', 'attention'];
+  function quickKeys(seg) { return trackTab(seg) ? QUICK_SUPPORT : QUICK_ORDER; }
+  function quickPred(seg) {
+    /* Срез, которого на этой вкладке нет, и фильтровать не должен: человек выбрал
+       «Квал-лиды» в «Клиентах», перешел в «Сопровождение» — и там половина списка
+       пропала бы без единого включенного чипа на экране. */
+    var q = quickKeys(seg).indexOf(state.quick || '') < 0 ? null : QUICK[state.quick];
     return (q && q.pred) ? q.pred : function () { return true; };
   }
   function segLeads(seg) {
-    var qp = quickPred();
+    var qp = quickPred(seg);
     var arr = segBase(seg).filter(function (l) {
       if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
@@ -1411,8 +1421,7 @@
     var total = segArr.length;
     var shown = segLeads(state.seg).length;
 
-    var order = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short'];
-    var chips = order.map(function (k) {
+    var chips = quickKeys(state.seg).map(function (k) {
       var q = QUICK[k];
       var n = q.pred ? segArr.filter(q.pred).length : total;
       if (k && !n) return '';

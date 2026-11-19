@@ -12,6 +12,8 @@ if (!src.includes(marker)) { console.log('НЕ НАШЕЛ якорь leadTrack')
 const patched = src.replace(marker, marker +
   '\n  globalThis.__L = { chips: function (a) { return trackChips(a); },' +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
+  ' keys: function (seg) { return quickKeys(seg); },' +
+  ' pred: function (seg) { return quickPred(seg); },' +
   ' setTracks: function (t) { DOC_TRACKS = t; }, state: state };');
 
 function el(tag) {
@@ -93,6 +95,15 @@ check('без фильтра видны все пятеро', arr.filter(l => L.
 L.state.seg = 'support';
 const extra = arr.concat([lead('Егор', 'newtrack')]);
 check('незнакомое направление попадает в ряд', /newtrack<span class="qn num">1<\/span>/.test(L.chips(extra)), '');
+
+/* Ряд срезов воронки: на «Сопровождении» короче (Мария 19.11.2026). */
+check('на «Сопровождении» ровно три среза', L.keys('support').join(',') === ',tasks,attention', L.keys('support').join(','));
+check('квал-лидов и «без контакта» там нет', ['mql', 'sql', 'nocontact'].every(function (k) { return L.keys('support').indexOf(k) < 0; }), '');
+check('на «Клиентах» ряд прежний', L.keys('clients').indexOf('mql') > 0 && L.keys('clients').indexOf('nocontact') > 0, L.keys('clients').join(','));
+L.state.quick = 'mql';
+check('чужой срез не режет «Сопровождение»', L.pred('support')({ crm: {} }) === true, '');
+check('тот же срез на «Клиентах» работает', L.pred('clients')({ crm: {} }) === false, '');
+L.state.quick = '';
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);
