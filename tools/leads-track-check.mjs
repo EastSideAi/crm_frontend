@@ -1,6 +1,6 @@
-/* Проверка чипов направления на вкладке «Сопровождение» в «Контактах».
-   Гоняет НАСТОЯЩИЙ код app.js в vm (как points-track-check.mjs): сборки и тестов
-   в CRM нет, а чипы считают людей — неверный счетчик врет руководителю.
+/* Проверка фильтров вкладки «Сопровождение» в «Контактах»: направление, класс,
+   тьютор. Гоняет НАСТОЯЩИЙ код app.js в vm (как points-track-check.mjs): сборки и
+   тестов в CRM нет, а пункты считают людей — неверный счетчик врет руководителю.
    Запуск: node tools/leads-track-check.mjs
 */
 import fs from 'fs';
@@ -10,7 +10,11 @@ const src = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const marker = '  function leadTrack(l) { return ((l.crm && l.crm.overrides) || {}).track || \'\'; }';
 if (!src.includes(marker)) { console.log('НЕ НАШЕЛ якорь leadTrack'); process.exit(1); }
 const patched = src.replace(marker, marker +
-  '\n  globalThis.__L = { chips: function (a) { return trackChips(a); },' +
+  '\n  globalThis.__L = { opts: function (a) { return trackOptions(a); },' +
+  ' label: function () { return trackLabel(); },' +
+  ' ownOpts: function (a) { return ownerOptions(a); },' +
+  ' ownLabel: function (a) { return ownerLabel(a); },' +
+  ' ownHit: function (l, seg) { return ownerHit(l, seg); },' +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
   ' keys: function (seg) { return quickKeys(seg); },' +
   ' clsHit: function (l, seg) { return classHit(l, seg); },' +
@@ -74,16 +78,19 @@ let bad = 0;
 function check(name, cond, got) { console.log((cond ? '  ок   ' : '  ПЛОХО') + ' ' + name + (cond ? '' : ' -> ' + got)); if (!cond) bad++; }
 
 L.state.seg = 'support';
-const html = L.chips(arr);
-check('чип «Все направления» со счетчиком 5', /Все направления<span class="qn num">5<\/span>/.test(html), html.slice(0, 200));
-check('название берется с бэкенда, а не ключ', /Бакалавриат<span class="qn num">2<\/span>/.test(html) && !/>bachelor</.test(html), html.slice(0, 300));
-check('чип «Языковой год по гранту» со счетчиком 1', /Языковой год по гранту<span class="qn num">1<\/span>/.test(html), '');
-check('чип «Без направления» со счетчиком 1', /Без направления<span class="qn num">1<\/span>/.test(html), '');
-check('языковой год стоит перед бакалавриатом', html.indexOf('Языковой год по гранту') < html.indexOf('Бакалавриат<'), '');
-check('пустых направлений в ряду нет', !/Магистратура<span/.test(html), '');
-
-L.state.seg = 'clients';
-check('на чужой вкладке ряда нет', L.chips(arr) === '', JSON.stringify(L.chips(arr).slice(0, 80)));
+L.state.trk = '';
+L.state.cls = 0;
+const o = (list, label) => list.filter(x => x.label === label)[0];
+const list1 = L.opts(arr);
+check('пункт «Все направления» со счетчиком 5', (o(list1, 'Все направления') || {}).n === 5, JSON.stringify(list1[0]));
+check('название берется с бэкенда, а не ключ', (o(list1, 'Бакалавриат') || {}).n === 2 && !list1.some(x => x.label === 'bachelor'),
+  list1.map(x => x.label).join(','));
+check('пункт «Языковой год по гранту» со счетчиком 1', (o(list1, 'Языковой год по гранту') || {}).n === 1, '');
+check('пункт «Без направления» со счетчиком 1', (o(list1, 'Без направления') || {}).n === 1, '');
+check('языковой год стоит перед бакалавриатом',
+  list1.findIndex(x => x.label === 'Языковой год по гранту') < list1.findIndex(x => x.label === 'Бакалавриат'), '');
+check('пустых направлений в списке нет', !list1.some(x => x.label === 'Магистратура'), list1.map(x => x.label).join(','));
+check('подпись кнопки без фильтра — «Все направления»', L.label() === 'Все направления', L.label());
 
 L.state.seg = 'support';
 L.state.trk = 'bachelor';
@@ -100,7 +107,8 @@ check('без фильтра видны все пятеро', arr.filter(l => L.
 /* Направление, которого нет в порядке (завели новое на бэкенде) — не теряется. */
 L.state.seg = 'support';
 const extra = arr.concat([lead('Егор', 'newtrack')]);
-check('незнакомое направление попадает в ряд', /newtrack<span class="qn num">1<\/span>/.test(L.chips(extra)), '');
+check('незнакомое направление попадает в список', (o(L.opts(extra), 'newtrack') || {}).n === 1,
+  L.opts(extra).map(x => x.label).join(','));
 
 /* Ряд срезов воронки: на «Сопровождении» короче (Мария 19.11.2026). */
 check('на «Сопровождении» ровно три среза', L.keys('support').join(',') === ',tasks,attention', L.keys('support').join(','));
@@ -126,11 +134,22 @@ klassy[4].school_class = 8;
 L.state.seg = 'support';
 L.state.trk = '';
 L.state.cls = 0;
-const hk = L.chips(klassy);
-check('в ряду есть чип «9 класс» со счетчиком 2', /9 класс<span class="qn num">2<\/span>/.test(hk), hk.slice(-400));
-check('чипы классов отделены волоском', /qsep/.test(hk), hk.slice(-300));
-check('классов, которых нет у людей, в ряду нет', !/11 класс/.test(hk), '');
-check('направления в том же ряду остались', /Бакалавриат<span/.test(hk), '');
+const hk = L.opts(klassy);
+check('в списке есть «9 класс» со счетчиком 2', (o(hk, '9 класс') || {}).n === 2, JSON.stringify(hk));
+check('классы отделены от направлений волоском', hk.some(x => x.sep), JSON.stringify(hk));
+check('класс без людей не пропадает, а стоит с нулем',
+  hk.some(x => x.label === '8 класс') && hk.some(x => x.label === '9 класс') && hk.some(x => x.label === '10 класс'),
+  hk.map(x => x.label).join(','));
+check('лишних классов в списке нет', !hk.some(x => x.label === '11 класс'), '');
+check('направления в том же списке остались', hk.some(x => x.label === 'Бакалавриат'), '');
+check('волосок стоит после направлений, а не в начале',
+  hk.findIndex(x => x.sep) > hk.findIndex(x => x.label === 'Бакалавриат'), '');
+L.state.trk = 'bachelor';
+check('подпись кнопки называет выбранное направление', L.label() === 'Бакалавриат', L.label());
+L.state.cls = 9;
+check('направление и класс стоят в подписи вместе', L.label() === 'Бакалавриат · 9 класс', L.label());
+L.state.trk = '';
+L.state.cls = 0;
 
 L.state.cls = 9;
 check('фильтр «9 класс» дает двоих', klassy.filter(l => L.clsHit(l, 'support')).map(l => l.id).join(',') === 'Аня,Вера',
@@ -172,10 +191,40 @@ check('Насте зеленый', L.tone('Анастасия Мишина') ===
 check('Алене розовый', L.tone('Алена Малахова') === 'pink', L.tone('Алена Малахова'));
 check('Элизе голубой в любом порядке слов',
   L.tone('Аюпова Элиза') === 'blue' && L.tone('Элиза Аюпова') === 'blue', L.tone('Элиза Аюпова'));
+check('Марии фиолетовый', L.tone('Мария Шустова') === 'violet', L.tone('Мария Шустова'));
 check('буква е вместо ё не ломает цвет', L.tone('Алёна Малахова') === 'pink', L.tone('Алёна Малахова'));
 check('остальным цвет из спокойной части палитры и всегда тот же',
   L.tone('Светлана Рошенская') === L.tone('Светлана Рошенская') &&
   ['amber', 'green', 'pink', 'blue'].indexOf(L.tone('Светлана Рошенская')) < 0, L.tone('Светлана Рошенская'));
+
+/* Выпадашка по тьюторам (Мария 19.11.2026): список ведущих со счетчиком учеников,
+   фильтр по id, имя в своем цвете. */
+const tut = (id, name) => ({ id: 'l' + Math.random(), crm: { overrides: {}, owner: id ? { id: id, name: name } : null } });
+const kom = [
+  tut(1, 'Александр Сердотецков'), tut(1, 'Александр Сердотецков'), tut(1, 'Александр Сердотецков'),
+  tut(2, 'Анастасия Мишина'), tut(2, 'Анастасия Мишина'),
+  tut(3, 'Аюпова Элиза'), tut(0, ''),
+];
+L.state.seg = 'support';
+L.state.own = '';
+const tl = L.ownOpts(kom);
+check('первым пунктом «Все тьюторы» со счетчиком 7', tl[0].label === 'Все тьюторы' && tl[0].n === 7, JSON.stringify(tl[0]));
+check('у Саши трое учеников', (o(tl, 'Александр Сердотецков') || {}).n === 3, JSON.stringify(tl));
+check('тьюторы идут по числу учеников', tl[1].label === 'Александр Сердотецков' && tl[2].label === 'Анастасия Мишина',
+  tl.map(x => x.label).join(','));
+check('имя в списке стоит в своем цвете', (o(tl, 'Анастасия Мишина') || {}).tone === 'green', JSON.stringify(o(tl, 'Анастасия Мишина')));
+check('ученик без тьютора считается отдельно', (o(tl, 'Без тьютора') || {}).n === 1, '');
+check('подпись кнопки без фильтра — «Все тьюторы»', L.ownLabel(kom) === 'Все тьюторы', L.ownLabel(kom));
+
+L.state.own = '2';
+check('фильтр по тьютору дает только его учеников', kom.filter(l => L.ownHit(l, 'support')).length === 2,
+  String(kom.filter(l => L.ownHit(l, 'support')).length));
+check('подпись кнопки называет выбранного', L.ownLabel(kom) === 'Анастасия Мишина', L.ownLabel(kom));
+check('на чужой вкладке тьютор не режет список', kom.filter(l => L.ownHit(l, 'clients')).length === 7, '');
+L.state.own = 'none';
+check('«Без тьютора» дает одного', kom.filter(l => L.ownHit(l, 'support')).length === 1, '');
+L.state.own = '';
+check('без фильтра видны все семеро', kom.filter(l => L.ownHit(l, 'support')).length === 7, '');
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);
