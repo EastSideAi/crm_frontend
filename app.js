@@ -2731,8 +2731,8 @@
     { id: 'points', label: 'Мотивация', icon: 'target', cap: 'clients' },
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
-    // У кого открыты «Продажи», «Путь» живет там блоком в «Воронке» (Павел
-    // 19.11.2026: «чтобы все было в окне продаж»); маркетологу и продукту остается пунктом.
+    // У кого открыты «Продажи», пункта «Путь» нет: его цифры дает сверка лидов (Павел
+    // 19.11.2026: «уберем этот путь, это у нас сверка лидов»); маркетологу и продукту остается пунктом.
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path', hideCap: 'planfact' },
     // «Платежи», а не «Финансы»: здесь только оплаты клиентов. Пространство
     // «Финансы» — соседнее и про другие деньги, два одинаковых имени путали бы.
@@ -33018,7 +33018,8 @@
     box.innerHTML = '<div class="card sp12 shp"><div class="sec-head pf-sec"><span class="ic">' + ic('cal', 14) +
       '</span><div><div class="t">График смен</div><div class="s">когда кто на связи; ' +
       (tz ? 'время твое, Москва ' + (tz > 0 ? '+' : '') + tz / 60 : 'время по Москве') +
-      '. Нажми плюс в своем дне, чтобы поставить смену</div></div></div>' +
+      '. Поставь смены сразу на неделю или две кнопкой справа, плюс в дне ставит одну</div></div>' +
+      '<button class="bp sm shp-many" data-shpmany="1">' + ic('plus', 13) + 'Поставить смены</button></div>' +
       '<div class="brd-nav shp-nav"><button class="icobtn sm brd-arrow prev" data-shpgo="-7" title="Прошлая неделя">' + ic('go', 15) + '</button>' +
       '<span class="brd-label">' + a.getDate() + ' ' + DY_MON[a.getMonth()] + ' – ' + z.getDate() + ' ' + DY_MON[z.getMonth()] + '</span>' +
       '<button class="icobtn sm brd-arrow" data-shpgo="7" title="Следующая неделя">' + ic('go', 15) + '</button>' +
@@ -33059,7 +33060,147 @@
           });
       }, null, 'График смен', 'Поставить');
   }
+  /* Смены пачкой (Павел 19.11.2026: «расставить сразу на неделю, на две, и выбрать время:
+     в эти дни с 8 до 6, или с 10 до 3, потом с 3 до 10 по Москве»). Четыре недели
+     календарем, дни отмечаются нажатием и быстрыми кнопками, окон времени до четырех.
+     Уходит одним запросом: при пересечении не встает ничего (POST /shift-plan/batch). */
+  var SHP_PRESETS = [[480, 1080], [600, 900], [900, 1320], [600, 1080]];
+  function shpManyForm(d, uid0) {
+    if (document.querySelector('.al-ov')) return;
+    var tz = shpTz();
+    var today = mgDate(d.today);
+    var mon = new Date(today); mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
+    var cal = [];
+    for (var i = 0; i < 28; i++) { var x = new Date(mon); x.setDate(mon.getDate() + i); cal.push(x); }
+    var st = { days: {}, wins: [[600 + tz, 900 + tz]], uid: uid0 || (d.people.filter(function (p) { return p.mine; })[0] || {}).id };
+    var hm = function (m) { return shpHm(m); };
+    var mm = function (t) { var x = String(t || '').split(':'); return x.length < 2 ? NaN : parseInt(x[0], 10) * 60 + parseInt(x[1], 10); };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';
+    var people = d.can_all ? d.people.slice().sort(function (a, b) { return (b.mine - a.mine) || a.name.localeCompare(b.name, 'ru'); }) : [];
+    ov.innerHTML = '<div class="al-card shm" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">График смен</div><div class="al-title">Поставить смены</div></div>' +
+        '<button class="al-x" id="shm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">' + (tz ? 'Время твое, на сервер уйдет по Москве.' : 'Время по Москве.') + '</div>' +
+      '<div class="al-body">' +
+        (people.length ? '<label class="al-f"><span class="al-l">Кому</span><select id="shm-who" class="al-in">' +
+          people.map(function (p) { return '<option value="' + p.id + '"' + (p.id === st.uid ? ' selected' : '') + '>' + esc(p.name + (p.mine ? ' (я)' : '')) + '</option>'; }).join('') +
+          '</select></label>' : '') +
+        '<div class="al-f"><span class="al-l">Дни</span>' +
+          '<div class="shm-quick">' + [['w1', 'Будни этой недели'], ['w2', 'Будни двух недель'], ['a2', 'Все дни двух недель'], ['clr', 'Очистить']].map(function (q) {
+            return '<button type="button" class="qchip" data-shmq="' + q[0] + '">' + q[1] + '</button>';
+          }).join('') + '</div>' +
+          '<div class="shm-cal"><div class="shm-wd">' + SHP_WD.map(function (w) { return '<span>' + w + '</span>'; }).join('') + '</div>' +
+            '<div class="shm-grid" id="shm-grid"></div></div></div>' +
+        '<div class="al-f"><span class="al-l">Время</span><div id="shm-wins"></div>' +
+          '<div class="shm-quick">' + SHP_PRESETS.map(function (w, j) {
+            return '<button type="button" class="qchip" data-shmp="' + j + '">' + hm(w[0] + tz) + '–' + hm(w[1] + tz) + '</button>';
+          }).join('') + '<button type="button" class="qchip" data-shmadd="1">' + ic('plus', 12) + 'Еще окно</button></div></div>' +
+        '<div class="shm-sum" id="shm-sum"></div><div class="ct-err" id="shm-err"></div>' +
+      '</div>' +
+      '<div class="al-foot"><button class="al-cancel" id="shm-cancel">Отмена</button>' +
+        '<button class="bp al-save" id="shm-ok">Поставить</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () { ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180); };
+    var picked = function () { return Object.keys(st.days).filter(function (k) { return st.days[k]; }).sort(); };
+    var paint = function () {
+      el('shm-grid').innerHTML = cal.map(function (x) {
+        var iso = mgIso(x), past = x < today, on = !!st.days[iso];
+        return '<button type="button" class="shm-d' + (on ? ' on' : '') + (iso === d.today ? ' today' : '') + '"' +
+          (past ? ' disabled' : '') + ' data-shmd="' + iso + '">' + x.getDate() +
+          (x.getDate() === 1 || x === cal[0] ? '<small>' + DY_MON[x.getMonth()] + '</small>' : '') + '</button>';
+      }).join('');
+      el('shm-wins').innerHTML = st.wins.map(function (w, j) {
+        return '<div class="shm-win"><input type="time" class="al-in" data-shmw="' + j + ',0" value="' + hm(w[0]) + '">' +
+          '<span>–</span><input type="time" class="al-in" data-shmw="' + j + ',1" value="' + (w[1] === 1440 ? '24:00' : hm(w[1])) + '">' +
+          (st.wins.length > 1 ? '<button type="button" class="icobtn sm" data-shmdel="' + j + '" title="Убрать окно">' + ic('x', 13) + '</button>' : '') + '</div>';
+      }).join('');
+      var n = picked().length, mins = st.wins.reduce(function (a, w) { return a + Math.max(0, w[1] - w[0]); }, 0);
+      el('shm-sum').textContent = n ? 'Встанет ' + (n * st.wins.length) + ' ' + plural(n * st.wins.length, 'смена', 'смены', 'смен') +
+        ': ' + n + ' ' + plural(n, 'день', 'дня', 'дней') + ' × ' + st.wins.length + ' ' + plural(st.wins.length, 'окно', 'окна', 'окон') +
+        ', всего ' + Math.round(n * mins / 6) / 10 + ' ч' : 'Отметь дни в календаре';
+      bind();
+    };
+    var bind = function () {
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-shmd]'), function (b) {
+        b.onclick = function () { var k = b.getAttribute('data-shmd'); st.days[k] = !st.days[k]; paint(); };
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-shmw]'), function (inp) {
+        inp.onchange = function () {
+          var ij = inp.getAttribute('data-shmw').split(','), v = mm(inp.value);
+          if (isNaN(v)) return;
+          if (+ij[1] === 1 && v === 0) v = 1440;
+          st.wins[+ij[0]][+ij[1]] = v; paint();
+        };
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-shmdel]'), function (b) {
+        b.onclick = function () { st.wins.splice(+b.getAttribute('data-shmdel'), 1); paint(); };
+      });
+    };
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-shmq]'), function (b) {
+      b.addEventListener('click', function () {
+        var q = b.getAttribute('data-shmq');
+        st.days = {};
+        if (q === 'clr') { paint(); return; }
+        cal.forEach(function (x, i) {
+          var wk = Math.floor(i / 7), wd = i % 7;
+          if (x < today) return;
+          if (q === 'w1' && wk === 0 && wd < 5) st.days[mgIso(x)] = true;
+          if (q === 'w2' && wk < 2 && wd < 5) st.days[mgIso(x)] = true;
+          if (q === 'a2' && wk < 2) st.days[mgIso(x)] = true;
+        });
+        paint();
+      });
+    });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-shmp]'), function (b) {
+      b.addEventListener('click', function () {
+        var w = SHP_PRESETS[+b.getAttribute('data-shmp')];
+        var nw = [w[0] + tz, w[1] + tz];
+        // нажатие пресета при одном окне меняет его, иначе добавляет еще одно
+        if (st.wins.length === 1 && !st._multi) st.wins = [nw]; else st.wins.push(nw);
+        paint();
+      });
+    });
+    ov.querySelector('[data-shmadd]').addEventListener('click', function () {
+      st._multi = true;
+      var last = st.wins[st.wins.length - 1];
+      st.wins.push([last[1], Math.min(1440, last[1] + 300)]);
+      paint();
+    });
+    el('shm-x').onclick = el('shm-cancel').onclick = close;
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    el('shm-ok').addEventListener('click', function () {
+      var days = picked(), err = el('shm-err');
+      if (!days.length) { err.textContent = 'Отметь хотя бы один день'; return; }
+      var wins = [];
+      for (var j = 0; j < st.wins.length; j++) {
+        var s0 = st.wins[j][0], e0 = st.wins[j][1];
+        if (e0 <= s0) { err.textContent = 'В окне ' + hm(s0) + '–' + hm(e0) + ' конец раньше начала'; return; }
+        var s1 = s0 - tz, e1 = e0 - tz;
+        if (s1 < 0 || e1 > 1440) { err.textContent = 'По Москве окно ' + hm(s0) + '–' + hm(e0) + ' переходит через полночь, раздели его на два'; return; }
+        wins.push({ start: s1, end: e1 });
+      }
+      var who = el('shm-who');
+      var btn = el('shm-ok'); btn.disabled = true; err.textContent = '';
+      apiSend('/admin/api/shift-plan/batch', 'POST',
+        { days: days, windows: wins, user_id: who ? parseInt(who.value, 10) : undefined },
+        function (r) {
+          close(); state.shp = null; renderView();
+          showToast('В графике ' + r.added + ' ' + plural(r.added, 'смена', 'смены', 'смен'));
+        },
+        function (code, e) {
+          btn.disabled = false;
+          var det = e && e.body && e.body.detail;
+          err.textContent = typeof det === 'string' ? det : 'Не сохранилось, проверь сеть';
+        });
+    });
+    paint();
+  }
   function shpBind(box, d) {
+    Array.prototype.forEach.call(box.querySelectorAll('[data-shpmany]'), function (b) {
+      b.addEventListener('click', function () { shpManyForm(d); });
+    });
     Array.prototype.forEach.call(box.querySelectorAll('[data-shpgo]'), function (b) {
       b.addEventListener('click', function () { shpShift(parseInt(b.getAttribute('data-shpgo'), 10)); });
     });
@@ -33070,8 +33211,7 @@
     });
     Array.prototype.forEach.call(box.querySelectorAll('[data-shpwho]'), function (b) {
       b.addEventListener('click', function () {
-        var day = d.days.indexOf(d.today) >= 0 ? d.today : d.days[0];
-        shpAddForm(day, parseInt(b.getAttribute('data-shpwho'), 10), d);
+        shpManyForm(d, parseInt(b.getAttribute('data-shpwho'), 10));
       });
     });
     Array.prototype.forEach.call(box.querySelectorAll('.shp-sh.ed'), function (b) {
@@ -40832,7 +40972,8 @@
       var n = late[s.key] || 0;
       return { label: esc(s.label), value: fmtMoney(w.steps[s.key] || 0),
         sub: esc(s.hint), delta: n ? fmtMoney(n) + ' ' + esc(s.late) : '', deltaCls: 'bad',
-        lead: i === 0 && w.steps.free > 0 };
+        lead: i === 0 && w.steps.free > 0,
+        sbf: (w.steps[s.key] || 0) ? 'w_' + s.key : '', on: sbIsOn('w_' + s.key, '', '') };
     });
     // Таблица — то, что на руках у менеджеров. «Без менеджера» у них всегда ноль, а
     // ничейные лиды уже стоят первой плиткой и открываются ею же.
@@ -41331,17 +41472,14 @@
       view.innerHTML = '<div class="dash sb">' + head + sbIdeas(d) + sbPeople(d) + '</div>';
     } else {
       mtLoad();
-      sbPathSync();
       // Пятиминутка начинается со сверки лидов (Павел 19.11.2026), поэтому на коротком
       // отрезке она первая под шапкой; на месяце — сразу за планом.
       view.innerHTML = '<div class="dash sb">' + head + (short ? '' : sbPace(d) + plan) + sbReg() + sbConv(d) +
-        (can('clients') ? '<div class="sb-path" id="sb-path"></div>' : '') +
         sbWork(d) + (wq ? sbPeople(d) : '') + cbCard('sales') + mtCard() + potCard(8) +
         sbLadder(d) + sbManagers(d) + dialCard() + sbChannels(d) +
         (wq ? '' : sbPeople(d)) + '</div>';
     }
     sbTabsBind(view);
-    if (el('sb-path')) renderPath(el('sb-path'), true);
     sbBind(view, d);
     potBind(view);
     dialBind(view);
@@ -42227,7 +42365,7 @@
       return '<div class="ms-acts">' + out.join('') + '</div>';
     }
     if (kind === 'hot' && p.free) out.push('<button class="bp ghost" data-mstake="' + esc(p.id) + '">Взять себе</button>');
-    if (p.phone && kind !== 'pool') {
+    if (p.phone) {
       out.push(canCall
         ? '<button class="bp ms-call' + (kind === 'respond' || kind === 'hot' ? '' : ' ghost') + '" data-mscall="' + esc(p.phone) + '">' +
           ic('phone', 13) + 'Позвонить</button>'
@@ -42236,6 +42374,10 @@
     // «Связался» — касание не звонком (написал в мессенджер); звонок отмечают кнопками под именем.
     if (kind === 'respond' || (kind === 'hot' && !p.free)) out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '" title="Связался не звонком: написал, ответил в диалоге">Написал</button>');
     if (kind === 'pool') out.push('<button class="bp" data-mstake="' + esc(p.id) + '">Взять себе</button>');
+    // Переписка рядом со звонком (Павел 19.11.2026: «ссылочки на диалог»): диалог бота
+    // открывается в «Диалогах» CRM, чат из карточки — у мессенджера.
+    if (p.chat && p.chat.bot) out.push('<a class="bp ghost ms-chat" href="' + esc(dialogUrl(p.chat.bot)) + '">' + ic('chat', 13) + 'Диалог</a>');
+    else if (p.chat && p.chat.url) out.push('<a class="bp ghost ms-chat" href="' + esc(p.chat.url) + '" target="_blank" rel="noopener">' + ic('chat', 13) + 'Чат</a>');
     out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
     return '<div class="ms-acts">' + out.join('') + '</div>';
   }
@@ -42264,6 +42406,8 @@
     } else if (kind === 'hot') {
       tag = '<span class="sev ms-when">консультация ' + esc(msWhen(p.meet_at)) + '</span>';
     } else if (kind === 'after') {
+      tag = '<span class="sev ms-ok">встреча ' + esc(fmtDay(p.meet_at)) + '</span>';
+    } else if (kind === 'decide') {
       tag = '<span class="sev ms-ok">встреча ' + esc(fmtDay(p.meet_at)) + '</span>';
     } else if (kind === 'follow') {
       tag = '<span class="sev ' + (p.next_in_days != null && p.next_in_days <= 0.5 ? 'ms-late' : 'ms-ok') + '">касание ' +
@@ -42294,8 +42438,9 @@
       { n: 4, t: 'Встречи', s: d.meets.length ? d.meets.length + ' на ближайшие дни' : 'встреч нет', done: false, go: 'meets' },
       { n: 5, t: 'Отметить итог', s: d.after.length ? d.after.length + ' после встречи' : 'все отмечены', done: !d.after.length, go: 'after' },
       { n: 6, t: 'Дожать до записи', s: d.follow.length ? d.follow.length + ' на связи без записи' : 'никого', done: !d.follow.length, go: 'follow' },
-      { n: 7, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
-      { n: 8, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
+      { n: 7, t: 'Думают', s: (d.decide || []).length ? d.decide.length + ' после встречи без решения' : 'никого', done: !(d.decide || []).length, go: 'decide' },
+      { n: 8, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
+      { n: 9, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
     ];
     return '<div class="card ms-plan">' + steps.map(function (st) {
       return '<button class="ms-step' + (st.done ? ' done' : '') + (st.hot ? ' hot' : '') + '"' +
@@ -42396,6 +42541,8 @@
         d.after.map(function (p) { return msRow(p, 'after', cc); }).join(''), 'По всем встречам итог отмечен.') +
       msSection('follow', 'Дожать до записи', 'на связи, но не записались; пять касаний за 14 дней: +1, +3, +7, +14 день',
         d.follow.map(function (p) { return msRow(p, 'follow', cc); }).join(''), 'Всех довел до записи или до отказа.') +
+      msSection('decide', 'Думают после встречи', 'консультация прошла, договора нет; держи связь до решения: через 1, 3, 7 и 14 дней',
+        (d.decide || []).map(function (p) { return msRow(p, 'decide', cc); }).join(''), 'Никто не думает: все решили.') +
       msSection('pool', 'Свободные лиды', d.pool_total > d.pool.length
           ? 'никто не взял; сверху теплые с эфира, показаны ' + d.pool.length + ' из ' + d.pool_total
           : 'никто не взял; сверху теплые с эфира, взял — лид твой',
@@ -47945,8 +48092,12 @@
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
       return '<button class="stat' + (s.lead ? ' lead' : '') +
-        (s.go || s.ebl || s.step || s.blk ? ' go' : '') +
+        (s.go || s.ebl || s.step || s.blk || s.sbf ? ' go' : '') +
+        (s.on ? ' on' : '') +
         (s.drag ? ' movable' : '') + '"' +
+        /* data-sbf — плитка «Продаж», за которой список людей (тот же фильтр, что у цифр
+           таблиц): Павел 19.11.2026, «нажимаю Без менеджера, а список не открывается». */
+        (s.sbf ? ' data-sbf="' + s.sbf + '" aria-pressed="' + (s.on ? 'true' : 'false') + '"' : '') +
         /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
            порядок, draggable — чтобы браузер вообще начал её тащить. */
         (s.drag && s.key ? ' draggable="true" data-tile="' + s.key + '"' : '') +
@@ -48901,25 +49052,7 @@
       if (pathOnScreen()) renderView();
     });
   }
-  function pathOnScreen() { return state.page === 'path' || (state.page === 'sales' && sbTab() === 'funnel'); }
-  /* «Путь до оплаты» стоит блоком в «Воронке» (Павел 19.11.2026: «это все про одни и те
-     же цифры, нужно все слить»). Отрезок блока идет за переключателем экрана: Сегодня и
-     Вчера — день, 7 дней — неделя, Месяц — выбранный месяц. Стрелки внутри блока листают
-     дальше сами, пока наверху не сменят отрезок или месяц. */
-  function sbPathSync() {
-    var want = sbSpan() + ':' + pfMonth();
-    if (state._pathSync === want && pathGranOk() !== 'lost') return;
-    state._pathSync = want;
-    var sp = sbSpan();
-    if (sp === 'today' || sp === 'yesterday') { state.pathGran = 'day'; state.pathShift = sp === 'yesterday' ? -1 : 0; }
-    else if (sp === 'week') { state.pathGran = 'week'; state.pathShift = 0; }
-    else {
-      var m = pfMonth().split('-'), now = new Date();
-      state.pathGran = 'month';
-      state.pathShift = Math.min(0, (parseInt(m[0], 10) - now.getFullYear()) * 12 + parseInt(m[1], 10) - 1 - now.getMonth());
-    }
-    state.pathProd = null; state.pathStep = null;
-  }
+  function pathOnScreen() { return state.page === 'path'; }
   function pathStep(r, k) { return ((r && r.steps) || []).filter(function (s) { return s.key === k; })[0]; }
   /* Строка под заголовком — ответ на вопрос «что было за период» одной фразой. */
   function pathVerdict(r) {
@@ -59011,8 +59144,54 @@
     var opts = { method: 'POST' };
     if (body) { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
     return api('/admin/api/shift/' + path, opts)
-      .then(function () { shLoad(true); })
+      .then(function (r) {
+        shLoad(true);
+        // Закрыли смену — сразу показываем, сколько начислено и за что (Павел 19.11.2026).
+        if (path === 'close' && r && r.pay) shPayShow(r.pay, r.shift);
+        return r;
+      })
       .catch(function () { shLoad(true); });
+  }
+  /* Итог закрытой смены: число смен × ставка × коэффициент качества и три строки
+     баллов, чтобы было видно, за что сняли. Считает сервер (services/shift_quality.py). */
+  function shPayShow(pay, sh) {
+    if (document.querySelector('.al-ov')) return;
+    var q = pay.quality || {}, sp = q.speed || {}, ms = q.missed || {}, cv = q.conv || {};
+    var k = String(pay.coef).replace('.', ',');
+    var span = sh ? fmtTime(sh.started_at) + '–' + fmtTime(sh.ended_at) : '';
+    var line = function (t, pts, max, why) {
+      return '<div class="shq-r' + (pts < max ? ' lost' : '') + '"><span class="shq-t">' + esc(t) + '<small>' + esc(why) + '</small></span>' +
+        '<b class="num">' + pts + ' из ' + max + '</b></div>';
+    };
+    var missN = (ms.chats || 0) + (ms.calls || 0);
+    var body = pay.short
+      ? '<div class="shq-sum"><b class="num">0 ₽</b><span>смена ' + esc(span) + ' короче двух часов и в оплату не идет</span></div>'
+      : '<div class="shq-sum"><b class="num">' + fmtMoney(pay.rub) + ' ₽</b><span>' + esc(span) + ' · ' + pay.units + ' ' +
+          plural(pay.units, 'смена', 'смены', 'смен') + ' × ' + fmtMoney(pay.rate) + ' ₽ × ' + k + '</span></div>' +
+        '<div class="shq-list">' +
+          line('Скорость первого ответа', sp.points, 40, sp.leads
+            ? 'новых за смену ' + sp.leads + (sp.median_min != null ? ', половине ответили за ' + sp.median_min + ' мин' : ', половине не ответили') + '; норма 15 мин'
+            : 'новых лидов за смену не было') +
+          line('Без пропущенных', ms.points, 30, missN
+            ? [ms.chats ? ms.chats + ' ' + plural(ms.chats, 'диалог', 'диалога', 'диалогов') + ' без ответа' : '',
+               ms.calls ? ms.calls + ' ' + plural(ms.calls, 'звонок', 'звонка', 'звонков') + ' без перезвона' : ''].filter(Boolean).join(', ') + '; минус 10 за каждый'
+            : 'всем, кто ждал человека, ответили') +
+          line('Из контакта в запись', cv.points, 30, cv.rate != null
+            ? 'за месяц ' + cv.rate + '%, норма ' + cv.norm + '%' : 'в месяце пока не с кем сравнить') +
+        '</div>' +
+        '<div class="shq-k">' + q.points + ' баллов, коэффициент ' + k + (q.points < 45 ? '. Ниже 45 баллов разбираем смену с руководителем' : '') + '</div>';
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';
+    ov.innerHTML = '<div class="al-card shq" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Смена закрыта</div><div class="al-title">Начислено за смену</div></div>' +
+      '<button class="al-x" id="shq-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-body">' + body + '</div>' +
+      '<div class="al-foot"><button class="bp al-save" id="shq-ok">Понятно</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () { ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180); };
+    el('shq-x').onclick = el('shq-ok').onclick = close;
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
   }
   function shDur(ms) {
     var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
