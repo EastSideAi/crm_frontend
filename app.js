@@ -176,11 +176,13 @@
     portalTariff: 'plus', portalStage: null, portalPay: 'offer',
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
     // раздел «Сопровождение»: вкладка (my | all | pay), раскрытый ученик, дата выплаты
-    ptSeg: 'my', ptOpen: null, ptDay: '',
+    ptSeg: 'my', ptOpen: null, ptDay: '', ptTrack: '',
+    // «Контакты» → вкладка «Сопровождение»: выбранное направление подачи
+    trk: '',
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack', 'trk'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -204,6 +206,8 @@
         pathGran: state.pathGran || 'week',
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
         rwDept: state.rwDept || '',
+        ptTrack: state.ptTrack || '',
+        trk: state.trk || '',
       }));
     } catch (e) {}
   }
@@ -1040,6 +1044,13 @@
      Ручная отметка (overrides.support) сильнее правила в обе стороны: правило не
      поймает того, кому тариф еще не проставили, и не отпустит уехавшего. */
   var SUPPORT_TARIFFS = ['std', 'plus', 'prem'];
+  /* Направления подачи: ПОРЯДОК один на всю CRM — им пользуются и доска
+     «Сопровождение», и чипы на вкладке «Сопровождение» в Контактах. Ключи те же,
+     что в `doc_checklist.TRACKS` бэкенда; НАЗВАНИЯ берутся с сервера (DOC_TRACKS,
+     ручка /admin/api/docs/kinds), своего словаря в CRM нет — он разъехался бы с
+     чек-листом документов, а направление как раз и решает пакет семьи. */
+  var TRACK_ORDER = ['lang_grant', 'lang_paid', 'bachelor', 'master',
+                     'master_after_lang', 'bachelor_after_lang', 'master_direct'];
   function supportByRule(l) {
     if (!isClient(l)) return false;
     var o = (l.crm && l.crm.overrides) || {};
@@ -1101,6 +1112,7 @@
       if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
+      if (!trackHit(l, seg)) return false;
       return true;
     });
     if (state.sort) {
@@ -1346,6 +1358,47 @@
   }
 
   /* ── панель инструментов «Клиенты»: поиск + фильтры + срезы + вид ── */
+  /* Чипы направлений на вкладке «Сопровождение» (просьба Марии 19.11.2026:
+     «сделай фильтры по направлениям и туда всех этих учеников занеси»). Ряд стоит
+     только там: на «Новых» и «В работе» направление еще не проставлено, и ряд был
+     бы одним чипом «Без направления» на весь экран. Фильтр тоже действует только
+     на своей вкладке — иначе человек ушел бы в «Клиентов» и не понял, почему там
+     половина списка. */
+  function leadTrack(l) { return ((l.crm && l.crm.overrides) || {}).track || ''; }
+  function trackTab(seg) { return (seg || state.seg) === 'support'; }
+  function trackName(key) {
+    for (var i = 0; i < (DOC_TRACKS || []).length; i++) {
+      if (DOC_TRACKS[i].key === key) return DOC_TRACKS[i].name;
+    }
+    return key;
+  }
+  function trackHit(l, seg) {
+    if (!trackTab(seg) || !state.trk) return true;
+    return state.trk === 'none' ? !leadTrack(l) : leadTrack(l) === state.trk;
+  }
+  function trackChips(arr) {
+    if (!trackTab()) return '';
+    var by = {}, none = 0;
+    arr.forEach(function (l) {
+      var t = leadTrack(l);
+      if (t) by[t] = (by[t] || 0) + 1; else none++;
+    });
+    var keys = TRACK_ORDER.filter(function (k) { return by[k]; })
+      .concat(Object.keys(by).filter(function (k) { return TRACK_ORDER.indexOf(k) < 0; }));
+    if (!keys.length && !none) return '';
+    var cur = state.trk || '';
+    var chip = function (k, label, n) {
+      return '<button type="button" class="qchip' + (cur === k ? ' on' : '') +
+        '" data-trk="' + esc(k) + '">' + esc(label) +
+        '<span class="qn num">' + n + '</span></button>';
+    };
+    return '<div class="list-quick list-trk">' +
+      chip('', 'Все направления', arr.length) +
+      keys.map(function (k) { return chip(k, trackName(k), by[k]); }).join('') +
+      (none ? chip('none', 'Без направления', none) : '') +
+      '</div>';
+  }
+
   function leadsToolbar() {
     var funnelLabel = state.filters.funnel ? FUNNEL[state.filters.funnel] : 'Этап: все';
     var periodLabels = { '': 'За все время', today: 'Сегодня', week: '7 дней', month: '30 дней' };
@@ -1385,7 +1438,8 @@
         '</div>' +
         '<button class="bp sm lead-add" id="lead-add" title="Завести клиента вручную">' + ic('plus', 14) + '<span>Добавить</span></button>' +
       '</div>' +
-      '<div class="list-quick">' + chips + '</div>';
+      '<div class="list-quick">' + chips + '</div>' +
+      trackChips(segArr);
   }
   function attachToolbarHandlers() {
     var search = el('search'), wrap = search && search.closest('.searchwrap');
@@ -1427,6 +1481,20 @@
         renderView();
       });
     });
+    Array.prototype.forEach.call(document.querySelectorAll('.list-trk .qchip'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-trk') || '';
+        state.trk = (state.trk || '') === k ? '' : k;
+        saveUi(); renderView();
+      });
+    });
+    /* На телефоне ряд направлений едет вбок одной строкой, и выбранный чип может
+       оказаться за краем: человек видит короткий список и не понимает, почему. */
+    setTimeout(function () {
+      var trkRow = document.querySelector('.list-trk');
+      var trkOn = trkRow && trkRow.querySelector('.qchip.on');
+      if (trkOn && trkOn.getAttribute('data-trk')) trkRow.scrollLeft = Math.max(0, trkOn.offsetLeft - 16);
+    }, 0);
     Array.prototype.forEach.call(document.querySelectorAll('.list-tools .vseg button'), function (b) {
       b.addEventListener('click', function () { state.viewMode = b.getAttribute('data-v'); saveUi(); renderView(); });
     });
@@ -27681,6 +27749,69 @@
     return '<div class="card listcard fph-card">' + head + inner + '</div>';
   }
 
+  /* Строка отчета или акта партнера в карточке «Партнёрских выплат». Состояния —
+     из бэкенда (_act_state): report, objection, waiting, signed, accepted, paid. */
+  var FIN_ACT_MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
+    'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+  function finActLine(a) {
+    var d = new Date(a.period + 'T00:00:00');
+    var month = FIN_ACT_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    var doc = a.stage === 'act' ? 'Акт № ' + a.number : 'Отчёт';
+    var st = {
+      report: ['wait', 'предварительный, акт на 14-е'],
+      objection: ['bad', 'партнер возразил'],
+      waiting: ['wait', 'ждет подписи' + (a.accept_by ? ' до ' + finDate(a.accept_by) : '')],
+      signed: ['ok', 'подписан ' + finDate(a.signed_at) + (a.pay_by ? ', платим до ' + finDate(a.pay_by) : '')],
+      accepted: ['ok', 'принят без подписи' + (a.pay_by ? ', платим до ' + finDate(a.pay_by) : '')],
+      paid: ['doc', 'выплачено ' + finDate(a.paid_at)],
+    }[a.state] || ['wait', a.state];
+    var canRebuild = a.state === 'report' || a.state === 'objection' || a.state === 'waiting';
+    return '<span class="fpt-rcp-i">' + esc(doc + ' за ' + month) + ' · ' + finRub(a.amount) +
+        (a.clawback ? ' (удержано ' + finRub(a.clawback) + ')' : '') + ' ' +
+        '<span class="fst ' + st[0] + '">' + esc(st[1]) + '</span>' +
+        '<button class="qchip fpt-pk-min" data-act-doc="' + esc(a.id) + '">документ</button>' +
+        (canRebuild ? '<button class="qchip fpt-pk-min" data-act-rebuild="' + esc(a.id) + '">пересобрать</button>' : '') +
+        (a.state === 'objection'
+          ? '<button class="qchip fpt-pk-min add" data-act-done="' + esc(a.id) + '">возражение разобрано</button>'
+          : '') +
+      '</span>' +
+      (a.state === 'objection' && a.objection_text
+        ? '<span class="fpt-act-obj">«' + esc(a.objection_text) + '»' +
+            (a.objection_at ? ' · ' + esc(finDate(a.objection_at)) : '') + '</span>'
+        : '');
+  }
+
+  /* Документ акта — ровно тот, что видит партнер. Показываем во фрейме без скриптов
+     (sandbox): HTML собран бэкендом, но в нем имена партнера и клиентов, и исполнять
+     в нем ничего не нужно. */
+  function finActDoc(id) {
+    if (document.querySelector('.al-ov')) return;
+    xfetch('/admin/api/partner-acts/' + id + '/doc')
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        if (!html) { showToast('Документ не открылся, обнови страницу'); return; }
+        var ov = document.createElement('div');
+        ov.className = 'al-ov';
+        ov.innerHTML = '<div class="al-card fpt-act-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head"><div><div class="al-title">Документ партнера</div></div></div>' +
+          '<div class="al-body"><iframe class="fpt-act-doc" sandbox title="Документ"></iframe></div>' +
+          '<div class="al-foot"><button class="al-cancel" id="fad-close">Закрыть</button></div></div>';
+        document.body.appendChild(ov);
+        ov.querySelector('iframe').srcdoc = html;
+        requestAnimationFrame(function () { ov.classList.add('show'); });
+        var close = function () {
+          ov.classList.remove('show');
+          document.removeEventListener('keydown', onKey);
+          setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+        };
+        var onKey = function (e) { if (e.key === 'Escape') close(); };
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+        el('fad-close').addEventListener('click', close);
+      })
+      .catch(function () { showToast('Документ не открылся, проверь сеть'); });
+  }
+
   function renderFinPartners(view) {
     if (!FIN.partners) {
       if (FIN.err) return finErrView(view);
@@ -27866,6 +27997,16 @@
               '</span>';
           }).join('') + '</span></span></div>';
       }
+      // Отчеты и акты (оферта ред. 3, п. 9.2–9.5): с 24.11.2026 платим раз в месяц по
+      // акту, и платит автосбор после подписи или принятия. Здесь видно, на каком шаге
+      // акт, и разбирается возражение: это единственное, что по акту делает команда.
+      var acts = (p.acts || []).slice(0, 2);
+      var liveAct = (p.acts || []).filter(function (a) { return a.state !== 'paid'; })[0];
+      var actBox = acts.length
+        ? '<div class="fin-note' + (liveAct && liveAct.state === 'objection' ? '' : ' calm') +
+            ' fpt-rcp">' + ic('doc', 15) + '<span>' + acts.map(finActLine).join('') +
+            '</span></div>'
+        : '';
       // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
       // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
       var foot;
@@ -27879,7 +28020,10 @@
           ? '<span class="fin-count fpt-req">' + esc(reqLineTxt) +
               (reqWho ? ' <i class="fpt-who">' + esc('· ' + reqWho) + '</i>' : '') + '</span>'
           : '<span class="fin-count fpt-req">реквизиты не заданы</span>';
-        var payBtn = (p.due || 0) > 0
+        // При живом акте ручную выплату бэкенд не пропустит: деньги уйдут по акту.
+        var payBtn = liveAct
+          ? '<span class="fin-count fpt-right">выплата по акту</span>'
+          : (p.due || 0) > 0
           ? '<button class="qchip add fpt-right" data-pay="' + p.id + '" data-due="' + p.due +
               '" data-pname="' + esc(p.name) + '">' +
               ic('card', 12) + 'Выплатить ' + finRub(p.due) + '</button>'
@@ -27905,6 +28049,7 @@
         p.clients.map(clientRow).join('') +
         warnBox +
         holdBox +
+        actBox +
         rcpBox +
         foot +
       '</div>';
@@ -28017,6 +28162,38 @@
             FIN.partners = null; renderAll();
             showToast(p.client_referrer ? 'Пометку сняли' : 'Отмечен клиентом-реферером');
           }).catch(function (e) { showToast(finLineErr(e)); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-act-doc]'), function (b) {
+      b.addEventListener('click', function () { finActDoc(b.getAttribute('data-act-doc')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-act-done]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-act-done');
+        finConfirm('Возражение разобрано',
+          'Акт остается как есть, партнеру снова дается 3 рабочих дня на подпись. ' +
+          'Если по возражению суммы меняются, сначала поправь начисления и нажми «пересобрать».',
+          'Разобрано', function () {
+            czSend('/admin/api/partner-acts/' + id + '/objection-done', 'POST')
+              .then(function () { FIN.partners = null; renderAll(); showToast('Отметили, партнер снова может подписать'); })
+              .catch(function (e) { showToast(finLineErr(e)); });
+          });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-act-rebuild]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-act-rebuild');
+        finConfirm('Пересобрать документ',
+          'Посчитаем заново по текущим начислениям. Партнер увидит новый документ, ' +
+          'срок на подпись начнется заново.',
+          'Пересобрать', function () {
+            czSend('/admin/api/partner-acts/' + id + '/rebuild', 'POST')
+              .then(function (r) {
+                FIN.partners = null; renderAll();
+                showToast(r && r.id ? 'Пересобрали: ' + finRub(r.amount) : 'Меньше 1 000 ₽, перенесли на следующий месяц');
+              })
+              .catch(function (e) { showToast(finLineErr(e)); });
+          });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-get]'), function (b) {
@@ -48254,6 +48431,9 @@
   }
   function renderLeads(view) {
     if (state.seg === 'new' && state.loaded) return renderProspects(view);
+    /* Названия направлений живут на бэкенде. Если их еще не забирали, тянем и
+       перерисовываем экран один раз: до ответа чипы показали бы ключи (bachelor). */
+    if (trackTab() && !DOC_TRACKS.length) loadDocKinds(function () { renderView(); });
     view.innerHTML = '<div class="card listcard">' + leadsToolbar() + '<div class="list-body" id="list-body"></div></div>';
     attachToolbarHandlers();
     renderListBody();
@@ -58610,6 +58790,52 @@
       }).join('') + '</div></div>';
   }
 
+  /* Направления ученика. Порядок и ключи — те же, что в `doc_checklist.TRACKS`
+     бэкенда (там от направления зависит пакет документов семьи), название берем из
+     ответа сервера, а не из этого списка: два словаря разъедутся на первом же новом
+     направлении. Здесь ключи нужны только чтобы чипы стояли в осмысленном порядке —
+     от языкового года к магистратуре, а не по алфавиту. */
+  var PB_TRACKS = TRACK_ORDER;
+
+  function pbTrack() { return state.ptTrack || ''; }
+
+  function pbTrackName(st) {
+    return st.trackName || (st.track ? st.track : '');
+  }
+
+  /* Фильтр по направлению. Чип со счетчиком, как в расписании и квалификации:
+     пустых направлений не рисуем — чип, который ничего не находит, только мешает.
+     Отдельный чип «без направления» нужен не для красоты: у таких учеников в
+     кабинете семьи висит общий пакет документов, и это первый список, который
+     администратор разбирает руками. */
+  function pbTracks(students) {
+    var by = {}, none = 0, names = {};
+    students.forEach(function (s) {
+      if (s.track) { by[s.track] = (by[s.track] || 0) + 1; names[s.track] = pbTrackName(s); }
+      else none++;
+    });
+    var keys = PB_TRACKS.filter(function (k) { return by[k]; })
+      .concat(Object.keys(by).filter(function (k) { return PB_TRACKS.indexOf(k) < 0; }));
+    if (!keys.length && !none) return '';
+    var cur = pbTrack();
+    function chip(id, label, n) {
+      return '<button type="button" class="qchip' + (cur === id ? ' on' : '') + '" data-pbtrack="' + esc(id) + '">' +
+        esc(label) + '<span class="qn">' + n + '</span></button>';
+    }
+    return '<div class="pb-tracks">' +
+      chip('', 'Все', students.length) +
+      keys.map(function (k) { return chip(k, names[k] || k, by[k]); }).join('') +
+      (none ? chip('none', 'Без направления', none) : '') +
+      '</div>';
+  }
+
+  function pbFilter(students) {
+    var t = pbTrack();
+    if (!t) return students;
+    if (t === 'none') return students.filter(function (s) { return !s.track; });
+    return students.filter(function (s) { return s.track === t; });
+  }
+
   /* Полоса из пяти точек: закрытые залиты, текущая обведена. Она же навигация —
      клик открывает любую точку, даже давно закрытую (посмотреть, что отметили). */
   function pbRail(st, openKey) {
@@ -58710,6 +58936,7 @@
       '<div class="pb-head">' +
         '<div class="pb-nm"><button class="pb-open" data-pblead="' + esc(st.sessionId) + '">' + esc(st.name) + '</button>' +
           (st.tariff ? '<span class="pb-tar">' + esc(st.tariff) + '</span>' : '') +
+          (pbTrackName(st) ? '<span class="pb-trk">' + esc(pbTrackName(st)) + '</span>' : '') +
           (pbSeg() === 'all' ? who : '') + '</div>' +
         pbRail(st, p.key) +
         '<div class="pb-sum"><b class="num pb-earned">' + fmtMoney(st.money.earned) + ' ₽</b>' +
@@ -58791,15 +59018,19 @@
         'закрыли точку — она сразу встала в ближайшую из них.</div>' +
       '</div>';
 
+    var shown = pbFilter(box.students);
     var list = box.students.length
-      ? box.students.map(pbStudent).join('')
+      ? (shown.length
+          ? shown.map(pbStudent).join('')
+          : '<div class="card"><div class="empty">В этом направлении учеников нет. ' +
+            'Направление ставится в карточке ученика, оно же решает, какой пакет документов видит семья.</div></div>')
       : '<div class="card"><div class="empty">' +
         (seg === 'my'
           ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
           : 'Учеников с заведенными точками пока нет.') + '</div></div>';
 
     var top = seg === 'my' ? pbHero(box) : head;
-    view.innerHTML = pbTabs() + top + list;
+    view.innerHTML = pbTabs() + top + pbTracks(box.students) + list;
     pbWire(view);
   }
 
@@ -58942,6 +59173,16 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-pbseg]'), function (b) {
       b.addEventListener('click', function () {
         state.ptSeg = b.getAttribute('data-pbseg'); state.ptOpen = null; saveUi(); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbtrack]'), function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-pbtrack');
+        // Повторный клик по включенному чипу снимает фильтр: так же ведут себя
+        // чипы ролей в расписании, и это единственный способ вернуться ко «Всем»
+        // не целясь мышью в соседнюю кнопку.
+        state.ptTrack = (state.ptTrack === t) ? '' : t;
+        state.ptOpen = null; saveUi(); renderView();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-pbday]'), function (b) {
