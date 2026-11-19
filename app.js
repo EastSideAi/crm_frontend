@@ -2619,7 +2619,9 @@
     { id: 'points', label: 'Мотивация', icon: 'target', cap: 'clients' },
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
-    { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
+    // У кого открыты «Продажи», «Путь» живет там блоком в «Воронке» (Павел
+    // 19.11.2026: «чтобы все было в окне продаж»); маркетологу и продукту остается пунктом.
+    { id: 'path', label: 'Путь', icon: 'path', cap: 'path', hideCap: 'planfact' },
     // «Платежи», а не «Финансы»: здесь только оплаты клиентов. Пространство
     // «Финансы» — соседнее и про другие деньги, два одинаковых имени путали бы.
     { id: 'finance', label: 'Платежи', icon: 'coins', cap: 'finance' },
@@ -4219,6 +4221,11 @@
     // «Диалоги» = одна поверхность с тумблером: переписки бота ↔ обсуждения по задачам
     if (state.page === 'inbox') return state.inboxMode === 'threads' ? renderThreads(view) : renderInbox(view);
     if (state.page === 'dash') renderDash(view);
+    else if (state.page === 'path' && can('planfact') && can('clients')) {
+      // старая ссылка и кнопка дашборда ведут во вкладку «Продаж»
+      state.sbTab = 'funnel'; state.sbSpan = 'today'; state._sb = null;
+      setPage('sales');
+    }
     else if (state.page === 'path') renderPath(view);
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'motivation') renderMotivation(view);
@@ -41152,12 +41159,15 @@
       view.innerHTML = '<div class="dash sb">' + head + sbIdeas(d) + sbPeople(d) + '</div>';
     } else {
       mtLoad();
+      sbPathSync();
       view.innerHTML = '<div class="dash sb">' + head + (short ? '' : sbPace(d) + plan) + sbConv(d) +
+        (can('clients') ? '<div class="sb-path" id="sb-path"></div>' : '') +
         sbWork(d) + (wq ? sbPeople(d) : '') + cbCard('sales') + mtCard() + potCard(8) +
         sbReg() + sbLadder(d) + sbManagers(d) + dialCard() + sbChannels(d) +
         (wq ? '' : sbPeople(d)) + '</div>';
     }
     sbTabsBind(view);
+    if (el('sb-path')) renderPath(el('sb-path'), true);
     sbBind(view, d);
     potBind(view);
     dialBind(view);
@@ -48684,13 +48694,32 @@
       r.key = key;
       if (key !== pathKey()) return;
       state._pathRep = r;
-      if (state.page === 'path') { renderHead(); renderView(); }
+      if (pathOnScreen()) { renderHead(); renderView(); }
     }).catch(function (e) {
       if (state._pathBusy === key) state._pathBusy = null;
       if (key !== pathKey()) return;
       state._pathRep = { key: key, error: (e && e.body && e.body.detail) || 'не удалось загрузить' };
-      if (state.page === 'path') renderView();
+      if (pathOnScreen()) renderView();
     });
+  }
+  function pathOnScreen() { return state.page === 'path' || (state.page === 'sales' && sbTab() === 'funnel'); }
+  /* «Путь до оплаты» стоит блоком в «Воронке» (Павел 19.11.2026: «это все про одни и те
+     же цифры, нужно все слить»). Отрезок блока идет за переключателем экрана: Сегодня и
+     Вчера — день, 7 дней — неделя, Месяц — выбранный месяц. Стрелки внутри блока листают
+     дальше сами, пока наверху не сменят отрезок или месяц. */
+  function sbPathSync() {
+    var want = sbSpan() + ':' + pfMonth();
+    if (state._pathSync === want && pathGranOk() !== 'lost') return;
+    state._pathSync = want;
+    var sp = sbSpan();
+    if (sp === 'today' || sp === 'yesterday') { state.pathGran = 'day'; state.pathShift = sp === 'yesterday' ? -1 : 0; }
+    else if (sp === 'week') { state.pathGran = 'week'; state.pathShift = 0; }
+    else {
+      var m = pfMonth().split('-'), now = new Date();
+      state.pathGran = 'month';
+      state.pathShift = Math.min(0, (parseInt(m[0], 10) - now.getFullYear()) * 12 + parseInt(m[1], 10) - 1 - now.getMonth());
+    }
+    state.pathProd = null; state.pathStep = null;
   }
   function pathStep(r, k) { return ((r && r.steps) || []).filter(function (s) { return s.key === k; })[0]; }
   /* Строка под заголовком — ответ на вопрос «что было за период» одной фразой. */
@@ -48756,19 +48785,38 @@
       '<div class="grid"><div class="sp12">' + shimCard(5) + '</div></div></div>';
   }
 
-  function renderPath(view) {
-    if (!can('clients')) { noClientsStub(view, 'path'); return; }
-    if (pathGranOk() === 'lost') { renderPathLost(view); return; }
+  function pathListHtml(sel) {
+    var rows = sel.people.length ? sel.people.map(function (p) {
+      return pathPersonRow(p, '');
+    }).join('') : '<div class="empty">' + (sel.anon ? 'Только анонимные заходы — имени и контакта они не оставили.' : 'За этот период таких нет.') + '</div>';
+    var notes = [];
+    if (sel.anon && sel.people.length) notes.push('Еще ' + sel.anon + ' ' + plural(sel.anon, 'заход', 'захода', 'заходов') + ' без имени и контакта, в списке их нет.');
+    if (sel.cut) notes.push('Показаны первые ' + sel.people.length + '.');
+    return '<div class="card pth-list">' +
+      '<div class="sec-head"><div><div class="t">' + esc(sel.label) + ' · ' + sel.n + '</div>' +
+      '<div class="s">клик по имени открывает карточку</div></div></div>' +
+      /* откуда пришли люди этой ступени: бот по каналам, эфир, платформа, вручную */
+      ((sel.sources || []).length ? '<div class="pth-src">' + sel.sources.map(function (x) {
+        return '<span class="pth-sc">' + esc(x.label) + ' <b class="num">' + x.n + '</b></span>';
+      }).join('') + '</div>' : '') +
+      '<div class="pth-rows">' + rows + '</div>' +
+      (notes.length ? '<div class="brd-note">' + esc(notes.join(' ')) + '</div>' : '') + '</div>';
+  }
+  function renderPath(view, emb) {
+    if (!can('clients')) { if (!emb) noClientsStub(view, 'path'); return; }
+    if (pathGranOk() === 'lost' && !emb) { renderPathLost(view); return; }
     var r = pathRep();
-    if (!r) { pathLoad(); view.innerHTML = pathSkeleton(); return; }
+    if (!r) { pathLoad(); view.innerHTML = emb ? shimCard(4) : pathSkeleton(); return; }
     if (r.error) {
       view.innerHTML = '<div class="card"><div class="empty">Отчет не загрузился: ' + esc(r.error) +
         '. Обновите страницу, если не поможет — напишите в чат разработки.</div></div>';
       return;
     }
     var g = r.gran;
-    var selKey = pathStep(r, state.pathStep) ? state.pathStep : 'diagnosed';
-    var sel = pathStep(r, selKey);
+    // В «Продажах» список людей открывается нажатием: блок стоит высоко и без
+    // нажатия не должен отодвигать остальной экран.
+    var selKey = pathStep(r, state.pathStep) ? state.pathStep : (emb ? null : 'diagnosed');
+    var sel = selKey ? pathStep(r, selKey) : null;
 
     /* плитки шагов: число за период, клик — список людей ниже */
     var tiles = r.steps.map(function (s) {
@@ -48780,27 +48828,13 @@
     }).join('');
     var head = '<div class="card pth-top">' +
       '<div class="sec-head wrap pth-head"><span class="ic">' + ic('path', 14) + '</span>' +
-        '<div><div class="t">Шаги за ' + (g === 'day' ? 'день' : g === 'week' ? 'неделю' : 'месяц') + '</div>' +
+        '<div><div class="t">' + (emb ? 'Путь до оплаты' : 'Шаги') + ' за ' + (g === 'day' ? 'день' : g === 'week' ? 'неделю' : 'месяц') + '</div>' +
         '<div class="s">шаг считается в тот день, когда человек его сделал</div></div>' +
         pathNav(r) + '</div>' +
       '<div class="statbar ' + (r.steps.length === 6 ? 'six' : 'five') + ' pth-stats">' + tiles + '</div></div>';
 
     /* люди выбранного шага */
-    var rows = sel.people.length ? sel.people.map(function (p) {
-      return pathPersonRow(p, '');
-    }).join('') : '<div class="empty">' + (sel.anon ? 'Только анонимные заходы — имени и контакта они не оставили.' : 'За этот период таких нет.') + '</div>';
-    var notes = [];
-    if (sel.anon && sel.people.length) notes.push('Еще ' + sel.anon + ' ' + plural(sel.anon, 'заход', 'захода', 'заходов') + ' без имени и контакта, в списке их нет.');
-    if (sel.cut) notes.push('Показаны первые ' + sel.people.length + '.');
-    var list = '<div class="card pth-list">' +
-      '<div class="sec-head"><div><div class="t">' + esc(sel.label) + ' · ' + sel.n + '</div>' +
-      '<div class="s">клик по имени открывает карточку</div></div></div>' +
-      /* откуда пришли люди этой ступени: бот по каналам, эфир, платформа, вручную */
-      ((sel.sources || []).length ? '<div class="pth-src">' + sel.sources.map(function (x) {
-        return '<span class="pth-sc">' + esc(x.label) + ' <b class="num">' + x.n + '</b></span>';
-      }).join('') + '</div>' : '') +
-      '<div class="pth-rows">' + rows + '</div>' +
-      (notes.length ? '<div class="brd-note">' + esc(notes.join(' ')) + '</div>' : '') + '</div>';
+    var list = sel ? pathListHtml(sel) : '';
 
     /* оплаты по продуктам */
     var prods = r.products.length ? r.products.map(function (pr) {
@@ -48842,10 +48876,13 @@
       '<div class="s">клик по строке открывает этот период</div></div></div>' +
       '<div class="mkd-tbl">' + thead + trows + '</div></div>';
 
-    view.innerHTML = '<div class="dash">' + head + list + pay + trend + '</div>';
+    view.innerHTML = emb ? head + list + trend + pay : '<div class="dash">' + head + list + pay + trend + '</div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('.pth-stats .stat'), function (b) {
-      b.addEventListener('click', function () { state.pathStep = b.getAttribute('data-step'); renderView(); });
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-step');
+        state.pathStep = emb && state.pathStep === k ? null : k; renderView();
+      });
     });
     Array.prototype.forEach.call(view.querySelectorAll('.pth-ph'), function (b) {
       b.addEventListener('click', function () {

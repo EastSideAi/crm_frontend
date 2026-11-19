@@ -519,6 +519,9 @@ a { color: inherit; text-decoration: none; }
 
 /* ════ ДАШБОРД — вертикальный стек с единым ритмом ════ */
 .dash { display: flex; flex-direction: column; gap: 20px; }
+/* «Путь до оплаты» внутри «Воронки» продаж: карточки блока идут тем же шагом, что экран */
+.sb-path { display: flex; flex-direction: column; gap: 20px; }
+.sb-path:empty { display: none; }
 
 /* период-сегмент в топбаре (Обзор) */
 .dperiod { display: inline-flex; gap: 3px; background: var(--fill); border-radius: var(--r-pill); padding: 4px; }
