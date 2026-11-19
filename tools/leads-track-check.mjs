@@ -15,6 +15,7 @@ const patched = src.replace(marker, marker +
   ' ownOpts: function (a) { return ownerOptions(a); },' +
   ' ownLabel: function (a) { return ownerLabel(a); },' +
   ' ownHit: function (l, seg) { return ownerHit(l, seg); },' +
+  ' stCell: function (l) { return stageCell(l); },' +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
   ' keys: function (seg) { return quickKeys(seg); },' +
   ' clsHit: function (l, seg) { return classHit(l, seg); },' +
@@ -225,6 +226,53 @@ L.state.own = 'none';
 check('«Без тьютора» дает одного', kom.filter(l => L.ownHit(l, 'support')).length === 1, '');
 L.state.own = '';
 check('без фильтра видны все семеро', kom.filter(l => L.ownHit(l, 'support')).length === 7, '');
+
+/* Колонка «Этап» вместо балла (Мария 20.11.2026). Состояния считает сервер, браузер
+   рисует: проверяем, что рисует он ровно то, что приехало. */
+const steps = [
+  { k: 'access', n: 'Доступ', s: 'done', d: 2, t: 2 },
+  { k: 'diag', n: 'Диагностика', s: 'done', d: 3, t: 3 },
+  { k: 'pick', n: 'Подбор', s: 'now', d: 4, t: 9 },
+  { k: 'docs', n: 'Документы', s: 'open', d: 0, t: 2 },
+  { k: 'lang', n: 'Язык', s: 'none', d: 0, t: 0 },
+];
+const withStage = { id: 'x', crm: { overrides: {} },
+  stage: { key: 'pick', short: 'Подбор', title: 'Подбор', pos: 3, total: 5, steps: steps } };
+const cell = L.stCell(withStage);
+check('в строке название этапа и место в маршруте',
+  cell.indexOf('Подбор') > 0 && cell.indexOf('3/5') > 0, cell);
+/* Полоска — насечка на КАЖДЫЙ этап плана, а не на пройденные: иначе короткий
+   маршрут выглядит как пройденный целиком. */
+check('насечек столько же, сколько этапов',
+  (cell.match(/class="sg/g) || []).length === steps.length, cell);
+check('текущий этап в полоске один и он подсвечен',
+  (cell.match(/class="sg now"/g) || []).length === 1 &&
+  (cell.match(/class="sg done"/g) || []).length === 2, cell);
+/* Плана нет — пустой полоски тоже нет: шестнадцать серых насечек читаются как
+   «маршрут есть, но не начат», а маршрута еще не существует. */
+check('без плана полоски нет вовсе',
+  !/class="sg/.test(L.stCell({ id: 'w', crm: { overrides: {} }, stage: null })),
+  L.stCell({ id: 'w', crm: { overrides: {} }, stage: null }));
+check('по ячейке можно нажать — открывается карточка на «Поступлении»',
+  /data-stid="x"/.test(cell) && /data-stop="1"/.test(cell) &&
+  /role="button"/.test(cell) && /aria-label="Поступление/.test(cell), cell);
+const noPlan = L.stCell({ id: 'y', crm: { overrides: {} }, stage: null });
+check('плана нет — так и написано, а не первый этап',
+  noPlan.indexOf('план не собран') > 0, noPlan);
+/* Собирают план на той же вкладке карточки, куда ведет ячейка, — мертвой строки
+   из нее делать незачем. */
+check('«план не собран» тоже открывает карточку',
+  /data-stid="y"/.test(noPlan) && /role="button"/.test(noPlan), noPlan);
+/* Старый ответ сервера (поля stage нет вовсе) — это не «плана нет»: звать собирать
+   план, пока бэкенд не выкачен, значит врать всей вкладке разом. */
+check('сервер еще не умеет этапы — молчим, а не зовем собирать план',
+  L.stCell({ id: 'z', crm: { overrides: {} } }).indexOf('план не собран') < 0,
+  L.stCell({ id: 'z', crm: { overrides: {} } }));
+/* Старый ответ сервера (поля stage нет) ячейкой-кнопкой быть не должен: вести
+   человека в план, которого сервер еще не умеет считать, незачем. */
+check('без поля stage ячейка не кнопка',
+  !/role="button"/.test(L.stCell({ id: 'z', crm: { overrides: {} } })),
+  L.stCell({ id: 'z', crm: { overrides: {} } }));
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);
