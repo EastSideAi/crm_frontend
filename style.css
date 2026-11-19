@@ -286,6 +286,12 @@ a { color: inherit; text-decoration: none; }
    где прошел разговор. Включенный вид берем общий, у .qchip.on. */
 .mx-office-chip { margin-left: 10px; }
 .qchip .qn { font-size: 11px; font-weight: 700; color: var(--ink-3); }
+/* Второй ряд чипов на вкладке «Сопровождение» — направления подачи. Тише
+   верхнего: срез воронки отвечает на «что сейчас с человеком», направление — на
+   «куда он поступает», и два одинаково громких ряда подряд читаются как один. */
+.list-trk { padding-top: 9px; padding-bottom: 11px; background: var(--fill); }
+.list-trk .qchip { font-size: 12px; padding: 6px 11px; background: #fff; }
+.list-trk .qchip:hover { background: #EDEFF3; }
 .qchip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
 .qchip.on svg, .qchip.on .qn { color: rgba(255,255,255,.75); }
 .qchip.hot.on { background: var(--red); border-color: var(--red); }
@@ -4676,10 +4682,12 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
   .dn-who, .dn-when { grid-column: 2; text-align: left; font-size: 12px; }
   .dn-when { color: var(--ink-3); }
   /* Семь направлений в три ряда на 390px съедают экран целиком, а список под
-     ними — одну строку. Уводим в один ряд с горизонтальным скроллом. */
-  .list-quick.depts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .list-quick.depts::-webkit-scrollbar { display: none; }
-  .list-quick.depts .qchip { flex: none; }
+     ними — одну строку. Уводим в один ряд с горизонтальным скроллом.
+     Тем же рецептом живет ряд направлений подачи (.list-trk): беда та же,
+     второго решения у нее быть не должно. */
+  .list-quick.depts, .list-trk { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .list-quick.depts::-webkit-scrollbar, .list-trk::-webkit-scrollbar { display: none; }
+  .list-quick.depts .qchip, .list-trk .qchip { flex: none; }
   /* «По ученикам» на телефоне: название задачи во всю ширину, под ним человек и
      срок, статус справа. В четыре колонки на 390px имя схлопывается в «Ть…». */
   .stu { padding: 14px 16px 12px; }
