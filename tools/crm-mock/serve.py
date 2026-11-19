@@ -55,7 +55,11 @@ def leads():
         ov = {"tariff": tariff}
         if track:
             ov["track"] = track
+        # Кто ведет: в «Сопровождении» имя тьютора стоит на месте плашки статуса.
+        tutors = ["Элиза Аюпова", "Александр Сердотецков", "Лиана Эванс", None]
+        tutor = tutors[i % 4]
         crm = {"status": "client", "note": note, "overrides": ov,
+               "owner": ({"id": 100 + i, "name": tutor} if tutor else None),
                "tasks": [], "comms": []}
         # Разнобой ради срезов воронки: без него у всех карточек одинаковые
         # признаки, ряд чипов схлопывается в одно «Все», и разницу вкладок
@@ -67,9 +71,13 @@ def leads():
         if i % 5 == 0:
             crm["tasks"] = [{"text": "позвонить семье", "done": False,
                              "due": "2026-11-10"}]
+        # Класс школьника считает бэкенд из года окончания школы и отдает полем
+        # school_class (вкладки «8 / 9 / 10 класс»). Тут просто подставляем правдоподобно.
+        klass = [11, 10, 11, 9, 8, None, None, None, 10, 11, 9, 8][i % 12]
         out.append({
             "id": "demo-%02d" % i,
             "name": name,
+            "school_class": klass,
             "score": score,
             "status": "diagnosed",
             "grade": "11 класс" if i % 2 else "10 класс",
@@ -117,6 +125,12 @@ class H(SimpleHTTPRequestHandler):
             return self._json(ME)
         if p == "/admin/api/leads":
             return self._json({"ok": True, "leads": leads()})
+        # Карточка лида — тот же выдуманный человек, что в списке: без нее окно
+        # карточки открывается пустым, и блок квалификации не посмотреть.
+        if p.startswith("/admin/api/leads/") and p.count("/") == 4:
+            one = [x for x in leads() if x["id"] == p.rsplit("/", 1)[-1]]
+            if one:
+                return self._json({"ok": True, **one[0]})
         if p == "/admin/api/docs/kinds":
             return self._json({"ok": True, "kinds": [], "tracks": TRACKS})
         if p.startswith("/admin/api/") or p.startswith("/api/"):
