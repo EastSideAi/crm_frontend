@@ -236,6 +236,12 @@ a { color: inherit; text-decoration: none; }
 /* меню дропдауна (тот же контейнер, что #smenu) */
 #smenu.ddmenu button { justify-content: flex-start; }
 #smenu.ddmenu button svg { margin-left: auto; color: var(--blue); }
+/* число рядом с пунктом (сколько человек под этим фильтром) и волосок между
+   двумя разными фильтрами в одном списке — направлением и классом */
+#smenu.ddmenu button .ddn { margin-left: auto; color: var(--ink-3); font-size: 11.5px; font-weight: 600; }
+#smenu.ddmenu button.cur .ddn { color: var(--blue); }
+#smenu.ddmenu button .ddn + svg { margin-left: 7px; }
+#smenu.ddmenu .ddsep { height: 1px; background: var(--line); margin: 5px 11px; }
 
 /* выбор ведомости: год -> месяц (тихие фильтры) + ведомость со стрелками (якорь).
    Стрелки — общий контрол .icobtn (не свой рецепт кнопки), бейдж — семья .sev. */
@@ -281,19 +287,19 @@ a { color: inherit; text-decoration: none; }
   color: var(--ink-2); background: var(--fill); border: 1px solid transparent;
   border-radius: var(--r-pill); padding: 7px 13px; cursor: pointer; transition: .15s; white-space: nowrap; }
 .qchip svg { width: 13px; height: 13px; color: var(--ink-3); }
+/* Направление и тьютор стоят в том же ряду, что срезы воронки, но прижаты вправо:
+   слева вопрос «что с человеком сейчас», справа «чей он и куда поступает». Это
+   выпадашки, а не чипы (Мария 19.11.2026): семь направлений и три класса занимали
+   чипами две строки над таблицей. */
+.list-quick .lq-dd { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.list-quick .lq-dd .cdd { padding: 7px 13px; font-size: 12.5px; background: #fff; }
+.list-quick .lq-dd .cdd:hover { background: #EDEFF3; }
+.list-quick .lq-dd .cdd.active { background: var(--blue-tint); }
 .qchip:hover { color: var(--ink); background: #EDEFF3; }
 /* «Из офиса» стоит рядом с направлениями, но отвечает на другой вопрос —
    где прошел разговор. Включенный вид берем общий, у .qchip.on. */
 .mx-office-chip { margin-left: 10px; }
 .qchip .qn { font-size: 11px; font-weight: 700; color: var(--ink-3); }
-/* Второй ряд чипов на вкладке «Сопровождение» — направления подачи. Тише
-   верхнего: срез воронки отвечает на «что сейчас с человеком», направление — на
-   «куда он поступает», и два одинаково громких ряда подряд читаются как один. */
-.list-trk { padding-top: 9px; padding-bottom: 11px; background: var(--fill); }
-.list-trk .qchip { font-size: 12px; padding: 6px 11px; background: #fff; }
-.list-trk .qchip:hover { background: #EDEFF3; }
-/* Классы школьников стоят в том же ряду, что направления (Мария 19.11.2026), но это
-   другой вопрос к списку — отделяем их волоском, а не вторым рядом. */
 /* Имя тьютора на месте плашки статуса в «Сопровождении»: там у всех «клиент».
    Цвет у каждого свой (Мария 19.11.2026): четверых она назвала поименно, остальные
    берут спокойные оттенки. Текст всегда темный на светлой подложке — желтым по
@@ -303,16 +309,26 @@ a { color: inherit; text-decoration: none; }
 .t-chip { display: inline-block; max-width: 100%; padding: 3px 8px; border-radius: 999px;
           font-size: 11.5px; font-weight: 600; letter-spacing: -.01em;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tn-amber  { color: #8A6100; background: #F59F0026; }
-.tn-green  { color: #2B8A3E; background: #2B8A3E1A; }
-.tn-pink   { color: #C2255C; background: #C2255C16; }
-.tn-blue   { color: #1971C2; background: #1971C21A; }
-.tn-violet { color: #6741D9; background: #6741D916; }
-.tn-teal   { color: #0B7285; background: #0B728516; }
-.tn-olive  { color: #5C940D; background: #5C940D1A; }
-.tn-brown  { color: #B35309; background: #B3530918; }
-.tn-slate  { color: #495057; background: #4950571A; }
-.list-trk .qsep { flex: none; align-self: center; width: 1px; height: 16px; margin: 0 4px; background: var(--line-2); }
+/* Тон тьютора: цвет живет отдельно от плашки — в таблице имя стоит в мягкой
+   плашке, а на кнопке фильтра и в выпадающем списке красится только текст. */
+.tn-amber  { color: #8A6100; }
+.tn-green  { color: #2B8A3E; }
+.tn-pink   { color: #C2255C; }
+.tn-blue   { color: #1971C2; }
+.tn-violet { color: #6741D9; }
+.tn-teal   { color: #0B7285; }
+.tn-olive  { color: #5C940D; }
+.tn-brown  { color: #B35309; }
+.tn-slate  { color: #495057; }
+.t-chip.tn-amber  { background: #F59F0026; }
+.t-chip.tn-green  { background: #2B8A3E1A; }
+.t-chip.tn-pink   { background: #C2255C16; }
+.t-chip.tn-blue   { background: #1971C21A; }
+.t-chip.tn-violet { background: #6741D916; }
+.t-chip.tn-teal   { background: #0B728516; }
+.t-chip.tn-olive  { background: #5C940D1A; }
+.t-chip.tn-brown  { background: #B3530918; }
+.t-chip.tn-slate  { background: #4950571A; }
 .qchip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
 .qchip.on svg, .qchip.on .qn { color: rgba(255,255,255,.75); }
 .qchip.hot.on { background: var(--red); border-color: var(--red); }
@@ -4681,12 +4697,10 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
   .dn-who, .dn-when { grid-column: 2; text-align: left; font-size: 12px; }
   .dn-when { color: var(--ink-3); }
   /* Семь направлений в три ряда на 390px съедают экран целиком, а список под
-     ними — одну строку. Уводим в один ряд с горизонтальным скроллом.
-     Тем же рецептом живет ряд направлений подачи (.list-trk): беда та же,
-     второго решения у нее быть не должно. */
-  .list-quick.depts, .list-trk { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .list-quick.depts::-webkit-scrollbar, .list-trk::-webkit-scrollbar { display: none; }
-  .list-quick.depts .qchip, .list-trk .qchip { flex: none; }
+     ними — одну строку. Уводим в один ряд с горизонтальным скроллом. */
+  .list-quick.depts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .list-quick.depts::-webkit-scrollbar { display: none; }
+  .list-quick.depts .qchip { flex: none; }
   /* «По ученикам» на телефоне: название задачи во всю ширину, под ним человек и
      срок, статус справа. В четыре колонки на 390px имя схлопывается в «Ть…». */
   .stu { padding: 14px 16px 12px; }

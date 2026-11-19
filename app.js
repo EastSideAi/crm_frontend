@@ -177,13 +177,14 @@
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
     // раздел «Сопровождение»: вкладка (my | all | pay), раскрытый ученик, дата выплаты
     ptSeg: 'my', ptOpen: null, ptDay: '', ptTrack: '',
-    // «Контакты» → вкладка «Сопровождение»: выбранное направление подачи
+    // «Контакты» → вкладка «Сопровождение»: направление подачи, класс, тьютор
     trk: '',
     cls: 0,
+    own: '',
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack', 'trk', 'cls'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack', 'trk', 'cls', 'own'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -210,6 +211,7 @@
         ptTrack: state.ptTrack || '',
         trk: state.trk || '',
         cls: state.cls || 0,
+        own: state.own || '',
       }));
     } catch (e) {}
   }
@@ -1126,6 +1128,7 @@
       if (!qp(l)) return false;
       if (!trackHit(l, seg)) return false;
       if (!classHit(l, seg)) return false;
+      if (!ownerHit(l, seg)) return false;
       return true;
     });
     if (state.sort) {
@@ -1345,17 +1348,25 @@
   function chev() {
     return '<svg class="cdd-ch" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg>';
   }
-  function ddButton(id, label, active) {
-    return '<button class="cdd' + (active ? ' active' : '') + '" id="' + id + '"><span>' + esc(label) + '</span>' + chev() + '</button>';
+  function ddButton(id, label, active, tone) {
+    return '<button class="cdd' + (active ? ' active' : '') + '" id="' + id + '">' +
+      '<span' + (tone ? ' class="tn-' + tone + '"' : '') + '>' + esc(label) + '</span>' + chev() + '</button>';
   }
   function openDropdown(anchor, options, current, onPick) {
     closeSmenu();
     smenu = document.createElement('div');
     smenu.id = 'smenu'; smenu.className = 'ddmenu';
     smenu.innerHTML = options.map(function (o) {
-      return '<button data-v="' + esc(o.v) + '" class="' + (o.v === current ? 'cur' : '') + '">' +
-        (o.dot ? '<span class="dt" style="background:' + o.dot + '"></span>' : '') + esc(o.label) +
-        (o.v === current ? ic('check', 13) : '') + '</button>';
+      if (o.sep) return '<div class="ddsep"></div>';
+      /* обычному дропдауну хватает текущего значения, а там, где в одном списке
+         живут два независимых фильтра (направление и класс), отмеченных пунктов
+         может быть два — тогда пункт говорит о себе сам полем on. */
+      var on = ('on' in o) ? !!o.on : (o.v === current);
+      return '<button data-v="' + esc(o.v) + '" class="' + (on ? 'cur' : '') + '">' +
+        (o.dot ? '<span class="dt" style="background:' + o.dot + '"></span>' : '') +
+        (o.tone ? '<span class="tn-' + o.tone + '">' + esc(o.label) + '</span>' : esc(o.label)) +
+        (o.n == null ? '' : '<span class="ddn num">' + o.n + '</span>') +
+        (on ? ic('check', 13) : '') + '</button>';
     }).join('');
     document.body.appendChild(smenu);
     var r = anchor.getBoundingClientRect();
@@ -1364,6 +1375,7 @@
     smenu.style.left = Math.min(r.left, window.innerWidth - smenu.offsetWidth - 8) + 'px';
     anchor.classList.add('open');
     Array.prototype.forEach.call(smenu.children, function (b) {
+      if (!b.hasAttribute('data-v')) return;   // разделитель
       b.addEventListener('click', function (e) {
         e.stopPropagation(); var v = b.getAttribute('data-v'); closeSmenu(); onPick(v);
       });
@@ -1399,46 +1411,116 @@
     if (!trackTab(seg) || !state.cls) return true;
     return l.school_class === state.cls;
   }
-  function trackChips(arr) {
-    if (!trackTab()) return '';
-    var by = {}, none = 0;
+  /* ОДНА КНОПКА ВМЕСТО РЯДА ЧИПОВ (Мария 19.11.2026: «сделай тут выпадающую строку,
+     нажимаю сбоку на стрелку и оттуда выпадают по списку»). Направлений семь, классов
+     три — чипами это занимало две строки над таблицей и отодвигало сам список. Теперь
+     это обычный дропдаун рядом с «За все время», тот же контрол, что у этапа и периода.
+     Направление и класс в списке лежат рядом, но фильтры РАЗНЫЕ и складываются, поэтому
+     отмеченных пунктов может быть два, а подпись кнопки — «Бакалавриат · 9 класс». */
+  function trackCounts(arr) {
+    var by = {}, none = 0, cls = {};
     arr.forEach(function (l) {
       var t = leadTrack(l);
       if (t) by[t] = (by[t] || 0) + 1; else none++;
+      if (l.school_class) cls[l.school_class] = (cls[l.school_class] || 0) + 1;
     });
-    var keys = TRACK_ORDER.filter(function (k) { return by[k]; })
-      .concat(Object.keys(by).filter(function (k) { return TRACK_ORDER.indexOf(k) < 0; }));
-    if (!keys.length && !none) return '';
-    var cur = state.trk || '';
-    var chip = function (k, label, n) {
-      return '<button type="button" class="qchip' + (cur === k ? ' on' : '') +
-        '" data-trk="' + esc(k) + '">' + esc(label) +
-        '<span class="qn num">' + n + '</span></button>';
-    };
-    var byCls = {};
-    arr.forEach(function (l) { if (l.school_class) byCls[l.school_class] = (byCls[l.school_class] || 0) + 1; });
-    var clsChips = CLASS_CHIPS.filter(function (n) { return byCls[n]; }).map(function (n) {
-      return '<button type="button" class="qchip' + (state.cls === n ? ' on' : '') +
-        '" data-cls="' + n + '">' + n + ' класс' +
-        '<span class="qn num">' + byCls[n] + '</span></button>';
-    }).join('');
-    return '<div class="list-quick list-trk">' +
-      chip('', 'Все направления', arr.length) +
-      keys.map(function (k) { return chip(k, trackName(k), by[k]); }).join('') +
-      (none ? chip('none', 'Без направления', none) : '') +
-      (clsChips ? '<span class="qsep"></span>' + clsChips : '') +
-      '</div>';
+    return { by: by, none: none, cls: cls, all: arr.length };
+  }
+  function trackLabel() {
+    var p = [];
+    if (state.trk) p.push(state.trk === 'none' ? 'Без направления' : trackName(state.trk));
+    if (state.cls) p.push(state.cls + ' класс');
+    return p.length ? p.join(' · ') : 'Все направления';
+  }
+  function trackOptions(arr) {
+    var c = trackCounts(arr);
+    var keys = TRACK_ORDER.filter(function (k) { return c.by[k]; })
+      .concat(Object.keys(c.by).filter(function (k) { return TRACK_ORDER.indexOf(k) < 0; }));
+    var opts = [{ v: '', label: 'Все направления', n: c.all, on: !state.trk && !state.cls }];
+    keys.forEach(function (k) {
+      opts.push({ v: 't:' + k, label: trackName(k), n: c.by[k], on: state.trk === k });
+    });
+    if (c.none) opts.push({ v: 't:none', label: 'Без направления', n: c.none, on: state.trk === 'none' });
+    var ks = CLASS_CHIPS.filter(function (n) { return c.cls[n]; });
+    if (ks.length) {
+      opts.push({ sep: true, v: '' });
+      ks.forEach(function (n) {
+        opts.push({ v: 'c:' + n, label: n + ' класс', n: c.cls[n], on: state.cls === n });
+      });
+    }
+    return opts;
+  }
+  /* ВЫПАДАШКА ПО ТЬЮТОРАМ рядом с направлениями (Мария 19.11.2026: «чтобы была
+     строка, куда нажимаешь, и там высвечивается список наших тьюторов, и чтобы
+     отображались их ученики»). Фильтруем по id ответственного, а не по имени:
+     тезки в команде уже были. Имя в списке и на кнопке стоит в своем цвете — том
+     же, что в колонке «Тьютор», чтобы кнопка и таблица читались как одно. */
+  function ownerId(l) { var o = ((l.crm || {}).owner) || {}; return o.id ? String(o.id) : ''; }
+  function ownerHit(l, seg) {
+    if (!trackTab(seg) || !state.own) return true;
+    return state.own === 'none' ? !ownerId(l) : ownerId(l) === state.own;
+  }
+  function ownerLabel(arr) {
+    if (!state.own) return 'Все тьюторы';
+    if (state.own === 'none') return 'Без тьютора';
+    for (var i = 0; i < arr.length; i++) {
+      if (ownerId(arr[i]) === state.own) return ownerName(arr[i]);
+    }
+    return 'Тьютор';   // выбранный исчез из среза — кнопка все равно говорит, что фильтр стоит
+  }
+  function ownerOptions(arr) {
+    var by = {}, none = 0;
+    arr.forEach(function (l) {
+      var id = ownerId(l);
+      if (!id) { none++; return; }
+      if (!by[id]) by[id] = { id: id, name: ownerName(l), n: 0 };
+      by[id].n++;
+    });
+    var list = Object.keys(by).map(function (k) { return by[k]; })
+      .sort(function (a, b) { return b.n - a.n || a.name.localeCompare(b.name, 'ru'); });
+    var opts = [{ v: '', label: 'Все тьюторы', n: arr.length, on: !state.own }];
+    list.forEach(function (o) {
+      opts.push({ v: 'o:' + o.id, label: o.name, n: o.n, on: state.own === o.id, tone: tutorTone(o.name) });
+    });
+    if (none) opts.push({ v: 'o:none', label: 'Без тьютора', n: none, on: state.own === 'none' });
+    return opts;
+  }
+  function ownTone() {
+    if (!state.own || state.own === 'none') return '';
+    var nm = ownerLabel(segArrForTools());
+    return nm && nm !== 'Тьютор' ? tutorTone(nm) : '';
+  }
+  function ownerPick(v) {
+    var id = v ? v.slice(2) : '';
+    state.own = state.own === id ? '' : id;
+    saveUi(); renderView();
+  }
+  function trackPick(v) {
+    if (!v) { state.trk = ''; state.cls = 0; }
+    else if (v.slice(0, 2) === 'c:') {
+      var n = Number(v.slice(2));
+      state.cls = state.cls === n ? 0 : n;
+    } else {
+      var k = v.slice(2);
+      state.trk = state.trk === k ? '' : k;
+    }
+    saveUi(); renderView();
   }
 
-  function leadsToolbar() {
-    var funnelLabel = state.filters.funnel ? FUNNEL[state.filters.funnel] : 'Этап: все';
-    var periodLabels = { '': 'За все время', today: 'Сегодня', week: '7 дней', month: '30 дней' };
-
-    var segArr = segBase(state.seg).filter(function (l) {
+  /* Срез вкладки ДО быстрых фильтров: по нему считаются счетчики в чипах и в
+     дропдауне направлений, и он же стоит в знаменателе «N из M». */
+  function segArrForTools() {
+    return segBase(state.seg).filter(function (l) {
       if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       return inPeriod(l, state.filters.period);
     });
+  }
+  function leadsToolbar() {
+    var funnelLabel = state.filters.funnel ? FUNNEL[state.filters.funnel] : 'Этап: все';
+    var periodLabels = { '': 'За все время', today: 'Сегодня', week: '7 дней', month: '30 дней' };
+
+    var segArr = segArrForTools();
     var total = segArr.length;
     var shown = segLeads(state.seg).length;
 
@@ -1468,8 +1550,14 @@
         '</div>' +
         '<button class="bp sm lead-add" id="lead-add" title="Завести клиента вручную">' + ic('plus', 14) + '<span>Добавить</span></button>' +
       '</div>' +
-      '<div class="list-quick">' + chips + '</div>' +
-      trackChips(segArr);
+      '<div class="list-quick">' + chips +
+        (trackTab()
+          ? '<span class="lq-dd">' +
+              ddButton('f-trk', trackLabel(), !!(state.trk || state.cls)) +
+              ddButton('f-own', ownerLabel(segArr), !!state.own, ownTone()) +
+            '</span>'
+          : '') +
+      '</div>';
   }
   function attachToolbarHandlers() {
     var search = el('search'), wrap = search && search.closest('.searchwrap');
@@ -1511,25 +1599,18 @@
         renderView();
       });
     });
-    Array.prototype.forEach.call(document.querySelectorAll('.list-trk .qchip'), function (b) {
-      b.addEventListener('click', function () {
-        if (b.hasAttribute('data-cls')) {
-          var n = Number(b.getAttribute('data-cls'));
-          state.cls = state.cls === n ? 0 : n;
-        } else {
-          var k = b.getAttribute('data-trk') || '';
-          state.trk = (state.trk || '') === k ? '' : k;
-        }
-        saveUi(); renderView();
-      });
+    var fow = el('f-own');
+    if (fow) fow.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (fow.classList.contains('open')) { closeSmenu(); fow.classList.remove('open'); return; }
+      openDropdown(fow, ownerOptions(segArrForTools()), '', ownerPick);
     });
-    /* На телефоне ряд направлений едет вбок одной строкой, и выбранный чип может
-       оказаться за краем: человек видит короткий список и не понимает, почему. */
-    setTimeout(function () {
-      var trkRow = document.querySelector('.list-trk');
-      var trkOn = trkRow && trkRow.querySelector('.qchip.on');
-      if (trkOn && trkOn.getAttribute('data-trk')) trkRow.scrollLeft = Math.max(0, trkOn.offsetLeft - 16);
-    }, 0);
+    var ftr = el('f-trk');
+    if (ftr) ftr.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (ftr.classList.contains('open')) { closeSmenu(); ftr.classList.remove('open'); return; }
+      openDropdown(ftr, trackOptions(segArrForTools()), '', trackPick);
+    });
     Array.prototype.forEach.call(document.querySelectorAll('.list-tools .vseg button'), function (b) {
       b.addEventListener('click', function () { state.viewMode = b.getAttribute('data-v'); saveUi(); renderView(); });
     });
@@ -1538,11 +1619,7 @@
   function updateListCount() {
     var node = el('list-count');
     if (!node) return;
-    var segArr = segBase(state.seg).filter(function (l) {
-      if (!state.showBlank && isBlankVisit(l)) return false;
-      if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
-      return inPeriod(l, state.filters.period);
-    });
+    var segArr = segArrForTools();
     var total = segArr.length, shown = segLeads(state.seg).length;
     node.innerHTML = (shown === total)
       ? '<b>' + total + '</b> ' + plural(total, 'клиент', 'клиента', 'клиентов')
@@ -48627,7 +48704,7 @@
      Остальным цвет дается от имени, но из спокойной части палитры, чтобы не спорить
      с четырьмя названными. */
   var TUTOR_TONE = { сердотецков: 'amber', мишина: 'green', малахова: 'pink', аюпова: 'blue' };
-  var TUTOR_TONES_REST = ['violet', 'teal', 'olive', 'brown', 'slate'];
+  var TUTOR_TONES_REST = ['violet', 'teal', 'brown', 'slate'];
   function tutorTone(name) {
     var n = String(name || '').toLowerCase().replace(/ё/g, 'е');
     for (var k in TUTOR_TONE) { if (n.indexOf(k) >= 0) return TUTOR_TONE[k]; }
