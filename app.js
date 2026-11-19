@@ -176,11 +176,11 @@
     portalTariff: 'plus', portalStage: null, portalPay: 'offer',
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
     // раздел «Сопровождение»: вкладка (my | all | pay), раскрытый ученик, дата выплаты
-    ptSeg: 'my', ptOpen: null, ptDay: '',
+    ptSeg: 'my', ptOpen: null, ptDay: '', ptTrack: '',
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -204,6 +204,7 @@
         pathGran: state.pathGran || 'week',
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
         rwDept: state.rwDept || '',
+        ptTrack: state.ptTrack || '',
       }));
     } catch (e) {}
   }
@@ -58610,6 +58611,53 @@
       }).join('') + '</div></div>';
   }
 
+  /* Направления ученика. Порядок и ключи — те же, что в `doc_checklist.TRACKS`
+     бэкенда (там от направления зависит пакет документов семьи), название берем из
+     ответа сервера, а не из этого списка: два словаря разъедутся на первом же новом
+     направлении. Здесь ключи нужны только чтобы чипы стояли в осмысленном порядке —
+     от языкового года к магистратуре, а не по алфавиту. */
+  var PB_TRACKS = ['lang_grant', 'lang_paid', 'bachelor', 'master',
+                   'master_after_lang', 'bachelor_after_lang', 'master_direct'];
+
+  function pbTrack() { return state.ptTrack || ''; }
+
+  function pbTrackName(st) {
+    return st.trackName || (st.track ? st.track : '');
+  }
+
+  /* Фильтр по направлению. Чип со счетчиком, как в расписании и квалификации:
+     пустых направлений не рисуем — чип, который ничего не находит, только мешает.
+     Отдельный чип «без направления» нужен не для красоты: у таких учеников в
+     кабинете семьи висит общий пакет документов, и это первый список, который
+     администратор разбирает руками. */
+  function pbTracks(students) {
+    var by = {}, none = 0, names = {};
+    students.forEach(function (s) {
+      if (s.track) { by[s.track] = (by[s.track] || 0) + 1; names[s.track] = pbTrackName(s); }
+      else none++;
+    });
+    var keys = PB_TRACKS.filter(function (k) { return by[k]; })
+      .concat(Object.keys(by).filter(function (k) { return PB_TRACKS.indexOf(k) < 0; }));
+    if (!keys.length && !none) return '';
+    var cur = pbTrack();
+    function chip(id, label, n) {
+      return '<button type="button" class="qchip' + (cur === id ? ' on' : '') + '" data-pbtrack="' + esc(id) + '">' +
+        esc(label) + '<span class="qn">' + n + '</span></button>';
+    }
+    return '<div class="pb-tracks">' +
+      chip('', 'Все', students.length) +
+      keys.map(function (k) { return chip(k, names[k] || k, by[k]); }).join('') +
+      (none ? chip('none', 'Без направления', none) : '') +
+      '</div>';
+  }
+
+  function pbFilter(students) {
+    var t = pbTrack();
+    if (!t) return students;
+    if (t === 'none') return students.filter(function (s) { return !s.track; });
+    return students.filter(function (s) { return s.track === t; });
+  }
+
   /* Полоса из пяти точек: закрытые залиты, текущая обведена. Она же навигация —
      клик открывает любую точку, даже давно закрытую (посмотреть, что отметили). */
   function pbRail(st, openKey) {
@@ -58689,6 +58737,7 @@
       '<div class="pb-head">' +
         '<div class="pb-nm"><button class="pb-open" data-pblead="' + esc(st.sessionId) + '">' + esc(st.name) + '</button>' +
           (st.tariff ? '<span class="pb-tar">' + esc(st.tariff) + '</span>' : '') +
+          (pbTrackName(st) ? '<span class="pb-trk">' + esc(pbTrackName(st)) + '</span>' : '') +
           (pbSeg() === 'all' ? who : '') + '</div>' +
         pbRail(st, p.key) +
         '<div class="pb-sum"><b class="num pb-earned">' + fmtMoney(st.money.earned) + ' ₽</b>' +
@@ -58769,15 +58818,19 @@
         'закрыли точку — она сразу встала в ближайшую из них.</div>' +
       '</div>';
 
+    var shown = pbFilter(box.students);
     var list = box.students.length
-      ? box.students.map(pbStudent).join('')
+      ? (shown.length
+          ? shown.map(pbStudent).join('')
+          : '<div class="card"><div class="empty">В этом направлении учеников нет. ' +
+            'Направление ставится в карточке ученика, оно же решает, какой пакет документов видит семья.</div></div>')
       : '<div class="card"><div class="empty">' +
         (seg === 'my'
           ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
           : 'Учеников с заведенными точками пока нет.') + '</div></div>';
 
     var top = seg === 'my' ? pbHero(box) : head;
-    view.innerHTML = pbTabs() + top + list;
+    view.innerHTML = pbTabs() + top + pbTracks(box.students) + list;
     pbWire(view);
   }
 
@@ -58920,6 +58973,16 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-pbseg]'), function (b) {
       b.addEventListener('click', function () {
         state.ptSeg = b.getAttribute('data-pbseg'); state.ptOpen = null; saveUi(); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbtrack]'), function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-pbtrack');
+        // Повторный клик по включенному чипу снимает фильтр: так же ведут себя
+        // чипы ролей в расписании, и это единственный способ вернуться ко «Всем»
+        // не целясь мышью в соседнюю кнопку.
+        state.ptTrack = (state.ptTrack === t) ? '' : t;
+        state.ptOpen = null; saveUi(); renderView();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-pbday]'), function (b) {
