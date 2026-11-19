@@ -1441,13 +1441,13 @@
       opts.push({ v: 't:' + k, label: trackName(k), n: c.by[k], on: state.trk === k });
     });
     if (c.none) opts.push({ v: 't:none', label: 'Без направления', n: c.none, on: state.trk === 'none' });
-    var ks = CLASS_CHIPS.filter(function (n) { return c.cls[n]; });
-    if (ks.length) {
-      opts.push({ sep: true, v: '' });
-      ks.forEach(function (n) {
-        opts.push({ v: 'c:' + n, label: n + ' класс', n: c.cls[n], on: state.cls === n });
-      });
-    }
+    /* Классы стоят ВСЕГДА все три, даже с нулем. Пустой класс значит «таких нет»,
+       и это ответ; исчезнувший пункт человек читает как поломку (Мария 20.11.2026:
+       «что это, где 9 класс?» — девятиклассников в базе просто не было ни одного). */
+    opts.push({ sep: true, v: '' });
+    CLASS_CHIPS.forEach(function (n) {
+      opts.push({ v: 'c:' + n, label: n + ' класс', n: c.cls[n] || 0, on: state.cls === n });
+    });
     return opts;
   }
   /* ВЫПАДАШКА ПО ТЬЮТОРАМ рядом с направлениями (Мария 19.11.2026: «чтобы была

@@ -137,7 +137,10 @@ L.state.cls = 0;
 const hk = L.opts(klassy);
 check('в списке есть «9 класс» со счетчиком 2', (o(hk, '9 класс') || {}).n === 2, JSON.stringify(hk));
 check('классы отделены от направлений волоском', hk.some(x => x.sep), JSON.stringify(hk));
-check('классов, которых нет у людей, в списке нет', !hk.some(x => x.label === '11 класс'), '');
+check('класс без людей не пропадает, а стоит с нулем',
+  hk.some(x => x.label === '8 класс') && hk.some(x => x.label === '9 класс') && hk.some(x => x.label === '10 класс'),
+  hk.map(x => x.label).join(','));
+check('лишних классов в списке нет', !hk.some(x => x.label === '11 класс'), '');
 check('направления в том же списке остались', hk.some(x => x.label === 'Бакалавриат'), '');
 check('волосок стоит после направлений, а не в начале',
   hk.findIndex(x => x.sep) > hk.findIndex(x => x.label === 'Бакалавриат'), '');
