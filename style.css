@@ -5649,9 +5649,12 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .trow.lr-grid.sup { grid-template-columns: 104px minmax(0,1fr) !important;
     height: auto; padding: 11px 14px; row-gap: 7px; }
   .trow.lr-grid.sup .t-tutor { grid-row: 1 / span 2; align-self: center; }
-  /* Палец крупнее курсора: плашка держит высоту нажатия, а не рисуется в один пиксель. */
+  /* Палец крупнее курсора: плашка держит высоту нажатия, а не рисуется в один пиксель.
+     Рамка пунктиром (Мария 20.11.2026): заливка спорила с цветной плашкой тьютора в
+     той же строке, пунктир говорит «сюда можно нажать» и не добавляет второго пятна. */
   .trow.lr-grid.sup .t-stage { grid-column: 2; justify-self: start; max-width: 100%;
-    padding: 5px 10px; border-radius: 9px; background: var(--fill); }
+    padding: 4px 10px; border-radius: 9px; border: 1px dashed var(--line-2); }
+  .trow.lr-grid.sup .t-stage:hover { border-color: var(--blue); }
   .trow.lr-grid.sup .t-stage .stn { font-size: 12.5px; }
   /* Заголовок колонки на телефоне не нужен: плашка стоит под именем, а не столбцом. */
   .trow.lr-grid.sup.thead .th-stage { display: none; }
