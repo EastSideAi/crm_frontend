@@ -239,8 +239,20 @@ const steps = [
 const withStage = { id: 'x', crm: { overrides: {} },
   stage: { key: 'pick', short: 'Подбор', title: 'Подбор', pos: 3, total: 5, steps: steps } };
 const cell = L.stCell(withStage);
-check('в строке только название этапа и место в маршруте, без полоски',
-  cell.indexOf('Подбор') > 0 && cell.indexOf('3/5') > 0 && !/class="sg/.test(cell), cell);
+check('в строке название этапа и место в маршруте',
+  cell.indexOf('Подбор') > 0 && cell.indexOf('3/5') > 0, cell);
+/* Полоска — насечка на КАЖДЫЙ этап плана, а не на пройденные: иначе короткий
+   маршрут выглядит как пройденный целиком. */
+check('насечек столько же, сколько этапов',
+  (cell.match(/class="sg/g) || []).length === steps.length, cell);
+check('текущий этап в полоске один и он подсвечен',
+  (cell.match(/class="sg now"/g) || []).length === 1 &&
+  (cell.match(/class="sg done"/g) || []).length === 2, cell);
+/* Плана нет — пустой полоски тоже нет: шестнадцать серых насечек читаются как
+   «маршрут есть, но не начат», а маршрута еще не существует. */
+check('без плана полоски нет вовсе',
+  !/class="sg/.test(L.stCell({ id: 'w', crm: { overrides: {} }, stage: null })),
+  L.stCell({ id: 'w', crm: { overrides: {} }, stage: null }));
 check('по ячейке можно нажать — открывается карточка на «Поступлении»',
   /data-stid="x"/.test(cell) && /data-stop="1"/.test(cell) &&
   /role="button"/.test(cell) && /aria-label="Поступление/.test(cell), cell);
