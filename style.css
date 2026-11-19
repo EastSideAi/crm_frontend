@@ -540,9 +540,6 @@ a { color: inherit; text-decoration: none; }
 
 /* ════ ДАШБОРД — вертикальный стек с единым ритмом ════ */
 .dash { display: flex; flex-direction: column; gap: 20px; }
-/* «Путь до оплаты» внутри «Воронки» продаж: карточки блока идут тем же шагом, что экран */
-.sb-path { display: flex; flex-direction: column; gap: 20px; }
-.sb-path:empty { display: none; }
 
 /* период-сегмент в топбаре (Обзор) */
 .dperiod { display: inline-flex; gap: 3px; background: var(--fill); border-radius: var(--r-pill); padding: 4px; }
@@ -13004,7 +13001,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
    шести шагов: где ты по дню, видно одним взглядом; шаг с людьми, которые ждут
    ответа, единственный горит красным. Ниже те же шаги списками людей. */
 .ms .ms-head { margin-bottom: 0; }
-.ms-plan { display: grid; grid-template-columns: repeat(8, 1fr); padding: 6px; gap: 2px; }
+.ms-plan { display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px; gap: 2px; }
 .ms-step { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 14px 14px;
   border: 0; background: none; border-radius: var(--r-lg); cursor: pointer; font: inherit;
   transition: background .14s var(--ease); min-width: 0; }
@@ -13058,8 +13055,8 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .ms-sum b { display: block; font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
 .ms-cbtns { display: flex; gap: 10px; margin-top: 14px !important; }
 
-@media (max-width: 1360px) {
-  .ms-plan { grid-template-columns: repeat(4, 1fr); }
+@media (min-width: 1800px) {
+  .ms-plan { grid-template-columns: repeat(9, 1fr); }
 }
 @media (max-width: 960px) {
   .ms-plan { grid-template-columns: repeat(3, 1fr); }
@@ -15702,3 +15699,44 @@ video.cs-media { background: #000; }
 .mg-tc small.mg-dl.bad { color: var(--red-ink); }
 .mg-hcall { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 4px 0 12px;
   font-size: 12px; color: var(--ink-3); }
+
+/* Смены пачкой (19.11.2026): календарь четырех недель и окна времени */
+.shp .sec-head .shp-many { margin-left: auto; flex-shrink: 0; }
+.al-card.shm { width: min(520px, calc(100vw - 32px)); }
+.shm-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.shm-cal { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.shm-wd, .shm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.shm-wd span { font-size: 11px; color: var(--ink-3); text-align: center; font-weight: 600; }
+.shm-d { height: 40px; border: 0; border-radius: 10px; background: var(--fill); color: var(--ink);
+  font: 600 13px 'Manrope', sans-serif; font-variant-numeric: tabular-nums; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1;
+  transition: background .15s, color .15s; }
+.shm-d small { font-size: 9.5px; font-weight: 500; color: var(--ink-3); }
+.shm-d:hover:not(:disabled) { background: var(--navy-soft); }
+.shm-d.today { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.shm-d.on { background: var(--blue); color: #fff; }
+.shm-d.on small { color: rgba(255,255,255,.8); }
+.shm-d:disabled { opacity: .35; cursor: default; }
+.shm-d:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.shm-win { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.shm-win .al-in { flex: 1; min-width: 0; }
+.shm-win span { color: var(--ink-3); }
+.shm-sum { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+@media (max-width: 560px) { .shp .sec-head { flex-wrap: wrap; } .shp .sec-head .shp-many { margin-left: 0; } }
+
+/* список людей под цифрой не прячется под шапкой страницы при прокрутке к нему */
+#sb-people, .mg-who { scroll-margin-top: 100px; }
+
+/* Итог закрытой смены: сколько начислено и за что (19.11.2026) */
+.al-card.shq { width: min(480px, calc(100vw - 32px)); }
+.shq-sum { display: flex; flex-direction: column; gap: 4px; }
+.shq-sum b { font-size: 40px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); line-height: 1.05; }
+.shq-sum span { font-size: 13px; color: var(--ink-2); }
+.shq-list { display: flex; flex-direction: column; border-radius: var(--r-lg); background: var(--fill); padding: 4px 14px; }
+.shq-r { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; }
+.shq-r + .shq-r { border-top: 1px solid var(--line); }
+.shq-t { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.shq-t small { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.shq-r b { font-size: 13px; color: var(--green-ink); white-space: nowrap; }
+.shq-r.lost b { color: var(--red-ink); }
+.shq-k { font-size: 12.5px; color: var(--ink-2); }
