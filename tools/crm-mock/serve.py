@@ -56,8 +56,9 @@ def leads():
         if track:
             ov["track"] = track
         # Кто ведет: в «Сопровождении» имя тьютора стоит на месте плашки статуса.
-        tutors = ["Элиза Аюпова", "Александр Сердотецков", "Лиана Эванс", None]
-        tutor = tutors[i % 4]
+        tutors = ["Аюпова Элиза", "Александр Сердотецков", "Алена Малахова",
+                  "Анастасия Мишина", "Светлана Рошенская", None]
+        tutor = tutors[i % 6]
         crm = {"status": "client", "note": note, "overrides": ov,
                "owner": ({"id": 100 + i, "name": tutor} if tutor else None),
                "tasks": [], "comms": []}

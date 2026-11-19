@@ -18,6 +18,7 @@ const patched = src.replace(marker, marker +
   ' klassy: function () { return qlClasses(); },' +
   ' klassLabel: function (y) { return qlClassLabel(y); },' +
   ' owner: function (l) { return ownerName(l); },' +
+  ' tone: function (n) { return tutorTone(n); },' +
   ' pred: function (seg) { return quickPred(seg); },' +
   ' setTracks: function (t) { DOC_TRACKS = t; }, state: state };');
 
@@ -164,6 +165,17 @@ check('одиннадцатый выпускается в этом учебно�
 check('восьмой выпускается через три года', god(8) === String(konec + 3), String(god(8)));
 check('прошлый год выпуска подписан отдельно, а не теряется',
   L.klassLabel(konec - 2) === 'выпуск ' + (konec - 2), L.klassLabel(konec - 2));
+
+/* Цвет тьютора: четверых Мария назвала поименно, ключ — фамилия. */
+check('Саше желтый', L.tone('Александр Сердотецков') === 'amber', L.tone('Александр Сердотецков'));
+check('Насте зеленый', L.tone('Анастасия Мишина') === 'green', L.tone('Анастасия Мишина'));
+check('Алене розовый', L.tone('Алена Малахова') === 'pink', L.tone('Алена Малахова'));
+check('Элизе голубой в любом порядке слов',
+  L.tone('Аюпова Элиза') === 'blue' && L.tone('Элиза Аюпова') === 'blue', L.tone('Элиза Аюпова'));
+check('буква е вместо ё не ломает цвет', L.tone('Алёна Малахова') === 'pink', L.tone('Алёна Малахова'));
+check('остальным цвет из спокойной части палитры и всегда тот же',
+  L.tone('Светлана Рошенская') === L.tone('Светлана Рошенская') &&
+  ['amber', 'green', 'pink', 'blue'].indexOf(L.tone('Светлана Рошенская')) < 0, L.tone('Светлана Рошенская'));
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);
