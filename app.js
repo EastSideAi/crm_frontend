@@ -155,7 +155,7 @@
     // «Расписание» в меню, под «Задачами».
     meetView: 'slots', meetMonth: 0, meetMonthData: {},
     news: null, newsUnread: 0, learn: null, learnOpen: null,
-    teamMode: 'office', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
+    teamMode: 'now', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
     pulse: null, pulseDate: '', pulseTimer: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -8295,7 +8295,7 @@
     // Шапка со срезами «Команды» едет вместе с экраном: он живет вкладкой, а не
     // отдельной страницей, и без нее отсюда некуда вернуться.
     var fcw = state.focus && state.focus !== 'none' ? state.focus : null;
-    var top = '<div class="wk-top">' + teamModeSeg() + '<span class="wk-spacer"></span>' +
+    var top = '<div class="wk-top">' + teamBack('week', 'Неделя') + '<span class="wk-spacer"></span>' +
       wkNav(fcw ? fcw.label : '') + '</div>';
     if (state.focus === null) {
       view.innerHTML = top + dashSkeleton(); wireTeamMode(view); loadFocus(); return;
@@ -8435,7 +8435,7 @@
   }
 
   function renderStuck(view) {
-    var top = '<div class="wk-top">' + teamModeSeg() + '</div>';
+    var top = '<div class="wk-top">' + teamBack('week', 'Неделя') + '</div>';
     if (state.stuck === null) {
       view.innerHTML = top + dashSkeleton(); wireTeamMode(view); loadStuck(); return;
     }
@@ -12919,34 +12919,46 @@
      строки по имени, цифры без сравнения людей между собой (planner-research.md,
      §7). Серия — сколько недель подряд закрыто, нейтральная информация. */
   function teamModeSeg() {
-    /* День / Неделя / Месяц (Павел 10.09.2026: «непонятно, для чего итоги и
-       отчеты»). Архив закрытых недель остался, но ссылкой из недели, а не
-       вкладкой: это справочник, а не ежедневный экран. */
-    // Месяц и квартал — один и тот же экран итогов с разным периодом; отдельный
-    // переключатель «Месяц / Квартал» рядом с «День / Неделя / Месяц» читался как
-    // два одинаковых (Павел 10.09.2026, скрин с двумя «Месяц» подряд).
-    function on(m) { return m === 'month' || m === 'quarter' ? state.teamMode === 'stats' && state.teamPeriod === m : state.teamMode === m; }
-    function btns(items) {
-      return items.map(function (m) {
-        return '<button type="button" class="' + (on(m[0]) ? 'on' : '') + '" data-teammode="' + m[0] + '">' + m[1] + '</button>';
-      }).join('');
+    /* Три кнопки вместо восьми (Павел 20.11.2026: «там вообще какой-то бардак
+       и непонятный интерфейс»). Было: Офис, День, Неделя, Месяц, Квартал,
+       Фокус, Застряло и архив отчетов — в одном ряду лежали периоды, срезы по
+       проблемам и справочник, и ни одна кнопка не отвечала на главный вопрос
+       руководителя «как у нас дела».
+         Сейчас — кто за работой и над чем прямо сейчас (карта офиса и день).
+         Неделя — как идет неделя, сверху полоса исключений: фокус и застряло.
+         Месяц — итоги периода; квартал тот же экран, переключателем рядом с
+       навигацией, архив отчетов — ссылкой оттуда же. */
+    function on(m) {
+      if (m === 'week') return state.teamMode === 'week' || state.teamMode === 'focus' || state.teamMode === 'stuck';
+      if (m === 'stats') return state.teamMode === 'stats' || state.teamMode === 'reports';
+      return state.teamMode === m;
     }
-    /* Одна капсула, а не две подряд. Двумя одинаковыми сегментами рядом экран
-       врал: на «Фокусе» в левой капсуле не горела ни одна кнопка, и выглядело
-       это как сломанный фильтр. Слева период, справа два управленческих среза,
-       между ними черта — выбран всегда ровно один пункт.
-       Фокус и застряло переехали сюда из левого меню 06.10.2026. */
-    // Офис стоит первым и открывается по умолчанию (Павел, 24.10.2026): это
-    // ответ на вопрос «кто чем занят сейчас», а периоды — разбор после.
     return '<div class="pay-seg plan-seg tm-seg">' +
-      btns([['office', 'Офис']]) +
-      '<span class="seg-div"></span>' +
-      btns([['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']]) +
-      '<span class="seg-div"></span>' +
-      btns([['focus', 'Фокус'], ['stuck', 'Застряло']]) +
+      [['now', 'Сейчас'], ['week', 'Неделя'], ['stats', 'Месяц']].map(function (m) {
+        return '<button type="button" class="' + (on(m[0]) ? 'on' : '') + '" data-teammode="' + m[0] + '">' + m[1] + '</button>';
+      }).join('') +
     '</div>';
   }
+  /* Возврат из среза, который перестал быть вкладкой: фокус, застряло, архив. */
+  function teamBack(to, label) {
+    return '<button class="qchip wk-back" data-teamback="' + to + '">' + ic('go', 12) + esc(label) + '</button>';
+  }
   function wireTeamMode(view) {
+    function go(m) {
+      state.teamMode = m; state.teamWho = null; state.teamPerson = null; state.pulse = null; renderView();
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-teamgo]'), function (b) {
+      b.addEventListener('click', function () { go(b.getAttribute('data-teamgo')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-teamback]'), function (b) {
+      b.addEventListener('click', function () { go(b.getAttribute('data-teamback')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-teamperiod]'), function (b) {
+      b.addEventListener('click', function () {
+        state.teamPeriod = b.getAttribute('data-teamperiod'); state.teamShift = 0;
+        state.teamStats = null; state.teamWho = null; state.teamPerson = null; renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-teammode]'), function (b) {
       b.addEventListener('click', function () {
         var m = b.getAttribute('data-teammode');
@@ -13021,11 +13033,17 @@
     }
     var d = state.teamStats, t = d.totals || {};
     var stuckN = (d.people || []).reduce(function (a, p) { return a + (p.stuck || 0); }, 0);
+    // Квартал — тот же экран, поэтому не кнопка в капсуле, а переключатель рядом
+    // с периодом: две одинаковые кнопки «Месяц» и «Квартал» в одном ряду с
+    // «Неделей» читались как три разных экрана (Павел 10.09.2026 и 20.11.2026).
+    var isQ = state.teamPeriod === 'quarter';
     var nav = '<div class="brd-nav">' +
       '<button class="icobtn sm brd-arrow prev" id="ts-prev">' + ic('go', 15) + '</button>' +
       '<span class="brd-label">' + esc(d.label || '') + '</span>' +
       '<button class="icobtn sm brd-arrow" id="ts-next">' + ic('go', 15) + '</button>' +
-      (state.teamShift ? '<button class="qchip" id="ts-now">Сейчас</button>' : '') + '</div>';
+      (state.teamShift ? '<button class="qchip" id="ts-now">Сейчас</button>' : '') +
+      '<button type="button" class="qchip" data-teamperiod="' + (isQ ? 'month' : 'quarter') + '">' +
+        (isQ ? 'месяцем' : 'кварталом') + '</button>' + '</div>';
     var stats = '<div class="mo-stats">' +
       '<div class="mo-stat"><b class="num">' + (t.pct || 0) + '%</b><span>плана сделано командой</span></div>' +
       '<div class="mo-stat"><b class="num">' + (t.done || 0) + ' <i>из ' + (t.plan || 0) + '</i></b><span>задач за период</span></div>' +
@@ -13056,7 +13074,8 @@
       : '';
     view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
       stats +
-      '<div class="card listcard"><div class="list-body">' + (rows ? head + rows : '<div class="empty">За этот период задач в неделях ни у кого не было.</div>') + '</div></div>' +
+      '<div class="card listcard"><div class="list-body">' + (rows ? head + rows : '<div class="empty">За этот период задач в неделях ни у кого не было.</div>') + '</div>' +
+        '<div class="dy-foot tp-foot"><button type="button" class="tp-link" data-teamgo="reports">Архив закрытых недель</button></div></div>' +
       depts;
     wireTeamMode(view); wireDeptChips(view);
     function go(x) { state.teamShift = Math.max(-12, Math.min(4, (state.teamShift || 0) + x)); state.teamStats = null; renderView(); }
@@ -13136,7 +13155,7 @@
   function renderTeamReports(view) {
     if (state.teamReports === null) { view.innerHTML = dashSkeleton(); loadTeamReports(); return; }
     if (state.teamReports === 'none') {
-      view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div><div class="card"><div class="empty">Не удалось загрузить отчеты. Обнови страницу.</div></div>';
+      view.innerHTML = '<div class="wk-top">' + teamBack('stats', 'Месяц') + '</div><div class="card"><div class="empty">Не удалось загрузить отчеты. Обнови страницу.</div></div>';
       wireTeamMode(view); return;
     }
     var list = (state.teamReports.reports || []);
@@ -13165,7 +13184,7 @@
           '</div>';
         }).join('');
     }).join('');
-    view.innerHTML = '<div class="wk-top">' + teamModeSeg() +
+    view.innerHTML = '<div class="wk-top">' + teamBack('stats', 'Месяц') +
         '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Человек, неделя, что мешало" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
@@ -13199,7 +13218,7 @@
     if (state.teamMode === 'reports') { renderTeamReports(view); return; }
     if (state.teamMode === 'focus') { renderFocus(view); return; }
     if (state.teamMode === 'stuck') { renderStuck(view); return; }
-    if (state.teamMode === 'office') { renderOffice(view); return; }
+    if (state.teamMode === 'now') { renderOffice(view); return; }
     renderPulse(view);
   }
 
@@ -13530,7 +13549,8 @@
         '<span>Зайти в офис</span></a>' +
     '</div>';
 
-    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '</div>' +
+    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() +
+        '<span class="wk-spacer"></span>' + pulseNav(d) + '</div>' +
       '<div class="card om-card">' + strip +
         (zones.length
           ? '<div class="om-stage" style="aspect-ratio:' + L.w + '/' + L.h + '">' +
@@ -13543,11 +13563,22 @@
               '<span class="om-lg-bot">' + ic('bot', 12) + '</span> задача у агента' +
             '</div>'
           : '<div class="empty">В команде пока некого рассадить.</div>') +
-      '</div>';
-    wireTeamMode(view); wireDeptChips(view);
+      '</div>' +
+      // Под картой — та же команда строками: карта отвечает «кто за работой»,
+      // таблица «над чем именно, что сделано и что на завтра». Раньше это были
+      // две соседние вкладки, и за ответом ходили в обе (20.11.2026).
+      pulseDayCard(d);
+    wireTeamMode(view); wireDeptChips(view); wirePulseRows(view, d.people || []);
     Array.prototype.forEach.call(view.querySelectorAll('.mr-go'), function (a) {
       a.addEventListener('click', function (e) { enterMeetRoom(e, a); });
     });
+    var pv = el('tp-prev'), nx = el('tp-next'), td = el('tp-today');
+    function shiftDay(n) { var x = new Date(pulseDate() + 'T12:00:00'); x.setDate(x.getDate() + n); state.pulseDate = zoomYmd(x); state.pulse = null; renderView(); }
+    if (pv) pv.addEventListener('click', function () { shiftDay(-1); });
+    if (nx) nx.addEventListener('click', function () { shiftDay(1); });
+    if (td) td.addEventListener('click', function () { state.pulseDate = ''; state.pulse = null; renderView(); });
+    // Сегодняшний день живет: раз в минуту тихо подтягиваем свежее.
+    if (d.is_today) { pulseStop(); state.pulseTimer = setInterval(function () { loadPulse(true); }, 60000); }
     if (!zones.length) return;
 
     var cv = view.querySelector('.om-cv'), lyr = view.querySelector('.om-lyr');
@@ -13658,7 +13689,7 @@
       state.officeResize = function () {
         var w = window.innerWidth;
         if ((((w < 980) ? 1 : 2) !== cols || ((w < 620) ? 2 : 3) !== perRow) &&
-            state.teamMode === 'office' && state.page === 'tasks' && state.taskSeg === 'team') renderView();
+            state.teamMode === 'now' && state.page === 'tasks' && state.taskSeg === 'team') renderView();
       };
       window.addEventListener('resize', function () {
         clearTimeout(state.officeResizeT);
@@ -13691,10 +13722,10 @@
   }
   function loadPulse(silent) {
     var mode = state.teamMode === 'week' ? 'week' : 'day';
-    /* Карта офиса — всегда про сейчас. Стрелки дня она не показывает, но дату
-       делит с пульсом: посмотрел вчерашний день, перешел на карту — и она
-       рисовала «сделано» и «был в работе» по вчера, молча и без подписи. */
-    var day = state.teamMode === 'office' ? '' : pulseDate();
+    /* Карта офиса и таблица дня — один экран «Сейчас» и одна дата: стрелки дня
+       двигают обе половины сразу, и расхождения «карта про сегодня, таблица про
+       вчера» больше нет. */
+    var day = pulseDate();
     var q = '/admin/api/team/pulse?mode=' + mode + '&date=' + day + deptQ();
     if (!silent) state.tasksLoading = true;
     api(q).then(function (r) {
@@ -13746,123 +13777,138 @@
       return '<i class="' + (set[d] ? 'on' : '') + '" data-h="' + WDAYS_RU[d] + '"></i>';
     }).join('') + '</span>';
   }
+  /* Таблица дня: кто над чем работает сейчас, что сделал, что на завтра.
+     Живет под картой офиса на вкладке «Сейчас»: карта отвечает «кто за
+     работой», таблица — «над чем именно» (разбор «Команды», 20.11.2026). */
+  function pulseDayCard(d) {
+    var people = (d.people || []).slice();
+    var t = d.totals || {};
+    // Тихие наверх: экран открывают, чтобы найти, у кого встало.
+    people.sort(function (a, b) { return (a.active_at ? 1 : 0) - (b.active_at ? 1 : 0) || a.name.localeCompare(b.name, 'ru'); });
+    var moved = t.active || 0, all = moved + (t.quiet || 0);
+    var strip = '<div class="tp-sum">' +
+      '<span><b class="num">' + (t.done || 0) + '</b> ' + plural(t.done || 0, 'задача сделана', 'задачи сделано', 'задач сделано') + '</span>' +
+      '<span><b class="num">' + moved + '</b> из <b class="num">' + all + '</b> двигали задачи</span>' +
+      '<span><b class="num">' + (t.tomorrow || 0) + '</b> на ' + esc(d.tomorrow_label || 'завтра') + '</span>' +
+      (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> ' + plural(t.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
+    '</div>';
+    var head = '<div class="trow tp-grid thead"><span class="th">Исполнитель</span><span class="th">Сейчас</span>' +
+      '<span class="th">Сделано</span><span class="th">' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : 'Дальше · ' + d.tomorrow_label) + '</span></div>';
+    var body = people.map(function (p) {
+      // Пустая клетка — прочерк, и только он: «осталось на сегодня» живет в
+      // подписи под именем, иначе жирная цифра под шапкой «Сделано» читается
+      // как «сделал одну». У тихого в «Сейчас» тоже прочерк: серый аватар,
+      // подпись и погашенные точки уже сказали, что движения не было.
+      var dash = '<span class="tp-none">—</span>';
+      var nowCell = p.now
+        ? pulseTask(p.now, p.now.how === 'doing' ? 'в работе' : fmtTime(p.now.at))
+        : (p.active_at ? '<span class="tp-none">ничего не взял в работу</span>' : dash);
+      var doneCell = (p.done || []).map(function (x) { return pulseTask(x, fmtTime(x.at)); }).join('') + pulseMore(p.done_n, (p.done || []).length) || dash;
+      var tmrCell = (p.tomorrow || []).map(function (x) { return pulseTask(x, ''); }).join('') + pulseMore(p.tomorrow_n, (p.tomorrow || []).length) || dash;
+      var sub = (p.active_at ? 'был в задачах в ' + fmtTime(p.active_at) : 'сегодня без движения') +
+        (p.today_left ? ' · на сегодня еще ' + p.today_left : '');
+      function cell(l, html, cls) { return '<div class="tp-c' + (cls ? ' ' + cls : '') + (html === dash ? ' tp-empty' : '') + '" data-l="' + l + '">' + html + '</div>'; }
+      return '<div class="trow tp-grid' + (p.active_at ? '' : ' tp-quiet') + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
+        '<div class="brd-who tp-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
+          '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) +
+            (p.overdue ? '<span class="sev tp-over">' + p.overdue + ' ' + plural(p.overdue, 'просрочка', 'просрочки', 'просрочек') + '</span>' : '') + '</span>' +
+            '<span class="t-sub">' + esc(sub) + '</span>' +
+            pulseHours(p.hours, !!p.active_at) + '</span></div>' +
+        cell('Сейчас', nowCell, 'now') +
+        cell('Сделано', doneCell) +
+        cell(esc(d.tomorrow_label === 'завтра' ? 'Завтра' : d.tomorrow_label), tmrCell) +
+      '</div>';
+    }).join('');
+    var idleAll = d.idle || [], idleN = d.idle_n || idleAll.length;
+    var idle = idleAll.length
+      ? '<div class="brd-idle"><span class="brd-il">Без задач и движения</span>' + esc(idleAll.slice(0, 10).join(', ')) +
+        (idleN > 10 ? ' <span class="brd-more num">и еще ' + (idleN - 10) + '</span>' : '') + '</div>'
+      : '';
+    return '<div class="card listcard tp-card">' + strip +
+      '<div class="list-body">' + (body ? head + body : '<div class="empty">В этот день никто ничего не двигал.</div>') + '</div>' +
+      idle + '</div>';
+  }
+
+  /* Клики строк пульса: задача открывается карточкой, человек — своей неделей.
+     Один обработчик на оба экрана, день и неделю: строки одинаковые. */
+  function wirePulseRows(view, people) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tpt]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-tpt')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.tp-who'), function (w) {
+      w.addEventListener('click', function () {
+        var row = w.closest('[data-uid]'); var uid = +row.getAttribute('data-uid');
+        var who = (people || []).filter(function (x) { return x.id === uid; })[0];
+        state.teamWho = { id: uid, name: who ? who.name : '' };
+        state.teamWeek = null; state.tasks = null;
+        renderView();
+      });
+    });
+  }
+
+  /* Неделя команды. Сверху — то, где встало: фокус и застряло были отдельными
+     вкладками в одном ряду с периодами, и руководитель обходил восемь экранов,
+     чтобы собрать картину. Теперь это полоса исключений на самом экране. */
   function renderPulse(view) {
     if (state.pulse === null) { view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div>' + dashSkeleton(); wireTeamMode(view); loadPulse(); return; }
     if (state.pulse === 'none') {
       view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div><div class="card"><div class="empty">Не удалось собрать команду. Обнови страницу.</div></div>';
       wireTeamMode(view); return;
     }
-    var d = state.pulse, week = d.mode === 'week';
+    var d = state.pulse;
     var people = (d.people || []).slice();
     var t = d.totals || {};
-    var body, head, strip;
-    if (!week) {
-      // Тихие наверх: экран открывают, чтобы найти, у кого встало.
-      people.sort(function (a, b) { return (a.active_at ? 1 : 0) - (b.active_at ? 1 : 0) || a.name.localeCompare(b.name, 'ru'); });
-      var moved = t.active || 0, all = moved + (t.quiet || 0);
-      strip = '<div class="tp-sum">' +
-        '<span><b class="num">' + (t.done || 0) + '</b> ' + plural(t.done || 0, 'задача сделана', 'задачи сделано', 'задач сделано') + '</span>' +
-        '<span><b class="num">' + moved + '</b> из <b class="num">' + all + '</b> двигали задачи</span>' +
-        '<span><b class="num">' + (t.tomorrow || 0) + '</b> на ' + esc(d.tomorrow_label || 'завтра') + '</span>' +
-        (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> ' + plural(t.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
+    people.sort(function (a, b) { return (b.overdue + b.stuck) - (a.overdue + a.stuck) || a.name.localeCompare(b.name, 'ru'); });
+    var strip = '<div class="tp-sum">' +
+      '<span><b class="num">' + (t.done || 0) + '</b> из <b class="num">' + (t.plan || 0) + '</b> сделано</span>' +
+      (t.stuck ? '<span class="warn"><b class="num">' + t.stuck + '</b> застряло</span>' : '') +
+      (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> просрочено</span>' : '') +
+      (t.await_review ? '<span class="warn"><b class="num">' + t.await_review + '</b> ' + plural(t.await_review, 'неделя ждет приемки', 'недели ждут приемки', 'недель ждут приемки') + '</span>' : '') +
+    '</div>';
+    var flags = '<div class="tp-flags">' +
+      '<button type="button" class="qchip tp-flag" data-teamgo="focus">' + ic('target', 13) + 'Фокус недели</button>' +
+      '<button type="button" class="qchip tp-flag' + (t.stuck ? ' warn' : '') + '" data-teamgo="stuck">' + ic('bell', 13) + 'Застряло' +
+        (t.stuck ? ' <b class="num">' + t.stuck + '</b>' : '') + '</button>' +
+    '</div>';
+    var head = '<div class="trow tp-wgrid thead"><span class="th">Исполнитель</span><span class="th">Взял</span><span class="th">Сделано</span>' +
+      '<span class="th">Застряло</span><span class="th">Просрочено</span><span class="th">Неделя</span></div>';
+    function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
+    var body = people.map(function (p) {
+      var rp = WK_REP[p.report.state] || WK_REP.wait;
+      var given = p.report.state === 'done' || p.report.state === 'late';
+      var rvs = (p.report.review || {}).state, rv = RH_REVIEW[rvs] || RH_REVIEW.pending;
+      var itog = given
+        ? (rvs === 'pending'
+            ? '<button class="qchip wk-accept-btn" data-review="' + p.id + '">' + ic('check', 12) + 'Принять' + chev() + '</button>'
+            : '<button class="rh-rv-btn" data-review="' + p.id + '"><span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</button>')
+        : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
+      var said = p.report.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(p.report.text) + '</span></div>' : '';
+      // Красное — только просрочка; застряло — амбер (заминка, а не потеря).
+      return '<div class="trow tp-wgrid' + (p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
+        '<div class="brd-who tp-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
+          '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) + '</span>' +
+            '<span class="t-sub">' + esc(p.role_label || '') + '</span>' + pulseDays(p.days) + '</span></div>' +
+        n(p.plan, '', 'Взял') + n(p.done + (p.review || 0), 'ok', 'Сделано') + n(p.stuck, 'warn', 'Застряло') + n(p.overdue, 'bad', 'Просрочено') +
+        '<div class="rh-c" data-l="Неделя">' + itog + '</div>' + said +
       '</div>';
-      head = '<div class="trow tp-grid thead"><span class="th">Исполнитель</span><span class="th">Сейчас</span>' +
-        '<span class="th">Сделано</span><span class="th">' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : 'Дальше · ' + d.tomorrow_label) + '</span></div>';
-      body = people.map(function (p) {
-        // Пустая клетка — прочерк, и только он: «осталось на сегодня» живет в
-        // подписи под именем, иначе жирная цифра под шапкой «Сделано» читается
-        // как «сделал одну». У тихого в «Сейчас» тоже прочерк: серый аватар,
-        // подпись и погашенные точки уже сказали, что движения не было.
-        var dash = '<span class="tp-none">—</span>';
-        var nowCell = p.now
-          ? pulseTask(p.now, p.now.how === 'doing' ? 'в работе' : fmtTime(p.now.at))
-          : (p.active_at ? '<span class="tp-none">ничего не взял в работу</span>' : dash);
-        var doneCell = (p.done || []).map(function (x) { return pulseTask(x, fmtTime(x.at)); }).join('') + pulseMore(p.done_n, (p.done || []).length) || dash;
-        var tmrCell = (p.tomorrow || []).map(function (x) { return pulseTask(x, ''); }).join('') + pulseMore(p.tomorrow_n, (p.tomorrow || []).length) || dash;
-        var sub = (p.active_at ? 'был в задачах в ' + fmtTime(p.active_at) : 'сегодня без движения') +
-          (p.today_left ? ' · на сегодня еще ' + p.today_left : '');
-        function cell(l, html, cls) { return '<div class="tp-c' + (cls ? ' ' + cls : '') + (html === dash ? ' tp-empty' : '') + '" data-l="' + l + '">' + html + '</div>'; }
-        return '<div class="trow tp-grid' + (p.active_at ? '' : ' tp-quiet') + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
-          '<div class="brd-who tp-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
-            '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) +
-              (p.overdue ? '<span class="sev tp-over">' + p.overdue + ' ' + plural(p.overdue, 'просрочка', 'просрочки', 'просрочек') + '</span>' : '') + '</span>' +
-              '<span class="t-sub">' + esc(sub) + '</span>' +
-              pulseHours(p.hours, !!p.active_at) + '</span></div>' +
-          cell('Сейчас', nowCell, 'now') +
-          cell('Сделано', doneCell) +
-          cell(esc(d.tomorrow_label === 'завтра' ? 'Завтра' : d.tomorrow_label), tmrCell) +
-        '</div>';
-      }).join('');
-    } else {
-      people.sort(function (a, b) { return (b.overdue + b.stuck) - (a.overdue + a.stuck) || a.name.localeCompare(b.name, 'ru'); });
-      strip = '<div class="tp-sum">' +
-        '<span><b class="num">' + (t.done || 0) + '</b> из <b class="num">' + (t.plan || 0) + '</b> сделано</span>' +
-        (t.stuck ? '<span class="warn"><b class="num">' + t.stuck + '</b> застряло</span>' : '') +
-        (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> просрочено</span>' : '') +
-        (t.await_review ? '<span class="warn"><b class="num">' + t.await_review + '</b> ' + plural(t.await_review, 'неделя ждет приемки', 'недели ждут приемки', 'недель ждут приемки') + '</span>' : '') +
-      '</div>';
-      head = '<div class="trow tp-wgrid thead"><span class="th">Исполнитель</span><span class="th">Взял</span><span class="th">Сделано</span>' +
-        '<span class="th">Застряло</span><span class="th">Просрочено</span><span class="th">Неделя</span></div>';
-      function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
-      body = people.map(function (p) {
-        var rp = WK_REP[p.report.state] || WK_REP.wait;
-        var given = p.report.state === 'done' || p.report.state === 'late';
-        var rvs = (p.report.review || {}).state, rv = RH_REVIEW[rvs] || RH_REVIEW.pending;
-        var itog = given
-          ? (rvs === 'pending'
-              ? '<button class="qchip wk-accept-btn" data-review="' + p.id + '">' + ic('check', 12) + 'Принять' + chev() + '</button>'
-              : '<button class="rh-rv-btn" data-review="' + p.id + '"><span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</button>')
-          : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
-        var said = p.report.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(p.report.text) + '</span></div>' : '';
-        // Красное — только просрочка; застряло — амбер (заминка, а не потеря).
-        return '<div class="trow tp-wgrid' + (p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
-          '<div class="brd-who tp-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
-            '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) + '</span>' +
-              '<span class="t-sub">' + esc(p.role_label || '') + '</span>' + pulseDays(p.days) + '</span></div>' +
-          n(p.plan, '', 'Взял') + n(p.done + (p.review || 0), 'ok', 'Сделано') + n(p.stuck, 'warn', 'Застряло') + n(p.overdue, 'bad', 'Просрочено') +
-          '<div class="rh-c" data-l="Неделя">' + itog + '</div>' + said +
-        '</div>';
-      }).join('');
-    }
+    }).join('');
     var idleAll = d.idle || [], idleN = d.idle_n || idleAll.length;
     var idle = idleAll.length
-      ? '<div class="brd-idle"><span class="brd-il">' + (week ? 'Пустая неделя' : 'Без задач и движения') + '</span>' + esc(idleAll.slice(0, 10).join(', ')) +
+      ? '<div class="brd-idle"><span class="brd-il">Пустая неделя</span>' + esc(idleAll.slice(0, 10).join(', ')) +
         (idleN > 10 ? ' <span class="brd-more num">и еще ' + (idleN - 10) + '</span>' : '') + '</div>'
       : '';
     view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + pulseNav(d) + '</div>' +
-      '<div class="card listcard tp-card">' + strip +
-        '<div class="list-body">' + (body ? head + body : '<div class="empty">' + (week ? 'На этой неделе ни у кого ничего нет.' : 'В этот день никто ничего не двигал.') + '</div>') + '</div>' +
+      '<div class="card listcard tp-card">' + strip + flags +
+        '<div class="list-body">' + (body ? head + body : '<div class="empty">На этой неделе ни у кого ничего нет.</div>') + '</div>' +
         idle +
-        (week ? '<div class="dy-foot tp-foot"><button type="button" class="tp-link" id="tp-archive">Архив закрытых недель</button></div>' : '') +
       '</div>';
-    wireTeamMode(view); wireDeptChips(view);
-    if (week) wkWireNav(view);
-    var pv = el('tp-prev'), nx = el('tp-next'), td = el('tp-today');
-    function shiftDay(n) { var x = new Date(pulseDate() + 'T12:00:00'); x.setDate(x.getDate() + n); state.pulseDate = zoomYmd(x); state.pulse = null; renderView(); }
-    if (pv) pv.addEventListener('click', function () { shiftDay(-1); });
-    if (nx) nx.addEventListener('click', function () { shiftDay(1); });
-    if (td) td.addEventListener('click', function () { state.pulseDate = ''; state.pulse = null; renderView(); });
-    if (el('tp-archive')) el('tp-archive').addEventListener('click', function () { state.teamMode = 'reports'; renderView(); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-tpt]'), function (b) {
-      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-tpt')); });
-    });
+    wireTeamMode(view); wireDeptChips(view); wkWireNav(view); wirePulseRows(view, people);
     Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         openReportReview(+btn.getAttribute('data-review'), 'week', d.starts, function () { state.pulse = null; renderView(); });
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('.tp-who'), function (w) {
-      w.addEventListener('click', function () {
-        var row = w.closest('[data-uid]'); var uid = +row.getAttribute('data-uid');
-        var who = people.filter(function (x) { return x.id === uid; })[0];
-        state.teamWho = { id: uid, name: who ? who.name : '' };
-        state.teamWeek = null; state.tasks = null;
-        renderView();
-      });
-    });
-    // Сегодняшний день живет: раз в минуту тихо подтягиваем свежее.
-    if (!week && d.is_today) state.pulseTimer = setInterval(function () { loadPulse(true); }, 60000);
   }
 
   /* Неделя одного человека глазами руководителя: те же полосы, что у него
@@ -60608,7 +60654,10 @@
         state.teamPeriod = tmode;
         state.teamShift = Math.max(-12, Math.min(4, tshift || 0));
         state.teamStats = null; state.teamWho = null; state.teamPerson = null;
-      } else if (['office', 'day', 'week', 'focus', 'stuck', 'reports'].indexOf(tmode) !== -1) {
+      } else if (['office', 'day', 'now'].indexOf(tmode) !== -1) {
+        // Офис и День слились в «Сейчас» (20.11.2026) — старые ссылки живы.
+        state.teamMode = 'now';
+      } else if (['week', 'focus', 'stuck', 'reports'].indexOf(tmode) !== -1) {
         state.teamMode = tmode;
       }
       return ['tasks', 'team'];
@@ -60712,7 +60761,7 @@
         var seg = taskSeg();
         if (seg !== 'team') return seg;
         var mode = state.teamMode === 'stats' ? (state.teamPeriod || 'month') : state.teamMode;
-        if (!mode || mode === 'office') return seg;
+        if (!mode || mode === 'now') return seg;
         var sh = state.teamMode === 'stats' ? (state.teamShift || 0) : 0;
         if (!sh) return 'team/' + mode;
         // Месяц — датой, чтобы пересланная ссылка не съехала на следующий месяц.

@@ -10938,6 +10938,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tp-sum b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
 .tp-sum .bad, .tp-sum .bad b { color: var(--red-ink); }
 .tp-sum .warn, .tp-sum .warn b { color: var(--amber-ink); }
+/* Полоса исключений недели: фокус и застряло были вкладками в одном ряду с
+   периодами, теперь это вход в срез прямо с экрана недели. Светлая, под
+   полосой итогов: это не статус, а две двери. */
+.tp-flags { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 24px 12px;
+  border-bottom: 1px solid var(--line-2); }
+.tp-flag { gap: 6px; }
+.tp-flag b { font-weight: 800; }
+.tp-flag.warn { background: var(--amber-soft); border-color: transparent; color: var(--amber-ink); }
+.tp-flag.warn svg { color: var(--amber-ink); }
 .brd-n.warn { color: var(--amber-ink); }
 .tp-grid { grid-template-columns: minmax(200px, 300px) minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); }
 .tp-wgrid { grid-template-columns: minmax(200px, 300px) repeat(4, minmax(64px, 1fr)) 210px; }
