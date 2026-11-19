@@ -48703,8 +48703,9 @@
      полное имя: в карточках команды встречается и «Аюпова Элиза», и «Элиза Аюпова».
      Остальным цвет дается от имени, но из спокойной части палитры, чтобы не спорить
      с четырьмя названными. */
-  var TUTOR_TONE = { сердотецков: 'amber', мишина: 'green', малахова: 'pink', аюпова: 'blue' };
-  var TUTOR_TONES_REST = ['violet', 'teal', 'brown', 'slate'];
+  var TUTOR_TONE = { сердотецков: 'amber', мишина: 'green', малахова: 'pink', аюпова: 'blue',
+                     шустова: 'violet' };
+  var TUTOR_TONES_REST = ['teal', 'brown', 'slate'];
   function tutorTone(name) {
     var n = String(name || '').toLowerCase().replace(/ё/g, 'е');
     for (var k in TUTOR_TONE) { if (n.indexOf(k) >= 0) return TUTOR_TONE[k]; }
