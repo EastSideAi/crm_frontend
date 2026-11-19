@@ -49283,7 +49283,10 @@
     host.innerHTML =
       '<div class="trow lr-grid thead' + (tutorCol() ? ' sup' : '') + '">' +
         (tutorCol() ? '<span class="th">Тьютор</span>' : thCell('crm', 'Статус', '')) +
-        thCell('name', 'Лид', '') +
+        /* В «Сопровождении» колонка называется «Ученик» (Мария 20.11.2026): там лежат
+           те, с кем мы уже работаем, и называть ребенка лидом в этой вкладке неверно.
+           На «Новых» и «В работе» остается «Лид» — там это правда. */
+        thCell('name', tutorCol() ? 'Ученик' : 'Лид', '') +
         (tutorCol()
           ? '<span class="th th-stage">Этап</span>'
           : thCell('score', 'Балл', ' hidem') + '<span class="th hidem">Контакт</span>') +
