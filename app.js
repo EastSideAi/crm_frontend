@@ -27682,6 +27682,69 @@
     return '<div class="card listcard fph-card">' + head + inner + '</div>';
   }
 
+  /* Строка отчета или акта партнера в карточке «Партнёрских выплат». Состояния —
+     из бэкенда (_act_state): report, objection, waiting, signed, accepted, paid. */
+  var FIN_ACT_MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
+    'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+  function finActLine(a) {
+    var d = new Date(a.period + 'T00:00:00');
+    var month = FIN_ACT_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    var doc = a.stage === 'act' ? 'Акт № ' + a.number : 'Отчёт';
+    var st = {
+      report: ['wait', 'предварительный, акт на 14-е'],
+      objection: ['bad', 'партнер возразил'],
+      waiting: ['wait', 'ждет подписи' + (a.accept_by ? ' до ' + finDate(a.accept_by) : '')],
+      signed: ['ok', 'подписан ' + finDate(a.signed_at) + (a.pay_by ? ', платим до ' + finDate(a.pay_by) : '')],
+      accepted: ['ok', 'принят без подписи' + (a.pay_by ? ', платим до ' + finDate(a.pay_by) : '')],
+      paid: ['doc', 'выплачено ' + finDate(a.paid_at)],
+    }[a.state] || ['wait', a.state];
+    var canRebuild = a.state === 'report' || a.state === 'objection' || a.state === 'waiting';
+    return '<span class="fpt-rcp-i">' + esc(doc + ' за ' + month) + ' · ' + finRub(a.amount) +
+        (a.clawback ? ' (удержано ' + finRub(a.clawback) + ')' : '') + ' ' +
+        '<span class="fst ' + st[0] + '">' + esc(st[1]) + '</span>' +
+        '<button class="qchip fpt-pk-min" data-act-doc="' + esc(a.id) + '">документ</button>' +
+        (canRebuild ? '<button class="qchip fpt-pk-min" data-act-rebuild="' + esc(a.id) + '">пересобрать</button>' : '') +
+        (a.state === 'objection'
+          ? '<button class="qchip fpt-pk-min add" data-act-done="' + esc(a.id) + '">возражение разобрано</button>'
+          : '') +
+      '</span>' +
+      (a.state === 'objection' && a.objection_text
+        ? '<span class="fpt-act-obj">«' + esc(a.objection_text) + '»' +
+            (a.objection_at ? ' · ' + esc(finDate(a.objection_at)) : '') + '</span>'
+        : '');
+  }
+
+  /* Документ акта — ровно тот, что видит партнер. Показываем во фрейме без скриптов
+     (sandbox): HTML собран бэкендом, но в нем имена партнера и клиентов, и исполнять
+     в нем ничего не нужно. */
+  function finActDoc(id) {
+    if (document.querySelector('.al-ov')) return;
+    xfetch('/admin/api/partner-acts/' + id + '/doc')
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        if (!html) { showToast('Документ не открылся, обнови страницу'); return; }
+        var ov = document.createElement('div');
+        ov.className = 'al-ov';
+        ov.innerHTML = '<div class="al-card fpt-act-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head"><div><div class="al-title">Документ партнера</div></div></div>' +
+          '<div class="al-body"><iframe class="fpt-act-doc" sandbox title="Документ"></iframe></div>' +
+          '<div class="al-foot"><button class="al-cancel" id="fad-close">Закрыть</button></div></div>';
+        document.body.appendChild(ov);
+        ov.querySelector('iframe').srcdoc = html;
+        requestAnimationFrame(function () { ov.classList.add('show'); });
+        var close = function () {
+          ov.classList.remove('show');
+          document.removeEventListener('keydown', onKey);
+          setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+        };
+        var onKey = function (e) { if (e.key === 'Escape') close(); };
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+        el('fad-close').addEventListener('click', close);
+      })
+      .catch(function () { showToast('Документ не открылся, проверь сеть'); });
+  }
+
   function renderFinPartners(view) {
     if (!FIN.partners) {
       if (FIN.err) return finErrView(view);
@@ -27867,6 +27930,16 @@
               '</span>';
           }).join('') + '</span></span></div>';
       }
+      // Отчеты и акты (оферта ред. 3, п. 9.2–9.5): с 24.11.2026 платим раз в месяц по
+      // акту, и платит автосбор после подписи или принятия. Здесь видно, на каком шаге
+      // акт, и разбирается возражение: это единственное, что по акту делает команда.
+      var acts = (p.acts || []).slice(0, 2);
+      var liveAct = (p.acts || []).filter(function (a) { return a.state !== 'paid'; })[0];
+      var actBox = acts.length
+        ? '<div class="fin-note' + (liveAct && liveAct.state === 'objection' ? '' : ' calm') +
+            ' fpt-rcp">' + ic('doc', 15) + '<span>' + acts.map(finActLine).join('') +
+            '</span></div>'
+        : '';
       // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
       // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
       var foot;
@@ -27880,7 +27953,10 @@
           ? '<span class="fin-count fpt-req">' + esc(reqLineTxt) +
               (reqWho ? ' <i class="fpt-who">' + esc('· ' + reqWho) + '</i>' : '') + '</span>'
           : '<span class="fin-count fpt-req">реквизиты не заданы</span>';
-        var payBtn = (p.due || 0) > 0
+        // При живом акте ручную выплату бэкенд не пропустит: деньги уйдут по акту.
+        var payBtn = liveAct
+          ? '<span class="fin-count fpt-right">выплата по акту</span>'
+          : (p.due || 0) > 0
           ? '<button class="qchip add fpt-right" data-pay="' + p.id + '" data-due="' + p.due +
               '" data-pname="' + esc(p.name) + '">' +
               ic('card', 12) + 'Выплатить ' + finRub(p.due) + '</button>'
@@ -27906,6 +27982,7 @@
         p.clients.map(clientRow).join('') +
         warnBox +
         holdBox +
+        actBox +
         rcpBox +
         foot +
       '</div>';
@@ -28018,6 +28095,38 @@
             FIN.partners = null; renderAll();
             showToast(p.client_referrer ? 'Пометку сняли' : 'Отмечен клиентом-реферером');
           }).catch(function (e) { showToast(finLineErr(e)); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-act-doc]'), function (b) {
+      b.addEventListener('click', function () { finActDoc(b.getAttribute('data-act-doc')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-act-done]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-act-done');
+        finConfirm('Возражение разобрано',
+          'Акт остается как есть, партнеру снова дается 3 рабочих дня на подпись. ' +
+          'Если по возражению суммы меняются, сначала поправь начисления и нажми «пересобрать».',
+          'Разобрано', function () {
+            czSend('/admin/api/partner-acts/' + id + '/objection-done', 'POST')
+              .then(function () { FIN.partners = null; renderAll(); showToast('Отметили, партнер снова может подписать'); })
+              .catch(function (e) { showToast(finLineErr(e)); });
+          });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-act-rebuild]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-act-rebuild');
+        finConfirm('Пересобрать документ',
+          'Посчитаем заново по текущим начислениям. Партнер увидит новый документ, ' +
+          'срок на подпись начнется заново.',
+          'Пересобрать', function () {
+            czSend('/admin/api/partner-acts/' + id + '/rebuild', 'POST')
+              .then(function (r) {
+                FIN.partners = null; renderAll();
+                showToast(r && r.id ? 'Пересобрали: ' + finRub(r.amount) : 'Меньше 1 000 ₽, перенесли на следующий месяц');
+              })
+              .catch(function (e) { showToast(finLineErr(e)); });
+          });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-get]'), function (b) {
