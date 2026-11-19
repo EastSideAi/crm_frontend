@@ -56700,6 +56700,12 @@
          позиции, как в конструкторе ниже). Клиенту НЕ уходит сам — сначала «выставлен»,
          и только по красной кнопке «Отправить клиенту» ссылка улетает ему в бота
          (защита от отправки не туда, просьба Веры 07.09.2026). */
+      /* «Оформить сделку» (задача 9003): по сопровождению счет выставляется только так —
+         система заполняет тариф, сумму, график, номер договора и продавца, менеджер
+         проверяет и подтверждает. Без сделки нет ни ссылки, ни QR на перевод: иначе
+         дебиторка снова собиралась бы из дыр. Блок прячется, пока сделка живая. */
+      '<div class="m-sec deal-sec" id="deal-sec" hidden><div class="m-sec-h">Сделка по сопровождению</div>' +
+        '<div id="deal-box"></div></div>' +
       '<div class="m-sec"><div class="m-sec-h">Быстрый счёт' +
         '<span class="hr" id="qi-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div class="m-csub" style="margin:0 0 10px">Сумма и назначение — получите ссылку на оплату, живёт до оплаты. Клиенту уйдёт только после кнопки «Отправить клиенту».</div>' +
@@ -57777,7 +57783,170 @@
           if (e.message !== '403') showToast('Не получилось: ' + (e.message || 'проверьте сеть'));
         });
       };
+      /* Готовую ссылку показываем в поле только для чтения: ее копируют и уносят в
+         переписку, а не правят руками. */
+      var showLink = function (box, url, hint) {
+        box.innerHTML = '<input class="ord-link-i" readonly value="' + esc(url) + '">' +
+          '<button class="oi-mark" data-copy="1">копировать</button>' +
+          '<a class="oi-mark" href="' + esc(url) + '" target="_blank" rel="noopener">открыть</a>' +
+          '<div class="oi-hint">' + esc(hint) + '</div>';
+        var inp = box.querySelector('.ord-link-i');
+        box.querySelector('[data-copy]').addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          inp.select();
+          var done = function () { showToast('Ссылка скопирована'); };
+          if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done, done);
+          else { try { document.execCommand('copy'); } catch (x) {} done(); }
+        });
+      };
+      var DEAL_TARIFFS = ['std', 'plus', 'prem'];
+      var DEAL_SCHEMES = [['full', 'целиком', 1], ['half', 'пополам', 2], ['thirds', 'тремя частями', 3]];
+      var dealSec = el('deal-sec'), dealBox = el('deal-box'), deal = null;
+      var dealParts = function () {
+        for (var i = 0; i < DEAL_SCHEMES.length; i++) if (DEAL_SCHEMES[i][0] === deal.scheme) return DEAL_SCHEMES[i][2];
+        return 1;
+      };
+      /* Взносы поровну раз в месяц от даты договора, остаток рублей — в первый: так же
+         считает сервер (deal_schedule), и сумма графика сходится с договором до рубля. */
+      var dealPlan = function () {
+        var n = dealParts(), total = deal.amount_total || 0, base = Math.floor(total / n);
+        var p = (deal.contract_date || todayISO(0)).split('-');
+        deal.installments = [];
+        for (var k = 0; k < n; k++) {
+          var y = +p[0], m = +p[1] - 1 + k;
+          y += Math.floor(m / 12); m = m % 12;
+          deal.installments.push({ due_date: y + '-' + pad(m + 1) + '-' + pad(Math.min(+p[2], 28)),
+                                   amount: base + (k === 0 ? total - base * n : 0) });
+        }
+      };
+      var dealSum = function () { return deal.installments.reduce(function (s, r) { return s + (r.amount || 0); }, 0); };
+      var dealIdle = function (orders) {
+        if (!dealSec) return;
+        var live = (orders || []).some(function (o) { return o.deal && o.status !== 'canceled'; });
+        dealSec.hidden = live;
+        if (live || deal) return;
+        dealBox.innerHTML = '<div class="deal-idle">' +
+          '<div class="m-csub">Тариф, сумму, график, номер договора и продавца система подставит сама — проверьте и подтвердите. ' +
+          'После этого появятся ссылка ЮKassa и QR на перевод в ВТБ, а платежи встанут в дебиторку.</div>' +
+          '<button class="bp sm" id="deal-open">' + ic('doc', 13) + 'Оформить сделку</button></div>';
+        el('deal-open').addEventListener('click', function () {
+          var b = el('deal-open'); b.disabled = true;
+          api('/admin/api/leads/' + id + '/deal-draft').then(function (d) {
+            deal = d;
+            if (!deal.tariff_id && d.tariffs.length) { deal.tariff_id = null; }
+            deal.amount_total = deal.amount_total || 0;
+            dealPlan();
+            renderDeal();
+          }).catch(function (e) {
+            b.disabled = false;
+            showToast(e.message === '403' ? 'Сделку оформляет человек с доступом к финансам' : 'Не загрузилось — проверь сеть');
+          });
+        });
+      };
+      var renderDeal = function () {
+        var tars = deal.tariffs.map(function (t) {
+          return '<button data-v="' + t.id + '"' + (t.id === deal.tariff_id ? ' class="on"' : '') + '>' + esc(t.name) + '</button>';
+        }).join('');
+        var sch = DEAL_SCHEMES.map(function (x) {
+          return '<button data-v="' + x[0] + '"' + (x[0] === deal.scheme ? ' class="on"' : '') + '>' + x[1] + '</button>';
+        }).join('');
+        dealBox.innerHTML = '<div class="ord-b deal-b">' +
+          '<div class="deal-f"><span class="deal-l">Тариф</span><span class="pay-seg" id="deal-tar">' + tars + '</span></div>' +
+          '<div class="deal-grid">' +
+            '<label class="deal-f"><span class="deal-l">Сумма по договору, ₽</span>' +
+              '<input id="deal-amt" class="num" inputmode="numeric" value="' + (deal.amount_total || '') + '" placeholder="0"></label>' +
+            '<label class="deal-f"><span class="deal-l">Номер договора</span>' +
+              '<input id="deal-no" class="num" value="' + esc(deal.contract_no || '') + '"></label>' +
+            '<label class="deal-f"><span class="deal-l">Дата договора</span>' +
+              '<input id="deal-date" type="date" value="' + esc(deal.contract_date || '') + '"></label>' +
+            '<label class="deal-f"><span class="deal-l">Кто продал</span>' +
+              '<span class="pay-selwrap"><select class="ord-sel" id="deal-seller"></select></span></label>' +
+          '</div>' +
+          '<div class="deal-f"><span class="deal-l">Оплата</span><span class="pay-seg" id="deal-sch">' + sch + '</span></div>' +
+          '<div class="ord-sched deal-sched" id="deal-plan"></div>' +
+          '<div class="ord-foot">' +
+            '<button class="oi-mark off" id="deal-cancel">отмена</button>' +
+            '<button class="bp sm" id="deal-ok" style="margin-left:auto">' + ic('check', 13) + 'Подтвердить сделку</button>' +
+          '</div></div>';
+        renderDealPlan();
+        fetchPeople(function (people) {
+          var sel = el('deal-seller'); if (!sel) return;
+          sel.innerHTML = '<option value="">— выберите —</option>' + people.map(function (pp) {
+            return '<option value="' + pp.id + '"' + (String(pp.id) === String(deal.seller_id) ? ' selected' : '') + '>' +
+              esc(pp.name || pp.login) + '</option>';
+          }).join('');
+          sel.addEventListener('change', function () { deal.seller_id = sel.value ? parseInt(sel.value, 10) : null; });
+        });
+        Array.prototype.forEach.call(el('deal-tar').querySelectorAll('button'), function (b) {
+          b.addEventListener('click', function () {
+            deal.tariff_id = b.getAttribute('data-v');
+            var t = deal.tariffs.filter(function (x) { return x.id === deal.tariff_id; })[0];
+            if (t && t.price) deal.amount_total = t.price;
+            dealPlan(); renderDeal();
+          });
+        });
+        Array.prototype.forEach.call(el('deal-sch').querySelectorAll('button'), function (b) {
+          b.addEventListener('click', function () { deal.scheme = b.getAttribute('data-v'); dealPlan(); renderDeal(); });
+        });
+        el('deal-amt').addEventListener('input', function (e) {
+          deal.amount_total = parseInt(e.target.value.replace(/\D/g, ''), 10) || 0;
+          dealPlan(); renderDealPlan();
+        });
+        el('deal-no').addEventListener('input', function (e) { deal.contract_no = e.target.value; });
+        el('deal-date').addEventListener('change', function (e) {
+          deal.contract_date = e.target.value; dealPlan(); renderDealPlan();
+        });
+        el('deal-cancel').addEventListener('click', function () { deal = null; dealIdle([]); });
+        el('deal-ok').addEventListener('click', submitDeal);
+      };
+      var renderDealPlan = function () {
+        var box = el('deal-plan'); if (!box) return;
+        var total = deal.amount_total || 0, sum = dealSum(), diff = total - sum;
+        var t = 'Разбито ' + fmtMoney(sum) + ' из ' + fmtMoney(total) + ' ₽';
+        if (diff > 0) t += ' · осталось ' + fmtMoney(diff); else if (diff < 0) t += ' · лишние ' + fmtMoney(-diff);
+        box.innerHTML = '<div class="osch-head"><span class="osch-hint">Даты и суммы платежей — поправьте, если договорились иначе.</span></div>' +
+          '<div class="osch-rows">' + deal.installments.map(function (r, i) {
+            return '<div class="osch-row deal-row"><span class="deal-n">' + (deal.installments.length > 1 ? (i + 1) + '-й платеж' : 'Платеж') + '</span>' +
+              '<input type="date" data-i="' + i + '" class="deal-d" value="' + esc(r.due_date) + '">' +
+              '<input class="osch-a num deal-a" data-i="' + i + '" inputmode="numeric" value="' + (r.amount || '') + '"></div>';
+          }).join('') + '</div>' +
+          '<div class="osch-sum ' + (sum === total && total > 0 ? 'ok' : 'bad') + '" id="deal-sum">' + esc(t) + '</div>';
+        Array.prototype.forEach.call(box.querySelectorAll('.deal-d'), function (n) {
+          n.addEventListener('change', function () { deal.installments[+n.getAttribute('data-i')].due_date = n.value; });
+        });
+        Array.prototype.forEach.call(box.querySelectorAll('.deal-a'), function (n) {
+          n.addEventListener('input', function () {
+            deal.installments[+n.getAttribute('data-i')].amount = parseInt(n.value.replace(/\D/g, ''), 10) || 0;
+            var sum = dealSum(), total = deal.amount_total || 0, diff = total - sum;
+            var t = 'Разбито ' + fmtMoney(sum) + ' из ' + fmtMoney(total) + ' ₽';
+            if (diff > 0) t += ' · осталось ' + fmtMoney(diff); else if (diff < 0) t += ' · лишние ' + fmtMoney(-diff);
+            var sb = el('deal-sum');
+            if (sb) { sb.textContent = t; sb.className = 'osch-sum ' + (sum === total && total > 0 ? 'ok' : 'bad'); }
+          });
+        });
+      };
+      var submitDeal = function () {
+        if (!deal.tariff_id) return showToast('Выберите тариф');
+        if (dealSum() !== deal.amount_total) return showToast('Сумма платежей не сходится с суммой договора');
+        if (!deal.seller_id) return showToast('Выберите, кто продал');
+        var b = el('deal-ok'); b.disabled = true;
+        apiSend('/admin/api/leads/' + id + '/deal', 'POST', {
+          tariff_id: deal.tariff_id, amount_total: deal.amount_total, scheme: deal.scheme,
+          installments: deal.installments, contract_no: String(deal.contract_no || '').trim(),
+          contract_date: deal.contract_date, seller_id: deal.seller_id,
+        }, function () {
+          deal = null;
+          showToast('Сделка оформлена — платежи в дебиторке');
+          loadOrders();
+        }, function (code, err) {
+          b.disabled = false;
+          var d = (err && err.body && err.body.detail) || '';
+          if (code === 403) return showToast('Сделку оформляет человек с доступом к финансам');
+          showToast(typeof d === 'string' && d ? d : 'Не сохранилось — проверь сеть');
+        });
+      };
       var renderOrders = function (orders) {
+        dealIdle(orders);
         if (!orders || !orders.length) {
           ordList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте первый ниже.</div>';
           return;
@@ -57789,6 +57958,8 @@
           var paidN = inst.filter(function (i) { return i.status === 'paid'; }).length;
           var next = inst.filter(function (i) { return i.status !== 'paid' && i.status !== 'refunded'; })[0];
           var meta = [];
+          if (o.deal) meta.push('договор № ' + o.deal.contract_no + ' от ' + o.deal.contract_date.slice(8, 10) + '.' +
+            o.deal.contract_date.slice(5, 7) + '.' + o.deal.contract_date.slice(0, 4));
           if (isInst) meta.push('рассрочка: оплачено ' + paidN + ' из ' + inst.length);
           if (next) meta.push('след. ' + next.due_date.slice(8, 10) + '.' + next.due_date.slice(5, 7) + ' · ' + fmtMoney(next.amount) + ' ₽');
           if (o.paid_total) meta.push('внесено ' + fmtMoney(o.paid_total) + ' ₽');
@@ -57801,9 +57972,19 @@
           /* Ссылка на оплату: менеджер отправляет ее в переписку, и платит человек
              без входа в кабинет. Родители за детей платят чаще всего именно так. */
           var payable = o.status !== 'paid' && o.status !== 'canceled';
-          var linkBox = payable ? '<div class="ord-link" data-linkbox="' + o.id + '">' +
-            '<button class="oi-mark" data-getlink="' + o.id + '">получить ссылку на оплату</button>' +
-            '</div>' : '';
+          var linkBox = '';
+          if (payable && o.deal) {
+            /* По сделке — на выбор: ЮKassa или перевод в ВТБ по QR. Отдел продаж ведет
+               семьи на перевод, и QR избавляет их от ручного набора реквизитов. */
+            linkBox = '<div class="ord-link" data-linkbox="' + o.id + '">' +
+              '<button class="oi-mark" data-getlink="' + o.id + '">Ссылка ЮKassa</button>' +
+              '<button class="oi-mark" data-getbank="' + o.id + '">QR на перевод ВТБ</button></div>';
+          } else if (payable && DEAL_TARIFFS.indexOf(o.tariff_id) >= 0) {
+            linkBox = '<div class="ord-link"><span class="oi-hint">Ссылку и QR по сопровождению выдаем после «Оформить сделку» выше.</span></div>';
+          } else if (payable) {
+            linkBox = '<div class="ord-link" data-linkbox="' + o.id + '">' +
+              '<button class="oi-mark" data-getlink="' + o.id + '">получить ссылку на оплату</button></div>';
+          }
           if (!isInst || !open) return head + linkBox;
           // раскрытый график: каждый взнос со статусом и ручной отметкой
           var rows = inst.map(function (i) {
@@ -57856,28 +58037,39 @@
             e.stopPropagation();
             var oid = b.getAttribute('data-getlink');
             var box = ordList.querySelector('[data-linkbox="' + oid + '"]');
+            var label = b.textContent;
             b.disabled = true; b.textContent = 'готовлю…';
             apiSend('/admin/api/orders/' + oid + '/pay-link', 'POST', null, function (r) {
               /* Ссылку показываем в поле только для чтения: ее копируют и уносят в
                  переписку, а не правят руками. */
-              box.innerHTML = '<input class="ord-link-i" readonly value="' + esc(r.url) + '">' +
-                '<button class="oi-mark" data-copy="' + oid + '">копировать</button>' +
-                '<div class="oi-hint">Ссылка работает, пока счет не оплачен или не снят. ' +
+              showLink(box, r.url, 'Ссылка работает, пока счет не оплачен или не снят. ' +
                 'Человек откроет ее без входа в кабинет, введет почту для чека и заплатит. ' +
-                'Деньги привяжутся к этому счету.</div>';
-              var inp = box.querySelector('.ord-link-i');
-              box.querySelector('[data-copy]').addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                inp.select();
-                var done = function () { showToast('Ссылка скопирована'); };
-                if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done, done);
-                else { try { document.execCommand('copy'); } catch (x) {} done(); }
-              });
+                'Деньги привяжутся к этому счету.');
             }, function (code, err) {
-              b.disabled = false; b.textContent = 'получить ссылку на оплату';
+              b.disabled = false; b.textContent = label;
               var d = (err && err.body && err.body.detail) || '';
               if (code === 409) return showToast(d || 'По этому счету ссылку выдать нельзя');
               if (code === 403) return showToast('Ссылку на оплату выдает только человек с доступом к финансам');
+              showToast('Не получилось — проверь сеть');
+            });
+          });
+        });
+        // счет на перевод в ВТБ: страница с QR и реквизитами, назначение с номером договора
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-getbank]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var oid = b.getAttribute('data-getbank');
+            var box = ordList.querySelector('[data-linkbox="' + oid + '"]');
+            b.disabled = true; b.textContent = 'готовлю…';
+            apiSend('/admin/api/orders/' + oid + '/bank-invoice', 'POST', null, function (r) {
+              showLink(box, r.url, 'Семья откроет страницу с суммой ближайшего платежа и QR: ' +
+                'наведет камеру в приложении банка, и реквизиты с назначением заполнятся сами. ' +
+                'По номеру договора в назначении перевод сам найдет этот счет.');
+            }, function (code, err) {
+              b.disabled = false; b.textContent = 'QR на перевод ВТБ';
+              var d = (err && err.body && err.body.detail) || '';
+              if (code === 409) return showToast(d || 'По этому счету QR выдать нельзя');
+              if (code === 403) return showToast('QR на перевод выдает только человек с доступом к финансам');
               showToast('Не получилось — проверь сеть');
             });
           });

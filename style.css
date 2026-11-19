@@ -2271,6 +2271,31 @@ a { color: inherit; text-decoration: none; }
   font-variant-numeric: tabular-nums; }
 .osch-sum.ok { color: var(--green-ink); background: var(--green-soft); }
 .osch-sum.bad { color: var(--amber-ink); background: var(--amber-soft); }
+/* «Оформить сделку» (задача 9003). Собрано из рецептов конструктора счета: оправа
+   .ord-b на --fill, сегменты .pay-seg, строки графика .osch-*. Поля внутри оправы
+   белые, как у графика: на серой заливке серое поле растворяется. Подписи над полями
+   есть, потому что форму заполняет система и менеджеру надо видеть, что именно
+   проверять, — плейсхолдер исчезает, как только значение подставлено. */
+.deal-idle { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.deal-idle .m-csub { margin: 0; }
+.deal-b { margin-top: 0; gap: 14px; }
+.deal-f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.deal-l { font: 700 10.5px 'Manrope', sans-serif; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+.deal-f .pay-seg { background: #fff; flex-wrap: wrap; max-width: 100%; }
+.deal-f .pay-seg button.on { background: var(--blue-tint); box-shadow: none; }
+.deal-grid { display: grid; grid-template-columns: 1.1fr .8fr 1fr 1.3fr; gap: 10px; }
+.deal-b input, .deal-b .ord-sel { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
+  background: #fff; border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; min-width: 0; width: 100%; }
+.deal-b .ord-sel { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 34px; }
+.deal-b input:focus, .deal-b .ord-sel:focus { border-color: #DCE7FF; }
+.deal-sched { margin-top: 0; padding: 0; background: none; }
+.osch-row.deal-row { grid-template-columns: 96px 1fr 132px; }
+.deal-n { font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2); }
+.deal-b .ord-foot .oi-mark { justify-self: auto; }
+@media (max-width: 640px) {
+  .deal-grid { grid-template-columns: 1fr 1fr; }
+  .osch-row.deal-row { grid-template-columns: 74px 1fr 104px; }
+}
 /* Раскрытый график выставленного счёта: взносы со статусом и ручной отметкой оплаты */
 .pay-row.ord-oh { cursor: pointer; }
 .ord-caret { display: inline-flex; color: var(--ink-3); margin-right: 5px; transition: transform .15s; vertical-align: middle; }
