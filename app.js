@@ -179,10 +179,11 @@
     ptSeg: 'my', ptOpen: null, ptDay: '', ptTrack: '',
     // «Контакты» → вкладка «Сопровождение»: выбранное направление подачи
     trk: '',
+    cls: 0,
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack', 'trk'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept', 'rwDept', 'schedScope', 'schedPart', 'ptTrack', 'trk', 'cls'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.schedHide) state.schedHide = savedUi.schedHide;
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
@@ -208,6 +209,7 @@
         rwDept: state.rwDept || '',
         ptTrack: state.ptTrack || '',
         trk: state.trk || '',
+        cls: state.cls || 0,
       }));
     } catch (e) {}
   }
@@ -232,14 +234,6 @@
     queue:    { label: 'В работе',      hint: 'оставили заявку или их взяли в работу — от горячих к спокойным' },
     clients:  { label: 'Клиенты',       hint: 'оплатившие и те, кого отметили клиентом вручную' },
     support:  { label: 'Сопровождение', hint: 'те, кого мы ведем прямо сейчас: клиент с тарифом сопровождения или проставленным направлением' },
-    /* Вкладки по классу (Мария 19.11.2026: «сделай вкладки 8 класс, 9 класс, 10 класс»).
-       Класс считает СЕРВЕР из года окончания школы и отдает полем school_class: сам
-       класс нигде не хранится, 1 сентября он меняется у всех разом. Год сервер берет
-       из карточки, а пока его там нет — из анкеты, где это то же самое число. У кого
-       года нет нигде, тот ни в одну вкладку не попадает. */
-    cls8:     { label: '8 класс',       hint: 'школьники, которые заканчивают школу через три года' },
-    cls9:     { label: '9 класс',       hint: 'школьники, которые заканчивают школу через два года' },
-    cls10:    { label: '10 класс',      hint: 'школьники, которым до выпуска год' },
     all:      { label: 'Все',           hint: 'все карточки, кроме архива' },
     rejected: { label: 'Отказы',        hint: 'не сложилось — но контакт остался' },
     archive:  { label: 'Архив',         hint: 'скрытые лиды и тестовые записи — можно вернуть' },
@@ -1077,7 +1071,6 @@
       if (seg === 'support') return isSupport(l);
       if (seg === 'rejected') return l.crm.status === 'rejected';
       if (seg === 'new') return isProspect(l);
-      if (segClass(seg)) return l.school_class === segClass(seg) && (segAvail('new') || !isProspect(l));
       // Кому «Новые» не показаны, тому и во «Всех» холодных нет.
       return segAvail('new') || !isProspect(l);
     });
@@ -1132,6 +1125,7 @@
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
       if (!trackHit(l, seg)) return false;
+      if (!classHit(l, seg)) return false;
       return true;
     });
     if (state.sort) {
@@ -1169,23 +1163,16 @@
     }
     return arr;
   }
-  /* Номер класса из ключа вкладки: 'cls8' -> 8, остальные вкладки -> 0. */
-  function segClass(seg) {
-    return /^cls(\d+)$/.test(seg || '') ? Number(RegExp.$1) : 0;
-  }
   function counts() {
     /* Счетчики вкладок «Контактов» — по тем же правилам, что и списки, иначе цифра
        спорила бы со строками. c.cold — вкладка «Новые», c.all — «Все» вместе с ними. */
     var c = { queue: 0, all: 0, clients: 0, support: 0, rejected: 0, hot: 0, week: 0, today: 0,
-              anketa: 0, booked: 0, blank: 0, cold: 0, cls: {} };
+              anketa: 0, booked: 0, blank: 0, cold: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
       if (isBlankVisit(l)) c.blank++;
       // «Все» прячет пустые заходы (isBlankVisit), значит и не считает их.
       else if (segAvail('new') || !isProspect(l)) c.all++;
-      if (l.school_class && (segAvail('new') || !isProspect(l))) {
-        c.cls[l.school_class] = (c.cls[l.school_class] || 0) + 1;
-      }
       if (isProspect(l)) { c.cold++; return; }
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
@@ -1402,6 +1389,16 @@
     if (!trackTab(seg) || !state.trk) return true;
     return state.trk === 'none' ? !leadTrack(l) : leadTrack(l) === state.trk;
   }
+  /* Класс школьника приходит с сервера полем school_class (считается из года
+     окончания школы — сам класс меняется у всех разом 1 сентября). Чипы стоят в том
+     же ряду, что направления, и работают ВМЕСТЕ с ними: «Бакалавриат» и «9 класс»
+     дают девятиклассников на бакалавриате (Мария 19.11.2026). Классы только эти три:
+     она попросила 8, 9 и 10 — тех, кто поступает не в эту волну. */
+  var CLASS_CHIPS = [8, 9, 10];
+  function classHit(l, seg) {
+    if (!trackTab(seg) || !state.cls) return true;
+    return l.school_class === state.cls;
+  }
   function trackChips(arr) {
     if (!trackTab()) return '';
     var by = {}, none = 0;
@@ -1418,10 +1415,18 @@
         '" data-trk="' + esc(k) + '">' + esc(label) +
         '<span class="qn num">' + n + '</span></button>';
     };
+    var byCls = {};
+    arr.forEach(function (l) { if (l.school_class) byCls[l.school_class] = (byCls[l.school_class] || 0) + 1; });
+    var clsChips = CLASS_CHIPS.filter(function (n) { return byCls[n]; }).map(function (n) {
+      return '<button type="button" class="qchip' + (state.cls === n ? ' on' : '') +
+        '" data-cls="' + n + '">' + n + ' класс' +
+        '<span class="qn num">' + byCls[n] + '</span></button>';
+    }).join('');
     return '<div class="list-quick list-trk">' +
       chip('', 'Все направления', arr.length) +
       keys.map(function (k) { return chip(k, trackName(k), by[k]); }).join('') +
       (none ? chip('none', 'Без направления', none) : '') +
+      (clsChips ? '<span class="qsep"></span>' + clsChips : '') +
       '</div>';
   }
 
@@ -1508,8 +1513,13 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll('.list-trk .qchip'), function (b) {
       b.addEventListener('click', function () {
-        var k = b.getAttribute('data-trk') || '';
-        state.trk = (state.trk || '') === k ? '' : k;
+        if (b.hasAttribute('data-cls')) {
+          var n = Number(b.getAttribute('data-cls'));
+          state.cls = state.cls === n ? 0 : n;
+        } else {
+          var k = b.getAttribute('data-trk') || '';
+          state.trk = (state.trk || '') === k ? '' : k;
+        }
         saveUi(); renderView();
       });
     });
@@ -3265,7 +3275,7 @@
       var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
         (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).filter(segAvail).map(function (s) {
-        var n = s === 'new' ? c.cold : s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'support' ? c.support : s === 'rejected' ? c.rejected : segClass(s) ? (c.cls[segClass(s)] || 0) : 0;
+        var n = s === 'new' ? c.cold : s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'support' ? c.support : s === 'rejected' ? c.rejected : 0;
         return '<a class="tab' + (!onDup && state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
       }).join('') + dupTab + '</nav>';

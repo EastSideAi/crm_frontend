@@ -13,10 +13,7 @@ const patched = src.replace(marker, marker +
   '\n  globalThis.__L = { chips: function (a) { return trackChips(a); },' +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
   ' keys: function (seg) { return quickKeys(seg); },' +
-  ' cls: function (seg) { return segClass(seg); },' +
-  ' segBase: function (seg) { return segBase(seg); },' +
-  ' counts: function () { return counts(); },' +
-  ' setLeads: function (a) { state.leads = a; },' +
+  ' clsHit: function (l, seg) { return classHit(l, seg); },' +
   ' pred: function (seg) { return quickPred(seg); },' +
   ' setTracks: function (t) { DOC_TRACKS = t; }, state: state };');
 
@@ -109,21 +106,38 @@ check('чужой срез не режет «Сопровождение»', L.pr
 check('тот же срез на «Клиентах» работает', L.pred('clients')({ crm: {} }) === false, '');
 L.state.quick = '';
 
-/* Вкладки по классу: считает сервер (school_class), вкладка только раскладывает. */
+/* Класс школьника: чипы стоят в том же ряду, что направления, и работают вместе
+   с ними. Сам класс считает сервер (school_class), CRM только раскладывает. */
 const klassy = [
-  { id: 'К1', school_class: 8, crm: { status: 'client', overrides: {} }, status: 'diagnosed', paid: true },
-  { id: 'К2', school_class: 9, crm: { status: 'client', overrides: {} }, status: 'diagnosed', paid: true },
-  { id: 'К3', school_class: 10, crm: { status: 'client', overrides: {} }, status: 'diagnosed', paid: true },
-  { id: 'К4', school_class: 10, crm: { status: 'client', overrides: {} }, status: 'diagnosed', paid: true },
-  { id: 'К5', school_class: null, crm: { status: 'client', overrides: {} }, status: 'diagnosed', paid: true },
+  lead('Аня', 'bachelor'), lead('Боря', 'bachelor'),
+  lead('Вера', 'lang_grant'), lead('Гена', 'master_direct'), lead('Дина', ''),
 ];
-L.setLeads(klassy);
-check('ключ вкладки читается как номер класса', L.cls('cls8') === 8 && L.cls('cls10') === 10 && L.cls('support') === 0, String(L.cls('cls8')));
-check('во вкладке «10 класс» двое', L.segBase('cls10').map(l => l.id).join(',') === 'К3,К4', L.segBase('cls10').map(l => l.id).join(','));
-check('во вкладке «8 класс» один', L.segBase('cls8').map(l => l.id).join(',') === 'К1', L.segBase('cls8').map(l => l.id).join(','));
-check('без класса человек ни в одну вкладку не попадает',
-  ['cls8', 'cls9', 'cls10'].every(function (s) { return L.segBase(s).every(function (l) { return l.id !== 'К5'; }); }), '');
-check('счетчики вкладок совпадают со списками', JSON.stringify(L.counts().cls) === JSON.stringify({ 8: 1, 9: 1, 10: 2 }), JSON.stringify(L.counts().cls));
+klassy[0].school_class = 9;
+klassy[1].school_class = 10;
+klassy[2].school_class = 9;
+klassy[3].school_class = null;
+klassy[4].school_class = 8;
+
+L.state.seg = 'support';
+L.state.trk = '';
+L.state.cls = 0;
+const hk = L.chips(klassy);
+check('в ряду есть чип «9 класс» со счетчиком 2', /9 класс<span class="qn num">2<\/span>/.test(hk), hk.slice(-400));
+check('чипы классов отделены волоском', /qsep/.test(hk), hk.slice(-300));
+check('классов, которых нет у людей, в ряду нет', !/11 класс/.test(hk), '');
+check('направления в том же ряду остались', /Бакалавриат<span/.test(hk), '');
+
+L.state.cls = 9;
+check('фильтр «9 класс» дает двоих', klassy.filter(l => L.clsHit(l, 'support')).map(l => l.id).join(',') === 'Аня,Вера',
+  klassy.filter(l => L.clsHit(l, 'support')).map(l => l.id).join(','));
+check('класс складывается с направлением, а не спорит с ним',
+  klassy.filter(l => L.hit(l, 'support') && L.clsHit(l, 'support')).map(l => l.id).join(',') === 'Аня,Вера', '');
+L.state.trk = 'bachelor';
+check('«Бакалавриат» и «9 класс» вместе дают одного',
+  klassy.filter(l => L.hit(l, 'support') && L.clsHit(l, 'support')).map(l => l.id).join(',') === 'Аня', '');
+check('на чужой вкладке класс не режет список', klassy.filter(l => L.clsHit(l, 'clients')).length === 5, '');
+L.state.trk = '';
+L.state.cls = 0;
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);

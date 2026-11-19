@@ -292,6 +292,9 @@ a { color: inherit; text-decoration: none; }
 .list-trk { padding-top: 9px; padding-bottom: 11px; background: var(--fill); }
 .list-trk .qchip { font-size: 12px; padding: 6px 11px; background: #fff; }
 .list-trk .qchip:hover { background: #EDEFF3; }
+/* Классы школьников стоят в том же ряду, что направления (Мария 19.11.2026), но это
+   другой вопрос к списку — отделяем их волоском, а не вторым рядом. */
+.list-trk .qsep { flex: none; align-self: center; width: 1px; height: 16px; margin: 0 4px; background: var(--line-2); }
 .qchip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
 .qchip.on svg, .qchip.on .qn { color: rgba(255,255,255,.75); }
 .qchip.hot.on { background: var(--red); border-color: var(--red); }
