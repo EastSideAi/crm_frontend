@@ -42541,7 +42541,7 @@
     if (kind === 'hot' && p.free) out.push('<button class="bp ghost" data-mstake="' + esc(p.id) + '">Взять себе</button>');
     if (p.phone) {
       out.push(canCall
-        ? '<button class="bp ms-call' + (kind === 'respond' || kind === 'hot' ? '' : ' ghost') + '" data-mscall="' + esc(p.phone) + '">' +
+        ? '<button class="bp ms-call' + (kind === 'respond' || kind === 'hot' || kind === 'confirm' || kind === 'retry' ? '' : ' ghost') + '" data-mscall="' + esc(p.phone) + '">' +
           ic('phone', 13) + 'Позвонить</button>'
         : '<a class="bp ghost ms-call" href="tel:+' + esc(p.phone) + '">' + ic('phone', 13) + msPhone(p.phone) + '</a>');
     }
@@ -42552,8 +42552,47 @@
     // открывается в «Диалогах» CRM, чат из карточки — у мессенджера.
     if (p.chat && p.chat.bot) out.push('<a class="bp ghost ms-chat" href="' + esc(dialogUrl(p.chat.bot)) + '">' + ic('chat', 13) + 'Диалог</a>');
     else if (p.chat && p.chat.url) out.push('<a class="bp ghost ms-chat" href="' + esc(p.chat.url) + '" target="_blank" rel="noopener">' + ic('chat', 13) + 'Чат</a>');
+    // Не взял трубку — сообщение в один клик (разбор лучших практик 19.11.2026: недозвон,
+    // сразу сообщение в мессенджер, назавтра звонок в другое время).
+    if (p.dial && p.dial.last === 'no_answer' && !p.dial.reached) {
+      out.push('<button class="bp ghost" data-mstpl="' + esc(p.id) + '" title="Скопировать сообщение после недозвона">' +
+        ic('copy', 13) + 'Скопировать текст</button>');
+    }
     out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
     return '<div class="ms-acts">' + out.join('') + '</div>';
+  }
+
+  /* Текст после недозвона. Имя менеджера — первое слово его имени в CRM; без давления
+     и обещаний, как в стандарте переписки курса продаж. */
+  function msTplText(p, kind) {
+    var me = String(state.userName || '').split(' ')[0];
+    var hi = 'Здравствуйте! ' + (me ? 'Это ' + me + ', ИстСайд. ' : 'Это ИстСайд. ');
+    if (kind === 'confirm') {
+      return hi + 'Пробовали дозвониться, чтобы подтвердить консультацию ' + msWhen(p.at) +
+        '. Все в силе? Если время не подходит, напишите, подберем другое.';
+    }
+    return hi + 'Пробовали вам дозвониться по поводу поступления в Китай. Когда удобно поговорить? ' +
+      'Можно и здесь, в переписке.';
+  }
+
+  /* Сколько осталось до нормы первого ответа (15 минут) или насколько просрочено.
+     Время тикает на экране без перезагрузки (msTick). */
+  function msClock(born) {
+    var m = Math.max(0, Math.floor((Date.now() - Date.parse(born)) / 60000));
+    if (m < 10) return ['ms-t ok', 'осталось ' + (15 - m) + ' мин'];
+    if (m < 15) return ['ms-t warn', 'осталось ' + (15 - m) + ' мин'];
+    if (m < 180) return ['ms-t late', 'просрочено на ' + msAge(m - 15)];
+    return ['sev ms-late', 'ждет ' + msAge(m)];
+  }
+  function msTick() {
+    if (MS.tick) return;
+    MS.tick = setInterval(function () {
+      if (state.page !== 'myshift') { clearInterval(MS.tick); MS.tick = null; return; }
+      Array.prototype.forEach.call(document.querySelectorAll('[data-born]'), function (x) {
+        var c = msClock(x.getAttribute('data-born'));
+        x.className = 'sev ' + c[0].replace(/^sev /, ''); x.textContent = c[1];
+      });
+    }, 20000);
   }
 
   /* Насколько теплый лид после эфира (сервер, поле warm): порядок звонков Павла
@@ -42576,7 +42615,10 @@
     if (!p.phone && !p.contact) meta.push('номера нет, писать в диалог');
     var tag = '';
     if (kind === 'respond' || kind === 'pool') {
-      tag = '<span class="sev ' + (p.age_min > 15 ? 'ms-late' : 'ms-ok') + '">ждет ' + msAge(p.age_min) + '</span>';
+      var ck = msClock(p.created_at);
+      tag = '<span class="sev ' + ck[0].replace(/^sev /, '') + '" data-born="' + esc(p.created_at) + '">' + ck[1] + '</span>';
+    } else if (kind === 'retry') {
+      tag = '<span class="sev ms-t warn">позвонить снова</span>';
     } else if (kind === 'hot') {
       tag = '<span class="sev ms-when">консультация ' + esc(msWhen(p.meet_at)) + '</span>';
     } else if (kind === 'after') {
@@ -42603,21 +42645,35 @@
   }
 
   function msPlan(d, open) {
+    var retry = d.retry || [], conf = d.confirm || [];
+    var unconf = conf.filter(function (m) { return !m.confirmed; }).length;
     var steps = [
       { n: 1, t: 'Открыть смену', s: open ? 'идет' : 'начни с этого', done: open, go: '' },
       { n: 2, t: 'Записались сами', s: d.hot.length ? d.hot.length + ' ждут звонка до консультации' : 'все на связи',
-        done: !d.hot.length, go: 'hot', hot: d.hot.length > 0 },
+        done: !d.hot.length, go: 'hot', hot: d.hot.length > 0, norm: true },
       { n: 3, t: 'Ответить новым', s: d.respond.length ? d.respond.length + ' ждут, норма 15 минут' : 'все отвечены',
-        done: !d.respond.length, go: 'respond', hot: d.respond.length > 0 },
-      { n: 4, t: 'Встречи', s: d.meets.length ? d.meets.length + ' на ближайшие дни' : 'встреч нет', done: false, go: 'meets' },
-      { n: 5, t: 'Отметить итог', s: d.after.length ? d.after.length + ' после встречи' : 'все отмечены', done: !d.after.length, go: 'after' },
-      { n: 6, t: 'Дожать до записи', s: d.follow.length ? d.follow.length + ' на связи без записи' : 'никого', done: !d.follow.length, go: 'follow' },
-      { n: 7, t: 'Думают', s: (d.decide || []).length ? d.decide.length + ' после встречи без решения' : 'никого', done: !(d.decide || []).length, go: 'decide' },
-      { n: 8, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
-      { n: 9, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
+        done: !d.respond.length, go: 'respond', hot: d.respond.length > 0, norm: true },
+      { n: 4, t: 'Подтвердить завтра', s: conf.length ? (unconf ? unconf + ' из ' + conf.length + ' не подтверждены' : 'все ' + conf.length + ' подтверждены') : 'встреч на завтра нет',
+        done: !unconf, go: 'confirm', norm: true },
+      { n: 5, t: 'Не взяли трубку', s: retry.length ? retry.length + ' с прошлых дней, позвонить снова' : 'недозвонов нет',
+        done: !retry.length, go: 'retry', norm: true },
+      { n: 6, t: 'Отметить итог', s: d.after.length ? d.after.length + ' после встречи' : 'все отмечены', done: !d.after.length, go: 'after', norm: true },
+      { n: 7, t: 'Дожать до записи', s: d.follow.length ? d.follow.length + ' на связи без записи' : 'никого', done: !d.follow.length, go: 'follow' },
+      { n: 8, t: 'Думают', s: (d.decide || []).length ? d.decide.length + ' после встречи без решения' : 'никого', done: !(d.decide || []).length, go: 'decide' },
+      { n: 9, t: 'Взять свободных', s: d.pool_total ? d.pool_total + ' без ответственного' : 'свободных нет', done: !d.pool_total, go: 'pool' },
+      { n: 10, t: 'Закрыть смену', s: 'итог одной строкой', done: false, go: 'close' },
     ];
-    return '<div class="card ms-plan">' + steps.map(function (st) {
-      return '<button class="ms-step' + (st.done ? ' done' : '') + (st.hot ? ' hot' : '') + '"' +
+    /* Норма смены (Павел 19.11.2026) — не отдельный блок, а полоса над тем же планом:
+       пять шагов, которые обязательно закрыть за смену. Дожим, думающие и свободные —
+       работа без дна, в норму их не считаем. */
+    var nm = steps.filter(function (st) { return st.norm; }), nd = nm.filter(function (st) { return st.done; }).length;
+    var norm = '<div class="ms-norm"><div class="ms-nt"><b>Норма смены: ' + nd + ' из ' + nm.length + '</b>' +
+      '<small>' + (nd === nm.length ? 'все обязательное закрыто, дальше дожим и свободные'
+        : 'обязательно за смену: шаги 2–6, они подсвечены. Дожим и свободные идут сверх нормы') + '</small></div>' +
+      '<span class="ms-nbar" role="progressbar" aria-valuemin="0" aria-valuemax="' + nm.length + '" aria-valuenow="' + nd + '">' +
+      '<i style="width:' + Math.round(nd * 100 / nm.length) + '%"></i></span></div>';
+    return '<div class="card ms-plan">' + norm + steps.map(function (st) {
+      return '<button class="ms-step' + (st.done ? ' done' : '') + (st.hot ? ' hot' : '') + (st.norm ? ' nrm' : '') + '"' +
         (st.go ? ' data-msgo="' + st.go + '"' : ' disabled') + '>' +
         '<span class="ms-sn">' + (st.done ? ic('check', 13) : st.n) + '</span>' +
         '<span class="ms-st"><b>' + st.t + '</b><small>' + esc(st.s) + '</small></span></button>';
@@ -42661,6 +42717,82 @@
         '<button class="bp ghost" id="ms-close-no">Еще поработаю</button></div></div>';
   }
 
+  /* Счет смены вживую (Павел 19.11.2026: «с точки зрения эффективности»): те же три
+     условия и тот же расчет, что при закрытии (сервер, поле live), плюс одна подсказка,
+     что сейчас сильнее всего поднимет счет. */
+  function msLive(d, open) {
+    var q = d.live;
+    if (!open || !q) return '';
+    var sp = q.speed || {}, mi = q.missed || {}, cv = q.conv || {};
+    var k = Number(q.coef).toFixed(1).replace('.', ',');
+    var bar = function (t, pts, max, why) {
+      return '<div class="mq-r' + (pts < max ? ' lost' : '') + '"><span class="mq-t">' + esc(t) + '<small>' + esc(why) + '</small></span>' +
+        '<span class="mq-bar"><i style="width:' + Math.round(pts * 100 / max) + '%"></i></span>' +
+        '<b class="num">' + pts + '<small> из ' + max + '</small></b></div>';
+    };
+    var since = Date.parse(q.since);
+    var wait = d.respond.concat(d.pool, d.hot.filter(function (p) { return p.free; })).filter(function (p) {
+      return Date.parse(p.created_at) >= since;
+    }).sort(function (a, b) { return Date.parse(a.created_at) - Date.parse(b.created_at); })[0];
+    var missN = (mi.chats || 0) + (mi.calls || 0), hint;
+    if (wait) {
+      hint = ['warn', wait.name + ': ' + msClock(wait.created_at)[1] + ' до первого ответа. Пока новые ждут, баллы за скорость падают',
+        d.respond.indexOf(wait) >= 0 ? 'respond' : d.pool.indexOf(wait) >= 0 ? 'pool' : 'hot'];
+    } else if (missN) {
+      hint = ['warn', 'Без ответа ' + [mi.chats ? mi.chats + ' ' + plural(mi.chats, 'диалог', 'диалога', 'диалогов') : '',
+        mi.calls ? mi.calls + ' ' + plural(mi.calls, 'звонок', 'звонка', 'звонков') : ''].filter(Boolean).join(' и ') +
+        ': минус 10 за каждый. Ответь до конца смены, и баллы вернутся', ''];
+    } else if (cv.rate != null && cv.rate < cv.norm) {
+      hint = ['', 'Запись из контакта за месяц ' + cv.rate + '% при норме ' + cv.norm + '%: дожимай тех, с кем уже на связи', 'follow'];
+    } else {
+      hint = ['ok', 'Все по норме: новым ответили вовремя, пропущенных нет', ''];
+    }
+    return '<div class="card ms-live">' +
+      '<div class="mq-k"><span class="mq-l">Коэффициент смены сейчас</span><b class="num">' + k + '</b>' +
+        '<small>' + q.points + ' ' + plural(q.points, 'балл', 'балла', 'баллов') + ' из 100</small>' +
+        '<span class="mq-rub num">' + (q.units ? 'за смену выходит ' + fmtMoney(q.rub) + ' ₽' : 'засчитается после 2 часов') + '</span></div>' +
+      '<div class="mq-rows">' +
+        bar('Скорость первого ответа', sp.points, 40, sp.leads
+          ? 'новых ' + sp.leads + (sp.median_min != null ? ', половине ответили за ' + sp.median_min + ' мин' : ', половине не ответили')
+          : 'новых за смену пока нет') +
+        bar('Без пропущенных', mi.points, 30, missN ? 'без ответа ' + missN : 'всем ответили') +
+        bar('Из контакта в запись', cv.points, 30, cv.rate != null ? 'месяц ' + cv.rate + '%, норма ' + cv.norm + '%' : 'в месяце пока не с кем сравнить') +
+      '</div>' +
+      '<button class="mq-hint ' + hint[0] + '"' + (hint[2] ? ' data-msgo="' + hint[2] + '"' : ' disabled') + '>' +
+        ic(hint[0] === 'ok' ? 'check' : 'bolt', 14) + '<span>' + esc(hint[1]) + '</span>' +
+        (hint[2] ? '<em class="mq-go">к списку' + ic('chev', 13) + '</em>' : '') + '</button></div>';
+  }
+
+  /* Мои смены за месяц: растешь или нет. Шапка смены показывает только число смен,
+     здесь — каждая смена с баллами и итог месяца. */
+  function msMonth(d) {
+    var m = d.month;
+    if (!m || !m.shifts.length) return '';
+    var rows = m.shifts.map(function (x) {
+      var cls = x.coef == null ? 'ms-ok' : x.coef >= 1 ? 'ms-good' : x.coef >= 0.8 ? 'ms-ok' : 'ms-late';
+      return '<div class="ms-mrow"><span>' + esc(fmtDay(x.from)) + '<small>' + fmtTime(x.from) + '–' + fmtTime(x.to) + '</small></span>' +
+        '<span class="num">' + (x.units || 0) + ' ' + plural(x.units || 0, 'смена', 'смены', 'смен') + '</span>' +
+        '<span class="num">' + (x.points != null ? x.points + ' ' + plural(x.points, 'балл', 'балла', 'баллов') : 'без оценки') + '</span>' +
+        '<span class="sev ' + cls + '">' + (x.coef != null ? 'коэф. ' + Number(x.coef).toFixed(2).replace('.', ',') : 'без оценки') + '</span></div>';
+    }).join('');
+    return '<div class="card sp12 ms-sec" id="ms-month"><div class="sec-head pf-sec"><div><div class="t">Мои смены за месяц</div>' +
+      '<div class="s">' + m.units + ' ' + plural(m.units, 'смена', 'смены', 'смен') +
+      (m.coef != null ? ', средний коэффициент ' + Number(m.coef).toFixed(2).replace('.', ',') : '') +
+      ' · ответил новым ' + m.touched + ', записал ' + m.booked + ', провел встреч ' + m.held + '</div></div></div>' +
+      '<div class="ms-list">' + rows + '</div></div>';
+  }
+
+  function msConfirmRow(m, cc) {
+    var st = m.confirmed ? '<span class="sev ms-good">подтвердил</span>'
+      : '<span class="sev ms-when">' + esc(msWhen(m.at)) + '</span>';
+    var p = { id: m.id, phone: m.phone, chat: m.chat, dial: m.dial };
+    var meta = [m.kind === 'slot' ? 'записался в окно' : 'консультация', m.with ? 'ведет ' + m.with : '', m.confirmed ? msWhen(m.at) : '']
+      .filter(Boolean).join(' · ');
+    var dl = !m.confirmed && m.phone ? '<span class="ms-dl"><span class="ms-dls">' + esc(dialSum(m.dial)) + '</span>' + dialMarks(m.id) + '</span>' : '';
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(m.name) + '</b><small>' + esc(meta) + '</small>' + dl + '</div>' +
+      st + msActs(p, m.confirmed ? 'meet' : 'confirm', cc) + '</div>';
+  }
+
   function renderMyShift(view) {
     shLoad();
     msLoad();
@@ -42699,7 +42831,7 @@
           ic('ext', 14) + '</button></div>' : '<div class="ms-acts"></div>') + '</div>';
     }).join('');
 
-    view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + cbCard('shift') + msPlan(d, !!open) + msClose(d, open) + stats +
+    view.innerHTML = '<div class="dash ms">' + msHead(open, cnt) + msLive(d, open) + cbCard('shift') + msPlan(d, !!open) + msClose(d, open) + stats +
       (cc ? '<div class="card ms-dial"><span>' + ic('phone', 15) + 'Звонилка открывается отдельным окном на всю смену: ' +
         'держи его открытым, туда приходят и входящие.</span>' +
         '<button class="bp ghost" id="ms-dial">Открыть звонилку</button></div>'
@@ -42709,6 +42841,10 @@
         d.hot.map(function (p) { return msRow(p, 'hot', cc); }).join(''), 'Все, кто записался, уже на связи.') +
       msSection('respond', 'Ответить сейчас', 'твои лиды, с которыми еще никто не связался; позвони, не дозвонился — напиши в диалог',
         d.respond.map(function (p) { return msRow(p, 'respond', cc); }).join(''), 'Новых без ответа нет.') +
+      msSection('confirm', 'Подтвердить завтрашние встречи', 'звонок накануне поднимает явку; дозвонился — встреча подтверждена, не взял — скопируй текст и напиши',
+        (d.confirm || []).map(function (m) { return msConfirmRow(m, cc); }).join(''), 'На завтра встреч нет.') +
+      msSection('retry', 'Не взяли трубку', 'недозвоны прошлых дней; позвони в другое время дня, не взял снова — скопируй текст и напиши',
+        (d.retry || []).map(function (p) { return msRow(p, 'retry', cc); }).join(''), 'Недозвонов с прошлых дней нет.') +
       msSection('meets', 'Встречи', 'консультации твоих лидов на ближайшие дни; за сутки подтверди, за час напомни',
         meets, 'Встреч пока нет. Записывай в свои окна в «Расписании».') +
       msSection('after', 'После встречи: отметить итог', 'консультация прошла, а в карточке итога нет; поставь договор, «думает» или отказ',
@@ -42722,8 +42858,10 @@
           : 'никто не взял; сверху теплые с эфира, взял — лид твой',
         d.pool.map(function (p) { return msRow(p, 'pool', cc); }).join(''), 'Свободных нет.') +
       msSection('calls', 'Звонки сегодня', 'твои звонки через звонилку CRM', calls, 'Сегодня звонков еще не было.') +
+      msMonth(d) +
       '</div>';
     msBind(view);
+    msTick();
     dialBind(view, function () { MS.d = null; msLoad(true); shLoad(true); });
     if (open) shStartTimer(Date.parse(open.started_at));
   }
@@ -42774,6 +42912,24 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mslead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-mslead')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mstpl]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-mstpl'), dd = MS.d || {}, p = null, kind = '';
+        (dd.confirm || []).forEach(function (x) { if (x.id === id) { p = x; kind = 'confirm'; } });
+        if (!p) ['retry', 'hot', 'respond', 'follow', 'decide', 'pool'].forEach(function (q) {
+          (dd[q] || []).forEach(function (x) { if (!p && x.id === id) p = x; });
+        });
+        if (!p) return;
+        var text = msTplText(p, kind);
+        var done = function () {
+          showToast(p.chat && (p.chat.bot || p.chat.url) ? 'Текст скопирован, вставь в чат' : 'Текст скопирован, отправь в мессенджер семьи');
+          if (p.chat && p.chat.bot) location.hash = dialogUrl(p.chat.bot).replace(/^.*#/, '#');
+          else if (p.chat && p.chat.url) window.open(p.chat.url, '_blank', 'noopener');
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { prompt('Скопируй текст', text); });
+        else prompt('Скопируй текст', text);
+      });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mstouch]'), function (b) {
       b.addEventListener('click', function () {
