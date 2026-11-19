@@ -519,9 +519,6 @@ a { color: inherit; text-decoration: none; }
 
 /* ════ ДАШБОРД — вертикальный стек с единым ритмом ════ */
 .dash { display: flex; flex-direction: column; gap: 20px; }
-/* «Путь до оплаты» внутри «Воронки» продаж: карточки блока идут тем же шагом, что экран */
-.sb-path { display: flex; flex-direction: column; gap: 20px; }
-.sb-path:empty { display: none; }
 
 /* период-сегмент в топбаре (Обзор) */
 .dperiod { display: inline-flex; gap: 3px; background: var(--fill); border-radius: var(--r-pill); padding: 4px; }
@@ -15692,3 +15689,6 @@ video.cs-media { background: #000; }
 .shm-win span { color: var(--ink-3); }
 .shm-sum { font-size: 13px; color: var(--ink-2); font-weight: 600; }
 @media (max-width: 560px) { .shp .sec-head { flex-wrap: wrap; } .shp .sec-head .shp-many { margin-left: 0; } }
+
+/* список людей под цифрой не прячется под шапкой страницы при прокрутке к нему */
+#sb-people, .mg-who { scroll-margin-top: 100px; }

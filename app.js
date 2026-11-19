@@ -2628,8 +2628,8 @@
     { id: 'points', label: 'Мотивация', icon: 'target', cap: 'clients' },
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
-    // У кого открыты «Продажи», «Путь» живет там блоком в «Воронке» (Павел
-    // 19.11.2026: «чтобы все было в окне продаж»); маркетологу и продукту остается пунктом.
+    // У кого открыты «Продажи», пункта «Путь» нет: его цифры дает сверка лидов (Павел
+    // 19.11.2026: «уберем этот путь, это у нас сверка лидов»); маркетологу и продукту остается пунктом.
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path', hideCap: 'planfact' },
     // «Платежи», а не «Финансы»: здесь только оплаты клиентов. Пространство
     // «Финансы» — соседнее и про другие деньги, два одинаковых имени путали бы.
@@ -40869,7 +40869,8 @@
       var n = late[s.key] || 0;
       return { label: esc(s.label), value: fmtMoney(w.steps[s.key] || 0),
         sub: esc(s.hint), delta: n ? fmtMoney(n) + ' ' + esc(s.late) : '', deltaCls: 'bad',
-        lead: i === 0 && w.steps.free > 0 };
+        lead: i === 0 && w.steps.free > 0,
+        sbf: (w.steps[s.key] || 0) ? 'w_' + s.key : '', on: sbIsOn('w_' + s.key, '', '') };
     });
     // Таблица — то, что на руках у менеджеров. «Без менеджера» у них всегда ноль, а
     // ничейные лиды уже стоят первой плиткой и открываются ею же.
@@ -41368,17 +41369,14 @@
       view.innerHTML = '<div class="dash sb">' + head + sbIdeas(d) + sbPeople(d) + '</div>';
     } else {
       mtLoad();
-      sbPathSync();
       // Пятиминутка начинается со сверки лидов (Павел 19.11.2026), поэтому на коротком
       // отрезке она первая под шапкой; на месяце — сразу за планом.
       view.innerHTML = '<div class="dash sb">' + head + (short ? '' : sbPace(d) + plan) + sbReg() + sbConv(d) +
-        (can('clients') ? '<div class="sb-path" id="sb-path"></div>' : '') +
         sbWork(d) + (wq ? sbPeople(d) : '') + cbCard('sales') + mtCard() + potCard(8) +
         sbLadder(d) + sbManagers(d) + dialCard() + sbChannels(d) +
         (wq ? '' : sbPeople(d)) + '</div>';
     }
     sbTabsBind(view);
-    if (el('sb-path')) renderPath(el('sb-path'), true);
     sbBind(view, d);
     potBind(view);
     dialBind(view);
@@ -47991,8 +47989,12 @@
       /* lead — главная цифра полосы: одна на экран, остальные рядом тише. Полоса
          получает модификатор .lead, плитка — тот же класс (см. style.css). */
       return '<button class="stat' + (s.lead ? ' lead' : '') +
-        (s.go || s.ebl || s.step || s.blk ? ' go' : '') +
+        (s.go || s.ebl || s.step || s.blk || s.sbf ? ' go' : '') +
+        (s.on ? ' on' : '') +
         (s.drag ? ' movable' : '') + '"' +
+        /* data-sbf — плитка «Продаж», за которой список людей (тот же фильтр, что у цифр
+           таблиц): Павел 19.11.2026, «нажимаю Без менеджера, а список не открывается». */
+        (s.sbf ? ' data-sbf="' + s.sbf + '" aria-pressed="' + (s.on ? 'true' : 'false') + '"' : '') +
         /* Перетаскиваемая плитка (экран запусков): ключ нужен, чтобы запомнить
            порядок, draggable — чтобы браузер вообще начал её тащить. */
         (s.drag && s.key ? ' draggable="true" data-tile="' + s.key + '"' : '') +
@@ -48922,25 +48924,7 @@
       if (pathOnScreen()) renderView();
     });
   }
-  function pathOnScreen() { return state.page === 'path' || (state.page === 'sales' && sbTab() === 'funnel'); }
-  /* «Путь до оплаты» стоит блоком в «Воронке» (Павел 19.11.2026: «это все про одни и те
-     же цифры, нужно все слить»). Отрезок блока идет за переключателем экрана: Сегодня и
-     Вчера — день, 7 дней — неделя, Месяц — выбранный месяц. Стрелки внутри блока листают
-     дальше сами, пока наверху не сменят отрезок или месяц. */
-  function sbPathSync() {
-    var want = sbSpan() + ':' + pfMonth();
-    if (state._pathSync === want && pathGranOk() !== 'lost') return;
-    state._pathSync = want;
-    var sp = sbSpan();
-    if (sp === 'today' || sp === 'yesterday') { state.pathGran = 'day'; state.pathShift = sp === 'yesterday' ? -1 : 0; }
-    else if (sp === 'week') { state.pathGran = 'week'; state.pathShift = 0; }
-    else {
-      var m = pfMonth().split('-'), now = new Date();
-      state.pathGran = 'month';
-      state.pathShift = Math.min(0, (parseInt(m[0], 10) - now.getFullYear()) * 12 + parseInt(m[1], 10) - 1 - now.getMonth());
-    }
-    state.pathProd = null; state.pathStep = null;
-  }
+  function pathOnScreen() { return state.page === 'path'; }
   function pathStep(r, k) { return ((r && r.steps) || []).filter(function (s) { return s.key === k; })[0]; }
   /* Строка под заголовком — ответ на вопрос «что было за период» одной фразой. */
   function pathVerdict(r) {
