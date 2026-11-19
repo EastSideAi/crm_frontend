@@ -125,6 +125,12 @@ class H(SimpleHTTPRequestHandler):
             return self._json(ME)
         if p == "/admin/api/leads":
             return self._json({"ok": True, "leads": leads()})
+        # Карточка лида — тот же выдуманный человек, что в списке: без нее окно
+        # карточки открывается пустым, и блок квалификации не посмотреть.
+        if p.startswith("/admin/api/leads/") and p.count("/") == 4:
+            one = [x for x in leads() if x["id"] == p.rsplit("/", 1)[-1]]
+            if one:
+                return self._json({"ok": True, **one[0]})
         if p == "/admin/api/docs/kinds":
             return self._json({"ok": True, "kinds": [], "tracks": TRACKS})
         if p.startswith("/admin/api/") or p.startswith("/api/"):

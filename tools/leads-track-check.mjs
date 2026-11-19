@@ -15,6 +15,8 @@ const patched = src.replace(marker, marker +
   ' keys: function (seg) { return quickKeys(seg); },' +
   ' clsHit: function (l, seg) { return classHit(l, seg); },' +
   ' tutorCol: function () { return tutorCol(); },' +
+  ' klassy: function () { return qlClasses(); },' +
+  ' klassLabel: function (y) { return qlClassLabel(y); },' +
   ' owner: function (l) { return ownerName(l); },' +
   ' pred: function (seg) { return quickPred(seg); },' +
   ' setTracks: function (t) { DOC_TRACKS = t; }, state: state };');
@@ -150,6 +152,18 @@ check('имя ведущего берется из карточки',
   L.owner({ crm: { owner: { id: 1, name: 'Элиза Аюпова' } } }) === 'Элиза Аюпова', '');
 check('без ответственного имени нет, а не «undefined»', L.owner({ crm: {} }) === '', JSON.stringify(L.owner({ crm: {} })));
 L.state.seg = 'support';
+
+/* Поле «Класс» в карточке пишет ГОД окончания школы, а не класс. */
+const opts = L.klassy();
+const god = (n) => (opts.filter(o => o[1] === n + ' класс')[0] || [])[0];
+const now = new Date();
+const konec = now.getMonth() + 1 >= 9 ? now.getFullYear() + 1 : now.getFullYear();
+check('в списке семь классов, с 5 по 11', opts.length === 7 && opts[0][1] === '5 класс' && opts[6][1] === '11 класс',
+  opts.map(o => o[1]).join(','));
+check('одиннадцатый выпускается в этом учебном году', god(11) === String(konec), String(god(11)));
+check('восьмой выпускается через три года', god(8) === String(konec + 3), String(god(8)));
+check('прошлый год выпуска подписан отдельно, а не теряется',
+  L.klassLabel(konec - 2) === 'выпуск ' + (konec - 2), L.klassLabel(konec - 2));
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);

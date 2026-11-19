@@ -54289,6 +54289,23 @@
 
   /* Ближайшие шесть волн от сегодня. Зашитый список годов через год врет, поэтому
      считаем от даты: прошедшие в этом году наборы пропускаем. */
+  /* Класс школьника в карточке. Менеджер выбирает КЛАСС, а в базу уходит ГОД
+     ОКОНЧАНИЯ школы (qual.school_end): класс меняется у всех разом 1 сентября, и
+     записанный однажды превратился бы во вранье к весне. Тот же перевод делает
+     сервер в обратную сторону, когда считает school_class для чипов. */
+  function qlSchoolEnd() {
+    var d = new Date();
+    return d.getMonth() + 1 >= 9 ? d.getFullYear() + 1 : d.getFullYear();
+  }
+  function qlClasses() {
+    var end = qlSchoolEnd(), out = [];
+    for (var n = 5; n <= 11; n++) out.push([String(end + (11 - n)), n + ' класс']);
+    return out;
+  }
+  function qlClassLabel(year) {
+    var opt = qlClasses().filter(function (o) { return o[0] === String(year || ''); })[0];
+    return opt ? opt[1] : (year ? 'выпуск ' + year : '');
+  }
   function qlWaves() {
     var now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
     var out = [];
@@ -54621,6 +54638,10 @@
 
     // в селекте показываем то, что уже знаем из анкеты (приглушенно), а выбор
     // менеджера пишем в карточку — он сильнее анкеты
+    var klassy = qlClasses();
+    if (q.school_end && !klassy.some(function (o) { return o[0] === String(q.school_end); })) {
+      klassy = [[String(q.school_end), qlClassLabel(q.school_end)]].concat(klassy);
+    }
     var waves = qlWaves();
     var wave = q.wave || '';
     if (wave && wave !== 'later' && !waves.some(function (w) { return w[0] === wave; })) {
@@ -54631,6 +54652,10 @@
         qlSelect('grade', q.grade || mql.grade || '', QL_GRADES, 'не знаем', !q.grade && !!mql.grade) + '</label>' +
       '<label class="ql-f"><span class="ql-l">Цель</span>' +
         qlSelect('goal', q.goal || mql.goal || '', QL_GOALS, 'не знаем', !q.goal && !!mql.goal) + '</label>' +
+      /* Школьник уже не школьник — год выпуска прошел; такой год в списке классов
+         не найдется, поэтому показываем его отдельной строкой, а не теряем молча. */
+      '<label class="ql-f"><span class="ql-l">Класс</span>' +
+        qlSelect('school_end', q.school_end || '', klassy, 'не знаем', false) + '</label>' +
       '<label class="ql-f"><span class="ql-l">Волна подачи</span>' +
         qlSelect('wave', wave, waves.concat([['later', 'позже']]), 'не названа', false) + '</label>' +
       /* Тариф ставится руками: в платежах у нас свободные названия («1/2 платеж за
