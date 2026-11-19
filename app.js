@@ -190,6 +190,9 @@
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
+    // Свернутая карта офиса — как раз такой случай: без явной проверки выбор
+    // «свернуть» не переживал перезаход (приемка 20.11.2026).
+    if (savedUi.omOpen === true || savedUi.omOpen === false) state.omOpen = savedUi.omOpen;
   } catch (e) {}
   function saveUi() {
     try {
@@ -213,6 +216,7 @@
         trk: state.trk || '',
         cls: state.cls || 0,
         own: state.own || '',
+        omOpen: state.omOpen,
       }));
     } catch (e) {}
   }
@@ -4725,9 +4729,10 @@
         'кто чем занят и где встало.',
       art: function () { return gdWin(1, 'Задачи', []); },
       dos: [
-        'Вкладка «Команда» открывается «Офисом»: план этажа, на котором видно, кто сейчас за работой, у кого задачи стоят и сколько сделано сегодня.',
-        'Рядом разрезы День, Неделя, Месяц — кто над чем работает и что сделано за период. Клик по человеку открывает его задачи.',
-        'Там же «Фокус» и «Застряло»: первое — главное на неделю, второе — задачи, которые переносят второй раз подряд.',
+        'Вкладка «Команда» — это три окна: «Сейчас», «Неделя», «Месяц». На каждом — карточка на человека, а в ней только то, что важно в это окно.',
+        '«Сейчас» открывается планом этажа: видно, кто за работой и у кого задача стоит третий день. Под картой — карточки: над чем человек сидит, что сделал сегодня, что взял на завтра.',
+        'Клик по карточке или по имени открывает страницу человека: его цели и закрытые в них шаги, что в работе, что сделал, что дальше.',
+        'На «Неделе» рядом с итогами две двери: «Фокус недели» — главное на неделю, «Застряло» — задачи, которые переносят второй раз подряд.',
         'Просрочка красным. Разбирайте ее раз в неделю, иначе задачник превращается в кладбище.',
         'Принять или вернуть чужую задачу можно только из ее карточки, и только если человек ее сдал.',
       ],
@@ -13131,7 +13136,13 @@
        повторяло процент плана, «Недели» и «Серия» мерили ритуал закрытия
        недели, а не работу. Осталось сделано из взятого, а переносы и
        застревание — чипами, и только когда они есть. */
-    var rows = (d.people || []).map(function (p) {
+    // Худший процент наверх, как на «Неделе» исключения: экран открывают
+    // ради тех, у кого не идет (приемка 20.11.2026). Это не рейтинг — порядок
+    // чтения; публичного скоринга людей в разделе по-прежнему нет.
+    var mpeople = (d.people || []).slice().sort(function (a, b) {
+      return (a.pct || 0) - (b.pct || 0) || a.name.localeCompare(b.name, 'ru');
+    });
+    var rows = mpeople.map(function (p) {
       return teamCard(p, {
         tail: '<span class="tm-pct num">' + p.pct + '%</span>',
         line: '<b class="num">' + p.done + '</b> из <b class="num">' + p.plan + '</b> сделано',
@@ -13145,10 +13156,10 @@
     var depts = (d.depts || []).length > 1
       ? '<div class="card listcard ts-depts"><div class="dy-h"><span class="t">По отделам</span></div>' +
         '<div class="list-body">' + d.depts.map(function (x) {
-          return '<div class="dp-row"><span class="dp-nm">' + esc(x.label) + '</span>' +
-            '<span class="dp-n"><b class="num">' + x.done + '</b> из <b class="num">' + x.plan + '</b></span>' +
+          return '<div class="ts-dp"><span class="ts-dp-nm">' + esc(x.label) + '</span>' +
+            '<span class="ts-dp-n"><b class="num">' + x.done + '</b> из <b class="num">' + x.plan + '</b></span>' +
             (x.carried ? '<span class="sev tm-fl">' + x.carried + ' ' + plural(x.carried, 'перенос', 'переноса', 'переносов') + '</span>' : '') +
-            '<span class="dp-pct num">' + x.pct + '%</span></div>';
+            '<span class="ts-dp-pct num">' + x.pct + '%</span></div>';
         }).join('') + '</div></div>'
       : '';
     view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
@@ -13156,9 +13167,9 @@
       (rows ? '<div class="tm-cards">' + rows + '</div>'
             : '<div class="card"><div class="empty">За этот период задач в неделях ни у кого не было.</div></div>') +
       depts +
-      '<div class="card tp-foot-card"><div class="dy-foot tp-foot">' +
-        '<button type="button" class="tp-link" data-teamgo="reports">Архив закрытых недель</button></div></div>';
-    wireTeamMode(view); wireDeptChips(view); wireTeamCards(view, d.people || []);
+      '<div class="tp-foot"><button type="button" class="qchip" data-teamgo="reports">' +
+        ic('doc', 13) + 'Отчеты по неделям</button></div>';
+    wireTeamMode(view); wireDeptChips(view); wireTeamCards(view, mpeople);
     function go(x) { state.teamShift = Math.max(-12, Math.min(4, (state.teamShift || 0) + x)); state.teamStats = null; renderView(); }
     if (el('ts-prev')) el('ts-prev').addEventListener('click', function () { go(-1); });
     if (el('ts-next')) el('ts-next').addEventListener('click', function () { go(1); });
@@ -13685,11 +13696,16 @@
     var stale = men.filter(function (m) { return m.st === 'slow'; }).length;
 
     var narrow = wide < 760;
+    /* Полоса карты говорит только про столы. «Без движения» и «сделано
+       сегодня» отсюда убраны: ровно эти слова стоят в полосе под картой, но
+       считаются иначе — там «не трогал задачи сегодня», тут «задача лежит
+       третий день». Два определения одним словом на одном экране ломают
+       доверие к числам сильнее, чем их нехватка (приемка 20.11.2026). */
     var strip = '<div class="om-strip">' +
       '<span><b class="num">' + live + '</b> за работой</span>' +
-      '<span' + (stale ? ' class="warn"' : '') + '><b class="num">' + stale + '</b> без движения</span>' +
-      '<span><b class="num">' + men.reduce(function (n, m) { return n + m.done; }, 0) +
-        '</b> сделано сегодня</span>' +
+      // Ноль не показываем: пустота на этом месте и значит «все движется».
+      (stale ? '<span class="warn"><b class="num">' + stale + '</b> ' +
+        plural(stale, 'задача стоит', 'задачи стоят', 'задач стоит') + ' третий день</span>' : '') +
       (narrow ? '' : '<span><b class="num">' + seats.length + '</b> ' +
         (partial ? 'за столами' : 'мест') + '</span>' +
       '<i>' + (partial
@@ -13725,7 +13741,7 @@
       a.addEventListener('click', function (e) { enterMeetRoom(e, a); });
     });
     if (el('om-fold')) el('om-fold').addEventListener('click', function () {
-      state.omOpen = !mapOpen; renderView();
+      state.omOpen = !mapOpen; saveUi(); renderView();
     });
     var pv = el('tp-prev'), nx = el('tp-next'), td = el('tp-today');
     function shiftDay(n) { var x = new Date(pulseDate() + 'T12:00:00'); x.setDate(x.getDate() + n); state.pulseDate = zoomYmd(x); state.pulse = null; renderView(); }
@@ -13919,7 +13935,7 @@
   }
   function pulseDays(days) {
     var set = {}; (days || []).forEach(function (d) { set[d] = 1; });
-    return '<span class="tp-hrs days">' + [1, 2, 3, 4, 5].map(function (d) {
+    return '<span class="tp-hrs days" title="Дни недели, в которые двигал задачи">' + [1, 2, 3, 4, 5].map(function (d) {
       return '<i class="' + (set[d] ? 'on' : '') + '" data-h="' + WDAYS_RU[d] + '"></i>';
     }).join('') + '</span>';
   }
@@ -13938,8 +13954,12 @@
     // «на пн 2» вместо «на понедельник, 23 ноября 2»: короткая форма влезает
     // в чип, длинная ломает его на две строки.
     var tmrShort = d.tomorrow ? WDAYS_RU[new Date(d.tomorrow + 'T12:00:00').getDay()] : 'завтра';
-    // Тихие наверх: экран открывают, чтобы найти, у кого встало.
-    people.sort(function (a, b) { return (a.active_at ? 1 : 0) - (b.active_at ? 1 : 0) || a.name.localeCompare(b.name, 'ru'); });
+    // Сначала просрочки, потом тихие: экран открывают, чтобы найти, у кого
+    // встало, а красное не должно лежать ниже спокойного (приемка 20.11.2026).
+    people.sort(function (a, b) {
+      return (b.overdue || 0) - (a.overdue || 0) ||
+        (a.active_at ? 1 : 0) - (b.active_at ? 1 : 0) || a.name.localeCompare(b.name, 'ru');
+    });
     var moved = t.active || 0, all = moved + (t.quiet || 0);
     var strip = '<div class="tp-sum">' +
       '<span><b class="num">' + (t.done || 0) + '</b> ' + plural(t.done || 0, 'задача сделана', 'задачи сделано', 'задач сделано') + '</span>' +
@@ -13955,11 +13975,16 @@
          и половина карточки вываливается наружу. Задача открывается со
          страницы человека, куда ведет вся карточка. */
       var now = p.now, nowMeta = now ? [now.how === 'doing' ? 'в работе' : fmtTime(now.at), now.client_name || ''].filter(Boolean).join(' · ') : '';
+      // У тихого подпись под именем уже сказала «сегодня без движения» —
+      // второй раз теми же словами не повторяем, показываем, сколько у него
+      // лежит невзятого (приемка 20.11.2026).
       var line = now
         ? '<span class="tm-now">' + (now.important ? '<span class="tsk-imp" title="Важная">' + ic('bolt', 11) + '</span>' : '') +
             '<span class="tm-nowt">' + esc(now.title) + '</span>' +
             (nowMeta ? '<i class="tm-nowm">' + esc(nowMeta) + '</i>' : '') + '</span>'
-        : '<span class="tm-idle">' + (p.active_at ? 'ничего не взял в работу' : 'движения по задачам нет') + '</span>';
+        : '<span class="tm-idle">' + (p.open_n
+            ? p.open_n + ' ' + plural(p.open_n, 'задача', 'задачи', 'задач') + ', в работе ни одной'
+            : 'открытых задач нет') + '</span>';
       return teamCard(p, {
         sub: sub,
         line: line,
@@ -13972,11 +13997,7 @@
         quiet: !p.active_at,
       });
     }).join('');
-    var idleAll = d.idle || [], idleN = d.idle_n || idleAll.length;
-    var idle = idleAll.length
-      ? '<div class="card tp-idle"><div class="brd-idle"><span class="brd-il">Без задач и движения</span>' + esc(idleAll.slice(0, 10).join(', ')) +
-        (idleN > 10 ? ' <span class="brd-more num">и еще ' + (idleN - 10) + '</span>' : '') + '</div></div>'
-      : '';
+    var idle = idleTail(d, 'Без задач и движения', 'card tp-idle');
     return '<div class="card listcard tp-card">' + strip + '</div>' +
       (body ? '<div class="tm-cards">' + body + '</div>'
             : '<div class="card"><div class="empty">В этот день никто ничего не двигал.</div></div>') +
@@ -13992,26 +14013,56 @@
     var flags = (o.flags || []).filter(function (f) { return f && f.n; }).map(function (f) {
       return '<span class="sev ' + f.cls + ' tm-fl">' + f.n + ' ' + esc(f.label) + '</span>';
     }).join('');
-    return '<button type="button" class="card tm-card' + (o.alarm ? ' alarm' : '') + (o.quiet ? ' quiet' : '') + '" data-uid="' + p.id + '">' +
-      '<span class="tm-top"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
-        '<span class="tm-who"><span class="tm-nm">' + esc(p.name) + '</span>' +
+    /* Карточка — не кнопка: внутри нее живет «Принять», а кнопку внутри
+       кнопки браузер не разбирает, и с клавиатуры до приемки было не
+       добраться (приемка 20.11.2026). Поэтому карточка кликается мышью, а
+       клавиатурная дверь на страницу человека — его имя. */
+    return '<div class="card tm-card' + (o.alarm ? ' alarm' : '') + (o.quiet ? ' quiet' : '') + '" data-uid="' + p.id + '">' +
+      '<div class="tm-top"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
+        '<span class="tm-who"><button type="button" class="tm-nm" data-tmgo="' + p.id + '">' + esc(p.name) + '</button>' +
           '<span class="tm-rl">' + esc(o.sub || p.role_label || '') + '</span></span>' +
-        (o.tail || '') + '</span>' +
-      (o.line ? '<span class="tm-line">' + o.line + '</span>' : '') +
+        (o.tail || '') + '</div>' +
+      (o.line ? '<div class="tm-line">' + o.line + '</div>' : '') +
       (o.dots || '') +
-      (flags ? '<span class="tm-flags">' + flags + '</span>' : '') +
-    '</button>';
+      (flags ? '<div class="tm-flags">' + flags + '</div>' : '') +
+    '</div>';
+  }
+  /* Хвостовая строка раздела: у кого в этом окне не было ничего. Имена тут
+     не текст, а двери: «провалиться в каждого» — это и про них тоже
+     (приемка 20.11.2026). Сервер старее экрана отдает только имена — тогда
+     остается текст, как было. */
+  function idleTail(d, label, cls) {
+    var names = d.idle || [], withIds = d.idle_people || null;
+    var n = d.idle_n || names.length;
+    if (!n) return '';
+    var body = withIds
+      ? withIds.slice(0, 10).map(function (p) {
+          return '<button type="button" class="brd-ip" data-tmgo="' + p.id + '" data-tmnm="' + esc(p.name) + '">' + esc(p.name) + '</button>';
+        }).join('')
+      : esc(names.slice(0, 10).join(', '));
+    return '<div class="' + (cls || 'card') + '"><div class="brd-idle"><span class="brd-il">' + esc(label) + '</span>' +
+      body + (n > 10 ? ' <span class="brd-more num">и еще ' + (n - 10) + '</span>' : '') + '</div></div>';
   }
   function wireTeamCards(view, people) {
+    function open(uid, name) {
+      var who = (people || []).filter(function (x) { return x.id === uid; })[0];
+      state.teamWho = { id: uid, name: who ? who.name : (name || '') };
+      // Период не назначаем: personPeriod() выведет его из вкладки, и с
+      // «Сейчас» человек откроется днем, а не неделей (приемка 20.11.2026).
+      state.person = null; state.personShift = 0; state.personPeriod = null;
+      renderView();
+    }
     Array.prototype.forEach.call(view.querySelectorAll('.tm-card'), function (c) {
       c.addEventListener('click', function (e) {
-        if (e.target.closest('[data-review]')) return;
-        var uid = +c.getAttribute('data-uid');
-        var who = (people || []).filter(function (x) { return x.id === uid; })[0];
-        state.teamWho = { id: uid, name: who ? who.name : '' };
-        state.person = null; state.personShift = 0;
-        state.personPeriod = state.teamMode === 'stats' ? 'month' : 'week';
-        renderView();
+        if (e.target.closest('button')) return;
+        open(+c.getAttribute('data-uid'));
+      });
+    });
+    // Имя — клавиатурная дверь на страницу человека, см. teamCard.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tmgo]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        open(+b.getAttribute('data-tmgo'), b.getAttribute('data-tmnm') || '');
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
@@ -14048,6 +14099,8 @@
       '<button type="button" class="qchip tp-flag" data-teamgo="focus">' + ic('target', 13) + 'Фокус недели</button>' +
       '<button type="button" class="qchip tp-flag' + (t.stuck ? ' warn' : '') + '" data-teamgo="stuck">' + ic('bell', 13) + 'Застряло' +
         (t.stuck ? ' <b class="num">' + t.stuck + '</b>' : '') + '</button>' +
+      // Что значит полоска дней, на экране не было сказано нигде.
+      '<span class="tm-dlab">полоска в карточке — дни, когда двигал задачи</span>' +
     '</div>';
     var body = people.map(function (p) {
       var rp = WK_REP[p.report.state] || WK_REP.wait;
@@ -14055,7 +14108,7 @@
       var rvs = (p.report.review || {}).state, rv = RH_REVIEW[rvs] || RH_REVIEW.pending;
       var tail = given
         ? (rvs === 'pending'
-            ? '<span class="qchip wk-accept-btn tm-act" data-review="' + p.id + '">' + ic('check', 12) + 'Принять</span>'
+            ? '<button type="button" class="qchip wk-accept-btn tm-act" data-review="' + p.id + '">' + ic('check', 12) + 'Принять</button>'
             : '<span class="sev ' + rv.cls + '">' + rv.label + '</span>')
         : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
       var done = p.done + (p.review || 0);
@@ -14069,16 +14122,12 @@
         alarm: !!p.overdue,
       });
     }).join('');
-    var idleAll = d.idle || [], idleN = d.idle_n || idleAll.length;
-    var idle = idleAll.length
-      ? '<div class="brd-idle"><span class="brd-il">Пустая неделя</span>' + esc(idleAll.slice(0, 10).join(', ')) +
-        (idleN > 10 ? ' <span class="brd-more num">и еще ' + (idleN - 10) + '</span>' : '') + '</div>'
-      : '';
+    var idle = idleTail(d, 'Пустая неделя', '');
     view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + pulseNav(d) + '</div>' +
       '<div class="card listcard tp-card">' + strip + flags + '</div>' +
       (body ? '<div class="tm-cards">' + body + '</div>'
             : '<div class="card"><div class="empty">На этой неделе ни у кого ничего нет.</div></div>') +
-      (idle ? '<div class="card tp-idle">' + idle + '</div>' : '');
+      idle;
     wireTeamMode(view); wireDeptChips(view); wkWireNav(view); wireTeamCards(view, people);
   }
 

@@ -15729,6 +15729,8 @@ video.cs-media { background: #000; }
 .pr-row { display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
   padding: 9px 12px; border-radius: 10px; }
 .pr-row:hover { background: var(--fill); }
+.pr-row:focus-visible, .pg-step:focus-visible, .pg-h:focus-visible {
+  outline: none; box-shadow: inset 0 0 0 2px var(--blue); border-radius: 10px; }
 .pr-t { display: block; font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35; }
 .pr-m { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
 .pr-row.over .pr-m { color: var(--red-ink); }
@@ -15774,16 +15776,22 @@ video.cs-media { background: #000; }
   padding: 14px 15px 13px; text-align: left; cursor: pointer; font: inherit;
   transition: border-color .16s var(--ease), background .16s var(--ease); }
 .tm-card:hover { border-color: var(--line-2); background: var(--app); }
-.tm-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
 /* Просрочка — полоска слева, как в строках-тикетах (.r-crit): красное на
    карточке одно, и это оно. */
 .tm-card.alarm::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--coral); }
 .tm-top { display: flex; align-items: center; gap: 10px; }
 .tm-who { min-width: 0; flex: 1; display: block; }
-.tm-nm { display: block; font-size: 14px; font-weight: 700; letter-spacing: -.01em; color: var(--ink);
+.tm-nm { display: block; max-width: 100%; padding: 0; background: none; border: 0; cursor: pointer;
+  font: 700 14px 'Manrope', sans-serif; letter-spacing: -.01em; color: var(--ink); text-align: left;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tm-rl { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: 1px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-card:hover .tm-nm, .tm-nm:hover { color: var(--blue); }
+.tm-nm:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--blue); border-radius: 6px; }
+/* Подпись в две строки, а не в многоточие: рядом с ней встает чип просрочки,
+   и обрезалось как раз «на сегодня еще 2» — то, ради чего ее читают
+   (приемка 20.11.2026). */
+.tm-rl { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: 11.5px; font-weight: 600; line-height: 1.35; color: var(--ink-3); margin-top: 1px; }
 .tm-top .sev, .tm-top .tm-act { flex: none; }
 .tm-pct { font-size: 17px; font-weight: 800; letter-spacing: -.03em; color: var(--ink); flex: none; }
 .tm-line { display: block; min-width: 0; max-width: 100%; font-size: 13px; font-weight: 600; color: var(--ink-2); }
@@ -15794,6 +15802,7 @@ video.cs-media { background: #000; }
   color: var(--ink-3); line-height: 1.4;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tm-card .tp-hrs { margin: 1px 0 0; }
+.tm-dlab { margin-left: auto; align-self: center; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
 /* Подписи дней выводятся под точками через ::after, поэтому высоту под них
    резервируем явно — иначе следующий чип наезжает на «пн вт ср». */
 .tm-card .tp-hrs + * { margin-top: 8px; }
@@ -15820,10 +15829,18 @@ video.cs-media { background: #000; }
 
 /* Отделы под карточками людей: строка — отдел, сделано из взятого, переносы
    и процент справа. Таблицы тут больше нет (20.11.2026). */
-.dp-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); }
-.dp-row:first-child { border-top: 0; }
-.dp-nm { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--ink);
+/* Префикс ts-: класс .dp-row в этом файле уже занят списком дел «Моей смены»
+   и строками «С / По» в фильтрах периода (приемка 20.11.2026). */
+.ts-dp { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); }
+.ts-dp:first-child { border-top: 0; }
+.ts-dp-nm { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dp-n { font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-.dp-n .num { color: var(--ink); font-weight: 800; }
-.dp-pct { font-size: 15px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); min-width: 46px; text-align: right; }
+.ts-dp-n { font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.ts-dp-n .num { color: var(--ink); font-weight: 800; }
+.ts-dp-pct { font-size: 15px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); min-width: 46px; text-align: right; }
+
+/* Имя в хвостовой строке — дверь на страницу человека, а не просто текст. */
+.brd-ip { padding: 2px 6px; margin: 0 2px 0 0; border: 0; background: none; cursor: pointer;
+  font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2); border-radius: 7px; }
+.brd-ip:hover { background: var(--fill); color: var(--blue); }
+.brd-ip:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--blue); }
