@@ -58912,6 +58912,27 @@
     return '<div class="pb-pt">' + head + line + pbChecklist(st, p) + foot + '</div>';
   }
 
+  /* Консультация по подбору вузов — отдельная оплата сверх пяти точек, 3000 за штуку.
+     Это не шестая точка: у нее нет чек-листа и коэффициента, одна кнопка «провел». */
+  function pbConsult(st) {
+    var c = st.consultation;
+    var head = '<div class="pb-pth"><b>Консультация по подбору вузов</b>' +
+      '<span class="pb-amt num">' + fmtMoney(c ? c.amount : 3000) + ' ₽</span></div>' +
+      '<div class="pb-about">Отдельная оплата сверх точек, за проведенную консультацию по вузам.</div>';
+    if (c) {
+      var line = '<div class="pb-line ok">' + ic('check', 13) +
+        '<span>Проведена ' + fmtDay(c.heldOn) + '. ' +
+        (c.paid ? 'Выплачено' + (c.payDay ? ' ' + fmtDay(c.payDay) : '')
+                : 'Идет в ближайшую выплату') + '</span>' +
+        (c.paid ? '' : '<button class="lnk" data-pbconsultoff="' + esc(st.sessionId) + '">снять</button>') +
+        '</div>';
+      return '<div class="pb-pt pb-consult">' + head + line + '</div>';
+    }
+    return '<div class="pb-pt pb-consult">' + head +
+      '<div class="pb-foot"><button class="bp sm" data-pbconsulton="' + esc(st.sessionId) + '">' +
+        'Отметить проведенной и начислить 3 000 ₽</button></div></div>';
+  }
+
   function pbStudent(st) {
     var openKey = (state.ptOpen && state.ptOpen.indexOf(st.sessionId + ':') === 0)
       ? state.ptOpen.split(':')[1] : (st.next && st.next.key);
@@ -58932,6 +58953,7 @@
           '<span>' + done + ' из 5 закрыто</span></div>' +
       '</div>' +
       pbPoint(st, p, n, pbPaid(st)) +
+      pbConsult(st) +
       '</div>';
   }
 
@@ -59106,8 +59128,8 @@
         '</div>' +
         '<button class="bp ghost sm" data-pbday="' + esc(box.next) + '">Следующая выплата</button>' +
       '</div>' +
-      '<div class="pb-topd">В нее идут точки, закрытые с ' + fmtDay(box.from) + ' по ' + fmtDay(box.to) +
-        '. Сумма складывается из закрытых точек, руками ее никто не вводит.</div>' +
+      '<div class="pb-topd">В нее идут закрытые точки и проведенные консультации с ' + fmtDay(box.from) + ' по ' + fmtDay(box.to) +
+        '. Сумма складывается сама, руками ее никто не вводит.</div>' +
       (payAll ? '<div class="pb-acts">' + payAll + '</div>' : '') +
       '</div>';
 
@@ -59133,7 +59155,7 @@
 
       return '<div class="card pb-tut' + (t.paid ? ' is-paid' : '') + '">' +
         '<div class="pb-tuth"><b>' + esc(t.name) + '</b>' +
-          '<span class="pb-tutn">' + t.rows.length + ' ' + plural(t.rows.length, 'точка', 'точки', 'точек') + '</span>' +
+          '<span class="pb-tutn">' + t.rows.length + ' ' + plural(t.rows.length, 'начисление', 'начисления', 'начислений') + '</span>' +
           '<b class="pb-tuta num">' + fmtMoney(t.total) + ' ₽</b></div>' +
         rows + act + '</div>';
     }).join('') : '<div class="card"><div class="empty">В этот период не закрыто ни одной точки. Платить не за что — это и есть ответ.</div></div>';
@@ -59249,6 +59271,28 @@
         if (!confirm('Закрыть точку? Коэффициент и сумма зафиксируются на сегодня, обратно точка сама не откроется.')) return;
         var a = b.getAttribute('data-pbclose').split(':');
         send(a[0], '/' + a[1] + '/close', { __method: 'POST' }, 'Сначала отметьте весь чек-лист');
+      });
+    });
+
+    function consultDo(sid, path, body, bad) {
+      api('/admin/api/leads/' + sid + '/consultation' + path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+      }).then(function () { PB[pbSeg()] = null; PTS[sid] = null; pbLoad(true); })
+        .catch(function (e) {
+          showToast(e && e.status === 409 ? (bad || 'Так нельзя') : 'Не сохранилось, попробуй еще раз');
+        });
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbconsulton]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Отметить консультацию по подбору вузов проведенной? Начислится 3 000 ₽.')) return;
+        consultDo(b.getAttribute('data-pbconsulton'), '', {});
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbconsultoff]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Снять отметку консультации?')) return;
+        consultDo(b.getAttribute('data-pbconsultoff'), '/void', { reason: '' },
+          'Консультация уже выплачена — сначала отмени выплату в реестре');
       });
     });
   }
