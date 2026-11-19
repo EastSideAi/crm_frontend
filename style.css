@@ -13215,6 +13215,14 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   font-weight: 700; font-size: 15px; color: var(--ink); text-align: left; }
 .pb-open:hover { color: var(--blue); }
 .pb-tar, .pb-who { font-size: 12px; color: var(--ink-3); }
+/* Направление ученика в строке. Плашкой, а не еще одной серой подписью: тариф и
+   «ведет» отвечают на «сколько платят» и «кто ведет», а направление решает пакет
+   документов семьи, и глазами его ищут отдельно. */
+.pb-trk { font-size: 11.5px; font-weight: 600; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 3px 9px; }
+/* Ряд фильтров по направлению — между шапкой экрана и списком учеников. */
+.pb-tracks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.pb-tracks .qchip { font-size: 12px; padding: 6px 11px; }
 .pb-sum { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; }
 .pb-sum b { font-size: 16px; font-weight: 700; }
 .pb-sum b.pb-earned { color: var(--green-ink); }
