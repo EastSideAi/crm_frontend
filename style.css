@@ -261,43 +261,55 @@ a { color: inherit; text-decoration: none; }
 .vseg button.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.1); }
 
 /* ── этап маршрута в строке «Сопровождения» ─────────────────────────────────
-   Полоска с насечками по числу этапов: пройденные тихим синим, текущий —
-   сплошным, будущие серые. Подпись словом под ней, потому что шестнадцать
-   насечек на глаз не считаются, а вопрос у человека один: где клиент сейчас. */
-.t-stage { padding-right: 10px; overflow: hidden; cursor: pointer; }
-.t-stage.none { font-size: 12px; color: var(--ink-3); cursor: default; }
-.t-stage .stbar { display: flex; gap: 2px; }
-.t-stage .sg { height: 6px; flex: 1; border-radius: 2px; background: var(--line-2); transition: .15s; }
-.t-stage .sg.done { background: #BBD0FF; }
-.t-stage .sg.open { background: #D7E2FF; }
-.t-stage .sg.now { background: var(--blue); }
-.t-stage .stlab { margin-top: 6px; font-size: 11.5px; font-weight: 600; color: var(--ink);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.t-stage .stlab i { font-style: normal; color: var(--ink-3); margin-left: 5px;
-  font-variant-numeric: tabular-nums; }
-.t-stage:hover .sg { background: #DCE0E8; }
-.t-stage:hover .sg.done { background: #A9C3FF; }
-.t-stage:hover .sg.now { background: var(--blue); }
+   В строке стоит ТОЛЬКО название этапа: полоска с насечками в каждой строке
+   читалась как шум (Мария 20.11.2026: «слишком захламленно»). Весь маршрут
+   открывается отдельным окном по клику — отсюда роль кнопки и кольцо фокуса:
+   другой двери к дорожной карте нет, и с клавиатуры она тоже должна открываться. */
+.t-stage { display: flex; align-items: baseline; gap: 8px; padding: 2px 10px 2px 0;
+  overflow: hidden; cursor: pointer; border-radius: 8px; }
+.t-stage .stn { font-size: 13px; font-weight: 600; color: var(--ink);
+  letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-stage .stp { flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.t-stage:hover .stn { color: var(--blue); }
+.t-stage:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+/* «план не собран» — это призыв собрать план, а не самая тихая строка экрана */
+.t-stage.none { font-size: 12px; color: var(--ink-2); cursor: default; }
+.t-stage.unknown { font-size: 12px; color: var(--ink-3); cursor: default; }
 
-/* мини-карта маршрута по клику */
-#smenu.stmenu { padding: 8px; gap: 1px; max-height: 70vh; overflow: auto; }
-#smenu.stmenu .st-h { position: sticky; top: 0; z-index: 1; background: #fff;
-  font-size: 12px; font-weight: 700; color: var(--ink-3);
-  padding: 4px 10px 8px; border-bottom: 1px solid var(--line); margin-bottom: 5px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#smenu.stmenu .st-r { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
-  border-radius: 9px; font-size: 12.5px; color: var(--ink); }
-#smenu.stmenu .st-ic { width: 18px; height: 18px; border-radius: 50%; flex: none;
-  display: grid; place-items: center; font-size: 10px; font-weight: 800;
-  background: var(--fill); color: var(--ink-3); }
-#smenu.stmenu .st-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#smenu.stmenu .st-n { font-size: 11.5px; font-weight: 600; color: var(--ink-3);
+/* ── дорожная карта отдельным окном ──────────────────────────────────────────
+   Оверлей общий с формой «Новый клиент» (.al-ov/.al-card), свои только .rmap-*:
+   имя .rm-* уже занято этапами плана в карточке клиента (§8 design.md), и два
+   компонента под одним классом рано или поздно расходятся. */
+.rmap-card { max-width: 520px; }
+.rmap-now { flex: none; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  margin: 14px 24px 0; padding: 10px 14px; border-radius: 14px; background: var(--blue-tint); }
+.rmap-now b { font-size: 15px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+.rmap-now .rmap-n { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+/* Лента этапов: шаг строк задает только padding самой строки, промежутка между
+   ними нет — иначе рельс рвется и читается случайным штрихом, а не маршрутом.
+   gap перебивает .al-body, поэтому стоит здесь, после нее. */
+.al-body.rmap-body { padding: 10px 16px 14px; gap: 0; }
+/* Шестнадцать этапов должны помещаться целиком: маршрут, который надо прокручивать,
+   перестает читаться маршрутом. Внутри сущности плотно — это правило системы. */
+.rmap-r { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-radius: 10px;
+  font-size: 13px; position: relative; }
+/* рельс между кружками: непрерывный, от строки к строке */
+.rmap-r::before { content: ''; position: absolute; left: 19.5px; top: -6px; width: 2px; height: 12px;
+  background: var(--line-2); }
+.rmap-r:first-child::before { display: none; }
+.rmap-r .rmap-ic { width: 21px; height: 21px; border-radius: 50%; flex: none; display: grid;
+  place-items: center; font-size: 10.5px; font-weight: 800; background: var(--fill); color: var(--ink-3); }
+.rmap-r .rmap-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmap-r .rmap-note { font-size: 11.5px; font-weight: 600; color: var(--ink-2);
   font-variant-numeric: tabular-nums; }
-#smenu.stmenu .st-r.done .st-ic { background: #2B8A3E1A; color: #2B8A3E; }
-#smenu.stmenu .st-r.now { background: var(--blue-tint); }
-#smenu.stmenu .st-r.now .st-ic { background: var(--blue); color: #fff; }
-#smenu.stmenu .st-r.now .st-t { font-weight: 700; color: var(--blue); }
-#smenu.stmenu .st-r.wait .st-t { color: var(--ink-3); }
+.rmap-r.done .rmap-ic { background: var(--green-soft); color: var(--green-ink); }
+.rmap-r.done::before, .rmap-r.now::before { background: rgba(47,107,255,.35); }
+.rmap-r.now { background: var(--blue-tint); }
+.rmap-r.now .rmap-ic { background: var(--blue); color: #fff; }
+.rmap-r.now .rmap-t { font-weight: 700; color: var(--blue-d); }
+.rmap-r.now .rmap-note { color: var(--blue-d); }
+.rmap-r.open .rmap-ic { background: var(--blue-tint); color: var(--blue-d); }
+.rmap-r.wait .rmap-t, .rmap-r.wait .rmap-ic { color: var(--ink-3); }
 
 /* ════ контейнер списка «Клиенты» (тулбар + тело в одной карточке) ════ */
 .listcard { overflow: hidden; }
@@ -781,7 +793,7 @@ a { color: inherit; text-decoration: none; }
 .lr-grid { grid-template-columns: 138px 1.4fr 130px 170px 110px 30px; }
 /* «Сопровождение»: вместо балла и контакта — этап маршрута (Мария 20.11.2026).
    Контакт там не нужен: клиенту пишут из карточки, а не копируя почту из списка. */
-.lr-grid.sup { grid-template-columns: 138px 1.4fr 250px 110px 30px; }
+.lr-grid.sup { grid-template-columns: 138px 1.4fr 200px 110px 30px; }
 .dl-grid { grid-template-columns: 1.4fr 190px 110px 30px; }
 .tsk-grid { grid-template-columns: minmax(0,1.7fr) 178px 150px 116px; }
 /* Свои задачи: колонки исполнителя нет — в каждой строке стояло бы свое же имя. */

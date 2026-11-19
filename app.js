@@ -48872,45 +48872,85 @@
      «стоит в начале» это разные вещи. */
   var STAGE_STATE = { done: 'done', now: 'now', open: 'open' };
   function stageCell(l) {
+    /* Поля stage нет вовсе — это старый ответ сервера (бэкенд еще не выкачен), а не
+       «плана нет». Разные вещи: во втором случае план надо собрать, в первом надо
+       дождаться выкатки, и звать человека собирать план было бы враньем. */
+    if (!('stage' in l)) return '<div class="t-stage hidem unknown">—</div>';
     var st = l.stage;
     if (!st || !st.steps || !st.steps.length) {
       return '<div class="t-stage hidem none">план не собран</div>';
     }
-    var segs = st.steps.map(function (p) {
-      return '<i class="sg ' + (STAGE_STATE[p.s] || '') + '"></i>';
-    }).join('');
-    return '<div class="t-stage hidem" data-stop="1" data-stid="' + l.id + '">' +
-      '<div class="stbar">' + segs + '</div>' +
-      '<div class="stlab"><b>' + esc(st.short || '—') + '</b>' +
-        (st.pos ? '<i>· ' + st.pos + ' из ' + st.total + '</i>' : '') + '</div>' +
+    /* В строке только название этапа: полоска с насечками в каждой строке читалась
+       как шум («слишком захламленно», Мария 20.11.2026). Весь маршрут открывается
+       отдельным окном по клику — и по Enter, другой двери к нему нет. */
+    return '<div class="t-stage hidem" data-stop="1" data-stid="' + l.id + '"' +
+      ' role="button" tabindex="0" aria-label="Дорожная карта: ' +
+      esc(st.short || 'этап') + ', этап ' + (st.pos || '?') + ' из ' + st.total + '">' +
+      '<span class="stn">' + esc(st.short || '—') + '</span>' +
+      (st.pos ? '<span class="stp num">' + st.pos + '/' + st.total + '</span>' : '') +
     '</div>';
   }
-  /* Мини-карта по клику: весь маршрут списком — что закрыто, где стоим, что впереди.
-     «и типо когда на нее жмешь были этапы дорожной карты» (Мария 20.11.2026). */
+  /* Правая подпись этапа. Единица одна на весь столбец («задач»), а у будущих этапов
+     без задач подписи нет вовсе: одиннадцать одинаковых «нет задач» подряд ничего не
+     добавляют к серому кружку и серому тексту. */
   function stageNote(p) {
     if (p.s === 'done') return 'закрыт';
-    if (!p.t) return 'нет задач';
-    return p.d + ' из ' + p.t + (p.s === 'now' ? ' задач' : '');
+    if (!p.t) return '';
+    return p.d + ' из ' + p.t + ' задач';
   }
-  function openStageMenu(lead, anchor) {
-    closeSmenu();
-    var st = lead.stage || {};
-    smenu = document.createElement('div');
-    smenu.id = 'smenu'; smenu.className = 'stmenu';
-    smenu.innerHTML = '<div class="st-h">' + esc(leadName(lead)) + '</div>' +
-      (st.steps || []).map(function (p, i) {
-        return '<div class="st-r ' + (STAGE_STATE[p.s] || 'wait') + '">' +
-          '<span class="st-ic">' + (p.s === 'done' ? ic('check', 11) : (i + 1)) + '</span>' +
-          '<span class="st-t">' + esc(p.n || p.k) + '</span>' +
-          '<span class="st-n">' + stageNote(p) + '</span>' +
-        '</div>';
-      }).join('');
-    document.body.appendChild(smenu);
-    var r = anchor.getBoundingClientRect();
-    smenu.style.minWidth = Math.max(r.width, 260) + 'px';
-    smenu.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - smenu.offsetHeight - 8)) + 'px';
-    smenu.style.left = Math.min(r.left, window.innerWidth - smenu.offsetWidth - 8) + 'px';
-    smenu.scrollTop = 0;   // шестнадцать этапов не влезают, и список открывался прокрученным
+  /* ДОРОЖНАЯ КАРТА ОТДЕЛЬНЫМ ОКНОМ (Мария 20.11.2026: «надо, когда нажимаешь, чтобы
+     открывалась отдельно дорожная карта их и на каком этапе»). Весь маршрут лентой:
+     что закрыто, где стоим, что впереди. Этапы и их состояние считает сервер. */
+  function openRoadmap(lead, back) {
+    if (typeof closeSmenu === 'function') closeSmenu();
+    if (document.querySelector('.al-ov')) return;   // поверх другого окна не открываемся
+    var st = (lead && lead.stage) || {};
+    var steps = st.steps || [];
+    var done = steps.filter(function (p) { return p.s === 'done'; }).length;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov rmap';
+    ov.innerHTML =
+      '<div class="al-card rmap-card" role="dialog" aria-modal="true" aria-labelledby="rm-ttl" tabindex="-1">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Дорожная карта</div>' +
+            '<div class="al-title" id="rm-ttl">' + esc(leadName(lead)) + '</div></div>' +
+          '<button class="al-x" id="rm-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="rmap-now">' +
+          '<span class="al-eyebrow">Сейчас</span>' +
+          '<b>' + esc(st.short || 'этап не определен') + '</b>' +
+          '<span class="rmap-n num">этап ' + (st.pos || '—') + ' из ' + (st.total || steps.length) +
+            ' · пройдено ' + done + '</span>' +
+        '</div>' +
+        '<div class="al-body rmap-body">' +
+          steps.map(function (p, i) {
+            var note = stageNote(p);
+            return '<div class="rmap-r ' + (STAGE_STATE[p.s] || 'wait') + '">' +
+              '<span class="rmap-ic">' + (p.s === 'done' ? ic('check', 11) : (i + 1)) + '</span>' +
+              '<span class="rmap-t">' + esc(p.n || p.k) + '</span>' +
+              (note ? '<span class="rmap-note">' + note + '</span>' : '') +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+      // вернуть фокус туда, откуда пришли: иначе с клавиатуры человек после закрытия
+      // оказывается в начале страницы
+      if (back && back.focus) try { back.focus(); } catch (e) {}
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('rm-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var card = ov.querySelector('.rmap-card');
+    if (card) setTimeout(function () { card.focus(); }, 30);
   }
   function fillTable(host) {
     var arr = segLeads(state.seg);
@@ -48997,10 +49037,14 @@
       tr.addEventListener('mouseenter', function () { warm(tr.getAttribute('data-id')); });
     });
     Array.prototype.forEach.call(host.querySelectorAll('.t-stage[data-stid]'), function (c) {
-      c.addEventListener('click', function (e) {
+      var open = function (e) {
         e.stopPropagation();
         var lead = findLead(c.getAttribute('data-stid'));
-        if (lead) openStageMenu(lead, c);
+        if (lead) openRoadmap(lead, c);
+      };
+      c.addEventListener('click', open);
+      c.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); }
       });
     });
     Array.prototype.forEach.call(host.querySelectorAll('.pill-st'), function (p) {

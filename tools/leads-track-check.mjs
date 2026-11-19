@@ -240,19 +240,24 @@ const steps = [
 const withStage = { id: 'x', crm: { overrides: {} },
   stage: { key: 'pick', short: 'Подбор', title: 'Подбор', pos: 3, total: 5, steps: steps } };
 const cell = L.stCell(withStage);
-check('в полоске столько насечек, сколько этапов', (cell.match(/class="sg/g) || []).length === 5,
-  String((cell.match(/class="sg/g) || []).length));
-check('пройденные, текущий и будущие помечены по-разному',
-  /sg done/.test(cell) && /sg now/.test(cell) && /sg open/.test(cell), cell);
-check('подпись называет этап словом и место в маршруте',
-  cell.indexOf('Подбор') > 0 && cell.indexOf('3 из 5') > 0, cell);
+check('в строке только название этапа и место в маршруте, без полоски',
+  cell.indexOf('Подбор') > 0 && cell.indexOf('3/5') > 0 && !/class="sg/.test(cell), cell);
+check('по строке можно нажать — там открывается карта',
+  /data-stid="x"/.test(cell) && /data-stop="1"/.test(cell), cell);
 check('плана нет — так и написано, а не первый этап',
-  L.stCell({ id: 'y', crm: { overrides: {} } }).indexOf('план не собран') > 0,
-  L.stCell({ id: 'y', crm: { overrides: {} } }));
+  L.stCell({ id: 'y', crm: { overrides: {} }, stage: null }).indexOf('план не собран') > 0,
+  L.stCell({ id: 'y', crm: { overrides: {} }, stage: null }));
+/* Старый ответ сервера (поля stage нет вовсе) — это не «плана нет»: звать собирать
+   план, пока бэкенд не выкачен, значит врать всей вкладке разом. */
+check('сервер еще не умеет этапы — молчим, а не зовем собирать план',
+  L.stCell({ id: 'z', crm: { overrides: {} } }).indexOf('план не собран') < 0,
+  L.stCell({ id: 'z', crm: { overrides: {} } }));
 check('у закрытого этапа подпись «закрыт»', L.stNote(steps[0]) === 'закрыт', L.stNote(steps[0]));
 check('у текущего видно, сколько задач закрыто', L.stNote(steps[2]) === '4 из 9 задач', L.stNote(steps[2]));
-check('этап без задач не притворяется нулевым прогрессом',
-  L.stNote(steps[4]) === 'нет задач', L.stNote(steps[4]));
+check('у этапа без задач подписи нет вовсе, а не «нет задач» одиннадцать раз подряд',
+  L.stNote(steps[4]) === '', JSON.stringify(L.stNote(steps[4])));
+check('единица измерения одна на весь столбец',
+  L.stNote(steps[3]) === '0 из 2 задач', L.stNote(steps[3]));
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);
