@@ -16,7 +16,6 @@ const patched = src.replace(marker, marker +
   ' ownLabel: function (a) { return ownerLabel(a); },' +
   ' ownHit: function (l, seg) { return ownerHit(l, seg); },' +
   ' stCell: function (l) { return stageCell(l); },' +
-  ' stNote: function (p) { return stageNote(p); },' +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
   ' keys: function (seg) { return quickKeys(seg); },' +
   ' clsHit: function (l, seg) { return classHit(l, seg); },' +
@@ -242,22 +241,26 @@ const withStage = { id: 'x', crm: { overrides: {} },
 const cell = L.stCell(withStage);
 check('в строке только название этапа и место в маршруте, без полоски',
   cell.indexOf('Подбор') > 0 && cell.indexOf('3/5') > 0 && !/class="sg/.test(cell), cell);
-check('по строке можно нажать — там открывается карта',
-  /data-stid="x"/.test(cell) && /data-stop="1"/.test(cell), cell);
+check('по ячейке можно нажать — открывается карточка на «Поступлении»',
+  /data-stid="x"/.test(cell) && /data-stop="1"/.test(cell) &&
+  /role="button"/.test(cell) && /aria-label="Поступление/.test(cell), cell);
+const noPlan = L.stCell({ id: 'y', crm: { overrides: {} }, stage: null });
 check('плана нет — так и написано, а не первый этап',
-  L.stCell({ id: 'y', crm: { overrides: {} }, stage: null }).indexOf('план не собран') > 0,
-  L.stCell({ id: 'y', crm: { overrides: {} }, stage: null }));
+  noPlan.indexOf('план не собран') > 0, noPlan);
+/* Собирают план на той же вкладке карточки, куда ведет ячейка, — мертвой строки
+   из нее делать незачем. */
+check('«план не собран» тоже открывает карточку',
+  /data-stid="y"/.test(noPlan) && /role="button"/.test(noPlan), noPlan);
 /* Старый ответ сервера (поля stage нет вовсе) — это не «плана нет»: звать собирать
    план, пока бэкенд не выкачен, значит врать всей вкладке разом. */
 check('сервер еще не умеет этапы — молчим, а не зовем собирать план',
   L.stCell({ id: 'z', crm: { overrides: {} } }).indexOf('план не собран') < 0,
   L.stCell({ id: 'z', crm: { overrides: {} } }));
-check('у закрытого этапа подпись «закрыт»', L.stNote(steps[0]) === 'закрыт', L.stNote(steps[0]));
-check('у текущего видно, сколько задач закрыто', L.stNote(steps[2]) === '4 из 9 задач', L.stNote(steps[2]));
-check('у этапа без задач подписи нет вовсе, а не «нет задач» одиннадцать раз подряд',
-  L.stNote(steps[4]) === '', JSON.stringify(L.stNote(steps[4])));
-check('единица измерения одна на весь столбец',
-  L.stNote(steps[3]) === '0 из 2 задач', L.stNote(steps[3]));
+/* Старый ответ сервера (поля stage нет) ячейкой-кнопкой быть не должен: вести
+   человека в план, которого сервер еще не умеет считать, незачем. */
+check('без поля stage ячейка не кнопка',
+  !/role="button"/.test(L.stCell({ id: 'z', crm: { overrides: {} } })),
+  L.stCell({ id: 'z', crm: { overrides: {} } }));
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);

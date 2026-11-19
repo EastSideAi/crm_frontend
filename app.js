@@ -49039,92 +49039,30 @@
     return TUTOR_TONES_REST[h % TUTOR_TONES_REST.length];
   }
   /* ЭТАП МАРШРУТА В СТРОКЕ (Мария 20.11.2026, вместо балла в «Сопровождении»).
-     Полоска с насечками по числу этапов плюс подпись словом: «где человек сейчас» —
-     единственный вопрос к клиенту в работе, а балл отвечал на вопрос о лиде.
-     Состояния считает сервер (`client_views.lead_stage`, тот же код, что у доски
-     «Карта»), браузер только рисует. Плана нет — так и пишем: «план не собран» и
-     «стоит в начале» это разные вещи. */
-  var STAGE_STATE = { done: 'done', now: 'now', open: 'open' };
+     Название этапа словом и тихое «4/16»: «где человек сейчас» — единственный вопрос
+     к клиенту в работе, а балл отвечал на вопрос о лиде. Состояния считает сервер
+     (`client_views.lead_stage`, тот же код, что у доски «Карта»), браузер только
+     рисует. Нажатие открывает КАРТОЧКУ ученика сразу на «Поступлении» (Мария
+     20.11.2026: «надо чтобы он открывал их карточку и этап поступление»): весь
+     маршрут с задачами лежит там, и второго окна с тем же маршрутом быть не должно. */
   function stageCell(l) {
     /* Поля stage нет вовсе — это старый ответ сервера (бэкенд еще не выкачен), а не
        «плана нет». Разные вещи: во втором случае план надо собрать, в первом надо
        дождаться выкатки, и звать человека собирать план было бы враньем. */
-    if (!('stage' in l)) return '<div class="t-stage hidem unknown">—</div>';
-    var st = l.stage;
-    if (!st || !st.steps || !st.steps.length) {
-      return '<div class="t-stage hidem none">план не собран</div>';
-    }
-    /* В строке только название этапа: полоска с насечками в каждой строке читалась
-       как шум («слишком захламленно», Мария 20.11.2026). Весь маршрут открывается
-       отдельным окном по клику — и по Enter, другой двери к нему нет. */
-    return '<div class="t-stage hidem" data-stop="1" data-stid="' + l.id + '"' +
-      ' role="button" tabindex="0" aria-label="Дорожная карта: ' +
-      esc(st.short || 'этап') + ', этап ' + (st.pos || '?') + ' из ' + st.total + '">' +
-      '<span class="stn">' + esc(st.short || '—') + '</span>' +
-      (st.pos ? '<span class="stp num">' + st.pos + '/' + st.total + '</span>' : '') +
+    if (!('stage' in l)) return '<div class="t-stage unknown">—</div>';
+    var st = l.stage || {};
+    var has = !!(st.steps && st.steps.length);
+    /* Плана нет — ячейка все равно кнопка: собирают план на той же вкладке карточки,
+       куда она и ведет. */
+    return '<div class="t-stage' + (has ? '' : ' none') + '" data-stop="1" data-stid="' + l.id + '"' +
+      ' role="button" tabindex="0" aria-label="' + (has
+        ? 'Поступление: ' + esc(st.short || 'этап') + ', этап ' + (st.pos || '?') + ' из ' + st.total
+        : 'Поступление: план не собран') + '">' +
+      (has
+        ? '<span class="stn">' + esc(st.short || '—') + '</span>' +
+          (st.pos ? '<span class="stp num">' + st.pos + '/' + st.total + '</span>' : '')
+        : '<span class="stn">план не собран</span>') +
     '</div>';
-  }
-  /* Правая подпись этапа. Единица одна на весь столбец («задач»), а у будущих этапов
-     без задач подписи нет вовсе: одиннадцать одинаковых «нет задач» подряд ничего не
-     добавляют к серому кружку и серому тексту. */
-  function stageNote(p) {
-    if (p.s === 'done') return 'закрыт';
-    if (!p.t) return '';
-    return p.d + ' из ' + p.t + ' задач';
-  }
-  /* ДОРОЖНАЯ КАРТА ОТДЕЛЬНЫМ ОКНОМ (Мария 20.11.2026: «надо, когда нажимаешь, чтобы
-     открывалась отдельно дорожная карта их и на каком этапе»). Весь маршрут лентой:
-     что закрыто, где стоим, что впереди. Этапы и их состояние считает сервер. */
-  function openRoadmap(lead, back) {
-    if (typeof closeSmenu === 'function') closeSmenu();
-    if (document.querySelector('.al-ov')) return;   // поверх другого окна не открываемся
-    var st = (lead && lead.stage) || {};
-    var steps = st.steps || [];
-    var done = steps.filter(function (p) { return p.s === 'done'; }).length;
-    var ov = document.createElement('div');
-    ov.className = 'al-ov rmap';
-    ov.innerHTML =
-      '<div class="al-card rmap-card" role="dialog" aria-modal="true" aria-labelledby="rm-ttl" tabindex="-1">' +
-        '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Дорожная карта</div>' +
-            '<div class="al-title" id="rm-ttl">' + esc(leadName(lead)) + '</div></div>' +
-          '<button class="al-x" id="rm-x" title="Закрыть">' + ic('x', 16) + '</button>' +
-        '</div>' +
-        '<div class="rmap-now">' +
-          '<span class="al-eyebrow">Сейчас</span>' +
-          '<b>' + esc(st.short || 'этап не определен') + '</b>' +
-          '<span class="rmap-n num">этап ' + (st.pos || '—') + ' из ' + (st.total || steps.length) +
-            ' · пройдено ' + done + '</span>' +
-        '</div>' +
-        '<div class="al-body rmap-body">' +
-          steps.map(function (p, i) {
-            var note = stageNote(p);
-            return '<div class="rmap-r ' + (STAGE_STATE[p.s] || 'wait') + '">' +
-              '<span class="rmap-ic">' + (p.s === 'done' ? ic('check', 11) : (i + 1)) + '</span>' +
-              '<span class="rmap-t">' + esc(p.n || p.k) + '</span>' +
-              (note ? '<span class="rmap-note">' + note + '</span>' : '') +
-            '</div>';
-          }).join('') +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(ov);
-    requestAnimationFrame(function () { ov.classList.add('show'); });
-    var closed = false;
-    var close = function () {
-      if (closed) return; closed = true;
-      ov.classList.remove('show');
-      document.removeEventListener('keydown', onKey);
-      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
-      // вернуть фокус туда, откуда пришли: иначе с клавиатуры человек после закрытия
-      // оказывается в начале страницы
-      if (back && back.focus) try { back.focus(); } catch (e) {}
-    };
-    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
-    document.addEventListener('keydown', onKey);
-    el('rm-x').addEventListener('click', close);
-    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-    var card = ov.querySelector('.rmap-card');
-    if (card) setTimeout(function () { card.focus(); }, 30);
   }
   function fillTable(host) {
     var arr = segLeads(state.seg);
@@ -49174,7 +49112,7 @@
             '<div class="t-contact hidem">' + (contact
               ? (act ? '<a href="' + esc(act.href) + '" target="_blank" rel="noopener" data-stop="1">' + esc(contact) + '</a>' : esc(contact))
               : '<span class="none">—</span>') + '</div>') +
-        '<div class="t-when num' + (isToday(l.created_at) ? ' today' : '') + '">' + fmtWhen(l.created_at) + '</div>' +
+        '<div class="t-when num' + (tutorCol() ? ' hidem' : '') + (isToday(l.created_at) ? ' today' : '') + '">' + fmtWhen(l.created_at) + '</div>' +
         '<div class="t-go hidem">' + ic('go', 13) + '</div>' +
       '</div>';
     }).join('');
@@ -49184,9 +49122,11 @@
         (tutorCol() ? '<span class="th">Тьютор</span>' : thCell('crm', 'Статус', '')) +
         thCell('name', 'Лид', '') +
         (tutorCol()
-          ? '<span class="th hidem">Этап</span>'
+          ? '<span class="th th-stage">Этап</span>'
           : thCell('score', 'Балл', ' hidem') + '<span class="th hidem">Контакт</span>') +
-        thCell('created', 'Пришел', ' r') +
+        /* В «Сопровождении» на телефоне дата прихода уступает место этапу: у клиента
+           в работе вопрос один — где он сейчас, а не когда он пришел. */
+        thCell('created', 'Пришел', tutorCol() ? ' r hidem' : ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
 
@@ -49213,8 +49153,7 @@
     Array.prototype.forEach.call(host.querySelectorAll('.t-stage[data-stid]'), function (c) {
       var open = function (e) {
         e.stopPropagation();
-        var lead = findLead(c.getAttribute('data-stid'));
-        if (lead) openRoadmap(lead, c);
+        openDrawer(c.getAttribute('data-stid'), ids, 'admission');
       };
       c.addEventListener('click', open);
       c.addEventListener('keydown', function (e) {
@@ -52858,11 +52797,15 @@
     return planToolbar(id) + html;
   }
 
-  function openDrawer(id, listIds) {
+  /* Третий аргумент — секция, с которой карточка открывается. Нужен колонке «Этап»
+     в «Сопровождении»: там нажатие ведет сразу в «Поступление», к маршруту ученика. */
+  function openDrawer(id, listIds, sec) {
     if (!state._portal) fetchPortal();   // поле «Тариф» берет список из портала
     state.drawerId = id;
     if (listIds && listIds.length) state.drawerList = listIds;
-    state.modalSection = 'main';
+    state.modalSection = sec || 'main';
+    // статус публикации плана всегда свежий с бэка — как при обычном заходе в секцию
+    if (state.modalSection === 'admission') ensurePlanStatus(id, true);
     RM_CHAT = null;
     syncHash(id);
     renderDrawer(false);
@@ -52876,10 +52819,10 @@
     if (!state.assignees || !peopleFresh(state._assigneesAt)) {
       fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
     }
-    if (toMainCard(id)) return;
+    if (toMainCard(id, sec)) return;
     if (!state.details[id]) fetchDetail(id, function (got) {
       if (state.drawerId !== id) return;
-      if (got && toMainCard(id)) return;
+      if (got && toMainCard(id, sec)) return;
       if (got) renderDrawer(true);
       // пришли по ссылке на клиента, которого уже нет (или нет прав) — честно скажем
       else if (!findLead(id)) { closeDrawer(); showToast('Клиент не найден — возможно, ссылка устарела'); }
@@ -52889,11 +52832,11 @@
      открывает главную. Как есть его открывает только кнопка «Открыть» в разделе
      «Склеено» — там дубль смотрят нарочно, чтобы проверить или расклеить. */
   var DUP_AS_IS = null;
-  function toMainCard(id) {
+  function toMainCard(id, sec) {
     var d = state.details[id], main = d && d.crm && d.crm.merged_into;
     if (!main || main === id || DUP_AS_IS === id) return false;
     showToast('Это дубль — открыта главная карточка клиента');
-    openDrawer(main);
+    openDrawer(main, null, sec);
     return true;
   }
   function closeDrawer() {

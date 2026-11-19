@@ -262,9 +262,9 @@ a { color: inherit; text-decoration: none; }
 
 /* ── этап маршрута в строке «Сопровождения» ─────────────────────────────────
    В строке стоит ТОЛЬКО название этапа: полоска с насечками в каждой строке
-   читалась как шум (Мария 20.11.2026: «слишком захламленно»). Весь маршрут
-   открывается отдельным окном по клику — отсюда роль кнопки и кольцо фокуса:
-   другой двери к дорожной карте нет, и с клавиатуры она тоже должна открываться. */
+   читалась как шум (Мария 20.11.2026: «слишком захламленно»). Нажатие открывает
+   карточку ученика на «Поступлении» — отсюда роль кнопки и кольцо фокуса: с
+   клавиатуры маршрут должен открываться так же, как мышью. */
 .t-stage { display: flex; align-items: baseline; gap: 8px; padding: 2px 10px 2px 0;
   overflow: hidden; cursor: pointer; border-radius: 8px; }
 .t-stage .stn { font-size: 13px; font-weight: 600; color: var(--ink);
@@ -272,44 +272,10 @@ a { color: inherit; text-decoration: none; }
 .t-stage .stp { flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
 .t-stage:hover .stn { color: var(--blue); }
 .t-stage:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
-/* «план не собран» — это призыв собрать план, а не самая тихая строка экрана */
-.t-stage.none { font-size: 12px; color: var(--ink-2); cursor: default; }
+/* «план не собран» — это зов собрать план, а не состояние ученика: тише этапа,
+   но кнопка та же, и ведет она туда же, где план собирают. */
+.t-stage.none .stn { font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .t-stage.unknown { font-size: 12px; color: var(--ink-3); cursor: default; }
-
-/* ── дорожная карта отдельным окном ──────────────────────────────────────────
-   Оверлей общий с формой «Новый клиент» (.al-ov/.al-card), свои только .rmap-*:
-   имя .rm-* уже занято этапами плана в карточке клиента (§8 design.md), и два
-   компонента под одним классом рано или поздно расходятся. */
-.rmap-card { max-width: 520px; }
-.rmap-now { flex: none; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
-  margin: 14px 24px 0; padding: 10px 14px; border-radius: 14px; background: var(--blue-tint); }
-.rmap-now b { font-size: 15px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
-.rmap-now .rmap-n { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
-/* Лента этапов: шаг строк задает только padding самой строки, промежутка между
-   ними нет — иначе рельс рвется и читается случайным штрихом, а не маршрутом.
-   gap перебивает .al-body, поэтому стоит здесь, после нее. */
-.al-body.rmap-body { padding: 10px 16px 14px; gap: 0; }
-/* Шестнадцать этапов должны помещаться целиком: маршрут, который надо прокручивать,
-   перестает читаться маршрутом. Внутри сущности плотно — это правило системы. */
-.rmap-r { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-radius: 10px;
-  font-size: 13px; position: relative; }
-/* рельс между кружками: непрерывный, от строки к строке */
-.rmap-r::before { content: ''; position: absolute; left: 19.5px; top: -6px; width: 2px; height: 12px;
-  background: var(--line-2); }
-.rmap-r:first-child::before { display: none; }
-.rmap-r .rmap-ic { width: 21px; height: 21px; border-radius: 50%; flex: none; display: grid;
-  place-items: center; font-size: 10.5px; font-weight: 800; background: var(--fill); color: var(--ink-3); }
-.rmap-r .rmap-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rmap-r .rmap-note { font-size: 11.5px; font-weight: 600; color: var(--ink-2);
-  font-variant-numeric: tabular-nums; }
-.rmap-r.done .rmap-ic { background: var(--green-soft); color: var(--green-ink); }
-.rmap-r.done::before, .rmap-r.now::before { background: rgba(47,107,255,.35); }
-.rmap-r.now { background: var(--blue-tint); }
-.rmap-r.now .rmap-ic { background: var(--blue); color: #fff; }
-.rmap-r.now .rmap-t { font-weight: 700; color: var(--blue-d); }
-.rmap-r.now .rmap-note { color: var(--blue-d); }
-.rmap-r.open .rmap-ic { background: var(--blue-tint); color: var(--blue-d); }
-.rmap-r.wait .rmap-t, .rmap-r.wait .rmap-ic { color: var(--ink-3); }
 
 /* ════ контейнер списка «Клиенты» (тулбар + тело в одной карточке) ════ */
 .listcard { overflow: hidden; }
@@ -5675,6 +5641,21 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .sg2 { grid-template-columns: 1fr; }
   .trow { grid-template-columns: 100px 1fr 80px !important; gap: 10px; padding: 0 14px; }
   .trow .hidem { display: none; }
+  /* «Сопровождение» на телефоне показывает этап (Мария 20.11.2026: «с телефона тоже
+     надо обязательно»). Третьей колонкой он не встает: на 390px имя ученика и
+     название этапа обрезаются оба. Поэтому этап идет второй строкой под именем
+     плашкой — у телефона есть высота, но нет ширины. Дата прихода уходит классом
+     hidem в разметке: у клиента в работе про нее не спрашивают. */
+  .trow.lr-grid.sup { grid-template-columns: 104px minmax(0,1fr) !important;
+    height: auto; padding: 11px 14px; row-gap: 7px; }
+  .trow.lr-grid.sup .t-tutor { grid-row: 1 / span 2; align-self: center; }
+  /* Палец крупнее курсора: плашка держит высоту нажатия, а не рисуется в один пиксель. */
+  .trow.lr-grid.sup .t-stage { grid-column: 2; justify-self: start; max-width: 100%;
+    padding: 5px 10px; border-radius: 9px; background: var(--fill); }
+  .trow.lr-grid.sup .t-stage .stn { font-size: 12.5px; }
+  /* Заголовок колонки на телефоне не нужен: плашка стоит под именем, а не столбцом. */
+  .trow.lr-grid.sup.thead .th-stage { display: none; }
+  .trow.lr-grid.sup.thead { height: auto; padding-top: 9px; padding-bottom: 9px; }
   /* на телефоне ряд воронки ломается на две строки: сверху название, число и
      конверсия, снизу полоса во всю ширину. Раньше число прятали, и ряд оставался
      без главной цифры, а длинное название вылезало из фиксированной высоты */
