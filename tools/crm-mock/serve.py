@@ -67,9 +67,13 @@ def leads():
         if i % 5 == 0:
             crm["tasks"] = [{"text": "позвонить семье", "done": False,
                              "due": "2026-11-10"}]
+        # Класс школьника считает бэкенд из года окончания школы и отдает полем
+        # school_class (вкладки «8 / 9 / 10 класс»). Тут просто подставляем правдоподобно.
+        klass = [11, 10, 11, 9, 8, None, None, None, 10, 11, 9, 8][i % 12]
         out.append({
             "id": "demo-%02d" % i,
             "name": name,
+            "school_class": klass,
             "score": score,
             "status": "diagnosed",
             "grade": "11 класс" if i % 2 else "10 класс",
