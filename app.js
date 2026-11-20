@@ -40743,7 +40743,8 @@
     SB_REG_KINDS.forEach(function (x) { out.by[x.k] = {n: 0, c: 0}; out.list[x.k] = []; });
     out.list.all = [];
     (cc.leads || []).forEach(function (l) {
-      if (l.nl === 'family') return;
+      // склеенный дубль не лид: человек один, и это главная карточка (поле mg сервера)
+      if (l.nl === 'family' || l.mg) return;
       // ra — все записи на эфиры [дата, слаг, смотрел]; без него (старый ответ сервера) только интенсивы
       var all = l.ra ? l.ra.map(function (r) { return [r[0], r[2], r[1]]; })
         : (l.rg || (l.reg ? [[l.reg, l.w ? 1 : 0]] : [])).map(function (r) { return [r[0], r[1], 'intensive']; });
@@ -41063,15 +41064,23 @@
      можно работать, а кто просто интересовался вакансией или уже лид семьи»). Та же
      отметка «не новый лид», что в чистке «Управления»: человек уходит из счета лидов на
      обоих экранах одинаково. «Краткосрочка» — интерес, из лидов не убирает. */
-  var SB_MK = [['', 'Лид, работаем'], ['family', 'Из семьи лида'], ['vacancy', 'Вакансия'],
-    ['client', 'Уже клиент'], ['other', 'Не наша услуга'], ['spam', 'Спам']];
+  // Тот же перечень, что в чистке «Управления» (rnp.NOT_LEAD на сервере); Павел 20.11.2026:
+  // «как у нас в управлении есть перечень, так же и тут», «например, это друг семьи».
+  var SB_MK = [['', 'Лид, работаем'], ['family', 'Из семьи лида'], ['friend', 'Знакомый, друг семьи'],
+    ['vacancy', 'Вакансия'], ['client', 'Уже клиент'], ['dupe', 'Дубль'], ['other', 'Не наша услуга'],
+    ['efir', 'Только рега на эфир'], ['spam', 'Спам'], ['team', 'Наш / тест']];
+  // Кто ставит «кто это»: руководители и продавцы смены (тот же список ролей, что rnp.require_mark)
+  function canMarkLead() {
+    return can('marketing') || can('planfact') ||
+      (['sales_manager', 'sales_lead', 'tutor_sales'].indexOf(state.role) >= 0 && can('clients'));
+  }
   function sbMkBtn(id, name, big) {
-    if (!id || !(can('marketing') || can('planfact'))) return '';
+    if (!id || !canMarkLead()) return '';
     return '<button type="button" class="' + (big ? 'bp ghost sm sb-mkb' : 'sb-mk') + '" data-sbmk="' + esc(id) +
       '" data-sbmkn="' + esc(name || '') + '" title="Лид или нет: вакансия, семья, спам">' +
       (big ? 'Кто это' : 'кто это') + '</button>';
   }
-  function sbMkOpen(id, name) {
+  function sbMkOpen(id, name, after) {
     openSheet(name || 'Кто это', 'Все, кроме «лид», убирает человека из счета лидов на «Продажах» и в «Управлении».', [
       ['why', 'pick', 'Кто это', SB_MK.map(function (x) { return [x[0] || 'lead', x[1]]; }), 'lead'],
       ['short', 'pick', 'Краткосрочные программы', [['', 'не спрашивал'], ['1', 'интересуется']], ''],
@@ -41080,7 +41089,7 @@
       var done = function () {
         close();
         state._sb = null; state._mkCross = null; state._pot = null;
-        renderView();
+        if (after) after(); else renderView();
         showToast(reason ? 'Убрали из лидов: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1]
           : 'Оставили лидом');
       };
@@ -41276,7 +41285,8 @@
      его сама, звонок со своего телефона продавец отмечает кнопкой «дозвонился / не взял /
      номер не тот». Состояние человека считает сервер (sales_dial.dial_state), одно на
      «Продажи», «Мою смену» и карточку. */
-  var DIAL_RES = { reached: 'дозвонился', no_answer: 'не взял', bad_number: 'номер не тот' };
+  var DIAL_RES = { reached: 'дозвонился', no_answer: 'не взял', bad_number: 'номер не тот',
+                   chat_ok: 'подтвердил в переписке' };
   var DIAL_STAGE = { free: 'без менеджера', respond: 'ждет касания', follow: 'дожимаем',
                      meet: 'ждет встречи', decide: 'думает' };
   function dialLoad() {
@@ -42006,6 +42016,52 @@
     '</div>';
   }
 
+  /* Кто продал (Павел 20.11.2026: «видно, у Лианы вчера оплатили»; ведущий карточки после
+     оплаты меняется на тьютора, поэтому продавец живет в самой оплате). Отмечен в оплате —
+     просто имя. Не отмечен — выбор прямо в строке, подсказка сервера (кто вел консультацию)
+     стоит выбранной и подписана «по встрече?», пока человек ее не подтвердил. Сохраняет та
+     же ручка, что «продал» в «Оплатах» карточки. Строки без оплаты в карточке выбора не
+     имеют: продавца ставить некуда, сначала оплату надо отметить в карточке. */
+  function smSeller(l, d) {
+    if (l.seller_src === 'pay' || !l.pay_id) {
+      var none = l.seller_src !== 'pay';
+      return '<span class="sb-po' + (none ? ' none' : ' calm') + '" data-l="Продал">' +
+        esc(none ? 'Не указан' : l.seller) + '</span>';
+    }
+    var guess = l.seller_src ? l.seller_id : null;
+    return '<span class="sb-po sm-sel" data-l="Продал"><select class="sm-seller" data-smpay="' + l.pay_id + '"' +
+      ' aria-label="Кто продал">' +
+      '<option value="">не указан</option>' + (d.seller_opts || []).map(function (u) {
+        return '<option value="' + u.id + '"' + (String(u.id) === String(guess) ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+      }).join('') + '</select>' +
+      (guess ? '<small>по встрече? выбери, чтобы записать</small>' : '<small>выбери продавца</small>') + '</span>';
+  }
+
+  /* От кого ждем деньги в периоде (Павел 20.11.2026: «видно, от кого ждем оплаты»): взносы
+     по графикам рассрочки до конца периода, просроченные первыми, и строки «ожидается»,
+     которые Роман вносит в план выручки ведомости руками. */
+  function smAwait(d) {
+    var rows = (d.await || []).slice().sort(function (a, b) {
+      return (b.late - a.late) || String(a.due_on || '9').localeCompare(String(b.due_on || '9'));
+    });
+    var body = rows.map(function (w) {
+      var when = w.due_on ? fmtDay(w.due_on).slice(0, 5) : 'без даты';
+      var src = w.src === 'ledger' ? 'внесено в план выручки ведомости' : (w.item || 'взнос по графику');
+      return smLead(w.case_id,
+        '<span class="sm-d num' + (w.late ? ' late' : '') + '">' + esc(when) + '</span>' +
+        '<span class="sb-pn"><b>' + esc(w.client) + '</b><small>' + esc(src) + '</small></span>' +
+        '<span class="sb-po' + (w.late ? ' miss' : ' calm') + '" data-l="Статус">' +
+          (w.late ? 'просрочено' : (w.came ? 'часть пришла' : 'ждем')) + '</span>' +
+        '<span class="sb-po' + (w.seller ? ' calm' : ' none') + '" data-l="Продал">' + esc(w.seller || '—') + '</span>' +
+        '<span class="sm-v num">' + smRub(w.amount) + '</span>', 'sm-ln');
+    }).join('');
+    return '<div class="card sp12 sm-lines sm-await"><div class="sec-head pf-sec"><span class="ic">' + ic('clock', 14) +
+      '</span><div><div class="t">Ждем оплату · <span class="num">' + smRub(d.await_rub || 0) + '</span></div>' +
+      '<div class="s">взносы по графикам до конца периода и ожидаемые строки ведомости; нет графика — семьи здесь не будет, его вносят в карточке → «Оплаты»</div></div></div>' +
+      (body ? '<div class="sm-lh"><span>Срок</span><span>Семья</span><span>Статус</span><span>Продал</span><span>Сумма</span></div>' +
+        '<div class="sm-list">' + body + '</div>' : '<div class="empty">В этом периоде денег по графикам не ждем.</div>') + '</div>';
+  }
+
   function smLines(d) {
     var f = state._smF;
     var lab = { product: {}, kind: {}, ch: {}, seller: {} };
@@ -42013,12 +42069,19 @@
     var rows = d.lines.filter(function (l) { return !f || l[f.by] === f.val; });
     var sum = rows.reduce(function (s, l) { return s + l.amount; }, 0);
     var body = rows.slice().reverse().map(function (l) {
-      return smLead(l.case_id,
+      // Строка с выбором продавца — не кнопка: select внутри button не нажимается.
+      // Карточку тогда открывает имя.
+      var pick = l.seller_src !== 'pay' && l.pay_id;
+      var who = esc(l.case_id ? l.client : (l.payer || 'Без клиента'));
+      var row = pick ? function (id, inner) { return '<div class="sm-ln nolink">' + inner + '</div>'; } : smLead;
+      return row(l.case_id,
         '<span class="sm-d num">' + fmtDay(l.date).slice(0, 5) + '</span>' +
-        '<span class="sb-pn"><b>' + esc(l.case_id ? l.client : (l.payer || 'Без клиента')) + '</b>' +
+        '<span class="sb-pn">' + (pick && l.case_id
+          ? '<button class="sm-nm" data-sblead="' + esc(l.case_id) + '" title="Открыть карточку"><b>' + who + '</b></button>'
+          : '<b>' + who + '</b>') +
           '<small>' + esc(lab.product[l.product] || l.product) + ' · ' + esc(SM_KIND[l.kind] || '') + '</small></span>' +
         '<span class="sb-po calm" data-l="Канал">' + esc(l.ch) + '</span>' +
-        '<span class="sb-po' + (l.seller === 'Не указан' ? ' none' : ' calm') + '" data-l="Продал">' + esc(l.seller) + '</span>' +
+        smSeller(l, d) +
         '<span class="sm-v num">' + smRub(l.amount) +
           (l.crm ? '' : '<small>нет в карточке</small>') + '</span>', 'sm-ln');
     }).join('');
@@ -42082,7 +42145,7 @@
         smGroup('Продукты', 'box', 'product', d.products, d.total) +
         smGroup('Каналы', 'funnel', 'ch', d.channels, d.total) +
         smGroup('Кто продал', 'team', 'seller', d.sellers, d.total) +
-      '</div>' + smCheck(d) + smLines(d) + '</div>';
+      '</div>' + smLines(d) + smAwait(d) + smCheck(d) + '</div>';
     sbTabsBind(view);
     smBind(view, d);
     animBars(view);
@@ -42113,6 +42176,17 @@
     });
     var rs = el('sm-reset');
     if (rs) rs.addEventListener('click', function () { state._smF = null; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-smpay]'), function (s) {
+      s.addEventListener('click', function (e) { e.stopPropagation(); });
+      s.addEventListener('change', function () {
+        var body = s.value ? { seller_id: parseInt(s.value, 10) } : { clear_seller: true };
+        s.disabled = true;
+        apiSend('/admin/api/payments/' + s.getAttribute('data-smpay'), 'PATCH', body, function () {
+          showToast(s.value ? 'Записал, кто продал' : 'Продавца убрал');
+          state._sm = null; renderView();
+        }, function () { s.disabled = false; showToast('Не сохранилось, проверь интернет'); });
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
     });
@@ -42589,6 +42663,8 @@
     api('/admin/api/sales/my-day').then(function (r) {
       MS.d = r; MS.busy = false; MS.at = Date.now();
       if (state.page === 'myshift') renderView();
+      // Сверка лидов первый раз после выкатки считается на сервере фоном: спросим еще раз.
+      if (r && r.fresh === null) setTimeout(function () { if (state.page === 'myshift') msLoad(true); }, 20000);
     }).catch(function (e) {
       MS.busy = false;
       if (e.message === '403') return;
@@ -42746,6 +42822,65 @@
     return '<div class="ms-row">' +
       '<div class="ms-nm"><b>' + esc(p.name) + '</b><small>' + meta.join(' · ') + '</small>' + dl + '</div>' +
       tag + msActs(p, kind, canCall) + '</div>';
+  }
+
+  /* Лиды за сегодня и вчера (Павел 20.11.2026: «самое главное, чтобы показывались
+     сегодняшние и вчерашние лиды по обработке»). Те же люди, что «Сверка лидов» на
+     «Продажах», и все, а не только свои: видно, кто ведет и связались ли. Без телефона
+     человек тоже здесь, ему пишут в диалог. Состояние считает сервер (поле state). */
+  var MS_FRESH = {
+    free: ['ms-t late', 'свободный'], no_contact: ['ms-t warn', 'без телефона'],
+    respond: ['ms-t late', 'не связались'], follow: ['ms-ok', 'связались'],
+    meet: ['ms-ok', 'записан'], decide: ['ms-ok', 'думает'], client: ['ms-ok', 'клиент'],
+    out: ['ms-when', 'вне работы']
+  };
+  function msFreshRow(p, cc, canMark) {
+    var st = MS_FRESH[p.state] || MS_FRESH.out;
+    var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
+    if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
+    var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
+    // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
+    var heat = p.todo && p.heat_label ? '<span class="ms-heat h' + (p.heat || 0) + '">' + esc(p.heat_label) + '</span>' : '';
+    var mk = canMark ? '<button type="button" class="ms-mk" data-sbmk="' + esc(p.id) + '" data-sbmkn="' + esc(p.name) +
+      '" title="Не лид: не наша услуга, вакансия, спам, семья">кто это</button>' : '';
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small></div>' +
+      '<span class="sev ' + st[0] + '">' + st[1] + '</span>' + msActs(p, kind, cc) + '</div>';
+  }
+  /* Отрезок блока лидов (встреча продаж 20.11.2026: «прозвонить всех лидов ноября»).
+     Сервер отдает месяц, но не меньше недели; режем здесь, по дате прихода в Москве. */
+  var MS_SPANS = [['2d', 'Сегодня и вчера'], ['7d', '7 дней'], ['month', 'Месяц']];
+  var MS_FRESH_MAX = 40;
+  function msFreshFrom(span) {
+    var t = new Date(Date.now() + 3 * 3600e3), day = 864e5;
+    if (span === 'month') return t.toISOString().slice(0, 8) + '01';
+    return new Date(t.getTime() - (span === '7d' ? 6 : 1) * day).toISOString().slice(0, 10);
+  }
+  function msFresh(d, cc) {
+    var all = d.fresh;
+    if (all === undefined) return '';
+    var span = state.msFreshSpan || '2d';
+    var title = 'Лиды: с кем связаться';
+    if (all === null) return msSection('fresh', title, 'считаю, список появится через минуту', '', 'Считаю сверку лидов…');
+    var from = msFreshFrom(span);
+    var f = all.filter(function (p) { return !p.date || p.date >= from; });
+    var n = function (k) { return f.filter(function (p) { return p.state === k; }).length; };
+    var parts = [];
+    if (n('free')) parts.push('свободных ' + n('free'));
+    if (n('respond')) parts.push('не связались ' + n('respond'));
+    if (n('no_contact')) parts.push('без телефона ' + n('no_contact'));
+    var norm = d.worked_norm || 50, done = d.worked || 0;
+    var worked = '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">сегодня обработал <b class="num">' + done +
+      '</b> из ' + norm + ' семей</span>';
+    var chips = '<div class="list-quick ms-spans">' + MS_SPANS.map(function (x) {
+      return '<button class="qchip' + (x[0] === span ? ' on' : '') + '" data-msspan="' + x[0] + '">' + x[1] + '</button>';
+    }).join('') + '</div>';
+    var sub = worked + ' · ' + (f.length ? 'пришло ' + f.length + (parts.length ? ': ' + parts.join(', ') : ', все в работе') +
+      '; сверху горячие, с кем еще не связались' : 'за этот отрезок новых не было');
+    var more = state.msFreshMore ? f : f.slice(0, MS_FRESH_MAX);
+    var rows = !f.length ? '<div class="empty">За этот отрезок новых лидов не было.</div>' :
+      more.map(function (p) { return msFreshRow(p, cc, d.can_mark); }).join('') +
+      (f.length > more.length ? '<button class="ms-more" data-msmore="1">Показать еще ' + (f.length - more.length) + '</button>' : '');
+    return msSection('fresh', title, sub, chips + rows, 'За этот отрезок новых лидов не было.');
   }
 
   function msSection(id, title, sub, rows, empty) {
@@ -42908,7 +43043,12 @@
     var p = { id: m.id, phone: m.phone, chat: m.chat, dial: m.dial };
     var meta = [m.kind === 'slot' ? 'записался в окно' : 'консультация', m.with ? 'ведет ' + m.with : '', m.confirmed ? msWhen(m.at) : '']
       .filter(Boolean).join(' · ');
-    var dl = !m.confirmed && m.phone ? '<span class="ms-dl"><span class="ms-dls">' + esc(dialSum(m.dial)) + '</span>' + dialMarks(m.id) + '</span>' : '';
+    // Подтвердить можно и в переписке: у кого нет телефона, звонком встречу не подтвердить
+    // (Павел 20.11.2026, Алина). Отметка chat_ok в обзвон не идет, только в подтверждение.
+    var chatOk = '<span class="dl-mk"><button type="button" class="dl-b reached" data-dlmark="chat_ok" data-dlid="' +
+      esc(m.id) + '">подтвердил в переписке</button></span>';
+    var dl = m.confirmed ? '' : '<span class="ms-dl">' +
+      (m.phone ? '<span class="ms-dls">' + esc(dialSum(m.dial)) + '</span>' + dialMarks(m.id) : '') + chatOk + '</span>';
     return '<div class="ms-row"><div class="ms-nm"><b>' + esc(m.name) + '</b><small>' + esc(meta) + '</small>' + dl + '</div>' +
       st + msActs(p, m.confirmed ? 'meet' : 'confirm', cc) + '</div>';
   }
@@ -42957,11 +43097,12 @@
         '<button class="bp ghost" id="ms-dial">Открыть звонилку</button></div>'
         : '<div class="card ms-nocall">Звонилка тебе пока не подключена: номера открываются обычным звонком с телефона. ' +
         'Чтобы звонки и записи шли через CRM, попроси доступ у Павла.</div>') +
+      msFresh(d, cc) +
       msSection('hot', 'Записались сами', 'самые горячие: выбрали время консультации, а с ними еще никто не говорил; позвони до встречи',
         d.hot.map(function (p) { return msRow(p, 'hot', cc); }).join(''), 'Все, кто записался, уже на связи.') +
       msSection('respond', 'Ответить сейчас', 'твои лиды, с которыми еще никто не связался; позвони, не дозвонился — напиши в диалог',
         d.respond.map(function (p) { return msRow(p, 'respond', cc); }).join(''), 'Новых без ответа нет.') +
-      msSection('confirm', 'Подтвердить завтрашние встречи', 'звонок накануне поднимает явку; дозвонился — встреча подтверждена, не взял — скопируй текст и напиши',
+      msSection('confirm', 'Подтвердить завтрашние встречи', 'звонок накануне поднимает явку; дозвонился или семья ответила в переписке — встреча подтверждена, не взял — скопируй текст и напиши',
         (d.confirm || []).map(function (m) { return msConfirmRow(m, cc); }).join(''), 'На завтра встреч нет.') +
       msSection('retry', 'Не взяли трубку', 'недозвоны прошлых дней; позвони в другое время дня, не взял снова — скопируй текст и напиши',
         (d.retry || []).map(function (p) { return msRow(p, 'retry', cc); }).join(''), 'Недозвонов с прошлых дней нет.') +
@@ -42985,6 +43126,19 @@
     msBind(view);
     msTick();
     dialBind(view, function () { MS.d = null; msLoad(true); shLoad(true); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-msspan]'), function (b) {
+      b.addEventListener('click', function () {
+        state.msFreshSpan = b.getAttribute('data-msspan'); state.msFreshMore = false; renderView();
+      });
+    });
+    var msMoreB = view.querySelector('[data-msmore]');
+    if (msMoreB) msMoreB.addEventListener('click', function () { state.msFreshMore = true; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbmk]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        sbMkOpen(b.getAttribute('data-sbmk'), b.getAttribute('data-sbmkn'), function () { MS.d = null; msLoad(true); });
+      });
+    });
     if (open) shStartTimer(Date.parse(open.started_at));
   }
 
@@ -55686,8 +55840,12 @@
 
     return '<div class="m-sec ql-sec">' +
       '<div class="m-sec-h">Квалификация' +
-        '<span class="ql-verd' + (mql.ok ? ' on' : '') + '">' +
-          (mql.ok ? 'Квал-лид маркетинга' : 'Пока не квал') + '</span></div>' +
+        (canMarkLead() && ctx.lead && ctx.lead.id
+          ? '<button type="button" class="ql-verd ql-mk' + (mql.ok ? ' on' : '') + '" data-sbmk="' + esc(ctx.lead.id) +
+            '" data-sbmkn="' + esc(ctx.lead.name || '') + '" title="Отметить, кто это: лид, друг семьи, вакансия, спам">' +
+            (mql.ok ? 'Квал-лид маркетинга' : 'Пока не квал') + ' · кто это?</button>'
+          : '<span class="ql-verd' + (mql.ok ? ' on' : '') + '">' +
+            (mql.ok ? 'Квал-лид маркетинга' : 'Пока не квал') + '</span>') + '</div>' +
       '<div class="ql-crit">' + crit + '</div>' + fields +
       '<div class="ql-split"><span>Квал продаж</span><i></i>' +
         '<span class="ql-verd' + (sqlOn ? ' on' : '') + '">' +
@@ -58663,6 +58821,11 @@
     // ── КВАЛИФИКАЦИЯ: галочки продаж и поля, которых не было в анкете ──
     var qlHost = host.querySelector('.ql-sec');
     if (qlHost) {
+      Array.prototype.forEach.call(qlHost.querySelectorAll('[data-sbmk]'), function (b) {
+        b.addEventListener('click', function () {
+          sbMkOpen(b.getAttribute('data-sbmk'), b.getAttribute('data-sbmkn'), function () { loadLeads(true); });
+        });
+      });
       Array.prototype.forEach.call(qlHost.querySelectorAll('[data-qchk]'), function (b) {
         b.addEventListener('click', function () {
           var key = b.getAttribute('data-qchk');

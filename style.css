@@ -12949,6 +12949,15 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sm-d { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
 .sm-v { font-size: 13.5px; font-weight: 700; color: var(--ink); text-align: right; white-space: nowrap; }
 .sm-v small { display: block; font-size: 11px; font-weight: 600; color: var(--red-ink); margin-top: 1px; }
+.sm-sel { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sm-sel select { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); max-width: 100%;
+  padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
+.sm-sel select:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--blue-tint); border-color: var(--blue); }
+.sm-sel small { font-size: 11px; font-weight: 500; color: var(--amber-ink); }
+.sm-nm { all: unset; cursor: pointer; display: block; }
+.sm-nm:hover b { color: var(--blue); }
+.sm-nm:focus-visible { outline: 1.5px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+.sm-d.late, .sb-po.miss { color: var(--red-ink); }
 .sm-lh { display: grid; grid-template-columns: 48px minmax(160px, 1.5fr) minmax(100px, .8fr) minmax(110px, .8fr) 120px;
   gap: 14px; padding: 0 24px; height: 32px; align-items: center; background: var(--fill);
   border-top: 1px solid var(--line); }
@@ -16117,6 +16126,22 @@ video.cs-media { background: #000; }
 /* Задачи по карточкам в «Моей смене»: текст задачи и есть суть строки, не режем его */
 .ms-tk .ms-nm small { white-space: normal; overflow: visible; text-overflow: clip; }
 
+/* Лиды смены: теплота входа, норма 50 семей, отрезок и «кто это» (встреча продаж 20.11.2026) */
+.ms-spans { padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.ms-heat { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: var(--r-pill);
+  font-size: 11px; font-weight: 600; vertical-align: 1px; color: var(--red-ink); background: var(--red-soft); }
+.ms-heat.h1 { color: var(--amber-ink); background: var(--amber-soft); }
+.ms-heat.h2 { color: var(--ink-2); background: var(--fill); }
+.ms-nm b .ms-heat { white-space: nowrap; }
+.ms-wk b { color: var(--ink); font-weight: 700; }
+.ms-wk.ok b { color: var(--green-ink); }
+.ms-mk { margin-left: 8px; padding: 0; border: 0; background: none; font: inherit; color: var(--ink-3);
+  text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
+.ms-mk:hover, .ms-mk:focus-visible { color: var(--blue); }
+.ms-more { display: block; width: 100%; padding: 12px 24px; border: 0; background: none; text-align: left;
+  font: 600 12.5px 'Manrope', sans-serif; color: var(--blue); cursor: pointer; }
+.ms-more:hover { background: #FBFBFC; }
+
 .ord-newsub { font: 500 12px/1.4 'Manrope', sans-serif; color: var(--ink-3); margin: 2px 0 10px; }
 /* блок, к которому привела строка «Следующий шаг», коротко подсвечивается */
 @keyframes pgHit { 0% { background: color-mix(in srgb, var(--blue) 12%, transparent); } 100% { background: transparent; } }
@@ -16171,6 +16196,10 @@ video.cs-media { background: #000; }
   .pl-dock.ring { animation: none; }
   .pl-ringing .pl-flash { animation: none; border-color: var(--green); }
 }
+/* «Пока не квал» в карточке — кнопка «кто это» (Павел 20.11.2026: «чтобы была кликабельной») */
+button.ql-verd.ql-mk { border: 0; cursor: pointer; font-family: inherit; }
+button.ql-verd.ql-mk:hover { color: var(--blue); }
+button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* «Все цели» в сводке плана одного человека (#page/tasks/goals/who-<id>) */
 .tsk-whox { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--blue); cursor: pointer; }
