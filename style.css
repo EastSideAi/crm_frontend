@@ -16171,3 +16171,8 @@ video.cs-media { background: #000; }
   .pl-dock.ring { animation: none; }
   .pl-ringing .pl-flash { animation: none; border-color: var(--green); }
 }
+
+/* «Все цели» в сводке плана одного человека (#page/tasks/goals/who-<id>) */
+.tsk-whox { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--blue); cursor: pointer; }
+.tsk-whox:hover { text-decoration: underline; }
+.tsk-whox:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }

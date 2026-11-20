@@ -3816,7 +3816,12 @@
       }
       // Пришли из табло по человеку: «на тебе задач нет» рядом с чужим списком
       // читается как ошибка системы.
-      if (state.taskWho) tphr = 'Задачи одного человека: <b>' + esc(state.taskWho.name) +
+      // План одного человека на «Целях» пришел ссылкой: имя и счет шагов — сразу,
+      // и выход ко всем целям одной кнопкой, без поиска фильтра.
+      if (state.taskWho && TASK_SEGS[taskSeg()].view === 'goals') tphr = 'План: <b>' +
+        esc(state.taskWho.name || 'одного человека') + '</b>. ' + tphr +
+        ' <button type="button" class="tsk-whox" id="tsk-whox">Все цели</button>';
+      else if (state.taskWho) tphr = 'Задачи одного человека: <b>' + esc(state.taskWho.name) +
         '</b>. Сними чип с именем, чтобы вернуться ко всей команде.';
       // Пока в строке поиска слово, список внизу не про неделю: сводка «неделя
       // пустая» рядом с найденными задачами читается как сбой.
@@ -4264,6 +4269,11 @@
         '</div>';
     }
     ch.innerHTML = html;
+    var whx = el('tsk-whox');
+    if (whx) whx.addEventListener('click', function () {
+      state.taskWho = null; state.tasks = null;
+      syncPageHash(); renderHead(); renderView();
+    });
     var gb = el('tsk-guide');
     if (gb) gb.addEventListener('click', function () {
       state.guideOn = true; state.guideStep = null; state.guideSkip = false;
@@ -7721,6 +7731,7 @@
       state.tasksLoading = false;
       state.tasks = (r && r.tasks) || [];
       state.taskMe = r ? r.me : null;
+      if (state.taskWho && !state.taskWho.name && state.tasks[0]) state.taskWho.name = state.tasks[0].assignee_name || '';
       if (cb) cb();
       else if (state.page === 'tasks') { renderHead(); renderView(); }
     }).catch(function () {
@@ -62093,7 +62104,12 @@
        надо было искать руками (Роман 20.11.2026). */
     if (pg === 'tasks' && seg.indexOf('goals/') === 0) {
       var gd = seg.split('/')[1] || '';
-      if (DEPTS[gd]) state.taskDept = gd;
+      /* …/goals/who-2832 — план одного человека: его цели с шагами, без чужих.
+         Им делятся с руководителем («вот мой план на месяц»). Имя подставим, когда
+         придут цели: в ссылке только номер. */
+      var gw = /^who-(\d{1,9})$/.exec(gd);
+      if (gw) { state.taskWho = { id: +gw[1], name: '' }; state.taskDept = ''; }
+      else if (DEPTS[gd]) state.taskDept = gd;
       return ['tasks', 'goals'];
     }
     // Встречи из задач и вкладка расписания из EastSide Meeting — теперь раздел
@@ -62194,6 +62210,7 @@
       get: function () {
         var seg = taskSeg();
         // выбранный отдел на «Целях» уходит в адрес: скопировал — и коллега видит то же
+        if (seg === 'goals' && state.taskWho) return 'goals/who-' + state.taskWho.id;
         if (seg === 'goals' && DEPTS[state.taskDept]) return 'goals/' + state.taskDept;
         if (seg !== 'team') return seg;
         var mode = state.teamMode === 'stats' ? (state.teamPeriod || 'month') : state.teamMode;
