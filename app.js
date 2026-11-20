@@ -27894,8 +27894,12 @@
         'ведомости пока нет. Как пройдет оплата клиента с продавцом в ответственных — ' +
         'строка появится здесь сама.</div></div>';
 
-    view.innerHTML = statBar(tiles) + head + body;
+    // «План на месяц» продаж стоит сверху листа, как у маркетинга и продукта: лист продаж
+    // стал экраном начислений, и блок плана с черновиком руководителю было негде найти.
+    var planH = forms ? finPlanBlock('продажи') : '';
+    view.innerHTML = statBar(tiles) + planH + head + body;
     finPayChipsWire(view);
+    if (forms) finWirePlanBlock(view, 'продажи');
     pageAnim(view);
   }
 
