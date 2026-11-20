@@ -40268,7 +40268,12 @@
   // Строки людей с отметками: общие у «Чистки» и «Сегодня».
   function mgRows(d, R, today) {
     var team = d.team || [];
-    return '<div class="mg-list">' + d.leads.map(function (l) {
+    // Ольга 20.11.2026: «открываем, вечно одни и те же висят». Разобранные — с «квал»
+    // или причиной «не лид» — сворачиваются вниз под кнопку, сверху только новые.
+    var done = function (l) { return !!l.not_lead || (l.marks || []).indexOf('qual') >= 0; };
+    var open = d.leads.filter(function (l) { return !done(l); });
+    var shut = d.leads.filter(done);
+    var row = function (l) {
       // Ольга 16.11.2026: плашки ставятся по нескольку, «квал» первой
       var marks = l.marks || (l.not_lead ? [l.not_lead] : []);
       var chips = Object.keys(R).map(function (k) {
@@ -40285,7 +40290,13 @@
           (l.hint && !l.not_lead ? ' · <span class="mg-hint">похоже: ' + esc(R[l.hint] || l.hint) + '</span>' : '') + '</div>' +
         mgLeadWho(l) + '</div>' +
         '<div class="list-quick mg-nl">' + chips + '</div></div>';
-    }).join('') + '</div>' + (team.length ? '<div class="mg-team">Убраны как наши и тест: ' + team.map(function (t) {
+    };
+    return '<div class="mg-list">' + open.map(row).join('') +
+      (!open.length && shut.length ? '<div class="mg-note">Все разобраны.</div>' : '') +
+      (shut.length ? '<button class="mg-fold" data-mgfold="1" aria-expanded="' + !!state.mgShowDone + '">' +
+        'Отмеченные: ' + shut.length + ' ' + ic('chev', 12) + '</button>' +
+        (state.mgShowDone ? shut.map(row).join('') : '') : '') +
+      '</div>' + (team.length ? '<div class="mg-team">Убраны как наши и тест: ' + team.map(function (t) {
       return '<button class="mg-back" data-mgback="' + esc(t.id) + '" title="Вернуть в список">' + esc(t.name || 'без имени') + ' ' + ic('x', 11) + '</button>';
     }).join('') + '</div>' : '') + '</div>';
   }
@@ -40426,6 +40437,9 @@
             renderView();
           }).catch(function () { showToast('Отметка не сохранилась. Проверь сеть'); });
       });
+    });
+    view.querySelectorAll('[data-mgfold]').forEach(function (b) {
+      b.addEventListener('click', function () { state.mgShowDone = !state.mgShowDone; renderView(); });
     });
     view.querySelectorAll('[data-mgback]').forEach(function (b) {
       b.addEventListener('click', function () {
