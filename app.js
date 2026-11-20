@@ -62088,6 +62088,14 @@
       }
       return ['tasks', 'team'];
     }
+    /* Цели одного отдела ссылкой: #page/tasks/goals/finance. План месяца руководитель
+       отправляет ссылкой, и без отдела в адресе открывались цели всей компании, свои
+       надо было искать руками (Роман 20.11.2026). */
+    if (pg === 'tasks' && seg.indexOf('goals/') === 0) {
+      var gd = seg.split('/')[1] || '';
+      if (DEPTS[gd]) state.taskDept = gd;
+      return ['tasks', 'goals'];
+    }
     // Встречи из задач и вкладка расписания из EastSide Meeting — теперь раздел
     // «Расписание» (02.11.2026).
     if ((pg === 'tasks' && seg === 'meet') || (pg === 'meetx' && seg === 'sched')) return ['sched', ''];
@@ -62185,6 +62193,8 @@
          Остальные вкладки — одним словом, как было. */
       get: function () {
         var seg = taskSeg();
+        // выбранный отдел на «Целях» уходит в адрес: скопировал — и коллега видит то же
+        if (seg === 'goals' && DEPTS[state.taskDept]) return 'goals/' + state.taskDept;
         if (seg !== 'team') return seg;
         var mode = state.teamMode === 'stats' ? (state.teamPeriod || 'month') : state.teamMode;
         if (!mode || mode === 'now') return seg;
