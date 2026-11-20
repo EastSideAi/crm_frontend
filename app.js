@@ -41004,7 +41004,7 @@
       '" data-sbmkn="' + esc(name || '') + '" title="Лид или нет: вакансия, семья, спам">' +
       (big ? 'Кто это' : 'кто это') + '</button>';
   }
-  function sbMkOpen(id, name) {
+  function sbMkOpen(id, name, after) {
     openSheet(name || 'Кто это', 'Все, кроме «лид», убирает человека из счета лидов на «Продажах» и в «Управлении».', [
       ['why', 'pick', 'Кто это', SB_MK.map(function (x) { return [x[0] || 'lead', x[1]]; }), 'lead'],
       ['short', 'pick', 'Краткосрочные программы', [['', 'не спрашивал'], ['1', 'интересуется']], ''],
@@ -41013,7 +41013,7 @@
       var done = function () {
         close();
         state._sb = null; state._mkCross = null; state._pot = null;
-        renderView();
+        if (after) after(); else renderView();
         showToast(reason ? 'Убрали из лидов: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1]
           : 'Оставили лидом');
       };
@@ -42753,32 +42753,58 @@
      «Продажах», и все, а не только свои: видно, кто ведет и связались ли. Без телефона
      человек тоже здесь, ему пишут в диалог. Состояние считает сервер (поле state). */
   var MS_FRESH = {
-    free: ['ms-t late', 'свободный'], no_contact: ['ms-t warn', 'нет телефона'],
+    free: ['ms-t late', 'свободный'], no_contact: ['ms-t warn', 'без телефона'],
     respond: ['ms-t late', 'не связались'], follow: ['ms-ok', 'связались'],
     meet: ['ms-ok', 'записан'], decide: ['ms-ok', 'думает'], client: ['ms-ok', 'клиент'],
     out: ['ms-when', 'вне работы']
   };
-  function msFreshRow(p, cc) {
+  function msFreshRow(p, cc, canMark) {
     var st = MS_FRESH[p.state] || MS_FRESH.out;
     var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
     if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
     var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
-    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + '</b><small>' + meta.join(' · ') + '</small></div>' +
+    // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
+    var heat = p.todo && p.heat_label ? '<span class="ms-heat h' + (p.heat || 0) + '">' + esc(p.heat_label) + '</span>' : '';
+    var mk = canMark ? '<button type="button" class="ms-mk" data-sbmk="' + esc(p.id) + '" data-sbmkn="' + esc(p.name) +
+      '" title="Не лид: не наша услуга, вакансия, спам, семья">кто это</button>' : '';
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small></div>' +
       '<span class="sev ' + st[0] + '">' + st[1] + '</span>' + msActs(p, kind, cc) + '</div>';
   }
+  /* Отрезок блока лидов (встреча продаж 20.11.2026: «прозвонить всех лидов ноября»).
+     Сервер отдает месяц, но не меньше недели; режем здесь, по дате прихода в Москве. */
+  var MS_SPANS = [['2d', 'Сегодня и вчера'], ['7d', '7 дней'], ['month', 'Месяц']];
+  var MS_FRESH_MAX = 40;
+  function msFreshFrom(span) {
+    var t = new Date(Date.now() + 3 * 3600e3), day = 864e5;
+    if (span === 'month') return t.toISOString().slice(0, 8) + '01';
+    return new Date(t.getTime() - (span === '7d' ? 6 : 1) * day).toISOString().slice(0, 10);
+  }
   function msFresh(d, cc) {
-    var f = d.fresh;
-    if (f === undefined) return '';
-    if (f === null) return msSection('fresh', 'Лиды за сегодня и вчера', 'считаю, список появится через минуту', '', 'Считаю сверку лидов…');
+    var all = d.fresh;
+    if (all === undefined) return '';
+    var span = state.msFreshSpan || '2d';
+    var title = 'Лиды: с кем связаться';
+    if (all === null) return msSection('fresh', title, 'считаю, список появится через минуту', '', 'Считаю сверку лидов…');
+    var from = msFreshFrom(span);
+    var f = all.filter(function (p) { return !p.date || p.date >= from; });
     var n = function (k) { return f.filter(function (p) { return p.state === k; }).length; };
     var parts = [];
     if (n('free')) parts.push('свободных ' + n('free'));
     if (n('respond')) parts.push('не связались ' + n('respond'));
     if (n('no_contact')) parts.push('без телефона ' + n('no_contact'));
-    var sub = f.length ? 'пришло ' + f.length + (parts.length ? ': ' + parts.join(', ') : ', все в работе') +
-      '; те же люди, что «Сверка лидов» на «Продажах»' : '';
-    return msSection('fresh', 'Лиды за сегодня и вчера', sub,
-      f.map(function (p) { return msFreshRow(p, cc); }).join(''), 'Вчера и сегодня новых лидов не было.');
+    var norm = d.worked_norm || 50, done = d.worked || 0;
+    var worked = '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">сегодня обработал <b class="num">' + done +
+      '</b> из ' + norm + ' семей</span>';
+    var chips = '<div class="list-quick ms-spans">' + MS_SPANS.map(function (x) {
+      return '<button class="qchip' + (x[0] === span ? ' on' : '') + '" data-msspan="' + x[0] + '">' + x[1] + '</button>';
+    }).join('') + '</div>';
+    var sub = worked + ' · ' + (f.length ? 'пришло ' + f.length + (parts.length ? ': ' + parts.join(', ') : ', все в работе') +
+      '; сверху горячие, с кем еще не связались' : 'за этот отрезок новых не было');
+    var more = state.msFreshMore ? f : f.slice(0, MS_FRESH_MAX);
+    var rows = !f.length ? '<div class="empty">За этот отрезок новых лидов не было.</div>' :
+      more.map(function (p) { return msFreshRow(p, cc, d.can_mark); }).join('') +
+      (f.length > more.length ? '<button class="ms-more" data-msmore="1">Показать еще ' + (f.length - more.length) + '</button>' : '');
+    return msSection('fresh', title, sub, chips + rows, 'За этот отрезок новых лидов не было.');
   }
 
   function msSection(id, title, sub, rows, empty) {
@@ -43024,6 +43050,19 @@
     msBind(view);
     msTick();
     dialBind(view, function () { MS.d = null; msLoad(true); shLoad(true); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-msspan]'), function (b) {
+      b.addEventListener('click', function () {
+        state.msFreshSpan = b.getAttribute('data-msspan'); state.msFreshMore = false; renderView();
+      });
+    });
+    var msMoreB = view.querySelector('[data-msmore]');
+    if (msMoreB) msMoreB.addEventListener('click', function () { state.msFreshMore = true; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbmk]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        sbMkOpen(b.getAttribute('data-sbmk'), b.getAttribute('data-sbmkn'), function () { MS.d = null; msLoad(true); });
+      });
+    });
     if (open) shStartTimer(Date.parse(open.started_at));
   }
 

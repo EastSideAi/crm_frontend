@@ -16075,3 +16075,19 @@ video.cs-media { background: #000; }
 
 /* Задачи по карточкам в «Моей смене»: текст задачи и есть суть строки, не режем его */
 .ms-tk .ms-nm small { white-space: normal; overflow: visible; text-overflow: clip; }
+
+/* Лиды смены: теплота входа, норма 50 семей, отрезок и «кто это» (встреча продаж 20.11.2026) */
+.ms-spans { padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.ms-heat { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: var(--r-pill);
+  font-size: 11px; font-weight: 600; vertical-align: 1px; color: var(--red-ink); background: var(--red-soft); }
+.ms-heat.h1 { color: var(--amber-ink); background: var(--amber-soft); }
+.ms-heat.h2 { color: var(--ink-2); background: var(--fill); }
+.ms-nm b .ms-heat { white-space: nowrap; }
+.ms-wk b { color: var(--ink); font-weight: 700; }
+.ms-wk.ok b { color: var(--green-ink); }
+.ms-mk { margin-left: 8px; padding: 0; border: 0; background: none; font: inherit; color: var(--ink-3);
+  text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
+.ms-mk:hover, .ms-mk:focus-visible { color: var(--blue); }
+.ms-more { display: block; width: 100%; padding: 12px 24px; border: 0; background: none; text-align: left;
+  font: 600 12.5px 'Manrope', sans-serif; color: var(--blue); cursor: pointer; }
+.ms-more:hover { background: #FBFBFC; }
