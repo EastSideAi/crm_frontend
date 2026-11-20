@@ -2417,6 +2417,44 @@ a { color: inherit; text-decoration: none; }
   font-variant-numeric: tabular-nums; }
 .osch-sum.ok { color: var(--green-ink); background: var(--green-soft); }
 .osch-sum.bad { color: var(--amber-ink); background: var(--amber-soft); }
+/* «Оформить сделку» (задача 9003). Собрано из рецептов конструктора счета: оправа
+   .ord-b на --fill, сегменты .pay-seg, строки графика .osch-*. Поля внутри оправы
+   белые, как у графика: на серой заливке серое поле растворяется. Подписи над полями
+   есть, потому что форму заполняет система и менеджеру надо видеть, что именно
+   проверять, — плейсхолдер исчезает, как только значение подставлено. */
+.deal-idle { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.deal-idle .m-csub { margin: 0; }
+.deal-b { margin-top: 0; gap: 14px; }
+.deal-f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.deal-l { font: 700 10.5px 'Manrope', sans-serif; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+.deal-f .pay-seg { background: #fff; flex-wrap: wrap; max-width: 100%; }
+.deal-f .pay-seg button.on { background: var(--blue-tint); box-shadow: none; }
+.deal-grid { display: grid; grid-template-columns: 1.1fr .8fr 1fr 1.3fr; gap: 10px; }
+.deal-b input, .deal-b .ord-sel { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
+  background: #fff; border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; min-width: 0; width: 100%; }
+.deal-b .ord-sel { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 34px; }
+.deal-b input:focus, .deal-b .ord-sel:focus { border-color: #DCE7FF; }
+.deal-sched { margin-top: 0; padding: 0; background: none; }
+.osch-row.deal-row { grid-template-columns: 96px 1fr 132px; }
+.deal-n { font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2); }
+.deal-b .ord-foot .oi-mark { justify-self: auto; }
+/* Загрузка договора: главная кнопка — договор, ручное заполнение — тихой ссылкой рядом. */
+.deal-acts { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.deal-acts .oi-mark { justify-self: auto; }
+/* Откуда взялись значения формы. Синяя заливка — справка, амбер — есть что вписать
+   руками (формула §3: -soft фон + -ink текст). */
+.deal-note { font: 500 12.5px/1.45 'Manrope', sans-serif; color: var(--navy); padding: 10px 12px;
+  border-radius: 10px; background: var(--blue-tint); }
+.deal-note.warn { color: var(--amber-ink); background: var(--amber-soft); }
+/* Поле, которого не нашли в договоре: амбер-кант, гаснет, как только человек в него зашел */
+.deal-f.miss .deal-l { color: var(--amber-ink); }
+.deal-f.miss input, .deal-f.miss .ord-sel, .deal-f.miss .pay-seg { border-color: var(--amber); }
+.deal-f.miss .pay-seg { border: 1px solid var(--amber); }
+.deal-sched.miss .osch-row input { border-color: var(--amber); }
+@media (max-width: 640px) {
+  .deal-grid { grid-template-columns: 1fr 1fr; }
+  .osch-row.deal-row { grid-template-columns: 74px 1fr 104px; }
+}
 /* Раскрытый график выставленного счёта: взносы со статусом и ручной отметкой оплаты */
 .pay-row.ord-oh { cursor: pointer; }
 .ord-caret { display: inline-flex; color: var(--ink-3); margin-right: 5px; transition: transform .15s; vertical-align: middle; }
@@ -3308,6 +3346,17 @@ a { color: inherit; text-decoration: none; }
 .trow.tsk-grid.own .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .trow.tsk-grid.own .t-ttl,
 .trow.tsk-grid.own .t-sub { flex-basis: calc(100% - 30px); }
+/* Строка с галочкой слева — та же раскладка, но галочка тут есть и в чужой
+   задаче: в «Тебе сдали» ею принимают. Без этого кружок вставал отдельной
+   строкой над заголовком и вылезал из высоты строки (20.11.2026). Подписи и
+   метка цели переносятся под заголовок с отступом на ширину галочки, иначе
+   вторая строка начиналась левее первой. */
+.trow.tsk-grid.has-chk .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.trow.tsk-grid.has-chk:not(.has-goal) { height: auto; min-height: 58px;
+  padding-top: 10px; padding-bottom: 10px; }
+.trow.tsk-grid.has-chk .t-ttl { flex-basis: calc(100% - 30px); }
+.trow.tsk-grid.has-chk .t-sub { flex-basis: calc(100% - 30px); margin-left: 30px; }
+.trow.tsk-grid.has-chk .tsk-goal { margin-left: 30px; }
 .tsk-chk { width: 20px; height: 20px; flex: none; margin-top: 1px; border-radius: 50%;
   border: 1.5px solid #C5CCDA; background: #fff; display: grid; place-items: center;
   color: transparent; cursor: pointer; transition: .15s var(--ease); }
@@ -11332,8 +11381,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gl-card.open .gl-chev { transform: rotate(90deg); color: var(--blue); }
 .gl-meta { margin-top: 2px; font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gl-close { color: var(--green-ink); background: var(--green-soft); border-color: var(--green-soft); }
-.gl-more { flex: none; opacity: 0; transition: opacity .14s; }
-.gl-head:hover .gl-more, .gl-card.open .gl-more { opacity: 1; }
+.gl-more, .gl-done { flex: none; opacity: 0; transition: opacity .14s; }
+.gl-head:hover .gl-more, .gl-card.open .gl-more,
+.gl-head:hover .gl-done, .gl-card.open .gl-done,
+.gl-head:focus-within .gl-more, .gl-head:focus-within .gl-done { opacity: 1; }
+.gl-done:hover { color: var(--green-ink); background: var(--green-soft); }
 .gl-steps { border-top: 1px solid var(--line); padding: 4px 0 8px; }
 .gl-steps .dy-ttl { font-size: 13.5px; }
 .gl-steps .trow.dy-row { padding-left: 24px; padding-right: 16px; min-height: 40px; }
@@ -11356,7 +11408,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .nt-crewb { align-self: flex-start; margin: -4px 0 8px; }
 @media (max-width: 720px) {
   .gl-head { gap: 10px; padding: 12px; }
-  .gl-more { opacity: 1; }
+  .gl-more, .gl-done { opacity: 1; }
   .gl-title { font-size: 15px; }
   /* Шапка не должна съедать полэкрана: отделы одной строкой с прокруткой,
      импорт встречи — иконкой рядом с поиском. */
@@ -15230,6 +15282,10 @@ video.cs-media { background: #000; }
   border-radius: 999px; padding: 3px 8px; font: inherit; color: var(--ink-2); cursor: pointer; }
 .mg-back:hover { color: var(--blue); border-color: var(--blue); }
 .mg-nl { margin: 0; gap: 6px; }
+/* Плашек стало двенадцать (20.11.2026: «рега на эфир», «от партнера»): ряд кнопок
+   переносится сам, а имя и описание лида не сжимаются в столбик по слову. */
+.mg-lead .mg-hb { flex: 1 1 260px; }
+.mg-lead .mg-nl { flex: 0 1 720px; flex-wrap: wrap; justify-content: flex-end; }
 .mg-nl .qchip { padding: 6px 11px; }
 /* подсказка системы: подтверждается одним нажатием, поэтому чип обведен */
 .mg-nl .qchip.hint { box-shadow: inset 0 0 0 1px var(--amber); color: var(--amber-ink); }
@@ -15789,6 +15845,8 @@ video.cs-media { background: #000; }
    Строки — рецепт «Моей смены». */
 .sev.cb-tried { color: var(--amber-ink); background: var(--amber-soft); }
 .cb-last { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
+/* Кнопка «взять из документов» несет имя файла: длинное имя не должно распирать блок */
+.deal-fromdoc { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* «Главные конверсии» на «Продажах» (Павел 19.11.2026): две цифры отдела крупно. */
 .cv-ts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 24px 20px; }
@@ -16052,6 +16110,30 @@ video.cs-media { background: #000; }
 
 /* Задачи по карточкам в «Моей смене»: текст задачи и есть суть строки, не режем его */
 .ms-tk .ms-nm small { white-space: normal; overflow: visible; text-overflow: clip; }
+
+/* «Как принять оплату» в карточке (Павел 19.11.2026): ситуация → блок, без рамок,
+   строки делит полупрозрачная линия. Правило про крупные платежи — последней строкой. */
+.pay-guide { margin: 0 0 26px; padding: 14px 16px 12px; border-radius: var(--r-lg); background: var(--fill); }
+.pg-h { font: 700 13px 'Manrope', sans-serif; color: var(--ink); letter-spacing: -.01em; margin-bottom: 6px; }
+.pg-r { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+  padding: 8px 0; border: 0; border-top: 1px solid var(--line); background: none; cursor: pointer; text-align: left;
+  font: 500 13px/1.35 'Manrope', sans-serif; color: var(--ink-2); }
+.pg-r:first-of-type { border-top: 0; }
+.pg-t { display: inline-flex; align-items: center; gap: 4px; flex: none; font-weight: 700; font-size: 12.5px; color: var(--blue); white-space: nowrap; }
+.pg-r:hover .pg-w { color: var(--ink); }
+.pg-r:hover .pg-t { gap: 7px; }
+.pg-t, .pg-w { transition: color .15s ease, gap .15s ease; }
+.pg-r:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+.pg-rule { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line);
+  font: 600 12.5px/1.45 'Manrope', sans-serif; color: var(--navy); }
+.ord-newsub { font: 500 12px/1.4 'Manrope', sans-serif; color: var(--ink-3); margin: 2px 0 10px; }
+/* блок, к которому привела подсказка, коротко подсвечивается */
+@keyframes pgHit { 0% { background: color-mix(in srgb, var(--blue) 12%, transparent); } 100% { background: transparent; } }
+.pg-hit { animation: pgHit 1.6s ease-out; border-radius: var(--r-lg); }
+@media (max-width: 600px) {
+  .pg-r { flex-direction: column; align-items: flex-start; gap: 2px; }
+}
+@media (prefers-reduced-motion: reduce) { .pg-hit { animation: none; } .pg-t, .pg-w { transition: none; } }
 
 /* ── Телефон входящих в углу экрана (plMount, право phone_in). Рамка со звонилкой:
    в покое это строка «Телефон на линии», на звонок раскрывается с номером и кнопками.
