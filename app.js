@@ -59166,7 +59166,7 @@
               '<button class="oi-mark" data-getlink="' + o.id + '">Ссылка ЮKassa</button>' +
               '<span class="oi-hint">Крупный взнос — QR, деньги идут на счет ИП без комиссии. ЮKassa — примерно до 30 000 ₽.</span></div>';
           } else if (payable && DEAL_TARIFFS.indexOf(o.tariff_id) >= 0) {
-            linkBox = '<div class="ord-link"><span class="oi-hint">Ссылку и QR по сопровождению выдаем после «Оформить сделку» выше.</span></div>';
+            linkBox = '<div class="ord-link"><span class="oi-hint">Ссылку и QR по сопровождению выдаем после сделки: блок «Сделка по сопровождению» выше.</span></div>';
           } else if (payable) {
             linkBox = '<div class="ord-link" data-linkbox="' + o.id + '">' +
               '<button class="oi-mark" data-getlink="' + o.id + '">получить ссылку на оплату</button></div>';
