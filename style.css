@@ -16129,8 +16129,9 @@ video.cs-media { background: #000; }
 .nx-x:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 @keyframes nxIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 @media (max-width: 600px) {
-  .nx-strip { flex-wrap: wrap; gap: 10px; }
-  .nx-b { flex-basis: calc(100% - 80px); }
+  .nx-strip { position: relative; flex-wrap: wrap; gap: 10px; }
+  .nx-b { flex-basis: 100%; padding-right: 26px; }
+  .nx-x { position: absolute; top: 6px; right: 6px; }
   .nx-go { width: 100%; justify-content: center; }
   .nx-ic { display: none; }
 }
