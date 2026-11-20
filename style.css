@@ -760,6 +760,31 @@ a { color: inherit; text-decoration: none; }
 .t-when { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; display: flex;
   align-items: center; gap: 6px; justify-content: flex-end; }
 .t-when.today { color: var(--blue); font-weight: 600; }
+/* Дедлайн в «Сопровождении» (Мария 20.11.2026) — на месте даты прихода.
+   Дату ставит человек, поэтому ячейка это кнопка, а не подпись. */
+.t-dl { font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap;
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0;
+  border-radius: 8px; padding: 2px 4px; cursor: pointer; }
+.t-dl:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.t-dl:hover { color: var(--blue); }
+/* Просрочено и «вот-вот» — тоном текста, а не заливкой: в строке уже стоят цветная
+   плашка тьютора и синяя полоса этапа, третье пятно сделало бы строку светофором. */
+.t-dl.late { color: var(--red-ink); }
+.t-dl.soon { color: var(--amber-ink); }
+.t-dl.none { font-weight: 500; color: var(--ink-3); }
+.t-dl .dlset i { font-style: normal; }
+/* Прочерк может молчать, а «поставить» — это призыв, и на --ink-3 он не читался. */
+.t-dl .dlset .d1 { color: var(--ink-2); }
+.t-dl .dlset .d1 { display: none; }
+.trow:hover .t-dl.none .dlset .d0 { display: none; }
+.trow:hover .t-dl.none .dlset .d1 { display: inline; }
+/* Поле правки — общий рецепт формы в малом размере (`.al-in.sm`), третьего рецепта
+   поля в системе быть не должно (design.md). Своего тут только ширина: 132px в
+   колонке 110px переливались влево, на «Этап». */
+.t-dl input.dl-in { width: 100%; min-width: 0; padding: 5px 8px; }
+/* Ввод от 16px: на меньшем кегле Safari зумит страницу при фокусе и строка уезжает
+   из кадра. Тот же рецепт, что у поиска в выборе человека (.ss-q). */
+@media (max-width: 480px) { .t-dl input.dl-in { font-size: 16px; padding: 6px 8px; } }
 .t-go { width: 30px; height: 30px; border-radius: 9px; background: var(--fill);
   display: grid; place-items: center; color: var(--ink-3); transition: .15s; flex: none; }
 .trow:hover .t-go { background: var(--blue); color: #fff; }
@@ -3321,6 +3346,17 @@ a { color: inherit; text-decoration: none; }
 .trow.tsk-grid.own .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .trow.tsk-grid.own .t-ttl,
 .trow.tsk-grid.own .t-sub { flex-basis: calc(100% - 30px); }
+/* Строка с галочкой слева — та же раскладка, но галочка тут есть и в чужой
+   задаче: в «Тебе сдали» ею принимают. Без этого кружок вставал отдельной
+   строкой над заголовком и вылезал из высоты строки (20.11.2026). Подписи и
+   метка цели переносятся под заголовок с отступом на ширину галочки, иначе
+   вторая строка начиналась левее первой. */
+.trow.tsk-grid.has-chk .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.trow.tsk-grid.has-chk:not(.has-goal) { height: auto; min-height: 58px;
+  padding-top: 10px; padding-bottom: 10px; }
+.trow.tsk-grid.has-chk .t-ttl { flex-basis: calc(100% - 30px); }
+.trow.tsk-grid.has-chk .t-sub { flex-basis: calc(100% - 30px); margin-left: 30px; }
+.trow.tsk-grid.has-chk .tsk-goal { margin-left: 30px; }
 .tsk-chk { width: 20px; height: 20px; flex: none; margin-top: 1px; border-radius: 50%;
   border: 1.5px solid #C5CCDA; background: #fff; display: grid; place-items: center;
   color: transparent; cursor: pointer; transition: .15s var(--ease); }
@@ -5742,22 +5778,47 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
      название этапа обрезаются оба. Поэтому этап идет второй строкой под именем
      плашкой — у телефона есть высота, но нет ширины. Дата прихода уходит классом
      hidem в разметке: у клиента в работе про нее не спрашивают. */
-  .trow.lr-grid.sup { grid-template-columns: 104px minmax(0,1fr) !important;
+  .trow.lr-grid.sup { grid-template-columns: 104px minmax(0,1fr) auto !important;
     height: auto; padding: 11px 14px; row-gap: 7px; }
-  .trow.lr-grid.sup .t-tutor { grid-row: 1 / span 2; align-self: center; }
+  .trow.lr-grid.sup .t-tutor { grid-area: 1 / 1 / 3 / 2; align-self: center; }
+  .trow.lr-grid.sup .t-cell { grid-area: 1 / 2 / 2 / 4; }
   /* Палец крупнее курсора: плашка держит высоту нажатия, а не рисуется в один пиксель.
      Рамка пунктиром (Мария 20.11.2026): заливка спорила с цветной плашкой тьютора в
      той же строке, пунктир говорит «сюда можно нажать» и не добавляет второго пятна. */
-  .trow.lr-grid.sup .t-stage { grid-column: 2; justify-self: start; max-width: 100%;
-    padding: 4px 10px; border-radius: 9px; border: 1px dashed var(--line-2); }
+  .trow.lr-grid.sup .t-stage { grid-area: 2 / 2 / 3 / 3; justify-self: start; max-width: 100%;
+    padding: 4px 10px; border-radius: 9px; border: 1px dashed var(--line-2);
+    min-height: 34px; display: flex; align-items: center; }
   .trow.lr-grid.sup .t-stage:hover { border-color: var(--blue); }
   .trow.lr-grid.sup .t-stage .stn { font-size: 12.5px; font-weight: 600; }
   /* Полоски этапов на телефоне нет: в плашке шириной в палец шестнадцать насечек
      сливаются в серый штрих. Там работает сама плашка пунктиром. */
   .trow.lr-grid.sup .t-stage .stbar { display: none; }
-  .trow.lr-grid.sup .t-stage .stlab { margin-top: 0; }
+  /* min-width: 0 — плашка стала flex-контейнером ради высоты под палец, и без него
+     строка «Диагностика 2/16» не ужимается, а обрезается по краю: счетчик этапов
+     превращался в «2/1». Ужиматься должно НАЗВАНИЕ (у него многоточие), не счетчик. */
+  .trow.lr-grid.sup .t-stage .stlab { margin-top: 0; min-width: 0; flex: 1 1 auto; }
+  /* Дедлайн на телефоне встает справа от плашки этапа, во вторую строку: дата
+     короткая, место под нее есть, а ради нее одной городить третью строку незачем. */
+  /* На телефоне заполненная дата ничем не отличалась от подписи — нажать на нее
+     никто не догадается, а наведения там нет. Рамка пунктиром и высота под палец те
+     же, что у плашки этапа рядом: одна строка — один рецепт нажатия, и второго
+     цветного пятна рамка не добавляет (тон остается у самой цифры). */
+  .trow.lr-grid.sup .t-dl { grid-area: 2 / 3 / 3 / 4; align-self: center; min-height: 34px;
+    padding: 4px 10px; border-radius: 9px; border: 1px dashed var(--line-2); }
+  .trow.lr-grid.sup .t-dl:hover { border-color: var(--blue); }
+  /* Пока открыто поле, оно забирает всю вторую строку, а плашка этапа уходит: поле
+     даты в колонке шириной в дату ужимало этап до двух десятков пикселей, и вместо
+     названия оставался огрызок. Правишь срок — этап подождет полсекунды. */
+  .trow.lr-grid.sup.dl-edit .t-stage { display: none; }
+  .trow.lr-grid.sup.dl-edit .t-dl { grid-area: 2 / 2 / 3 / 4; justify-self: stretch;
+    border: 0; padding: 0; min-height: 0; }
+  /* На телефоне наведения нет — «поставить» показываем сразу, иначе пустая ячейка
+     молчит о том, что она кнопка. */
+  .trow.lr-grid.sup .t-dl.none .dlset .d0 { display: none; }
+  .trow.lr-grid.sup .t-dl.none .dlset .d1 { display: inline; }
   /* Заголовок колонки на телефоне не нужен: плашка стоит под именем, а не столбцом. */
   .trow.lr-grid.sup.thead .th-stage { display: none; }
+  .trow.lr-grid.sup.thead .th[data-sort="deadline"] { display: none; }
   .trow.lr-grid.sup.thead { height: auto; padding-top: 9px; padding-bottom: 9px; }
   /* на телефоне ряд воронки ломается на две строки: сверху название, число и
      конверсия, снизу полоса во всю ширину. Раньше число прятали, и ряд оставался
@@ -11320,8 +11381,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gl-card.open .gl-chev { transform: rotate(90deg); color: var(--blue); }
 .gl-meta { margin-top: 2px; font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gl-close { color: var(--green-ink); background: var(--green-soft); border-color: var(--green-soft); }
-.gl-more { flex: none; opacity: 0; transition: opacity .14s; }
-.gl-head:hover .gl-more, .gl-card.open .gl-more { opacity: 1; }
+.gl-more, .gl-done { flex: none; opacity: 0; transition: opacity .14s; }
+.gl-head:hover .gl-more, .gl-card.open .gl-more,
+.gl-head:hover .gl-done, .gl-card.open .gl-done,
+.gl-head:focus-within .gl-more, .gl-head:focus-within .gl-done { opacity: 1; }
+.gl-done:hover { color: var(--green-ink); background: var(--green-soft); }
 .gl-steps { border-top: 1px solid var(--line); padding: 4px 0 8px; }
 .gl-steps .dy-ttl { font-size: 13.5px; }
 .gl-steps .trow.dy-row { padding-left: 24px; padding-right: 16px; min-height: 40px; }
@@ -11344,7 +11408,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .nt-crewb { align-self: flex-start; margin: -4px 0 8px; }
 @media (max-width: 720px) {
   .gl-head { gap: 10px; padding: 12px; }
-  .gl-more { opacity: 1; }
+  .gl-more, .gl-done { opacity: 1; }
   .gl-title { font-size: 15px; }
   /* Шапка не должна съедать полэкрана: отделы одной строкой с прокруткой,
      импорт встречи — иконкой рядом с поиском. */

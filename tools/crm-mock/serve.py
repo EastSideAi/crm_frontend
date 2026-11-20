@@ -19,7 +19,9 @@
 остальные /admin/api/* и /api/* получают пустую заглушку, чтобы фоновые опросы
 не роняли экран. Нужны другие данные — правьте PEOPLE и ME здесь же.
 """
-import json, os, sys
+import json
+import os, sys
+from datetime import date, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1]); ROOT = sys.argv[2]
@@ -138,12 +140,25 @@ def doc_plan(lead):
             "total": len(items), "items": items}
 
 
+_LEADS = None
+
+
 def leads():
+    # Список держим в памяти процесса: PATCH правит ту же карточку, что видит
+    # список, иначе правка исчезает на первом же перерисовывании.
+    global _LEADS
+    if _LEADS is not None:
+        return _LEADS
     out = []
     for i, (name, track, tariff, score, contact, note) in enumerate(PEOPLE):
         ov = {"tariff": tariff}
         if track:
             ov["track"] = track
+        # Дедлайн в «Сопровождении» ставит человек руками. Для глаз нужны все четыре
+        # состояния ячейки: просрочено, вот-вот, спокойно и не поставлено.
+        _dl = {0: -3, 1: 0, 2: 1, 3: 12, 4: 40}.get(i % 7)
+        if _dl is not None:
+            ov["deadline"] = (date.today() + timedelta(days=_dl)).isoformat()
         # Кто ведет: в «Сопровождении» имя тьютора стоит на месте плашки статуса.
         tutors = ["Аюпова Элиза", "Александр Сердотецков", "Алена Малахова",
                   "Анастасия Мишина", "Светлана Рошенская", None]
@@ -180,6 +195,7 @@ def leads():
             "booking": {} if i in (2, 7) else {"contact": contact},
             "crm": crm,
         })
+    _LEADS = out
     return out
 
 ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": "super_admin",
@@ -192,6 +208,12 @@ class H(SimpleHTTPRequestHandler):
 
     def log_message(self, *a):
         pass
+
+    def end_headers(self):
+        # Без no-store браузер держит app.js в кэше, и правка, которую смотришь
+        # глазами, в превью не приезжает — проверка тогда врет.
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
 
     def _json(self, obj, code=200):
         raw = json.dumps(obj, ensure_ascii=False).encode()
@@ -237,6 +259,35 @@ class H(SimpleHTTPRequestHandler):
         return self._json({"ok": True})
 
     def do_PATCH(self):
+        # Настоящая ручка отвечает КАРТОЧКОЙ целиком, и фронт кладет ее себе
+        # (`l2.crm = res.crm`). Пока мок отвечал «ok», карточка после правки теряла
+        # tariff и track и вываливалась из «Сопровождения» — поломка мока, которую
+        # легко принять за поломку экрана. Поэтому мержим и отдаем crm.
+        path = self.path.split("?")[0].rstrip("/")
+        lead_id = path.rsplit("/", 1)[-1]
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(size) or b"{}")
+        except Exception:
+            body = {}
+        for l in leads():
+            if l["id"] == lead_id:
+                for k in ("status", "note", "tasks", "comms"):
+                    if k in body:
+                        l["crm"][k] = body[k]
+                # overrides настоящая ручка МЕРЖИТ, а ключи со значением "" удаляет
+                # (admin.py: `overrides || $2 - del_keys`). Мок, заменявший словарь
+                # целиком, молча подтверждал бы снятие срока, которого на бэкенде не
+                # происходит, — проверка на моке тогда ничего не значит.
+                if "overrides" in body:
+                    ov = dict(l["crm"].get("overrides") or {})
+                    for k2, v2 in (body["overrides"] or {}).items():
+                        if v2 == "":
+                            ov.pop(k2, None)
+                        else:
+                            ov[k2] = v2
+                    l["crm"]["overrides"] = ov
+                return self._json({"ok": True, "crm": l["crm"]})
         return self._json({"ok": True})
 
 ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

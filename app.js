@@ -1146,6 +1146,7 @@
           return av.localeCompare(bv, 'ru') * s.dir;
         }
         else if (s.col === 'crm') { av = CRM[a.crm.status].order; bv = CRM[b.crm.status].order; }
+        else if (s.col === 'deadline') return dlCmp(a, b, s.dir);
         else { av = new Date(a.created_at || 0).getTime(); bv = new Date(b.created_at || 0).getTime(); }
         return (av - bv) * s.dir;
       });
@@ -8631,6 +8632,7 @@
       quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
     }
     return '<div class="trow tsk-grid mine wk-row' + (t.parent_title ? ' has-goal' : '') +
+      (quick ? ' has-chk' : '') +
       (t.overdue ? ' r-crit' : '') + (own ? ' own' : '') + (closed ? ' closed' : '') +
       '" data-tid="' + t.id + '">' +
       '<div class="t-cell">' + quick +
@@ -14255,6 +14257,11 @@
           '<div class="gl-meta">' + meta.join('') +
             (complete ? ' <button class="qchip gl-close" data-gdone="' + g.id + '">' + ic('check', 11) + 'Цель достигнута, закрыть</button>' : '') +
           '</div></div>' +
+        // Закрыть цель одной кнопкой, не открывая карточку (Павел 20.11.2026).
+        // У достигнутой цели своя громкая кнопка в подписи, тут она была бы
+        // вторым таким же действием в одной строке.
+        (complete ? '' :
+          '<button class="icobtn sm gl-done" data-gdone="' + g.id + '" title="Закрыть цель">' + ic('check', 14) + '</button>') +
         '<button class="icobtn sm gl-more" data-gopen="' + g.id + '" title="Карточка цели">' + ic('doc', 14) + '</button>' +
         '<span class="gl-chev">' + ic('go', 14) + '</span>' +
       '</div>' + steps + '</div>';
@@ -14778,8 +14785,17 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-gdone]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation(); b.disabled = true;
-        apiSend('/admin/api/tasks/' + b.getAttribute('data-gdone') + '/status', 'POST', { status: 'done' }, function () {
-          showToast('Цель закрыта'); state.tasks = null; loadTaskSummary(); renderView();
+        var gid = +b.getAttribute('data-gdone');
+        var g = (state.tasks || []).filter(function (x) { return x.id === gid; })[0] || {};
+        // Шаги цели не трогаем: это чужая живая работа, она стоит у людей в
+        // планах. Но молчать о них нельзя, иначе цель «закрыта», а под ней
+        // пять задач, о которых никто не вспомнит.
+        var left = Math.max(0, (g.steps_total || 0) - (g.steps_done || 0));
+        apiSend('/admin/api/tasks/' + gid + '/status', 'POST', { status: 'done' }, function () {
+          showToast('Цель закрыта', left
+            ? left + ' ' + plural(left, 'шаг остался', 'шага остались', 'шагов остались') + ' в планах людей'
+            : '');
+          state.tasks = null; loadTaskSummary(); renderView();
         }, function () { b.disabled = false; showToast('Не закрылось — проверь сеть'); });
       });
     });
@@ -15850,7 +15866,11 @@
       // других, но не за себя: иначе руководитель закрывает поставленную ему
       // задачу сам, и тот, кто ее поставил, не узнает об этом никогда
       // (Ольга на обучении 07.10.2026). Сервер отвечает на это 403.
-      var canAccept = isAuthor || (can('tasks_all') && !isAssignee);
+      // «Своя работа» — та, которую ты сам и сдал: руководитель, стоящий в
+      // задаче соисполнителем, принимает сданное коллегой (Павел 20.11.2026).
+      // submitted_by приходит с сервера, он же это правило и проверяет.
+      var mine = isAssignee && !(t.submitted_by != null && me != null && t.submitted_by !== me);
+      var canAccept = isAuthor || (can('tasks_all') && !mine);
       var canFiles = isAssignee || boss || (me != null && watchIds.indexOf(me) !== -1);
       // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
       // назначает, а история должна остаться такой, какой была.
@@ -49300,6 +49320,61 @@
      Нажатие открывает КАРТОЧКУ ученика сразу на «Поступлении» (Мария 20.11.2026:
      «надо чтобы он открывал их карточку и этап поступление»): весь маршрут с
      задачами лежит там, и второго окна с тем же маршрутом быть не должно. */
+  /* ── Дедлайн в строке «Сопровождения» (Мария 20.11.2026) ─────────────────
+     Колонка «Пришел» на этой вкладке отвечала на вопрос, который про клиента в
+     работе никто не задает. На ее месте — дата, до которой мы должны что-то
+     сделать по этому ученику.
+
+     Дату СТАВИТ ЧЕЛОВЕК и хранится она в overrides карточки, как тариф и
+     направление. Считать ее из сроков документов и задач мы пробовали на бумаге и
+     отложили по ее слову: срок в задаче есть у 11 учеников из 48, в плане — у
+     пятерых, то есть расчетная колонка была бы пустой у трех четвертей списка.
+     Когда сроки проставят, расчет можно подложить ПОД ручную дату, не трогая эту
+     разметку: ручная всегда сильнее. */
+  function leadDeadline(l) {
+    return (((l.crm || {}).overrides) || {}).deadline || '';
+  }
+  function dlTone(iso) {
+    if (!iso) return '';
+    var t = todayISO(0);
+    if (iso < t) return ' late';          // просрочено
+    if (iso <= todayISO(3)) return ' soon';  // сегодня и ближайшие три дня
+    return '';
+  }
+  function dlText(iso) {
+    var d = iso.split('-');
+    if (d.length !== 3) return iso;
+    /* Год дописываем, только когда он не этот. Цикл подачи перешагивает новый год, и
+       промах в годе при вводе иначе рисуется тем же «05.12» — отличить его было бы
+       нечем, кроме тона. */
+    return d[2] + '.' + d[1] + (d[0] === todayISO(0).slice(0, 4) ? '' : '.' + d[0].slice(2));
+  }
+  /* Без даты — всегда в конце, в обе стороны: «срок не поставлен» это не «очень
+     далекий срок», и всплывать наверх по обратной сортировке такие строки не должны. */
+  function dlCmp(a, b, dir) {
+    var ad = leadDeadline(a), bd = leadDeadline(b);
+    if (!ad && !bd) return 0;
+    if (!ad) return 1;
+    if (!bd) return -1;
+    return (ad < bd ? -1 : ad > bd ? 1 : 0) * dir;
+  }
+  function dlCell(l) {
+    var iso = leadDeadline(l);
+    /* Имя ученика стоит в ярлыке: читающий экран голосом идет по колонке, и сорок
+       восемь одинаковых «Дедлайн не поставлен» не связывают дату с человеком. */
+    var who = ' — ' + leadName(l);
+    return '<div class="t-dl' + (iso ? dlTone(iso) : ' none') + '" data-stop="1" data-dl="' + l.id + '"' +
+      ' role="button" tabindex="0" aria-label="' + esc((iso
+        ? 'Дедлайн ' + dlText(iso) + ', изменить'
+        : 'Дедлайн не поставлен, поставить') + who) + '">' +
+      (iso
+        ? '<span class="num">' + esc(dlText(iso)) + '</span>'
+        /* Пустая ячейка держит прочерк, а «поставить» проступает по наведению на
+           строку: сорок восемь одинаковых призывов в столбик — это шум, а не
+           приглашение. */
+        : '<span class="dlset"><i class="d0">—</i><i class="d1">поставить</i></span>') +
+    '</div>';
+  }
   var STAGE_STATE = { done: 'done', now: 'now', open: 'open' };
   function stageCell(l) {
     /* Поля stage нет вовсе — это старый ответ сервера (бэкенд еще не выкачен), а не
@@ -49371,7 +49446,9 @@
             '<div class="t-contact hidem">' + (contact
               ? (act ? '<a href="' + esc(act.href) + '" target="_blank" rel="noopener" data-stop="1">' + esc(contact) + '</a>' : esc(contact))
               : '<span class="none">—</span>') + '</div>') +
-        '<div class="t-when num' + (tutorCol() ? ' hidem' : '') + (isToday(l.created_at) ? ' today' : '') + '">' + fmtWhen(l.created_at) + '</div>' +
+        (tutorCol()
+          ? dlCell(l)
+          : '<div class="t-when num' + (isToday(l.created_at) ? ' today' : '') + '">' + fmtWhen(l.created_at) + '</div>') +
         '<div class="t-go hidem">' + ic('go', 13) + '</div>' +
       '</div>';
     }).join('');
@@ -49388,14 +49465,15 @@
           : thCell('score', 'Балл', ' hidem') + '<span class="th hidem">Контакт</span>') +
         /* В «Сопровождении» на телефоне дата прихода уступает место этапу: у клиента
            в работе вопрос один — где он сейчас, а не когда он пришел. */
-        thCell('created', 'Пришел', tutorCol() ? ' r hidem' : ' r') +
+        /* В «Сопровождении» на месте даты прихода — дедлайн (Мария 20.11.2026). */
+        (tutorCol() ? thCell('deadline', 'Дедлайн', ' r') : thCell('created', 'Пришел', ' r')) +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
 
     Array.prototype.forEach.call(host.querySelectorAll('.th.sortable'), function (th) {
       th.addEventListener('click', function () {
         var col = th.getAttribute('data-sort');
-        var first = { name: 1, score: -1, crm: 1, created: -1 }[col] || -1;
+        var first = { name: 1, score: -1, crm: 1, created: -1, deadline: 1 }[col] || -1;
         if (state.sort && state.sort.col === col) {
           state.sort = state.sort.dir === first ? { col: col, dir: -first } : null;
         } else {
@@ -49420,6 +49498,69 @@
       c.addEventListener('click', open);
       c.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); }
+      });
+    });
+    /* Дедлайн правится прямо в строке: ячейка превращается в поле даты и
+       закрывается по выбору или по уходу фокуса. Поповер тут был бы лишним — у
+       даты одно поле и один родной календарь браузера, который на телефоне
+       открывается системным. */
+    /* Таблица перерисовывается целиком, и фокус после правки уезжал на body: дошедший
+       табом до двадцатой строки начинал путь заново. Возвращаем его в ту же ячейку. */
+    var dlBack = function (id) {
+      /* Запоминаем, на какой ячейке стоял фокус, ДО перерисовки: ответ сервера
+         приходит вторым заходом, и человек к этому моменту мог уйти табом дальше —
+         тогда возвращаем его туда, где он сейчас, а не назад к нашей дате. */
+      var a = document.activeElement;
+      var to = (a && a.classList && a.classList.contains('dl-in')) ? id
+        : (a && a.getAttribute ? a.getAttribute('data-dl') : null);
+      renderListBody();
+      if (!to) return;
+      var box = el('list-body');
+      var back = box && box.querySelector('.t-dl[data-dl="' + to + '"]');
+      if (back) back.focus();
+    };
+    Array.prototype.forEach.call(host.querySelectorAll('.t-dl[data-dl]'), function (c) {
+      var edit = function (e) {
+        e.stopPropagation();
+        if (c.querySelector('input')) return;
+        var id = c.getAttribute('data-dl'), lead0 = findLead(id) || {}, was = leadDeadline(lead0);
+        var inp = document.createElement('input');
+        inp.type = 'date'; inp.className = 'al-in sm dl-in'; inp.value = was;
+        inp.setAttribute('aria-label', 'Дедлайн — ' + leadName(lead0));
+        /* Пока открыто поле, ячейка кнопкой быть перестает: кнопка с полем внутри —
+           невалидная пара, и читающий экран продолжал звать ее «поставить». */
+        c.removeAttribute('role'); c.removeAttribute('tabindex');
+        /* Метка строки — для телефона: там поле забирает всю вторую строку (стили).
+           Снимать ее не надо, строка все равно перерисовывается целиком. */
+        var trow = c.closest ? c.closest('.trow') : null;
+        if (trow) trow.classList.add('dl-edit');
+        c.innerHTML = ''; c.appendChild(inp);
+        var done = false;
+        var save = function (val) {
+          if (done) return;
+          done = true;
+          var lead = findLead(id);
+          if (!lead || val === was) { dlBack(id); return; }
+          /* Пустое значение снимает срок. Ключ при этом ОСТАЕТСЯ в запросе пустой
+             строкой: бэкенд удаляет из overrides ровно те ключи, что пришли с "",
+             а выброшенный ключ он просто не увидит — дата осталась бы в базе и через
+             миг вернулась бы в ячейку ответом сервера. */
+          var ov = Object.assign({}, (lead.crm || {}).overrides || {}, { deadline: val || '' });
+          patch(id, { overrides: ov }, null, function () { dlBack(id); });
+          dlBack(id);
+        };
+        inp.addEventListener('click', function (ev) { ev.stopPropagation(); });
+        inp.addEventListener('change', function () { save(inp.value || ''); });
+        inp.addEventListener('blur', function () { save(inp.value || ''); });
+        inp.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Escape') { done = true; dlBack(id); }
+          if (ev.key === 'Enter') { save(inp.value || ''); }
+        });
+        try { inp.focus(); if (inp.showPicker) inp.showPicker(); } catch (err) { /* showPicker есть не везде */ }
+      };
+      c.addEventListener('click', edit);
+      c.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); edit(e); }
       });
     });
     Array.prototype.forEach.call(host.querySelectorAll('.pill-st'), function (p) {
