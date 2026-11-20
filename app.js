@@ -8631,6 +8631,7 @@
       quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
     }
     return '<div class="trow tsk-grid mine wk-row' + (t.parent_title ? ' has-goal' : '') +
+      (quick ? ' has-chk' : '') +
       (t.overdue ? ' r-crit' : '') + (own ? ' own' : '') + (closed ? ' closed' : '') +
       '" data-tid="' + t.id + '">' +
       '<div class="t-cell">' + quick +

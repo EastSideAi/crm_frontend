@@ -3205,6 +3205,17 @@ a { color: inherit; text-decoration: none; }
 .trow.tsk-grid.own .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .trow.tsk-grid.own .t-ttl,
 .trow.tsk-grid.own .t-sub { flex-basis: calc(100% - 30px); }
+/* Строка с галочкой слева — та же раскладка, но галочка тут есть и в чужой
+   задаче: в «Тебе сдали» ею принимают. Без этого кружок вставал отдельной
+   строкой над заголовком и вылезал из высоты строки (20.11.2026). Подписи и
+   метка цели переносятся под заголовок с отступом на ширину галочки, иначе
+   вторая строка начиналась левее первой. */
+.trow.tsk-grid.has-chk .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.trow.tsk-grid.has-chk:not(.has-goal) { height: auto; min-height: 58px;
+  padding-top: 10px; padding-bottom: 10px; }
+.trow.tsk-grid.has-chk .t-ttl { flex-basis: calc(100% - 30px); }
+.trow.tsk-grid.has-chk .t-sub { flex-basis: calc(100% - 30px); margin-left: 30px; }
+.trow.tsk-grid.has-chk .tsk-goal { margin-left: 30px; }
 .tsk-chk { width: 20px; height: 20px; flex: none; margin-top: 1px; border-radius: 50%;
   border: 1.5px solid #C5CCDA; background: #fff; display: grid; place-items: center;
   color: transparent; cursor: pointer; transition: .15s var(--ease); }
