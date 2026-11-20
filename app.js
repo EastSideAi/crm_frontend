@@ -41937,6 +41937,52 @@
     '</div>';
   }
 
+  /* Кто продал (Павел 20.11.2026: «видно, у Лианы вчера оплатили»; ведущий карточки после
+     оплаты меняется на тьютора, поэтому продавец живет в самой оплате). Отмечен в оплате —
+     просто имя. Не отмечен — выбор прямо в строке, подсказка сервера (кто вел консультацию)
+     стоит выбранной и подписана «по встрече?», пока человек ее не подтвердил. Сохраняет та
+     же ручка, что «продал» в «Оплатах» карточки. Строки без оплаты в карточке выбора не
+     имеют: продавца ставить некуда, сначала оплату надо отметить в карточке. */
+  function smSeller(l, d) {
+    if (l.seller_src === 'pay' || !l.pay_id) {
+      var none = l.seller_src !== 'pay';
+      return '<span class="sb-po' + (none ? ' none' : ' calm') + '" data-l="Продал">' +
+        esc(none ? 'Не указан' : l.seller) + '</span>';
+    }
+    var guess = l.seller_src ? l.seller_id : null;
+    return '<span class="sb-po sm-sel" data-l="Продал"><select class="sm-seller" data-smpay="' + l.pay_id + '"' +
+      ' aria-label="Кто продал">' +
+      '<option value="">не указан</option>' + (d.seller_opts || []).map(function (u) {
+        return '<option value="' + u.id + '"' + (String(u.id) === String(guess) ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+      }).join('') + '</select>' +
+      (guess ? '<small>по встрече? выбери, чтобы записать</small>' : '<small>выбери продавца</small>') + '</span>';
+  }
+
+  /* От кого ждем деньги в периоде (Павел 20.11.2026: «видно, от кого ждем оплаты»): взносы
+     по графикам рассрочки до конца периода, просроченные первыми, и строки «ожидается»,
+     которые Роман вносит в план выручки ведомости руками. */
+  function smAwait(d) {
+    var rows = (d.await || []).slice().sort(function (a, b) {
+      return (b.late - a.late) || String(a.due_on || '9').localeCompare(String(b.due_on || '9'));
+    });
+    var body = rows.map(function (w) {
+      var when = w.due_on ? fmtDay(w.due_on).slice(0, 5) : 'без даты';
+      var src = w.src === 'ledger' ? 'внесено в план выручки ведомости' : (w.item || 'взнос по графику');
+      return smLead(w.case_id,
+        '<span class="sm-d num' + (w.late ? ' late' : '') + '">' + esc(when) + '</span>' +
+        '<span class="sb-pn"><b>' + esc(w.client) + '</b><small>' + esc(src) + '</small></span>' +
+        '<span class="sb-po' + (w.late ? ' miss' : ' calm') + '" data-l="Статус">' +
+          (w.late ? 'просрочено' : (w.came ? 'часть пришла' : 'ждем')) + '</span>' +
+        '<span class="sb-po' + (w.seller ? ' calm' : ' none') + '" data-l="Продал">' + esc(w.seller || '—') + '</span>' +
+        '<span class="sm-v num">' + smRub(w.amount) + '</span>', 'sm-ln');
+    }).join('');
+    return '<div class="card sp12 sm-lines sm-await"><div class="sec-head pf-sec"><span class="ic">' + ic('clock', 14) +
+      '</span><div><div class="t">Ждем оплату · <span class="num">' + smRub(d.await_rub || 0) + '</span></div>' +
+      '<div class="s">взносы по графикам до конца периода и ожидаемые строки ведомости; нет графика — семьи здесь не будет, его вносят в карточке → «Оплаты»</div></div></div>' +
+      (body ? '<div class="sm-lh"><span>Срок</span><span>Семья</span><span>Статус</span><span>Продал</span><span>Сумма</span></div>' +
+        '<div class="sm-list">' + body + '</div>' : '<div class="empty">В этом периоде денег по графикам не ждем.</div>') + '</div>';
+  }
+
   function smLines(d) {
     var f = state._smF;
     var lab = { product: {}, kind: {}, ch: {}, seller: {} };
@@ -41944,12 +41990,19 @@
     var rows = d.lines.filter(function (l) { return !f || l[f.by] === f.val; });
     var sum = rows.reduce(function (s, l) { return s + l.amount; }, 0);
     var body = rows.slice().reverse().map(function (l) {
-      return smLead(l.case_id,
+      // Строка с выбором продавца — не кнопка: select внутри button не нажимается.
+      // Карточку тогда открывает имя.
+      var pick = l.seller_src !== 'pay' && l.pay_id;
+      var who = esc(l.case_id ? l.client : (l.payer || 'Без клиента'));
+      var row = pick ? function (id, inner) { return '<div class="sm-ln nolink">' + inner + '</div>'; } : smLead;
+      return row(l.case_id,
         '<span class="sm-d num">' + fmtDay(l.date).slice(0, 5) + '</span>' +
-        '<span class="sb-pn"><b>' + esc(l.case_id ? l.client : (l.payer || 'Без клиента')) + '</b>' +
+        '<span class="sb-pn">' + (pick && l.case_id
+          ? '<button class="sm-nm" data-sblead="' + esc(l.case_id) + '" title="Открыть карточку"><b>' + who + '</b></button>'
+          : '<b>' + who + '</b>') +
           '<small>' + esc(lab.product[l.product] || l.product) + ' · ' + esc(SM_KIND[l.kind] || '') + '</small></span>' +
         '<span class="sb-po calm" data-l="Канал">' + esc(l.ch) + '</span>' +
-        '<span class="sb-po' + (l.seller === 'Не указан' ? ' none' : ' calm') + '" data-l="Продал">' + esc(l.seller) + '</span>' +
+        smSeller(l, d) +
         '<span class="sm-v num">' + smRub(l.amount) +
           (l.crm ? '' : '<small>нет в карточке</small>') + '</span>', 'sm-ln');
     }).join('');
@@ -42013,7 +42066,7 @@
         smGroup('Продукты', 'box', 'product', d.products, d.total) +
         smGroup('Каналы', 'funnel', 'ch', d.channels, d.total) +
         smGroup('Кто продал', 'team', 'seller', d.sellers, d.total) +
-      '</div>' + smCheck(d) + smLines(d) + '</div>';
+      '</div>' + smLines(d) + smAwait(d) + smCheck(d) + '</div>';
     sbTabsBind(view);
     smBind(view, d);
     animBars(view);
@@ -42044,6 +42097,17 @@
     });
     var rs = el('sm-reset');
     if (rs) rs.addEventListener('click', function () { state._smF = null; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-smpay]'), function (s) {
+      s.addEventListener('click', function (e) { e.stopPropagation(); });
+      s.addEventListener('change', function () {
+        var body = s.value ? { seller_id: parseInt(s.value, 10) } : { clear_seller: true };
+        s.disabled = true;
+        apiSend('/admin/api/payments/' + s.getAttribute('data-smpay'), 'PATCH', body, function () {
+          showToast(s.value ? 'Записал, кто продал' : 'Продавца убрал');
+          state._sm = null; renderView();
+        }, function () { s.disabled = false; showToast('Не сохранилось, проверь интернет'); });
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sblead]'), function (b) {
       b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
     });
