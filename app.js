@@ -57910,8 +57910,7 @@
       '<div class="nx-b"><span class="nx-k">Следующий шаг · ' + st.step + ' из 3</span>' +
         '<span class="nx-t">' + esc(t[0]) + '.</span> ' + esc(sub) + '</div>' +
       '<button class="bp sm nx-go" id="nx-go">' + esc(t[2]) + ic('go', 12) + '</button>' +
-      '<button class="nx-x" id="nx-x" title="Скрыть до следующего шага">' + ic('x', 13) + '</button>' +
-      (st.step === 1 ? '<input type="file" id="nx-file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>' : '');
+      '<button class="nx-x" id="nx-x" title="Скрыть до следующего шага">' + ic('x', 13) + '</button>';
     el('nx-x').addEventListener('click', function () {
       state.nxOff = state.nxOff || {};
       state.nxOff[id] = st.step;
@@ -57919,17 +57918,30 @@
     });
     el('nx-go').addEventListener('click', function () {
       // Шаг 1: файл выбираем прямо отсюда, разбор договора идет уже в «Оплатах».
-      if (st.step === 1) return el('nx-file').click();
+      if (st.step === 1) return nxPickFile(id);
       state.nxPending = { id: id, kind: st.step === 2 ? 'doc' : 'pay', oid: st.oid };
       setModalSection('pay');
     });
+  }
+  /* Поле выбора файла живет вне карточки: карточка перерисовывается, пока человек
+     ищет договор в окне выбора, и поле внутри нее пропадало вместе с выбором. */
+  function nxPickFile(id) {
     var fi = el('nx-file');
-    if (fi) fi.addEventListener('change', function (e) {
-      var f = e.target.files && e.target.files[0];
-      if (!f) return;
-      state.nxPending = { id: id, kind: 'file', file: f };
-      setModalSection('pay');
-    });
+    if (!fi) {
+      fi = document.createElement('input');
+      fi.type = 'file'; fi.id = 'nx-file'; fi.hidden = true;
+      fi.accept = '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      document.body.appendChild(fi);
+      fi.addEventListener('change', function () {
+        var f = fi.files && fi.files[0], who = fi.getAttribute('data-id');
+        fi.value = '';
+        if (!f || state.drawerId !== who) return;
+        state.nxPending = { id: who, kind: 'file', file: f };
+        setModalSection('pay');
+      });
+    }
+    fi.setAttribute('data-id', id);
+    fi.click();
   }
   // Ставится над любой вкладкой. Свежий шаг рисуем сразу, устаревший — перечитываем.
   function nxMount(host, id, ctx) {
