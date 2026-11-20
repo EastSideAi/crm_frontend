@@ -42554,9 +42554,14 @@
     else if (p.chat && p.chat.url) out.push('<a class="bp ghost ms-chat" href="' + esc(p.chat.url) + '" target="_blank" rel="noopener">' + ic('chat', 13) + 'Чат</a>');
     // Не взял трубку — сообщение в один клик (разбор лучших практик 19.11.2026: недозвон,
     // сразу сообщение в мессенджер, назавтра звонок в другое время).
+    // Семья пишет в нашего бота — текст уходит через бота сразу (Павел 20.11.2026: «да,
+    // делаем»), иначе копируется для рабочего аккаунта, куда система писать не может.
     if (p.dial && p.dial.last === 'no_answer' && !p.dial.reached) {
-      out.push('<button class="bp ghost" data-mstpl="' + esc(p.id) + '" title="Скопировать сообщение после недозвона">' +
-        ic('copy', 13) + 'Скопировать текст</button>');
+      out.push(p.chat && p.chat.bot
+        ? '<button class="bp ghost" data-mstpl="' + esc(p.id) + '" data-bot="1" title="Отправить семье сообщение после недозвона через бота">' +
+          ic('chat', 13) + 'Отправить сообщение</button>'
+        : '<button class="bp ghost" data-mstpl="' + esc(p.id) + '" title="Скопировать сообщение после недозвона">' +
+          ic('copy', 13) + 'Скопировать текст</button>');
     }
     out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
     return '<div class="ms-acts">' + out.join('') + '</div>';
@@ -42939,6 +42944,16 @@
         });
         if (!p) return;
         var text = msTplText(p, kind);
+        if (b.getAttribute('data-bot') && p.chat && p.chat.bot) {
+          if (!window.confirm('Отправить семье через бота?\n\n' + text)) return;
+          b.disabled = true;
+          msAfter(api('/admin/api/bot/conversations/' + encodeURIComponent(p.chat.bot) + '/send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text })
+          }).then(function (res) {
+            showToast(res && res.delivered === false ? 'Не доставлено: ' + (res.reason || 'бот не смог отправить') : 'Отправил семье в бот');
+          }));
+          return;
+        }
         var done = function () {
           showToast(p.chat && (p.chat.bot || p.chat.url) ? 'Текст скопирован, вставь в чат' : 'Текст скопирован, отправь в мессенджер семьи');
           if (p.chat && p.chat.bot) location.hash = dialogUrl(p.chat.bot).replace(/^.*#/, '#');
