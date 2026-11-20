@@ -78,6 +78,66 @@ def stage_of(i):
             "title": STAGE_NAMES[pos], "pos": pos + 1, "total": len(steps),
             "steps": steps}
 
+# Пакет документов: что мы ждем от семьи. Считает его сервер
+# (doc_checklist.package_state) и отдает в карточке полем doc_plan — тут
+# правдоподобный ответ, чтобы увидеть блок глазами.
+DOC_ITEMS = [
+    ("Загранпаспорт", "Загранпаспорт ученика"), ("Паспорт РФ", "Паспорт РФ ученика"),
+    ("Паспорт родителя", "Загранпаспорт родителей"), ("Аттестат 9 класс", "Аттестат за 9 класс"),
+    ("Аттестат 11 класс", "Аттестат за 11 класс"),
+    ("Транскрипт 10 класс", "Транскрипт с оценками за 10 класс"),
+    ("Анкета студента", "Анкета студента"), ("Язык", "Языковой сертификат: HSK или Duolingo"),
+    ("Фото", "Фото по требованиям вуза"), ("Несудимость", "Справка о несудимости"),
+    ("Портфолио", "Портфолио достижений"),
+    ("Согласие на выезд", "Нотариальное согласие на выезд ребенка"),
+    ("Транскрипт 11 класс", "Выписка оценок за 11 класс, первый семестр"),
+]
+
+
+# Уже присланные файлы и вписанные строки: блок «Ждем от семьи» стоит в разделе
+# рядом с ними, и смотреть его в одиночку бессмысленно — рецепты не должны
+# спорить между собой.
+DOCS = [
+    {"id": 1, "name": "passport-rf.pdf", "kind": "Паспорт РФ", "status": "accepted",
+     "mime": "application/pdf", "link": None, "size_bytes": 420000, "has_file": True,
+     "created_at": "2026-11-12T10:00:00Z", "uploaded_side": "client",
+     "uploaded_relation": "parent", "uploaded_by": "мама", "review_note": ""},
+    {"id": 2, "name": "attestat-9.jpg", "kind": "Аттестат 9 класс", "status": "needs_fix",
+     "mime": "image/jpeg", "link": None, "size_bytes": 1250000, "has_file": True,
+     "created_at": "2026-11-14T12:30:00Z", "uploaded_side": "client",
+     "uploaded_relation": "self", "uploaded_by": "ученик",
+     "review_note": "скан нечитаемый, нужна замена"},
+    {"id": 3, "name": "dogovor-74.pdf", "kind": "Договор", "status": "accepted",
+     "mime": "application/pdf", "link": None, "size_bytes": 310000, "has_file": True,
+     "created_at": "2026-11-09T09:10:00Z", "uploaded_side": "team",
+     "uploaded_relation": None, "uploaded_by": "Алена Малахова", "review_note": ""},
+]
+DOC_FIELDS = [{"key": "contacts_cn", "name": "Телефон и адрес в Китае",
+               "value": "+86 131 0000 0000, Harbin, Nangang district"}]
+
+
+def doc_plan(lead):
+    i = int(lead["id"].rsplit("-", 1)[-1])
+    track = (lead["crm"]["overrides"] or {}).get("track") or ""
+    items = []
+    for n, (kind, name) in enumerate(DOC_ITEMS):
+        if n < (i % 5) + 1:
+            st, note = "ok", ""
+        elif n == (i % 5) + 1:
+            st, note = "fix", ("скан нечитаемый по нижней половине страницы, "
+                              "нужна замена: печать школы и подпись директора")
+        elif n == (i % 5) + 2:
+            st, note = "review", ""
+        else:
+            st, note = "wait", ""
+        items.append({"key": kind, "kind": kind, "name": name, "state": st,
+                      "note": note, "files": 0 if st == "wait" else 1, "field": False})
+    names = {t["key"]: t["name"] for t in TRACKS}
+    return {"track": track, "track_name": names.get(track, ""), "track_set": bool(track),
+            "done": sum(1 for x in items if x["state"] == "ok"),
+            "total": len(items), "items": items}
+
+
 def leads():
     out = []
     for i, (name, track, tariff, score, contact, note) in enumerate(PEOPLE):
@@ -163,7 +223,9 @@ class H(SimpleHTTPRequestHandler):
         if p.startswith("/admin/api/leads/") and p.count("/") == 4:
             one = [x for x in leads() if x["id"] == p.rsplit("/", 1)[-1]]
             if one:
-                return self._json({"ok": True, **one[0]})
+                return self._json({"ok": True, **one[0], "docs": DOCS,
+                                   "doc_fields": DOC_FIELDS,
+                                   "doc_plan": doc_plan(one[0])})
         if p == "/admin/api/docs/kinds":
             return self._json({"ok": True, "kinds": [], "tracks": TRACKS})
         if p.startswith("/admin/api/") or p.startswith("/api/"):
