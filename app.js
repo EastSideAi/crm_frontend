@@ -57897,7 +57897,12 @@
     if (!box || state.drawerId !== id) return;
     var st = state.nx && state.nx[id];
     var off = (state.nxOff || {})[id];
-    if (!st || !st.step || off === st.step) { box.hidden = true; box.innerHTML = ''; return; }
+    if (!st || !st.step || off === st.step) { box.hidden = true; box.innerHTML = ''; box.removeAttribute('data-step'); return; }
+    /* Тот же шаг — не перерисовываем: фоновая проверка иначе сносит поле файла, пока
+       человек выбирает договор в окне, и выбор пропадает. */
+    var key = st.step + ':' + (st.oid || '');
+    if (box.getAttribute('data-step') === key) return;
+    box.setAttribute('data-step', key);
     var t = NX_TEXT[st.step];
     var sub = st.step === 3 && st.no ? 'Договор № ' + st.no + '. ' + t[1] : t[1];
     box.hidden = false;
