@@ -62112,6 +62112,9 @@
       var gw = /^who-(\d{1,9})$/.exec(gd);
       if (gw) { state.taskWho = { id: +gw[1], name: '' }; state.taskDept = ''; }
       else if (DEPTS[gd]) state.taskDept = gd;
+      // Пришли ссылкой за целями — обучение «Как здесь работать» не перехватывает
+      // экран: человек открыл чужой план, а видел первый шаг обучения (Роман 20.11.2026).
+      state.guideOn = false; state.guideSkip = true;
       return ['tasks', 'goals'];
     }
     // Встречи из задач и вкладка расписания из EastSide Meeting — теперь раздел
