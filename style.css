@@ -16049,3 +16049,6 @@ video.cs-media { background: #000; }
   font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2); border-radius: 7px; }
 .brd-ip:hover { background: var(--fill); color: var(--blue); }
 .brd-ip:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--blue); }
+
+/* Задачи по карточкам в «Моей смене»: текст задачи и есть суть строки, не режем его */
+.ms-tk .ms-nm small { white-space: normal; overflow: visible; text-overflow: clip; }
