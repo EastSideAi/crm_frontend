@@ -260,6 +260,33 @@ a { color: inherit; text-decoration: none; }
 .vseg button svg { width: 15px; height: 15px; }
 .vseg button.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.1); }
 
+/* ── этап маршрута в строке «Сопровождения» ─────────────────────────────────
+   Полоска по всем этапам и название словом под ней (Мария 20.11.2026, по ее
+   картинке: «сделай только пунктиром как тут»). Насечка на этап, закрытые
+   залиты блеклым синим, текущая — сплошным: далеко ли человек прошел, видно
+   не читая. Нажатие открывает карточку ученика на «Поступлении» — отсюда роль
+   кнопки и кольцо фокуса: с клавиатуры маршрут открывается так же, как мышью. */
+.t-stage { padding: 2px 10px 2px 0; overflow: hidden; cursor: pointer; border-radius: 8px; }
+.t-stage .stbar { display: flex; gap: 2px; }
+.t-stage .sg { height: 6px; flex: 1; border-radius: 2px; background: var(--line-2);
+  transition: .15s; }
+.t-stage .sg.done { background: rgba(47,107,255,.35); }
+.t-stage .sg.open { background: var(--blue-tint); }
+.t-stage .sg.now { background: var(--blue); }
+.t-stage:hover .sg { background: var(--line); }
+.t-stage:hover .sg.done, .t-stage:hover .sg.now { background: var(--blue); }
+.t-stage .stlab { display: flex; align-items: baseline; gap: 7px; margin-top: 6px; }
+.t-stage .stn { font-size: 12.5px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-stage .stp { flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.t-stage:hover .stn { color: var(--blue); }
+.t-stage:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+/* «план не собран» — это зов собрать план, а не состояние ученика: тише этапа,
+   но кнопка та же, и ведет она туда же, где план собирают. Полоски у него нет —
+   рисовать пустой маршрут там, где маршрута еще не существует, значит врать. */
+.t-stage.none .stn { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.t-stage.unknown { font-size: 12px; color: var(--ink-3); cursor: default; }
+
 /* ════ контейнер списка «Клиенты» (тулбар + тело в одной карточке) ════ */
 .listcard { overflow: hidden; }
 .list-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 16px;
@@ -740,6 +767,9 @@ a { color: inherit; text-decoration: none; }
 /* сетки строк */
 .ar-grid { grid-template-columns: 104px 1fr 92px 30px; }
 .lr-grid { grid-template-columns: 138px 1.4fr 130px 170px 110px 30px; }
+/* «Сопровождение»: вместо балла и контакта — этап маршрута (Мария 20.11.2026).
+   Контакт там не нужен: клиенту пишут из карточки, а не копируя почту из списка. */
+.lr-grid.sup { grid-template-columns: 138px 1.4fr 200px 110px 30px; }
 .dl-grid { grid-template-columns: 1.4fr 190px 110px 30px; }
 .tsk-grid { grid-template-columns: minmax(0,1.7fr) 178px 150px 116px; }
 /* Свои задачи: колонки исполнителя нет — в каждой строке стояло бы свое же имя. */
@@ -2170,6 +2200,54 @@ a { color: inherit; text-decoration: none; }
 .doc-fld + .doc-fld { border-top: 1px solid var(--line-2); }
 .doc-fld-l { flex: 0 0 40%; color: var(--ink-2); font-weight: 600; }
 .doc-fld-v { flex: 1 1 auto; min-width: 0; color: var(--ink-1); word-break: break-word; }
+
+/* ── пакет документов: что ждем от семьи (карточка клиента) ──────────────────
+   Вопрос раздела один: чего еще нет. Поэтому несобранное идет списком, а принятое
+   свернуто — два десятка строк «принято» хоронят под собой три нужные. Состояния
+   считает сервер (doc_checklist.package_state), тут только раскладка.
+   Радиус и рамка — как у соседней .doc-flds над ней: две плашки одной роли в одном
+   разделе не должны отличаться скруглением. */
+.dpk { margin-bottom: 18px; border: 1px solid var(--line-2); border-radius: 11px;
+  padding: 12px 13px 11px; }
+.dpk-h { display: flex; align-items: baseline; gap: 10px; }
+.dpk-h b { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+.dpk-cnt { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.dpk-trk { margin-top: 3px; font-size: 11.5px; color: var(--ink-2); line-height: 1.45; }
+.dpk-list { margin-top: 9px; }
+/* Имя документа и причина разворота переносятся, а не обрезаются: в боевом составе
+   есть «Нотариальное согласие на выезд ребенка», а причину возврата пишет человек
+   и длиной она не ограничена. Обрезанная причина — это строка, ради которой тут
+   вообще есть цвет, и прочитать ее надо целиком. */
+.dpk-r { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 9px;
+  padding: 6px 0; font-size: 12.5px; }
+.dpk-r + .dpk-r { border-top: 1px solid var(--line); }
+/* Точка состояния вместо значка: строк два десятка, и ряд иконок читался бы как
+   отдельный интерфейс рядом со списком файлов. */
+.dpk-d { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--line-2);
+  transform: translateY(-1px); }
+.dpk-n { flex: 1 1 auto; min-width: 0; color: var(--ink); line-height: 1.45; }
+.dpk-s { margin-left: auto; flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.dpk-why { flex: 1 0 100%; margin-left: 16px; font-size: 11.5px; line-height: 1.45;
+  color: var(--amber-ink); }
+.dpk-r.fix .dpk-d { background: var(--amber); }
+.dpk-r.fix .dpk-s { color: var(--amber-ink); }
+.dpk-r.rev .dpk-d { background: var(--blue); }
+.dpk-r.rev .dpk-s { color: var(--blue-d); }
+.dpk-r.ok .dpk-d { background: var(--green); }
+.dpk-r.ok .dpk-n { color: var(--ink-2); }
+.dpk-all { margin-top: 9px; font-size: 12.5px; color: var(--green-ink); font-weight: 600; }
+/* Раскрытие — рецепт карточки лида (.m-fold): шеврон, который поворачивается.
+   Своего значка тут заводить нельзя, иначе в одном окне три языка раскрытия. */
+.dpk-done { margin-top: 2px; }
+.dpk-done > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  gap: 7px; padding: 7px 0 2px; user-select: none; }
+.dpk-done > summary::-webkit-details-marker { display: none; }
+.dpk-sum { font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.dpk-n2 { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.dpk-done > summary svg { margin-left: auto; color: var(--ink-3); transform: rotate(90deg);
+  transition: transform .18s; }
+.dpk-done[open] > summary svg { transform: rotate(-90deg); }
+.dpk-done > summary:hover .dpk-sum { color: var(--blue); }
 .doc-by { color: var(--ink-2); font-weight: 600; }
 .doc-by-own { color: var(--ink-3); font-weight: 500; }
 .doc-act { display: flex; gap: 6px; flex: none; }
@@ -5632,6 +5710,28 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .sg2 { grid-template-columns: 1fr; }
   .trow { grid-template-columns: 100px 1fr 80px !important; gap: 10px; padding: 0 14px; }
   .trow .hidem { display: none; }
+  /* «Сопровождение» на телефоне показывает этап (Мария 20.11.2026: «с телефона тоже
+     надо обязательно»). Третьей колонкой он не встает: на 390px имя ученика и
+     название этапа обрезаются оба. Поэтому этап идет второй строкой под именем
+     плашкой — у телефона есть высота, но нет ширины. Дата прихода уходит классом
+     hidem в разметке: у клиента в работе про нее не спрашивают. */
+  .trow.lr-grid.sup { grid-template-columns: 104px minmax(0,1fr) !important;
+    height: auto; padding: 11px 14px; row-gap: 7px; }
+  .trow.lr-grid.sup .t-tutor { grid-row: 1 / span 2; align-self: center; }
+  /* Палец крупнее курсора: плашка держит высоту нажатия, а не рисуется в один пиксель.
+     Рамка пунктиром (Мария 20.11.2026): заливка спорила с цветной плашкой тьютора в
+     той же строке, пунктир говорит «сюда можно нажать» и не добавляет второго пятна. */
+  .trow.lr-grid.sup .t-stage { grid-column: 2; justify-self: start; max-width: 100%;
+    padding: 4px 10px; border-radius: 9px; border: 1px dashed var(--line-2); }
+  .trow.lr-grid.sup .t-stage:hover { border-color: var(--blue); }
+  .trow.lr-grid.sup .t-stage .stn { font-size: 12.5px; font-weight: 600; }
+  /* Полоски этапов на телефоне нет: в плашке шириной в палец шестнадцать насечек
+     сливаются в серый штрих. Там работает сама плашка пунктиром. */
+  .trow.lr-grid.sup .t-stage .stbar { display: none; }
+  .trow.lr-grid.sup .t-stage .stlab { margin-top: 0; }
+  /* Заголовок колонки на телефоне не нужен: плашка стоит под именем, а не столбцом. */
+  .trow.lr-grid.sup.thead .th-stage { display: none; }
+  .trow.lr-grid.sup.thead { height: auto; padding-top: 9px; padding-bottom: 9px; }
   /* на телефоне ряд воронки ломается на две строки: сверху название, число и
      конверсия, снизу полоса во всю ширину. Раньше число прятали, и ряд оставался
      без главной цифры, а длинное название вылезало из фиксированной высоты */
@@ -15913,3 +16013,6 @@ video.cs-media { background: #000; }
   font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2); border-radius: 7px; }
 .brd-ip:hover { background: var(--fill); color: var(--blue); }
 .brd-ip:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--blue); }
+
+/* Задачи по карточкам в «Моей смене»: текст задачи и есть суть строки, не режем его */
+.ms-tk .ms-nm small { white-space: normal; overflow: visible; text-overflow: clip; }
