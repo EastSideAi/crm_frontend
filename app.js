@@ -57934,6 +57934,15 @@
     if (st) nxPaint(id);
     if (!st || Date.now() - st.at > NX_TTL) nxLoad(id).then(function () { nxPaint(id); }).catch(function () {});
   }
+  // Тариф поменяли прямо в карточке: строку ставим или убираем без перерисовки вкладки.
+  function nxRefresh(id, tariff) {
+    var old = el('nx-strip');
+    if (old) old.parentNode.removeChild(old);
+    if (state.nx) delete state.nx[id];
+    var host = el('m-content');
+    if (!host || state.drawerId !== id) return;
+    nxMount(host, id, { crm: { overrides: { tariff: tariff } } });
+  }
   // Действие, ради которого строка привела в «Оплаты». Берется один раз.
   function nxTake(id, kind) {
     var p = state.nxPending;
@@ -58537,6 +58546,7 @@
       if (tarSel) tarSel.addEventListener('change', function () {
         patch(id, { overrides: { tariff: tarSel.value } });
         state._mapAt = 0;   // карта считает по тарифам — пусть перечитает при заходе
+        nxRefresh(id, tarSel.value);   // поставили тариф — сразу виден первый шаг
       });
       // направление: опции приезжают с бэкенда, поэтому заполняем после загрузки
       var trSel = qlHost.querySelector('select[data-track]');
