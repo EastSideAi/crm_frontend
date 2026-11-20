@@ -41209,7 +41209,8 @@
      его сама, звонок со своего телефона продавец отмечает кнопкой «дозвонился / не взял /
      номер не тот». Состояние человека считает сервер (sales_dial.dial_state), одно на
      «Продажи», «Мою смену» и карточку. */
-  var DIAL_RES = { reached: 'дозвонился', no_answer: 'не взял', bad_number: 'номер не тот' };
+  var DIAL_RES = { reached: 'дозвонился', no_answer: 'не взял', bad_number: 'номер не тот',
+                   chat_ok: 'подтвердил в переписке' };
   var DIAL_STAGE = { free: 'без менеджера', respond: 'ждет касания', follow: 'дожимаем',
                      meet: 'ждет встречи', decide: 'думает' };
   function dialLoad() {
@@ -42940,7 +42941,12 @@
     var p = { id: m.id, phone: m.phone, chat: m.chat, dial: m.dial };
     var meta = [m.kind === 'slot' ? 'записался в окно' : 'консультация', m.with ? 'ведет ' + m.with : '', m.confirmed ? msWhen(m.at) : '']
       .filter(Boolean).join(' · ');
-    var dl = !m.confirmed && m.phone ? '<span class="ms-dl"><span class="ms-dls">' + esc(dialSum(m.dial)) + '</span>' + dialMarks(m.id) + '</span>' : '';
+    // Подтвердить можно и в переписке: у кого нет телефона, звонком встречу не подтвердить
+    // (Павел 20.11.2026, Алина). Отметка chat_ok в обзвон не идет, только в подтверждение.
+    var chatOk = '<span class="dl-mk"><button type="button" class="dl-b reached" data-dlmark="chat_ok" data-dlid="' +
+      esc(m.id) + '">подтвердил в переписке</button></span>';
+    var dl = m.confirmed ? '' : '<span class="ms-dl">' +
+      (m.phone ? '<span class="ms-dls">' + esc(dialSum(m.dial)) + '</span>' + dialMarks(m.id) : '') + chatOk + '</span>';
     return '<div class="ms-row"><div class="ms-nm"><b>' + esc(m.name) + '</b><small>' + esc(meta) + '</small>' + dl + '</div>' +
       st + msActs(p, m.confirmed ? 'meet' : 'confirm', cc) + '</div>';
   }
@@ -42994,7 +43000,7 @@
         d.hot.map(function (p) { return msRow(p, 'hot', cc); }).join(''), 'Все, кто записался, уже на связи.') +
       msSection('respond', 'Ответить сейчас', 'твои лиды, с которыми еще никто не связался; позвони, не дозвонился — напиши в диалог',
         d.respond.map(function (p) { return msRow(p, 'respond', cc); }).join(''), 'Новых без ответа нет.') +
-      msSection('confirm', 'Подтвердить завтрашние встречи', 'звонок накануне поднимает явку; дозвонился — встреча подтверждена, не взял — скопируй текст и напиши',
+      msSection('confirm', 'Подтвердить завтрашние встречи', 'звонок накануне поднимает явку; дозвонился или семья ответила в переписке — встреча подтверждена, не взял — скопируй текст и напиши',
         (d.confirm || []).map(function (m) { return msConfirmRow(m, cc); }).join(''), 'На завтра встреч нет.') +
       msSection('retry', 'Не взяли трубку', 'недозвоны прошлых дней; позвони в другое время дня, не взял снова — скопируй текст и напиши',
         (d.retry || []).map(function (p) { return msRow(p, 'retry', cc); }).join(''), 'Недозвонов с прошлых дней нет.') +
