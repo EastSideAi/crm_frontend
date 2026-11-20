@@ -40675,7 +40675,8 @@
     SB_REG_KINDS.forEach(function (x) { out.by[x.k] = {n: 0, c: 0}; out.list[x.k] = []; });
     out.list.all = [];
     (cc.leads || []).forEach(function (l) {
-      if (l.nl === 'family') return;
+      // склеенный дубль не лид: человек один, и это главная карточка (поле mg сервера)
+      if (l.nl === 'family' || l.mg) return;
       // ra — все записи на эфиры [дата, слаг, смотрел]; без него (старый ответ сервера) только интенсивы
       var all = l.ra ? l.ra.map(function (r) { return [r[0], r[2], r[1]]; })
         : (l.rg || (l.reg ? [[l.reg, l.w ? 1 : 0]] : [])).map(function (r) { return [r[0], r[1], 'intensive']; });
