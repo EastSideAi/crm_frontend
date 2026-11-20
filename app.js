@@ -29673,8 +29673,10 @@
     ];
     var rows = secs.map(function (s) {
       var ok = s.submitted;
-      var badge = '<span class="pl-badge ' + (ok ? 'ok' : 'no') + '">' +
-        (ok ? 'сдан' : 'не сдан') + '</span>';
+      // Черновик из прошлого месяца ждет руководителя: плана еще нет, но его осталось
+      // только сверить и принять (6380).
+      var badge = '<span class="pl-badge ' + (ok ? 'ok' : (s.draft ? 'draft' : 'no')) + '">' +
+        (ok ? 'сдан' : (s.draft ? 'черновик' : 'не сдан')) + '</span>';
       var planCell = ok
         ? '<span class="pl-sum num">' + finRub(s.plan) + '</span>'
         : '<span class="pl-sum num muted">—</span>';
@@ -29698,7 +29700,9 @@
         '</div>' + finMonthNav() + '</div>' +
         '<div class="pl-list">' + rows + '</div>' +
         '<div class="fin-note">' + ic('alert', 13) +
-          'Отдел «сдал», как только в плане на этот месяц есть хотя бы одна строка. ' +
+          'Отдел «сдал», когда руководитель внес план в своем блоке «План на месяц» или ' +
+          'принял черновик из прошлого месяца. Строка, которую финансист завел прямо в ' +
+          'ведомости, планом отдела не считается. ' +
           'Факт подтягивается сам по датам расходов — план и факт стоят рядом. ' +
           'В плане строка бывает двух видов: человек — с выплатой на 10-е и на 20-е, ' +
           'прочий расход — одной суммой.' +
@@ -29861,10 +29865,16 @@
           '<span>план <b>' + finRub(ll.plan) + '</b></span>' +
           '<span>факт <b>' + finRub(ll.fact) + '</b></span>' + state +
         '</div>' +
-        (rowsH || '<div class="plm-empty">Плановых строк на ' + esc(finMonthLabel(m)) +
-          ' еще нет.</div>') +
-        '<button class="qchip add plm-add" data-plm="add">' + ic('plus', 12) +
-          'Строка плана</button>';
+        finPlanDraftHtml(ll.draft) +
+        (rowsH || (ll.draft ? '' : '<div class="plm-empty">Плановых строк на ' +
+          esc(finMonthLabel(m)) + ' еще нет.</div>')) +
+        '<div class="plm-tools">' +
+          '<button class="qchip add plm-add" data-plm="add">' + ic('plus', 12) +
+            'Строка плана</button>' +
+          // Подставить черновик из прошлого месяца руками (6380): план не с нуля.
+          (!ll.draft && !items.length ? '<button class="qchip plm-add" data-plm="draft">' +
+            ic('copy', 12) + 'Подставить из прошлого месяца</button>' : '') +
+        '</div>';
     }
     return '<div class="card plm-card" data-plmsec="' + esc(section) + '">' +
       '<div class="plm-head"><div>' +
@@ -29874,9 +29884,87 @@
       '</div>' + finMonthNav() + '</div>' + body +
     '</div>';
   }
+  /* Черновик плана из прошлого месяца (задача 6380, Роман 20.11.2026): система
+     собирает его из расходов отдела, руководитель правит суммы, убирает лишнее и
+     принимает. До «Принять» строк в ведомости нет — черновик живет отдельно. Правки
+     держим прямо в объекте черновика, чтобы перерисовка экрана их не теряла. */
+  function finPlanDraftHtml(dr) {
+    if (!dr) return '';
+    var lines = dr.lines || [];
+    var total = lines.reduce(function (a, x) { return a + (+x.amount || 0); }, 0);
+    var rows = lines.map(function (x, i) {
+      var sub = x.kind === 'person'
+        ? '10-е ' + finRub(x.pay10 || 0) + ' · 20-е ' + finRub(x.pay20 || 0)
+        : (x.comment || '');
+      var amt = x.kind === 'person'
+        ? '<span class="plm-sum num">' + finRub(x.amount) + '</span>'
+        : '<input class="al-in sm plmd-in num" type="number" min="0" step="1" ' +
+            'data-plmdam="' + i + '" value="' + esc(String(Math.round(+x.amount || 0))) + '">';
+      return '<div class="plmd-row">' +
+        '<span class="plm-it">' + esc(x.item) + (sub ? '<i>' + esc(sub) + '</i>' : '') + '</span>' +
+        amt +
+        '<button class="plm-del" data-plmddel="' + i + '" title="Убрать из черновика">' +
+          ic('x', 12) + '</button>' +
+      '</div>';
+    }).join('');
+    return '<div class="plmd">' +
+      '<div class="plmd-head">' +
+        '<span class="plmd-ic">' + ic('copy', 14) + '</span>' +
+        '<div class="plmd-tx"><b>Черновик из ' + esc(finMonthLabel(dr.from_month)) + '</b>' +
+          '<small>расходы отдела за прошлый месяц. поправьте суммы, уберите лишнее и примите — ' +
+          'тогда строки встанут в план</small></div>' +
+        '<span class="plmd-tot num">' + finRub(total) + '</span>' +
+      '</div>' +
+      (rows || '<div class="plm-empty">В черновике не осталось строк.</div>') +
+      '<div class="plmd-foot">' +
+        '<button class="bp sm" data-plmd="ok"' + (lines.length ? '' : ' disabled') +
+          '>Принять в план</button>' +
+        '<button class="bp sm ghost" data-plmd="no">Убрать черновик</button>' +
+      '</div>' +
+    '</div>';
+  }
+  function finWirePlanDraft(card, section) {
+    var ll = (FIN.planlines || {})[section];
+    var dr = ll && ll.draft;
+    if (!dr) return;
+    Array.prototype.forEach.call(card.querySelectorAll('[data-plmdam]'), function (inp) {
+      inp.addEventListener('click', function (e) { e.stopPropagation(); });
+      inp.addEventListener('input', function () {
+        var x = dr.lines[+inp.getAttribute('data-plmdam')];
+        if (x) x.amount = Math.max(0, +inp.value || 0);
+        var tot = card.querySelector('.plmd-tot');
+        if (tot) tot.textContent = finRub(dr.lines.reduce(function (a, y) {
+          return a + (+y.amount || 0); }, 0));
+      });
+    });
+    Array.prototype.forEach.call(card.querySelectorAll('[data-plmddel]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        dr.lines.splice(+b.getAttribute('data-plmddel'), 1);
+        renderAll();
+      });
+    });
+    Array.prototype.forEach.call(card.querySelectorAll('[data-plmd]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var body = { section: section, month: finPlanMonth() };
+        if (b.getAttribute('data-plmd') === 'ok') {
+          body.lines = dr.lines;
+          finDo('/admin/api/fin/plan-draft/accept', 'POST', body, 'План принят');
+        } else {
+          finConfirm('Убрать черновик?',
+            'Строки из прошлого месяца не встанут в план. Внести план можно будет руками.',
+            'Убрать', function () {
+              finDo('/admin/api/fin/plan-draft/dismiss', 'POST', body, 'Черновик убран');
+            });
+        }
+      });
+    });
+  }
   function finWirePlanBlock(view, section) {
     var card = view.querySelector('.plm-card');
     if (!card) return;
+    finWirePlanDraft(card, section);
     Array.prototype.forEach.call(card.querySelectorAll('[data-plm]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -29884,6 +29972,10 @@
         if (a === 'prev') finMonthShift(-1);
         else if (a === 'next') finMonthShift(1);
         else if (a === 'add') finPlanLineForm(section, null);
+        else if (a === 'draft') {
+          finDo('/admin/api/fin/plan-draft/build', 'POST',
+            { section: section, month: finPlanMonth() }, 'Черновик собран');
+        }
       });
     });
     Array.prototype.forEach.call(card.querySelectorAll('[data-plmdel]'), function (b) {

@@ -12520,6 +12520,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   letter-spacing: .01em; white-space: nowrap; }
 .pl-badge.ok { color: var(--green-ink); background: var(--green-soft); }
 .pl-badge.no { color: var(--red-ink); background: var(--red-soft); }
+.pl-badge.draft { color: var(--amber-ink); background: var(--amber-soft); }
 .pl-val { display: flex; flex-direction: column; align-items: flex-end; min-width: 96px; }
 .pl-sum { font-size: 14px; font-weight: 650; color: var(--ink); }
 .pl-sum.muted { color: var(--ink-3); font-weight: 500; }
@@ -12595,6 +12596,30 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .plm-empty, .plm-load { padding: 14px 4px; font-size: 13px; color: var(--ink-3);
   border-top: 1px solid var(--line); }
 .plm-add { align-self: flex-start; margin-top: 2px; }
+.plm-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.plm-tools .plm-add { align-self: auto; margin-top: 0; }
+/* Черновик плана из прошлого месяца (6380): отдельная подложка над строками плана,
+   чтобы не спутать предложение системы с принятым планом. */
+.plmd { border-radius: 12px; background: var(--blue-tint); padding: 12px 12px 10px;
+  display: flex; flex-direction: column; gap: 2px; animation: plmdIn .22s ease both; }
+@keyframes plmdIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.plmd-head { display: flex; align-items: center; gap: 10px; padding-bottom: 6px; }
+.plmd-ic { width: 28px; height: 28px; flex: none; display: grid; place-items: center;
+  border-radius: 8px; background: var(--card); color: var(--blue); }
+.plmd-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.plmd-tx b { font-size: 13.5px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.plmd-tx small { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
+.plmd-tot { font-size: 15px; font-weight: 700; color: var(--ink); font-feature-settings: 'tnum'; }
+.plmd-row { display: grid; grid-template-columns: 1fr 120px 28px; align-items: center; gap: 10px;
+  padding: 7px 0; border-top: 1px solid rgba(15, 23, 42, .06); }
+.plmd-row .plm-del { opacity: 1; }
+.plmd-row .plm-sum { text-align: right; padding-right: 10px; }
+.plmd-in { width: 100%; text-align: right; font-feature-settings: 'tnum'; }
+.plmd-foot { display: flex; gap: 8px; padding-top: 8px; flex-wrap: wrap; }
+@media (max-width: 560px) {
+  .plmd-row { grid-template-columns: 1fr 96px 28px; gap: 8px; }
+  .plmd-head { align-items: flex-start; }
+}
 /* Строка-человек: план на 10-е и 20-е под именем чипами «выплачено», итого справа. */
 .plm-split { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   margin-top: 5px; }
