@@ -53680,6 +53680,96 @@
     window.open(location.origin + '/zvonilka/#n=' + encodeURIComponent(num) + '&go=1', 'es-zvonilka');
   }
 
+  // ── Входящие прямо в CRM (Вера 20.11.2026: «Константину… видно, даже если он в
+  // другом разделе; звук телефона и мигалками страница»). Линия — та же звонилка в
+  // режиме рамки (/zvonilka/?embed=1) в углу экрана: она держит регистрацию на АТС и
+  // показывает сам звонок с кнопками, а CRM поверх любого раздела звонит, мигает
+  // рамкой и заголовком вкладки и шлет уведомление, если вкладка в фоне. Рамку
+  // получает только право phone_in: входящие на АТС звонят одной линии crmin.
+  var PL = { dock: null, frame: null, ring: null, blink: null, title: '', num: '', name: '' };
+  function plMount() {
+    if (PL.dock || !can('phone') || !can('phone_in')) return;
+    var d = document.createElement('div');
+    d.className = 'pl-dock'; d.id = 'pl-dock';
+    d.innerHTML = '<iframe class="pl-frame" title="Телефон" allow="microphone; autoplay" src="' +
+      location.origin + '/zvonilka/?embed=1"></iframe>';
+    document.body.appendChild(d);
+    var fl = document.createElement('div');
+    fl.className = 'pl-flash'; fl.id = 'pl-flash';
+    document.body.appendChild(fl);
+    PL.dock = d; PL.frame = d.firstChild;
+    window.addEventListener('message', plMsg);
+    // Разрешение на уведомления браузер дает только в ответ на нажатие: просим на первом.
+    document.addEventListener('click', plAskNotify, true);
+  }
+  function plAskNotify() {
+    document.removeEventListener('click', plAskNotify, true);
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  }
+  function plMsg(e) {
+    var m = e.data;
+    if (e.origin !== location.origin || !PL.frame || e.source !== PL.frame.contentWindow) return;
+    if (!m || m.es !== 'pbx') return;
+    if (m.t === 'off') { plUnmount(); return; }
+    if (m.t === 'size') { PL.frame.style.height = Math.max(44, Math.min(420, m.h | 0)) + 'px'; return; }
+    if (m.t === 'line') { PL.dock.setAttribute('data-line', m.state); return; }
+    if (m.t === 'ring') { PL.num = m.num || ''; PL.name = ''; plAlarm(true); return; }
+    if (m.t === 'who') { PL.name = m.name || ''; if (PL.ring) plNotify(); return; }
+    if (m.t === 'talk') { plAlarm(false); PL.dock.classList.add('talk'); return; }
+    if (m.t === 'end') { plAlarm(false); return; }
+    if (m.t === 'idle') { PL.dock.classList.remove('talk'); return; }
+    if (m.t === 'open' && m.lead) { location.hash = '#lead/' + m.lead; return; }
+  }
+  function plUnmount() {
+    plAlarm(false);
+    window.removeEventListener('message', plMsg);
+    [PL.dock, el('pl-flash')].forEach(function (n) { if (n && n.parentNode) n.parentNode.removeChild(n); });
+    PL.dock = PL.frame = null;
+  }
+  function plWho() {
+    var n = PL.num ? msPhone(PL.num) : 'Скрытый номер';
+    return PL.name ? PL.name + ' · ' + n : n;
+  }
+  // Звонит: два тона, мигает рамка страницы и заголовок вкладки. Все гаснет одним
+  // вызовом с false — на ответ, отбой и пропущенный.
+  function plAlarm(on) {
+    document.documentElement.classList.toggle('pl-ringing', on);
+    if (PL.dock) PL.dock.classList.toggle('ring', on);
+    if (on && !PL.ring) {
+      PL.title = document.title;
+      var odd = false;
+      PL.blink = setInterval(function () {
+        odd = !odd;
+        document.title = odd ? 'Звонит ' + plWho() : 'Входящий звонок';
+      }, 900);
+      try {
+        var C = window.AudioContext || window.webkitAudioContext, ctx = new C(), g = ctx.createGain();
+        g.gain.value = 0; g.connect(ctx.destination);
+        [440, 480].forEach(function (f) { var o = ctx.createOscillator(); o.frequency.value = f; o.connect(g); o.start(); });
+        var t = 0;
+        // Ритм обычного телефона: секунда звонка, две тишины.
+        PL.ring = { ctx: ctx, iv: setInterval(function () { g.gain.setTargetAtTime(t++ % 3 === 0 ? 0.12 : 0, ctx.currentTime, 0.02); }, 1000) };
+        g.gain.setTargetAtTime(0.12, ctx.currentTime, 0.02);
+      } catch (e) { PL.ring = { ctx: null, iv: null }; }
+      plNotify();
+    } else if (!on && PL.ring) {
+      clearInterval(PL.ring.iv);
+      try { if (PL.ring.ctx) PL.ring.ctx.close(); } catch (e) {}
+      PL.ring = null;
+      clearInterval(PL.blink); PL.blink = null;
+      document.title = PL.title || document.title;
+      if (PL.note) { try { PL.note.close(); } catch (e) {} PL.note = null; }
+    }
+  }
+  function plNotify() {
+    if (!document.hidden || !window.Notification || Notification.permission !== 'granted') return;
+    try {
+      if (PL.note) PL.note.close();
+      PL.note = new Notification('Входящий звонок', { body: plWho(), tag: 'es-call', requireInteraction: true });
+      PL.note.onclick = function () { window.focus(); if (PL.note) PL.note.close(); };
+    } catch (e) {}
+  }
+
   function pcButton(id) {
     if (!can('phone') || !pcPhones(id).length) return '';
     var many = pcPhones(id).length > 1;
@@ -61759,6 +61849,7 @@
       if (NAV_ALL[i].id === hp[0] && can(NAV_ALL[i].cap)) { state.page = hp[0]; applyPageSeg(hp[0], hp[1]); break; }
     }
     renderShell();
+    plMount();
     /* Список людей и переписку тянем только тем, у кого есть на них права: у
        преподавателя их нет, а неудачный запрос CRM трактует как «сессия истекла»
        и выкидывает на вход. */
