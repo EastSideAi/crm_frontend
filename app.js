@@ -57781,7 +57781,7 @@
           return '<button type="button" class="pg-r" data-pgo="' + g[2] + '"><span class="pg-w">' + g[0] + '</span>' +
             '<span class="pg-t">' + g[1] + ic('go', 11) + '</span></button>';
         }).join('') +
-        '<div class="pg-rule">Крупные платежи принимаем переводом на счет ИП по QR, без комиссии. Ссылка ЮKassa для сумм примерно до 30 000 ₽.</div>' +
+        '<div class="pg-rule">Крупные платежи принимаем переводом на счет ИП по QR, без комиссии. Ссылка ЮKassa для сумм примерно до 30&nbsp;000&nbsp;₽.</div>' +
       '</div>' +
       /* Быстрый счёт: сумма + назначение → долгая ссылка ЮKassa (без разбора на
          позиции, как в конструкторе ниже). Клиенту НЕ уходит сам — сначала «выставлен»,
@@ -59164,7 +59164,7 @@
             linkBox = '<div class="ord-link" data-linkbox="' + o.id + '">' +
               '<button class="oi-mark" data-getbank="' + o.id + '">QR на перевод ВТБ</button>' +
               '<button class="oi-mark" data-getlink="' + o.id + '">Ссылка ЮKassa</button>' +
-              '<span class="oi-hint">Крупный взнос — QR, деньги идут на счет ИП без комиссии. ЮKassa — примерно до 30 000 ₽.</span></div>';
+              '<span class="oi-hint">Крупный взнос — QR, деньги идут на счет ИП без комиссии. ЮKassa — примерно до 30&nbsp;000&nbsp;₽.</span></div>';
           } else if (payable && DEAL_TARIFFS.indexOf(o.tariff_id) >= 0) {
             linkBox = '<div class="ord-link"><span class="oi-hint">Ссылку и QR по сопровождению выдаем после сделки: блок «Сделка по сопровождению» выше.</span></div>';
           } else if (payable) {
