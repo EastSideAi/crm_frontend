@@ -16107,26 +16107,31 @@ video.cs-media { background: #000; }
 /* Задачи по карточкам в «Моей смене»: текст задачи и есть суть строки, не режем его */
 .ms-tk .ms-nm small { white-space: normal; overflow: visible; text-overflow: clip; }
 
-/* «Как принять оплату» в карточке (Павел 19.11.2026): ситуация → блок, без рамок,
-   строки делит полупрозрачная линия. Правило про крупные платежи — последней строкой. */
-.pay-guide { margin: 0 0 26px; padding: 14px 16px 12px; border-radius: var(--r-lg); background: var(--fill); }
-.pg-h { font: 700 13px 'Manrope', sans-serif; color: var(--ink); letter-spacing: -.01em; margin-bottom: 6px; }
-.pg-r { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
-  padding: 8px 0; border: 0; border-top: 1px solid var(--line); background: none; cursor: pointer; text-align: left;
-  font: 500 13px/1.35 'Manrope', sans-serif; color: var(--ink-2); }
-.pg-r:first-of-type { border-top: 0; }
-.pg-t { display: inline-flex; align-items: center; gap: 4px; flex: none; font-weight: 700; font-size: 12.5px; color: var(--blue); white-space: nowrap; }
-.pg-r:hover .pg-w { color: var(--ink); }
-.pg-r:hover .pg-t { gap: 7px; }
-.pg-t, .pg-w { transition: color .15s ease, gap .15s ease; }
-.pg-r:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
-.pg-rule { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line);
-  font: 600 12.5px/1.45 'Manrope', sans-serif; color: var(--navy); }
 .ord-newsub { font: 500 12px/1.4 'Manrope', sans-serif; color: var(--ink-3); margin: 2px 0 10px; }
-/* блок, к которому привела подсказка, коротко подсвечивается */
+/* блок, к которому привела строка «Следующий шаг», коротко подсвечивается */
 @keyframes pgHit { 0% { background: color-mix(in srgb, var(--blue) 12%, transparent); } 100% { background: transparent; } }
 .pg-hit { animation: pgHit 1.6s ease-out; border-radius: var(--r-lg); }
+
+/* «Следующий шаг» над любой вкладкой карточки (Роман и Павел 20.11.2026): что сделать,
+   чтобы клиент с тарифом сопровождения заплатил. Одна строка и кнопка, без инструкций. */
+.nx-strip { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; padding: 10px 10px 10px 14px;
+  border-radius: var(--r-lg); background: var(--blue-tint); animation: nxIn .25s ease-out; }
+.nx-strip[hidden] { display: none; }
+.nx-ic { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px;
+  background: #fff; color: var(--blue); }
+.nx-b { flex: 1; min-width: 0; font: 500 13px/1.35 'Manrope', sans-serif; color: var(--ink-2); }
+.nx-k { display: block; font-size: 11.5px; font-weight: 700; color: var(--blue); margin-bottom: 1px; }
+.nx-t { color: var(--navy); font-weight: 700; letter-spacing: -.01em; }
+.nx-go { flex: none; }
+.nx-x { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 8px;
+  background: none; color: var(--ink-3); cursor: pointer; transition: color .15s ease, background .15s ease; }
+.nx-x:hover { color: var(--ink); background: rgba(28, 43, 74, .06); }
+.nx-x:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+@keyframes nxIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 @media (max-width: 600px) {
-  .pg-r { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .nx-strip { flex-wrap: wrap; gap: 10px; }
+  .nx-b { flex-basis: calc(100% - 80px); }
+  .nx-go { width: 100%; justify-content: center; }
+  .nx-ic { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .pg-hit { animation: none; } .pg-t, .pg-w { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .pg-hit, .nx-strip { animation: none; } }

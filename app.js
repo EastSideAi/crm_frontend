@@ -53575,6 +53575,7 @@
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // Плашка «это дубль» — над ЛЮБОЙ секцией: работать в дубле нельзя нигде, и
     // человек, пришедший по ссылке сразу в «Оплаты», обязан это увидеть.
+    nxMount(host, id, ctx);
     var dupN = dupBanner(ctx);
     if (dupN) host.insertAdjacentHTML('afterbegin', dupN);
 
@@ -57842,15 +57843,109 @@
     }).catch(function () { showToast('Не удалось загрузить преподавателей'); });
   }
 
-  /* Ситуация → блок. Третье поле — id блока, куда ведет строка. Сопровождение ведет
-     в сделку, а если сделка уже оформлена (блок спрятан) — в «Счета клиента». */
-  var PAY_GUIDE = [
-    ['Сопровождение по договору: Стандарт, Стандарт Плюс, Премиум', 'Сделка по сопровождению', 'deal-sec'],
-    ['Консультация или другая разовая сумма', 'Быстрый счет', 'qi-sec'],
-    ['Продукт из каталога не по договору', 'Новый счет', 'ord-new'],
-    ['Уроки языков', 'Счет за уроки', 'sch-sec'],
-    ['Заплатили наличными или переводом мимо кассы', 'Записать вручную', 'pay-manual'],
-  ];
+  /* «Следующий шаг» (Роман и Павел 20.11.2026). Менеджер не знает, что за деньгами
+     идти в «Оплаты», а там пять блоков. Поэтому у клиента с тарифом сопровождения над
+     любой вкладкой висит одна строка: что сделать дальше, и кнопка, которая это делает.
+     Шаги идут сами: нет договора → загрузить, договор есть → оформить сделку, сделка
+     есть → отправить QR. Пришел первый платеж — строки нет. Видит тот, кто принимает
+     оплату (pay_create): тьютору и преподавателю она ни к чему. */
+  var NX_TARIFFS = ['std', 'plus', 'prem'];
+  var NX_TTL = 10 * 1000;   // договор могли положить во вкладке «Документы» секунду назад
+  function nxTariff(ctx) {
+    var t = ((ctx.crm && ctx.crm.overrides) || {}).tariff;
+    return NX_TARIFFS.indexOf(t) >= 0 ? t : null;
+  }
+  // Шаг по счетам клиента: сделка с деньгами — готово, сделка без денег — шаг 3.
+  function nxFromOrders(orders) {
+    var dl = (orders || []).filter(function (o) { return o.deal && o.status !== 'canceled'; })[0];
+    if (!dl) return null;
+    if (dl.status === 'paid' || (dl.paid_total || 0) > 0) return { step: 0 };
+    return { step: 3, oid: dl.id, no: dl.deal.contract_no };
+  }
+  function nxLoad(id) {
+    state.nx = state.nx || {};
+    return api('/admin/api/leads/' + id + '/orders').then(function (r) {
+      var st = nxFromOrders(r.orders);
+      if (st) return st;
+      return api('/admin/api/leads/' + id + '/deal-draft').then(function (d) {
+        var docs = (d && d.contract_docs) || [];
+        return docs.length ? { step: 2, doc: docs[0].name } : { step: 1 };
+      });
+    }).then(function (st) {
+      st.at = Date.now();
+      state.nx[id] = st;
+      return st;
+    });
+  }
+  // Раздел «Оплаты» сам перечитал счета — строка обновляется без второго запроса.
+  function nxSync(id, orders) {
+    state.nx = state.nx || {};
+    var st = nxFromOrders(orders);
+    var cur = state.nx[id];
+    if (st) { st.at = Date.now(); state.nx[id] = st; }
+    else if (cur && cur.step === 3) delete state.nx[id];   // сделку отменили
+    else return;
+    if (state.drawerId === id) nxPaint(id);
+  }
+  var NX_TEXT = {
+    1: ['Загрузите подписанный договор', 'Или тот, что отправили семье: CRM прочитает из него сумму и график.', 'Загрузить договор', 'doc'],
+    2: ['Оформите сделку по договору', 'Договор уже в документах. CRM заполнит сделку, вам проверить и подтвердить.', 'Оформить сделку', 'check'],
+    3: ['Отправьте семье QR или ссылку на оплату', 'Крупную сумму по QR на счет ИП, без комиссии. ЮKassa примерно до 30 000 ₽.', 'Открыть QR и ссылку', 'coins'],
+  };
+  function nxPaint(id) {
+    var box = el('nx-strip');
+    if (!box || state.drawerId !== id) return;
+    var st = state.nx && state.nx[id];
+    var off = (state.nxOff || {})[id];
+    if (!st || !st.step || off === st.step) { box.hidden = true; box.innerHTML = ''; return; }
+    var t = NX_TEXT[st.step];
+    var sub = st.step === 3 && st.no ? 'Договор № ' + st.no + '. ' + t[1] : t[1];
+    box.hidden = false;
+    box.innerHTML = '<span class="nx-ic">' + ic(t[3], 15) + '</span>' +
+      '<div class="nx-b"><span class="nx-k">Следующий шаг · ' + st.step + ' из 3</span>' +
+        '<span class="nx-t">' + esc(t[0]) + '.</span> ' + esc(sub) + '</div>' +
+      '<button class="bp sm nx-go" id="nx-go">' + esc(t[2]) + ic('go', 12) + '</button>' +
+      '<button class="nx-x" id="nx-x" title="Скрыть до следующего шага">' + ic('x', 13) + '</button>' +
+      (st.step === 1 ? '<input type="file" id="nx-file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>' : '');
+    el('nx-x').addEventListener('click', function () {
+      state.nxOff = state.nxOff || {};
+      state.nxOff[id] = st.step;
+      nxPaint(id);
+    });
+    el('nx-go').addEventListener('click', function () {
+      // Шаг 1: файл выбираем прямо отсюда, разбор договора идет уже в «Оплатах».
+      if (st.step === 1) return el('nx-file').click();
+      state.nxPending = { id: id, kind: st.step === 2 ? 'doc' : 'pay', oid: st.oid };
+      setModalSection('pay');
+    });
+    var fi = el('nx-file');
+    if (fi) fi.addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      state.nxPending = { id: id, kind: 'file', file: f };
+      setModalSection('pay');
+    });
+  }
+  // Ставится над любой вкладкой. Свежий шаг рисуем сразу, устаревший — перечитываем.
+  function nxMount(host, id, ctx) {
+    if (!can('pay_create') || !nxTariff(ctx)) return;
+    host.insertAdjacentHTML('afterbegin', '<div class="nx-strip" id="nx-strip" hidden></div>');
+    var st = state.nx && state.nx[id];
+    if (st) nxPaint(id);
+    if (!st || Date.now() - st.at > NX_TTL) nxLoad(id).then(function () { nxPaint(id); }).catch(function () {});
+  }
+  // Действие, ради которого строка привела в «Оплаты». Берется один раз.
+  function nxTake(id, kind) {
+    var p = state.nxPending;
+    if (!p || p.id !== id || p.kind !== kind) return null;
+    state.nxPending = null;
+    return p;
+  }
+  function nxHit(t) {
+    if (!t) return;
+    t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    t.classList.remove('pg-hit'); void t.offsetWidth; t.classList.add('pg-hit');
+  }
 
   function buildPaySection(ctx) {
     var pays = (ctx.d && ctx.d.payments) || [];
@@ -57915,15 +58010,6 @@
     var manualCount = pays.length;
     return '<div class="m-ctitle">Оплаты</div>' +
       board +
-      /* Подсказка «какой блок жать» (Павел 19.11.2026: блоков пять, менеджер путает,
-         куда идти). Каждая строка ведет к своему блоку и подсвечивает его. */
-      '<div class="pay-guide"><div class="pg-h">Как принять оплату</div>' +
-        PAY_GUIDE.map(function (g) {
-          return '<button type="button" class="pg-r" data-pgo="' + g[2] + '"><span class="pg-w">' + g[0] + '</span>' +
-            '<span class="pg-t">' + g[1] + ic('go', 11) + '</span></button>';
-        }).join('') +
-        '<div class="pg-rule">Крупные платежи принимаем переводом на счет ИП по QR, без комиссии. Ссылка ЮKassa для сумм примерно до 30&nbsp;000&nbsp;₽.</div>' +
-      '</div>' +
       /* Быстрый счёт: сумма + назначение → долгая ссылка ЮKassa (без разбора на
          позиции, как в конструкторе ниже). Клиенту НЕ уходит сам — сначала «выставлен»,
          и только по красной кнопке «Отправить клиенту» ссылка улетает ему в бота
@@ -59071,6 +59157,9 @@
           var f = e.target.files && e.target.files[0];
           if (f) uploadContract(f);
         });
+        // файл выбрали в строке «Следующий шаг» — читаем его сразу, второй раз не спрашиваем
+        var nf = nxTake(id, 'file');
+        if (nf) { nxHit(dealSec); uploadContract(nf.file); }
         /* Договоры хранят в «Документах» карточки. Если он там уже есть — берем оттуда,
            второй раз файл не грузим; загрузка остается для случая, когда договора нет. */
         api('/admin/api/leads/' + id + '/deal-draft').then(function (d) {
@@ -59095,6 +59184,8 @@
                 });
             });
           });
+          // «Оформить сделку» из строки: берем самый свежий договор, как кнопка выше
+          if (nxTake(id, 'doc')) { nxHit(dealSec); acts.querySelector('.deal-fromdoc').click(); }
         }).catch(function () {});
       };
       /* Заготовка с сервера (тарифы, продавец, номер) и поверх нее — то, что прочли из
@@ -59272,6 +59363,7 @@
         });
       };
       var renderOrders = function (orders) {
+        nxSync(id, orders);
         dealIdle(orders);
         if (!orders || !orders.length) {
           ordList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте первый ниже.</div>';
@@ -59352,6 +59444,9 @@
             '<div class="oi-hint">Пришёл платёж мимо кассы — по ссылке из панели ЮKassa или переводом? Отметьте взнос оплаченным, и он уйдёт из дебиторки.</div>' +
             rows + '</div>';
         }).join('');
+        // пришли сюда по строке «Отправьте семье QR» — показываем кнопки этой сделки
+        var np = nxTake(id, 'pay');
+        if (np) nxHit(ordList.querySelector('[data-linkbox="' + np.oid + '"]') || el('ord-sec'));
         // тумблер раскрытия
         Array.prototype.forEach.call(ordList.querySelectorAll('.ord-oh'), function (h) {
           h.addEventListener('click', function () {
@@ -59712,17 +59807,6 @@
         });
       };
       loadQI();
-      // «Как принять оплату»: строка ведет к блоку и коротко подсвечивает его.
-      Array.prototype.forEach.call(document.querySelectorAll('[data-pgo]'), function (b) {
-        b.addEventListener('click', function () {
-          var t = el(b.getAttribute('data-pgo'));
-          if (t && t.hidden) t = el('ord-sec');      // сделка уже оформлена — она в «Счетах клиента»
-          if (!t) return;
-          if (t.tagName === 'DETAILS') t.open = true;
-          t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          t.classList.remove('pg-hit'); void t.offsetWidth; t.classList.add('pg-hit');
-        });
-      });
       var qiRefresh = el('qi-refresh');
       if (qiRefresh) qiRefresh.addEventListener('click', loadQI);
       var qiBtn = el('qi-btn');
