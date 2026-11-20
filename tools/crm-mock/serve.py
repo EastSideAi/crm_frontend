@@ -31,7 +31,7 @@ TRACKS = [
     {"key": "master", "name": "Магистратура"},
     {"key": "master_after_lang", "name": "Магистратура после языкового года"},
     {"key": "bachelor_after_lang", "name": "Бакалавриат после языкового года"},
-    {"key": "master_direct", "name": "Магистратура, подача напрямую в вуз"},
+    {"key": "master_direct", "name": "Магистратура (ЗАУ), подача напрямую в вуз"},
 ]
 
 PEOPLE = [
@@ -49,24 +49,136 @@ PEOPLE = [
     ("Марк Тихонов (папа Денис)", "", "prem", 44, "mark@demo.local", "направление пока не проставлено"),
 ]
 
+# Этап маршрута: сервер считает его из плана дела (client_views.lead_stage) и
+# отдает строкой списка — шестнадцать этапов с состоянием каждого. Тут собираем
+# правдоподобный ответ: кому-то план не собран вовсе (поле None), остальные стоят
+# на разных этапах.
+STAGE_NAMES = ["Доступ", "Диагностика", "Подбор", "Документы", "Портфолио", "Письма",
+               "Методы", "Язык", "CSCA", "Интервью", "Подача", "Зачисление", "Виза",
+               "Адаптация", "Прием", "Первые месяцы"]
+STAGE_KEYS = ["access", "diag", "pick", "docs", "folio", "letters", "study", "lang",
+              "csca", "interview", "apply", "offer", "visa", "adapt", "meet", "settle"]
+
+def stage_of(i):
+    if i in (3, 9):           # плана нет — так и пишем, это не «первый этап»
+        return None
+    pos = [1, 3, 4, 0, 8, 11, 2, 4, 0, 0, 6, 13][i % 12]
+    steps = []
+    for n, (k, nm) in enumerate(zip(STAGE_KEYS, STAGE_NAMES)):
+        if n < pos:
+            st, d, t = "done", 3, 3
+        elif n == pos:
+            st, d, t = "now", 4, 9
+        elif n == pos + 1:
+            st, d, t = "open", 0, 2
+        else:
+            st, d, t = "none", 0, 0
+        steps.append({"k": k, "n": nm, "s": st, "d": d, "t": t})
+    return {"key": STAGE_KEYS[pos], "short": STAGE_NAMES[pos],
+            "title": STAGE_NAMES[pos], "pos": pos + 1, "total": len(steps),
+            "steps": steps}
+
+# Пакет документов: что мы ждем от семьи. Считает его сервер
+# (doc_checklist.package_state) и отдает в карточке полем doc_plan — тут
+# правдоподобный ответ, чтобы увидеть блок глазами.
+DOC_ITEMS = [
+    ("Загранпаспорт", "Загранпаспорт ученика"), ("Паспорт РФ", "Паспорт РФ ученика"),
+    ("Паспорт родителя", "Загранпаспорт родителей"), ("Аттестат 9 класс", "Аттестат за 9 класс"),
+    ("Аттестат 11 класс", "Аттестат за 11 класс"),
+    ("Транскрипт 10 класс", "Транскрипт с оценками за 10 класс"),
+    ("Анкета студента", "Анкета студента"), ("Язык", "Языковой сертификат: HSK или Duolingo"),
+    ("Фото", "Фото по требованиям вуза"), ("Несудимость", "Справка о несудимости"),
+    ("Портфолио", "Портфолио достижений"),
+    ("Согласие на выезд", "Нотариальное согласие на выезд ребенка"),
+    ("Транскрипт 11 класс", "Выписка оценок за 11 класс, первый семестр"),
+]
+
+
+# Уже присланные файлы и вписанные строки: блок «Ждем от семьи» стоит в разделе
+# рядом с ними, и смотреть его в одиночку бессмысленно — рецепты не должны
+# спорить между собой.
+DOCS = [
+    {"id": 1, "name": "passport-rf.pdf", "kind": "Паспорт РФ", "status": "accepted",
+     "mime": "application/pdf", "link": None, "size_bytes": 420000, "has_file": True,
+     "created_at": "2026-11-12T10:00:00Z", "uploaded_side": "client",
+     "uploaded_relation": "parent", "uploaded_by": "мама", "review_note": ""},
+    {"id": 2, "name": "attestat-9.jpg", "kind": "Аттестат 9 класс", "status": "needs_fix",
+     "mime": "image/jpeg", "link": None, "size_bytes": 1250000, "has_file": True,
+     "created_at": "2026-11-14T12:30:00Z", "uploaded_side": "client",
+     "uploaded_relation": "self", "uploaded_by": "ученик",
+     "review_note": "скан нечитаемый, нужна замена"},
+    {"id": 3, "name": "dogovor-74.pdf", "kind": "Договор", "status": "accepted",
+     "mime": "application/pdf", "link": None, "size_bytes": 310000, "has_file": True,
+     "created_at": "2026-11-09T09:10:00Z", "uploaded_side": "team",
+     "uploaded_relation": None, "uploaded_by": "Алена Малахова", "review_note": ""},
+]
+DOC_FIELDS = [{"key": "contacts_cn", "name": "Телефон и адрес в Китае",
+               "value": "+86 131 0000 0000, Harbin, Nangang district"}]
+
+
+def doc_plan(lead):
+    i = int(lead["id"].rsplit("-", 1)[-1])
+    track = (lead["crm"]["overrides"] or {}).get("track") or ""
+    items = []
+    for n, (kind, name) in enumerate(DOC_ITEMS):
+        if n < (i % 5) + 1:
+            st, note = "ok", ""
+        elif n == (i % 5) + 1:
+            st, note = "fix", ("скан нечитаемый по нижней половине страницы, "
+                              "нужна замена: печать школы и подпись директора")
+        elif n == (i % 5) + 2:
+            st, note = "review", ""
+        else:
+            st, note = "wait", ""
+        items.append({"key": kind, "kind": kind, "name": name, "state": st,
+                      "note": note, "files": 0 if st == "wait" else 1, "field": False})
+    names = {t["key"]: t["name"] for t in TRACKS}
+    return {"track": track, "track_name": names.get(track, ""), "track_set": bool(track),
+            "done": sum(1 for x in items if x["state"] == "ok"),
+            "total": len(items), "items": items}
+
+
 def leads():
     out = []
     for i, (name, track, tariff, score, contact, note) in enumerate(PEOPLE):
         ov = {"tariff": tariff}
         if track:
             ov["track"] = track
+        # Кто ведет: в «Сопровождении» имя тьютора стоит на месте плашки статуса.
+        tutors = ["Аюпова Элиза", "Александр Сердотецков", "Алена Малахова",
+                  "Анастасия Мишина", "Светлана Рошенская", None]
+        tutor = tutors[i % 6]
+        # id у тьютора свой, а не у карточки: по нему идет фильтр, и одинаковые
+        # id у двух карточек одного человека раздвоили бы его в выпадашке.
+        crm = {"status": "client", "note": note, "overrides": ov,
+               "owner": ({"id": 100 + (i % 6), "name": tutor} if tutor else None),
+               "tasks": [], "comms": []}
+        # Разнобой ради срезов воронки: без него у всех карточек одинаковые
+        # признаки, ряд чипов схлопывается в одно «Все», и разницу вкладок
+        # («Сопровождение» короче «Клиентов») на экране не увидеть.
+        if i % 3 == 0:
+            crm["mql"] = {"ok": True}
+        if i % 4 == 0:
+            crm["sql"] = True
+        if i % 5 == 0:
+            crm["tasks"] = [{"text": "позвонить семье", "done": False,
+                             "due": "2026-11-10"}]
+        # Класс школьника считает бэкенд из года окончания школы и отдает полем
+        # school_class (вкладки «8 / 9 / 10 класс»). Тут просто подставляем правдоподобно.
+        klass = [11, 10, 11, 9, 8, None, None, None, 10, 11, 9, 8][i % 12]
         out.append({
             "id": "demo-%02d" % i,
             "name": name,
+            "school_class": klass,
+            "stage": stage_of(i),
             "score": score,
             "status": "diagnosed",
             "grade": "11 класс" if i % 2 else "10 класс",
             "target_year": 2027,
             "paid": True,
             "created_at": "2026-10-%02dT10:00:00Z" % (i + 1),
-            "booking": {"contact": contact},
-            "crm": {"status": "client", "note": note, "overrides": ov,
-                    "tasks": [], "comms": []},
+            "booking": {} if i in (2, 7) else {"contact": contact},
+            "crm": crm,
         })
     return out
 
@@ -106,6 +218,14 @@ class H(SimpleHTTPRequestHandler):
             return self._json(ME)
         if p == "/admin/api/leads":
             return self._json({"ok": True, "leads": leads()})
+        # Карточка лида — тот же выдуманный человек, что в списке: без нее окно
+        # карточки открывается пустым, и блок квалификации не посмотреть.
+        if p.startswith("/admin/api/leads/") and p.count("/") == 4:
+            one = [x for x in leads() if x["id"] == p.rsplit("/", 1)[-1]]
+            if one:
+                return self._json({"ok": True, **one[0], "docs": DOCS,
+                                   "doc_fields": DOC_FIELDS,
+                                   "doc_plan": doc_plan(one[0])})
         if p == "/admin/api/docs/kinds":
             return self._json({"ok": True, "kinds": [], "tracks": TRACKS})
         if p.startswith("/admin/api/") or p.startswith("/api/"):
