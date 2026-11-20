@@ -29677,8 +29677,10 @@
       // только сверить и принять (6380).
       var badge = '<span class="pl-badge ' + (ok ? 'ok' : (s.draft ? 'draft' : 'no')) + '">' +
         (ok ? 'сдан' : (s.draft ? 'черновик' : 'не сдан')) + '</span>';
-      var planCell = ok
-        ? '<span class="pl-sum num">' + finRub(s.plan) + '</span>'
+      // Сумма плана видна и у «не сдан»: строки, заведенные финансистом в ведомости,
+      // входят в итог «В плане» сверху, и прочерк в строке спорил бы с ним.
+      var planCell = s.plan
+        ? '<span class="pl-sum num' + (ok ? '' : ' muted') + '">' + finRub(s.plan) + '</span>'
         : '<span class="pl-sum num muted">—</span>';
       var factCell = '<span class="pl-fact num' + (s.fact ? '' : ' muted') + '">' +
         (s.fact ? 'факт ' + finRub(s.fact) : 'факт —') + '</span>';
@@ -29910,9 +29912,10 @@
     return '<div class="plmd">' +
       '<div class="plmd-head">' +
         '<span class="plmd-ic">' + ic('copy', 14) + '</span>' +
-        '<div class="plmd-tx"><b>Черновик из ' + esc(finMonthLabel(dr.from_month)) + '</b>' +
-          '<small>расходы отдела за прошлый месяц. поправьте суммы, уберите лишнее и примите — ' +
-          'тогда строки встанут в план</small></div>' +
+        '<div class="plmd-tx"><b>Черновик плана: расходы за ' +
+          esc(finMonthLabel(dr.from_month).toLowerCase()) + '</b>' +
+          '<small>поправьте суммы и уберите лишнее. В ведомость строки встанут, ' +
+          'когда нажмете «Принять в план»</small></div>' +
         '<span class="plmd-tot num">' + finRub(total) + '</span>' +
       '</div>' +
       (rows || '<div class="plm-empty">В черновике не осталось строк.</div>') +
