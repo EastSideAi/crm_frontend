@@ -16,6 +16,12 @@ const patched = src.replace(marker, marker +
   ' ownLabel: function (a) { return ownerLabel(a); },' +
   ' ownHit: function (l, seg) { return ownerHit(l, seg); },' +
   ' stCell: function (l) { return stageCell(l); },' +
+  ' dlCell: function (l) { return dlCell(l); },' +
+  ' dlOf: function (l) { return leadDeadline(l); },' +
+  ' dlTone: function (iso) { return dlTone(iso); },' +
+  ' dlText: function (iso) { return dlText(iso); },' +
+  ' dlCmp: function (a, b, dir) { return dlCmp(a, b, dir); },' +
+  ' today: function (n) { return todayISO(n); },' +
   ' hit: function (l, seg) { return trackHit(l, seg); },' +
   ' keys: function (seg) { return quickKeys(seg); },' +
   ' clsHit: function (l, seg) { return classHit(l, seg); },' +
@@ -273,6 +279,44 @@ check('сервер еще не умеет этапы — молчим, а не 
 check('без поля stage ячейка не кнопка',
   !/role="button"/.test(L.stCell({ id: 'z', crm: { overrides: {} } })),
   L.stCell({ id: 'z', crm: { overrides: {} } }));
+
+/* ── Дедлайн в строке (Мария 20.11.2026) ─────────────────────────────────── */
+const dlLead = iso => ({ id: 'd1', crm: { overrides: iso ? { deadline: iso } : {} } });
+const dc = L.dlCell(dlLead('2026-12-05'));
+check('дата в ячейке стоит днем и месяцем', dc.indexOf('05.12') > 0, dc);
+check('ячейка дедлайна — кнопка, и строку она не открывает',
+  /data-dl="d1"/.test(dc) && /data-stop="1"/.test(dc) && /role="button"/.test(dc), dc);
+/* Пустую ячейку нельзя подписывать датой «сегодня» или прятать вовсе: срок не
+   поставлен — это рабочее состояние, и нажать на него надо. */
+const dcNone = L.dlCell(dlLead(''));
+check('срок не поставлен — ячейка все равно кнопка',
+  /role="button"/.test(dcNone) && /data-dl="d1"/.test(dcNone), dcNone);
+check('пустая ячейка зовет поставить срок', dcNone.indexOf('поставить') > 0, dcNone);
+/* Тон ячейки — это предупреждение, и путать «просрочено» с «скоро» нельзя:
+   на первом надо звонить сегодня, на втором готовиться. */
+check('вчерашний срок считается просроченным', L.dlTone(L.today(-1)) === ' late', L.dlTone(L.today(-1)));
+check('сегодняшний срок горит, но не просрочен', L.dlTone(L.today(0)) === ' soon', L.dlTone(L.today(0)));
+check('срок через три дня еще горит', L.dlTone(L.today(3)) === ' soon', L.dlTone(L.today(3)));
+check('дальний срок спокойный', L.dlTone(L.today(30)) === '', L.dlTone(L.today(30)));
+check('без даты тона нет вовсе', L.dlTone('') === '', L.dlTone(''));
+/* Дата живет в overrides карточки, как тариф и направление: отдельного поля под нее
+   не заводили, и читать ее надо оттуда же, иначе правка руками потеряется. */
+check('дата читается из overrides карточки',
+  L.dlOf(dlLead('2026-12-05')) === '2026-12-05' && L.dlOf(dlLead('')) === '', '');
+/* Цикл подачи перешагивает новый год: без года промах в годе рисуется тем же
+   «05.12» и отличается только тоном. Этот год не дописываем — он очевиден. */
+const yNow = L.today(0).slice(0, 4), yNext = String(Number(yNow) + 1);
+check('год этого года не дописывается', L.dlText(yNow + '-12-05') === '05.12', L.dlText(yNow + '-12-05'));
+check('чужой год в дате виден', L.dlText(yNext + '-01-09') === '09.01.' + yNext.slice(2), L.dlText(yNext + '-01-09'));
+/* Ярлык кнопки называет ученика: читающий экран идет по колонке голосом, и сорок
+   восемь одинаковых подписей не связывают дату с человеком. */
+const dcName = L.dlCell({ id: 'd2', name: 'Анна Светлова', crm: { overrides: {} } });
+check('в ярлыке ячейки стоит имя ученика', dcName.indexOf('Анна Светлова') > 0, dcName);
+/* Сортировка: строки без срока уходят в конец в ОБЕ стороны. */
+const withD = dlLead('2026-12-05'), noD = dlLead('');
+check('без срока строка в конце по возрастанию', L.dlCmp(noD, withD, 1) === 1, L.dlCmp(noD, withD, 1));
+check('без срока строка в конце и по убыванию', L.dlCmp(noD, withD, -1) === 1, L.dlCmp(noD, withD, -1));
+check('ближний срок выше дальнего', L.dlCmp(dlLead('2026-12-01'), withD, 1) === -1, '');
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);
