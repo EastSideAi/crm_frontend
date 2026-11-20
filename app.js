@@ -8632,6 +8632,7 @@
       quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
     }
     return '<div class="trow tsk-grid mine wk-row' + (t.parent_title ? ' has-goal' : '') +
+      (quick ? ' has-chk' : '') +
       (t.overdue ? ' r-crit' : '') + (own ? ' own' : '') + (closed ? ' closed' : '') +
       '" data-tid="' + t.id + '">' +
       '<div class="t-cell">' + quick +
@@ -14256,6 +14257,11 @@
           '<div class="gl-meta">' + meta.join('') +
             (complete ? ' <button class="qchip gl-close" data-gdone="' + g.id + '">' + ic('check', 11) + 'Цель достигнута, закрыть</button>' : '') +
           '</div></div>' +
+        // Закрыть цель одной кнопкой, не открывая карточку (Павел 20.11.2026).
+        // У достигнутой цели своя громкая кнопка в подписи, тут она была бы
+        // вторым таким же действием в одной строке.
+        (complete ? '' :
+          '<button class="icobtn sm gl-done" data-gdone="' + g.id + '" title="Закрыть цель">' + ic('check', 14) + '</button>') +
         '<button class="icobtn sm gl-more" data-gopen="' + g.id + '" title="Карточка цели">' + ic('doc', 14) + '</button>' +
         '<span class="gl-chev">' + ic('go', 14) + '</span>' +
       '</div>' + steps + '</div>';
@@ -14779,8 +14785,17 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-gdone]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation(); b.disabled = true;
-        apiSend('/admin/api/tasks/' + b.getAttribute('data-gdone') + '/status', 'POST', { status: 'done' }, function () {
-          showToast('Цель закрыта'); state.tasks = null; loadTaskSummary(); renderView();
+        var gid = +b.getAttribute('data-gdone');
+        var g = (state.tasks || []).filter(function (x) { return x.id === gid; })[0] || {};
+        // Шаги цели не трогаем: это чужая живая работа, она стоит у людей в
+        // планах. Но молчать о них нельзя, иначе цель «закрыта», а под ней
+        // пять задач, о которых никто не вспомнит.
+        var left = Math.max(0, (g.steps_total || 0) - (g.steps_done || 0));
+        apiSend('/admin/api/tasks/' + gid + '/status', 'POST', { status: 'done' }, function () {
+          showToast('Цель закрыта', left
+            ? left + ' ' + plural(left, 'шаг остался', 'шага остались', 'шагов остались') + ' в планах людей'
+            : '');
+          state.tasks = null; loadTaskSummary(); renderView();
         }, function () { b.disabled = false; showToast('Не закрылось — проверь сеть'); });
       });
     });
@@ -15851,7 +15866,11 @@
       // других, но не за себя: иначе руководитель закрывает поставленную ему
       // задачу сам, и тот, кто ее поставил, не узнает об этом никогда
       // (Ольга на обучении 07.10.2026). Сервер отвечает на это 403.
-      var canAccept = isAuthor || (can('tasks_all') && !isAssignee);
+      // «Своя работа» — та, которую ты сам и сдал: руководитель, стоящий в
+      // задаче соисполнителем, принимает сданное коллегой (Павел 20.11.2026).
+      // submitted_by приходит с сервера, он же это правило и проверяет.
+      var mine = isAssignee && !(t.submitted_by != null && me != null && t.submitted_by !== me);
+      var canAccept = isAuthor || (can('tasks_all') && !mine);
       var canFiles = isAssignee || boss || (me != null && watchIds.indexOf(me) !== -1);
       // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
       // назначает, а история должна остаться такой, какой была.

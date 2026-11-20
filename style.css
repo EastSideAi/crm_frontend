@@ -3308,6 +3308,17 @@ a { color: inherit; text-decoration: none; }
 .trow.tsk-grid.own .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .trow.tsk-grid.own .t-ttl,
 .trow.tsk-grid.own .t-sub { flex-basis: calc(100% - 30px); }
+/* Строка с галочкой слева — та же раскладка, но галочка тут есть и в чужой
+   задаче: в «Тебе сдали» ею принимают. Без этого кружок вставал отдельной
+   строкой над заголовком и вылезал из высоты строки (20.11.2026). Подписи и
+   метка цели переносятся под заголовок с отступом на ширину галочки, иначе
+   вторая строка начиналась левее первой. */
+.trow.tsk-grid.has-chk .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.trow.tsk-grid.has-chk:not(.has-goal) { height: auto; min-height: 58px;
+  padding-top: 10px; padding-bottom: 10px; }
+.trow.tsk-grid.has-chk .t-ttl { flex-basis: calc(100% - 30px); }
+.trow.tsk-grid.has-chk .t-sub { flex-basis: calc(100% - 30px); margin-left: 30px; }
+.trow.tsk-grid.has-chk .tsk-goal { margin-left: 30px; }
 .tsk-chk { width: 20px; height: 20px; flex: none; margin-top: 1px; border-radius: 50%;
   border: 1.5px solid #C5CCDA; background: #fff; display: grid; place-items: center;
   color: transparent; cursor: pointer; transition: .15s var(--ease); }
@@ -11332,8 +11343,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gl-card.open .gl-chev { transform: rotate(90deg); color: var(--blue); }
 .gl-meta { margin-top: 2px; font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gl-close { color: var(--green-ink); background: var(--green-soft); border-color: var(--green-soft); }
-.gl-more { flex: none; opacity: 0; transition: opacity .14s; }
-.gl-head:hover .gl-more, .gl-card.open .gl-more { opacity: 1; }
+.gl-more, .gl-done { flex: none; opacity: 0; transition: opacity .14s; }
+.gl-head:hover .gl-more, .gl-card.open .gl-more,
+.gl-head:hover .gl-done, .gl-card.open .gl-done,
+.gl-head:focus-within .gl-more, .gl-head:focus-within .gl-done { opacity: 1; }
+.gl-done:hover { color: var(--green-ink); background: var(--green-soft); }
 .gl-steps { border-top: 1px solid var(--line); padding: 4px 0 8px; }
 .gl-steps .dy-ttl { font-size: 13.5px; }
 .gl-steps .trow.dy-row { padding-left: 24px; padding-right: 16px; min-height: 40px; }
@@ -11356,7 +11370,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .nt-crewb { align-self: flex-start; margin: -4px 0 8px; }
 @media (max-width: 720px) {
   .gl-head { gap: 10px; padding: 12px; }
-  .gl-more { opacity: 1; }
+  .gl-more, .gl-done { opacity: 1; }
   .gl-title { font-size: 15px; }
   /* Шапка не должна съедать полэкрана: отделы одной строкой с прокруткой,
      импорт встречи — иконкой рядом с поиском. */
