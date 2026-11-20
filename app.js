@@ -42666,6 +42666,16 @@
       (rows ? '<div class="ms-list">' + rows + '</div>' : '<div class="empty">' + empty + '</div>') + '</div>';
   }
 
+  /* Задача из карточки лида (Павел 20.11.2026: «что по кому нужно делать», «с кем
+     повторно проконтактировать»). Срок сегодня или раньше, чья — решает ведущий карточки. */
+  function msTaskRow(t) {
+    var late = t.late, dd = (t.due || '').split('-');
+    return '<div class="ms-row ms-tk"><div class="ms-nm"><b>' + esc(t.name) + '</b><small>' + esc(t.text) + '</small></div>' +
+      '<span class="sev ms-t ' + (late ? 'late' : 'ok') + '">' + (late ? 'с ' + dd[2] + '.' + dd[1] : 'сегодня') + '</span>' +
+      '<div class="ms-acts"><button class="bp ghost" data-mstask="' + esc(t.id) + '" data-tid="' + esc(t.task_id || '') + '">Сделано</button>' +
+      '<button class="icobtn sm" data-mslead="' + esc(t.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button></div></div>';
+  }
+
   function msPlan(d, open) {
     var retry = d.retry || [], conf = d.confirm || [];
     var unconf = conf.filter(function (m) { return !m.confirmed; }).length;
@@ -42867,6 +42877,8 @@
         (d.confirm || []).map(function (m) { return msConfirmRow(m, cc); }).join(''), 'На завтра встреч нет.') +
       msSection('retry', 'Не взяли трубку', 'недозвоны прошлых дней; позвони в другое время дня, не взял снова — скопируй текст и напиши',
         (d.retry || []).map(function (p) { return msRow(p, 'retry', cc); }).join(''), 'Недозвонов с прошлых дней нет.') +
+      ((d.card_tasks || []).length ? msSection('ctask', 'Задачи по карточкам', 'что ты сам себе поставил в карточке на сегодня и раньше: перезвонить, прислать, напомнить',
+        d.card_tasks.map(msTaskRow).join(''), '') : '') +
       msSection('meets', 'Встречи', 'консультации твоих лидов на ближайшие дни; за сутки подтверди, за час напомни',
         meets, 'Встреч пока нет. Записывай в свои окна в «Расписании».') +
       msSection('after', 'После встречи: отметить итог', 'консультация прошла, а в карточке итога нет; поставь договор, «думает» или отказ',
@@ -42961,6 +42973,21 @@
         };
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { prompt('Скопируй текст', text); });
         else prompt('Скопируй текст', text);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mstask]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-mstask'), tid = b.getAttribute('data-tid');
+        b.disabled = true;
+        // задачи карточки пишутся списком целиком: берем свежий список, а не кэш
+        msAfter(api('/admin/api/leads/' + id).then(function (det) {
+          var tasks = ((det && det.crm && det.crm.tasks) || []).map(function (x) {
+            return x.id === tid ? Object.assign({}, x, { done: true }) : x;
+          });
+          delete state.details[id];
+          return api('/admin/api/leads/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tasks: tasks }) });
+        }).then(function () { showToast('Задача закрыта'); }));
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mstouch]'), function (b) {
