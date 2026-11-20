@@ -42585,6 +42585,8 @@
     api('/admin/api/sales/my-day').then(function (r) {
       MS.d = r; MS.busy = false; MS.at = Date.now();
       if (state.page === 'myshift') renderView();
+      // Сверка лидов первый раз после выкатки считается на сервере фоном: спросим еще раз.
+      if (r && r.fresh === null) setTimeout(function () { if (state.page === 'myshift') msLoad(true); }, 20000);
     }).catch(function (e) {
       MS.busy = false;
       if (e.message === '403') return;
@@ -42742,6 +42744,39 @@
     return '<div class="ms-row">' +
       '<div class="ms-nm"><b>' + esc(p.name) + '</b><small>' + meta.join(' · ') + '</small>' + dl + '</div>' +
       tag + msActs(p, kind, canCall) + '</div>';
+  }
+
+  /* Лиды за сегодня и вчера (Павел 20.11.2026: «самое главное, чтобы показывались
+     сегодняшние и вчерашние лиды по обработке»). Те же люди, что «Сверка лидов» на
+     «Продажах», и все, а не только свои: видно, кто ведет и связались ли. Без телефона
+     человек тоже здесь, ему пишут в диалог. Состояние считает сервер (поле state). */
+  var MS_FRESH = {
+    free: ['ms-t late', 'свободный'], no_contact: ['ms-t warn', 'нет телефона'],
+    respond: ['ms-t late', 'не связались'], follow: ['ms-ok', 'связались'],
+    meet: ['ms-ok', 'записан'], decide: ['ms-ok', 'думает'], client: ['ms-ok', 'клиент'],
+    out: ['ms-when', 'вне работы']
+  };
+  function msFreshRow(p, cc) {
+    var st = MS_FRESH[p.state] || MS_FRESH.out;
+    var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
+    if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
+    var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + '</b><small>' + meta.join(' · ') + '</small></div>' +
+      '<span class="sev ' + st[0] + '">' + st[1] + '</span>' + msActs(p, kind, cc) + '</div>';
+  }
+  function msFresh(d, cc) {
+    var f = d.fresh;
+    if (f === undefined) return '';
+    if (f === null) return msSection('fresh', 'Лиды за сегодня и вчера', 'считаю, список появится через минуту', '', 'Считаю сверку лидов…');
+    var n = function (k) { return f.filter(function (p) { return p.state === k; }).length; };
+    var parts = [];
+    if (n('free')) parts.push('свободных ' + n('free'));
+    if (n('respond')) parts.push('не связались ' + n('respond'));
+    if (n('no_contact')) parts.push('без телефона ' + n('no_contact'));
+    var sub = f.length ? 'пришло ' + f.length + (parts.length ? ': ' + parts.join(', ') : ', все в работе') +
+      '; те же люди, что «Сверка лидов» на «Продажах»' : '';
+    return msSection('fresh', 'Лиды за сегодня и вчера', sub,
+      f.map(function (p) { return msFreshRow(p, cc); }).join(''), 'Вчера и сегодня новых лидов не было.');
   }
 
   function msSection(id, title, sub, rows, empty) {
@@ -42953,6 +42988,7 @@
         '<button class="bp ghost" id="ms-dial">Открыть звонилку</button></div>'
         : '<div class="card ms-nocall">Звонилка тебе пока не подключена: номера открываются обычным звонком с телефона. ' +
         'Чтобы звонки и записи шли через CRM, попроси доступ у Павла.</div>') +
+      msFresh(d, cc) +
       msSection('hot', 'Записались сами', 'самые горячие: выбрали время консультации, а с ними еще никто не говорил; позвони до встречи',
         d.hot.map(function (p) { return msRow(p, 'hot', cc); }).join(''), 'Все, кто записался, уже на связи.') +
       msSection('respond', 'Ответить сейчас', 'твои лиды, с которыми еще никто не связался; позвони, не дозвонился — напиши в диалог',
