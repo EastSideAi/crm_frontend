@@ -14255,6 +14255,11 @@
           '<div class="gl-meta">' + meta.join('') +
             (complete ? ' <button class="qchip gl-close" data-gdone="' + g.id + '">' + ic('check', 11) + 'Цель достигнута, закрыть</button>' : '') +
           '</div></div>' +
+        // Закрыть цель одной кнопкой, не открывая карточку (Павел 20.11.2026).
+        // У достигнутой цели своя громкая кнопка в подписи, тут она была бы
+        // вторым таким же действием в одной строке.
+        (complete ? '' :
+          '<button class="icobtn sm gl-done" data-gdone="' + g.id + '" title="Закрыть цель">' + ic('check', 14) + '</button>') +
         '<button class="icobtn sm gl-more" data-gopen="' + g.id + '" title="Карточка цели">' + ic('doc', 14) + '</button>' +
         '<span class="gl-chev">' + ic('go', 14) + '</span>' +
       '</div>' + steps + '</div>';
@@ -14778,8 +14783,17 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-gdone]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation(); b.disabled = true;
-        apiSend('/admin/api/tasks/' + b.getAttribute('data-gdone') + '/status', 'POST', { status: 'done' }, function () {
-          showToast('Цель закрыта'); state.tasks = null; loadTaskSummary(); renderView();
+        var gid = +b.getAttribute('data-gdone');
+        var g = (state.tasks || []).filter(function (x) { return x.id === gid; })[0] || {};
+        // Шаги цели не трогаем: это чужая живая работа, она стоит у людей в
+        // планах. Но молчать о них нельзя, иначе цель «закрыта», а под ней
+        // пять задач, о которых никто не вспомнит.
+        var left = Math.max(0, (g.steps_total || 0) - (g.steps_done || 0));
+        apiSend('/admin/api/tasks/' + gid + '/status', 'POST', { status: 'done' }, function () {
+          showToast('Цель закрыта', left
+            ? left + ' ' + plural(left, 'шаг остался', 'шага остались', 'шагов остались') + ' в планах людей'
+            : '');
+          state.tasks = null; loadTaskSummary(); renderView();
         }, function () { b.disabled = false; showToast('Не закрылось — проверь сеть'); });
       });
     });
