@@ -15244,6 +15244,10 @@ video.cs-media { background: #000; }
   border-radius: 999px; padding: 3px 8px; font: inherit; color: var(--ink-2); cursor: pointer; }
 .mg-back:hover { color: var(--blue); border-color: var(--blue); }
 .mg-nl { margin: 0; gap: 6px; }
+/* Плашек стало двенадцать (20.11.2026: «рега на эфир», «от партнера»): ряд кнопок
+   переносится сам, а имя и описание лида не сжимаются в столбик по слову. */
+.mg-lead .mg-hb { flex: 1 1 260px; }
+.mg-lead .mg-nl { flex: 0 1 720px; flex-wrap: wrap; justify-content: flex-end; }
 .mg-nl .qchip { padding: 6px 11px; }
 /* подсказка системы: подтверждается одним нажатием, поэтому чип обведен */
 .mg-nl .qchip.hint { box-shadow: inset 0 0 0 1px var(--amber); color: var(--amber-ink); }

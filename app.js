@@ -40204,8 +40204,9 @@
   /* Чистка лидов недели (Ольга до встречи РНП). Подсказку причины дает сервер по
      оплатам и общим контактам, решает человек: подсказка сама ничего не вычеркивает. */
   function mgLeadsHtml() {
-    // Чистят ту же закрытую неделю, чьи цифры смотрят на встрече, а не открытую.
-    var wk = mgAdd(mgWeek(), -7);
+    // Неделя — та, что выбрана стрелками, по умолчанию текущая (Ольга 20.11.2026:
+    // «встречаемся каждый день», чистят открытую неделю, а не закрытую).
+    var wk = mgWeek();
     if (!state._mgLeads || state._mgLeads.week !== wk) {
       if (state._mgLeadsLoad !== wk) {
         state._mgLeadsLoad = wk;
@@ -40235,8 +40236,11 @@
       var marks = l.marks || (l.not_lead ? [l.not_lead] : []);
       var chips = Object.keys(R).map(function (k) {
         var on = marks.indexOf(k) >= 0;
+        // «рега на эфир» с днем эфира (Ольга 20.11.2026: «Рега на эфир: дата эфира»)
+        var txt = R[k] + (k === 'efir' && l.efir ? ': ' + mgDate(l.efir).getDate() + '.' +
+          ('0' + (mgDate(l.efir).getMonth() + 1)).slice(-2) : '');
         return '<button class="qchip' + (on ? ' on' : '') + (!l.not_lead && l.hint === k ? ' hint' : '') +
-          '" aria-pressed="' + on + '" data-mgnl="' + esc(l.id) + '" data-r="' + k + '">' + esc(R[k]) + '</button>';
+          '" aria-pressed="' + on + '" data-mgnl="' + esc(l.id) + '" data-r="' + k + '">' + esc(txt) + '</button>';
       }).join('');
       return '<div class="mg-lead' + (l.not_lead ? ' off' : '') + '">' +
         '<div class="mg-hb"><div class="mg-ht"><a href="#lead/' + esc(l.id) + '" data-mglead="' + esc(l.id) + '">' + esc(l.name || 'Без имени') + '</a></div>' +
