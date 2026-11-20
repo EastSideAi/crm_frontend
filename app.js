@@ -56816,6 +56816,69 @@
      видеоплеера, и живой файл выглядит сломанным. Слушаем прямо в строке. */
   function docIsAudio(dc) { return String(dc.mime || '').indexOf('audio/') === 0; }
 
+  /* ПАКЕТ ДОКУМЕНТОВ: ЧТО МЫ ЖДЕМ ОТ СЕМЬИ (задача 10345, Мария 20.11.2026).
+     До этого в карточке лежали только присланные файлы, а список ожидаемого жил
+     в кабинете семьи — и Мария ходила смотреть на свою же работу «глазами
+     ученика». Состав и состояния считает СЕРВЕР тем же кодом, что рисует строки
+     семье (`doc_checklist.package_state` поверх `items_of`), браузер только
+     раскладывает их по кучкам: второй список ожидаемых документов разошелся бы
+     с кабинетом на первой правке направления. */
+  var DOC_PK = {
+    review: { t: 'на проверке', c: 'rev' },
+    fix:    { t: 'вернули',     c: 'fix' },
+    /* У ожидания подписи нет вовсе: весь блок и называется «Ждем от семьи», а
+       шесть одинаковых слов подряд не добавляют ничего к серой точке и отжимают
+       имя документа. Молчание тут и значит «ждем». */
+    wait:   { t: '',            c: 'wait' },
+    ok:     { t: 'принято',     c: 'ok' },
+  };
+  /* Свернут ли список принятого. Живет вне разметки, потому что секция
+     пересобирается целиком на каждую правку статуса соседнего файла, и открытый
+     <details> иначе захлопывался бы на каждом нажатии. */
+  var DPK_OPEN = false;
+  function docPlanBlock(plan) {
+    if (!plan || !plan.items || !plan.items.length) return '';
+    /* Порядок отвечает на вопрос «чей ход»: сперва присланное, где ход за нами,
+       потом возвраты (мы уже сказали, чего не хватает), потом молчаливое ожидание.
+       Единственный пункт, который должен сделать менеджер, не должен тонуть под
+       шестью строками ожидания. */
+    var order = ['review', 'fix', 'wait'];
+    var left = plan.items.filter(function (i) { return i.state !== 'ok'; });
+    var done = plan.items.filter(function (i) { return i.state === 'ok'; });
+    left.sort(function (a, b) { return order.indexOf(a.state) - order.indexOf(b.state); });
+    var row = function (i) {
+      var st = DOC_PK[i.state] || DOC_PK.wait;
+      return '<div class="dpk-r ' + st.c + '">' +
+        '<span class="dpk-d"></span>' +
+        '<span class="dpk-n">' + esc(i.name) + '</span>' +
+        (st.t ? '<span class="dpk-s">' + st.t + '</span>' : '') +
+        (i.note ? '<span class="dpk-why">' + esc(i.note) + '</span>' : '') +
+      '</div>';
+    };
+    return '<div class="dpk">' +
+      '<div class="dpk-h"><b>Ждем от семьи</b>' +
+        '<span class="dpk-cnt num">принято ' + plan.done + ' из ' + plan.total + '</span></div>' +
+      /* Направление решает состав пакета. Пока оно не проставлено, семья видит
+         полный список, и он еще сократится: обещать «ждем 21 документ» в этот
+         момент нельзя. */
+      '<div class="dpk-trk">' + (plan.track_set
+        ? 'пакет: ' + esc(plan.track_name)
+        : 'направление не проставлено, список станет короче после выбора') +
+      '</div>' +
+      (left.length
+        ? '<div class="dpk-list">' + left.map(row).join('') + '</div>'
+        : '<div class="dpk-all">Все собрано</div>') +
+      (done.length
+        /* Рецепт раскрытия — тот же, что у сворачиваемых блоков карточки
+           (.m-fold): шеврон, который поворачивается. Своих плюсов и минусов тут
+           заводить нельзя, иначе в одном окне три языка раскрытия. */
+        ? '<details class="dpk-done"' + (DPK_OPEN ? ' open' : '') + '>' +
+            '<summary><span class="dpk-sum">принятые</span>' +
+              '<span class="dpk-n2 num">' + done.length + '</span>' + ic('go', 12) + '</summary>' +
+            '<div class="dpk-list">' + done.map(row).join('') + '</div></details>'
+        : '') +
+    '</div>';
+  }
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
@@ -56865,6 +56928,7 @@
     }).join('');
     return '<div class="m-ctitle">Документы</div>' +
       '<div class="m-csub">Паспорт, аттестат, согласия — что прислал клиент. Файл до ' + DOC_MAX_MB + ' МБ или ссылка.</div>' +
+      docPlanBlock(ctx.d && ctx.d.doc_plan) +
       (fields ? '<div class="doc-flds">' + fields + '</div>' : '') +
       (docs.length ? '<div>' + rows + '</div>' : '') +
       // Категория выбирается ДО загрузки: файл без нее не закрывает строку пакета в
@@ -58504,6 +58568,11 @@
         },
       });
     });
+
+    // Свернутость списка принятого переживает ререндер: секция пересобирается
+    // целиком на каждую правку статуса соседнего файла (см. DPK_OPEN).
+    var dpkDone = document.querySelector('#modal .dpk-done');
+    if (dpkDone) dpkDone.addEventListener('toggle', function () { DPK_OPEN = dpkDone.open; });
 
     // документы: загрузка файла / ссылки / удаление
     var drop = el('m-drop'), fileIn = el('m-file');
