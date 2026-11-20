@@ -14731,7 +14731,9 @@
     }).filter(function (grp) {
       if (state.taskDept) return grp.dept === state.taskDept;
       // Пустой блок показываем, чтобы было куда завести цель; операционку и
-      // «вся компания» — только когда там что-то есть.
+      // «вся компания» — только когда там что-то есть. В плане одного человека
+      // пустые отделы — шум: смотрят его цели, а не куда завести новую.
+      if (state.taskWho) return grp.goals.length;
       return grp.goals.length || deptLive(grp.dept);
     });
 
