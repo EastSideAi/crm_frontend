@@ -57701,6 +57701,16 @@
     }).catch(function () { showToast('Не удалось загрузить преподавателей'); });
   }
 
+  /* Ситуация → блок. Третье поле — id блока, куда ведет строка. Сопровождение ведет
+     в сделку, а если сделка уже оформлена (блок спрятан) — в «Счета клиента». */
+  var PAY_GUIDE = [
+    ['Сопровождение по договору: Стандарт, Стандарт Плюс, Премиум', 'Сделка по сопровождению', 'deal-sec'],
+    ['Консультация или другая разовая сумма', 'Быстрый счет', 'qi-sec'],
+    ['Продукт из каталога не по договору', 'Новый счет', 'ord-new'],
+    ['Уроки языков', 'Счет за уроки', 'sch-sec'],
+    ['Заплатили наличными или переводом мимо кассы', 'Записать вручную', 'pay-manual'],
+  ];
+
   function buildPaySection(ctx) {
     var pays = (ctx.d && ctx.d.payments) || [];
     // Контакт для чека: берём известный из карточки, менеджер при нужде поправит.
@@ -57763,8 +57773,16 @@
 
     var manualCount = pays.length;
     return '<div class="m-ctitle">Оплаты</div>' +
-      '<div class="m-csub">Выставьте клиенту счет — он оплатит онлайн через ЮKassa, оплата зачтется сама. Итог по деньгам — в сводке ниже.</div>' +
       board +
+      /* Подсказка «какой блок жать» (Павел 19.11.2026: блоков пять, менеджер путает,
+         куда идти). Каждая строка ведет к своему блоку и подсвечивает его. */
+      '<div class="pay-guide"><div class="pg-h">Как принять оплату</div>' +
+        PAY_GUIDE.map(function (g) {
+          return '<button type="button" class="pg-r" data-pgo="' + g[2] + '"><span class="pg-w">' + g[0] + '</span>' +
+            '<span class="pg-t">' + g[1] + ic('go', 11) + '</span></button>';
+        }).join('') +
+        '<div class="pg-rule">Крупные платежи принимаем переводом на счет ИП по QR, без комиссии. Ссылка ЮKassa для сумм примерно до 30 000 ₽.</div>' +
+      '</div>' +
       /* Быстрый счёт: сумма + назначение → долгая ссылка ЮKassa (без разбора на
          позиции, как в конструкторе ниже). Клиенту НЕ уходит сам — сначала «выставлен»,
          и только по красной кнопке «Отправить клиенту» ссылка улетает ему в бота
@@ -57775,9 +57793,9 @@
          дебиторка снова собиралась бы из дыр. Блок прячется, пока сделка живая. */
       '<div class="m-sec deal-sec" id="deal-sec" hidden><div class="m-sec-h">Сделка по сопровождению</div>' +
         '<div id="deal-box"></div></div>' +
-      '<div class="m-sec"><div class="m-sec-h">Быстрый счёт' +
+      '<div class="m-sec" id="qi-sec"><div class="m-sec-h">Быстрый счёт' +
         '<span class="hr" id="qi-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
-        '<div class="m-csub" style="margin:0 0 10px">Сумма и назначение — получите ссылку на оплату, живёт до оплаты. Клиенту уйдёт только после кнопки «Отправить клиенту».</div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Для консультации или другой разовой суммы, не для сопровождения по договору. Ссылка живет до оплаты, клиенту уйдет только после кнопки «Отправить клиенту».</div>' +
         '<div id="qi-list"><div class="field-empty">Загружаю счета…</div></div>' +
         '<div class="qi-form">' +
           '<div class="pay-grid qi-grid">' +
@@ -57787,12 +57805,13 @@
           '<input id="qi-contact" placeholder="Почта или телефон для чека" value="' + esc(qiContact) + '">' +
           '<button class="bp sm" id="qi-btn" style="justify-content:center">' + ic('plus', 13) + 'Выставить счёт</button>' +
         '</div></div>' +
-      '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
+      '<div class="m-sec" id="ord-sec"><div class="m-sec-h">Счета клиента' +
         '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         buildDebtMark(ctx) +
         '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
-        '<div class="ord-b">' +
+        '<div class="ord-b" id="ord-new">' +
           '<div class="ord-newh">Новый счет</div>' +
+          '<div class="ord-newsub">Продукт из каталога не по договору. Сопровождение оформляется через сделку.</div>' +
           '<div class="ord-addwrap">' +
             '<button type="button" class="ord-addbtn" id="ord-addbtn">' + ic('plus', 13) + 'Добавить в счет' + ic('go', 12) + '</button>' +
             '<div class="ord-menu" id="ord-menu" hidden></div>' +
@@ -57812,15 +57831,15 @@
       /* Счет за уроки школы. Отдельно от счетов платформы: там продукты и рассрочка,
          здесь уроки и остаток ученика на странице учета уроков. Контакт для чека
          спрашивать не надо — его впишет сама семья на странице оплаты. */
-      '<div class="m-sec"><div class="m-sec-h">Счет за уроки</div>' +
-        '<div class="m-csub" style="margin:0 0 10px">Ссылку отправляете семье вы. Почту или телефон для чека человек впишет сам, оплаченные уроки прибавятся на странице учета уроков, а контакт запишется в эту карточку.</div>' +
+      '<div class="m-sec" id="sch-sec"><div class="m-sec-h">Счет за уроки</div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Для уроков языков. Ссылку отправляете семье вы. Почту или телефон для чека человек впишет сам, оплаченные уроки прибавятся на странице учета уроков, а контакт запишется в эту карточку.</div>' +
         '<div class="pay-grid sch">' +
           '<input id="sch-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
           '<input id="sch-les" inputmode="numeric" placeholder="Уроков (по тарифу)">' +
           '<button class="bp sm" id="sch-btn" style="justify-content:center">' + ic('card', 13) + 'Получить ссылку</button>' +
         '</div>' +
         '<div id="sch-out"></div></div>' +
-      '<details class="pay-manual"' + (manualCount ? ' open' : '') + '>' +
+      '<details class="pay-manual" id="pay-manual"' + (manualCount ? ' open' : '') + '>' +
         '<summary><span class="pm-t">Записать оплату вручную</span>' +
           '<span class="pm-h">нал, перевод и прочее мимо кассы' + (manualCount ? ' · ' + manualCount : '') + '</span>' +
           ic('go', 13) + '</summary>' +
@@ -59143,8 +59162,9 @@
             /* По сделке — на выбор: ЮKassa или перевод в ВТБ по QR. Отдел продаж ведет
                семьи на перевод, и QR избавляет их от ручного набора реквизитов. */
             linkBox = '<div class="ord-link" data-linkbox="' + o.id + '">' +
+              '<button class="oi-mark" data-getbank="' + o.id + '">QR на перевод ВТБ</button>' +
               '<button class="oi-mark" data-getlink="' + o.id + '">Ссылка ЮKassa</button>' +
-              '<button class="oi-mark" data-getbank="' + o.id + '">QR на перевод ВТБ</button></div>';
+              '<span class="oi-hint">Крупный взнос — QR, деньги идут на счет ИП без комиссии. ЮKassa — примерно до 30 000 ₽.</span></div>';
           } else if (payable && DEAL_TARIFFS.indexOf(o.tariff_id) >= 0) {
             linkBox = '<div class="ord-link"><span class="oi-hint">Ссылку и QR по сопровождению выдаем после «Оформить сделку» выше.</span></div>';
           } else if (payable) {
@@ -59551,6 +59571,17 @@
         });
       };
       loadQI();
+      // «Как принять оплату»: строка ведет к блоку и коротко подсвечивает его.
+      Array.prototype.forEach.call(document.querySelectorAll('[data-pgo]'), function (b) {
+        b.addEventListener('click', function () {
+          var t = el(b.getAttribute('data-pgo'));
+          if (t && t.hidden) t = el('ord-sec');      // сделка уже оформлена — она в «Счетах клиента»
+          if (!t) return;
+          if (t.tagName === 'DETAILS') t.open = true;
+          t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          t.classList.remove('pg-hit'); void t.offsetWidth; t.classList.add('pg-hit');
+        });
+      });
       var qiRefresh = el('qi-refresh');
       if (qiRefresh) qiRefresh.addEventListener('click', loadQI);
       var qiBtn = el('qi-btn');
