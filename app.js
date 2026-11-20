@@ -41051,10 +41051,18 @@
      можно работать, а кто просто интересовался вакансией или уже лид семьи»). Та же
      отметка «не новый лид», что в чистке «Управления»: человек уходит из счета лидов на
      обоих экранах одинаково. «Краткосрочка» — интерес, из лидов не убирает. */
-  var SB_MK = [['', 'Лид, работаем'], ['family', 'Из семьи лида'], ['vacancy', 'Вакансия'],
-    ['client', 'Уже клиент'], ['other', 'Не наша услуга'], ['spam', 'Спам']];
+  // Тот же перечень, что в чистке «Управления» (rnp.NOT_LEAD на сервере); Павел 20.11.2026:
+  // «как у нас в управлении есть перечень, так же и тут», «например, это друг семьи».
+  var SB_MK = [['', 'Лид, работаем'], ['family', 'Из семьи лида'], ['friend', 'Знакомый, друг семьи'],
+    ['vacancy', 'Вакансия'], ['client', 'Уже клиент'], ['dupe', 'Дубль'], ['other', 'Не наша услуга'],
+    ['efir', 'Только рега на эфир'], ['spam', 'Спам'], ['team', 'Наш / тест']];
+  // Кто ставит «кто это»: руководители и продавцы смены (тот же список ролей, что rnp.require_mark)
+  function canMarkLead() {
+    return can('marketing') || can('planfact') ||
+      (['sales_manager', 'sales_lead', 'tutor_sales'].indexOf(state.role) >= 0 && can('clients'));
+  }
   function sbMkBtn(id, name, big) {
-    if (!id || !(can('marketing') || can('planfact'))) return '';
+    if (!id || !canMarkLead()) return '';
     return '<button type="button" class="' + (big ? 'bp ghost sm sb-mkb' : 'sb-mk') + '" data-sbmk="' + esc(id) +
       '" data-sbmkn="' + esc(name || '') + '" title="Лид или нет: вакансия, семья, спам">' +
       (big ? 'Кто это' : 'кто это') + '</button>';
@@ -55818,8 +55826,12 @@
 
     return '<div class="m-sec ql-sec">' +
       '<div class="m-sec-h">Квалификация' +
-        '<span class="ql-verd' + (mql.ok ? ' on' : '') + '">' +
-          (mql.ok ? 'Квал-лид маркетинга' : 'Пока не квал') + '</span></div>' +
+        (canMarkLead() && ctx.lead && ctx.lead.id
+          ? '<button type="button" class="ql-verd ql-mk' + (mql.ok ? ' on' : '') + '" data-sbmk="' + esc(ctx.lead.id) +
+            '" data-sbmkn="' + esc(ctx.lead.name || '') + '" title="Отметить, кто это: лид, друг семьи, вакансия, спам">' +
+            (mql.ok ? 'Квал-лид маркетинга' : 'Пока не квал') + ' · кто это?</button>'
+          : '<span class="ql-verd' + (mql.ok ? ' on' : '') + '">' +
+            (mql.ok ? 'Квал-лид маркетинга' : 'Пока не квал') + '</span>') + '</div>' +
       '<div class="ql-crit">' + crit + '</div>' + fields +
       '<div class="ql-split"><span>Квал продаж</span><i></i>' +
         '<span class="ql-verd' + (sqlOn ? ' on' : '') + '">' +
@@ -58684,6 +58696,11 @@
     // ── КВАЛИФИКАЦИЯ: галочки продаж и поля, которых не было в анкете ──
     var qlHost = host.querySelector('.ql-sec');
     if (qlHost) {
+      Array.prototype.forEach.call(qlHost.querySelectorAll('[data-sbmk]'), function (b) {
+        b.addEventListener('click', function () {
+          sbMkOpen(b.getAttribute('data-sbmk'), b.getAttribute('data-sbmkn'), function () { loadLeads(true); });
+        });
+      });
       Array.prototype.forEach.call(qlHost.querySelectorAll('[data-qchk]'), function (b) {
         b.addEventListener('click', function () {
           var key = b.getAttribute('data-qchk');

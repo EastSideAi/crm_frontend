@@ -16190,3 +16190,7 @@ video.cs-media { background: #000; }
   .pl-dock.ring { animation: none; }
   .pl-ringing .pl-flash { animation: none; border-color: var(--green); }
 }
+/* «Пока не квал» в карточке — кнопка «кто это» (Павел 20.11.2026: «чтобы была кликабельной») */
+button.ql-verd.ql-mk { border: 0; cursor: pointer; font-family: inherit; }
+button.ql-verd.ql-mk:hover { color: var(--blue); }
+button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
