@@ -5438,6 +5438,11 @@ button.tsk-mimp { cursor: pointer; }
 .tg-tag.st { max-width: 44%; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
 .tg-empty-list { padding: 40px 16px; text-align: center; color: var(--ink-3); font-size: 13px; }
 
+/* Диалог идет в телеграм-аккаунте коллеги-ассистента, а не в самом боте. Имя бывает
+   длинным, поэтому сжимается и обрезается именно эта метка, а не статус рядом. */
+.tg-tag.asst { min-width: 0; flex-shrink: 100; overflow: hidden; color: var(--navy); background: var(--navy-soft); }
+.tg-tag.asst .tg-tag-t { white-space: nowrap; }
+
 /* правая панель — чат */
 .tg-chat { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tg-blank { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
@@ -5523,6 +5528,8 @@ button.tsk-mimp { cursor: pointer; }
 .tg-msg.out .tg-mt { color: rgba(255,255,255,.7); }
 .tg-by { font-size: 10px; font-weight: 600; color: var(--ink-3); margin-top: 2px; display: inline-flex; align-items: center; gap: 3px; }
 .tg-by svg { opacity: .8; }
+/* причина, по которой сообщение не дошло клиенту: что случилось и что делать */
+.tg-why { font-size: 11px; line-height: 1.35; color: var(--ink-2); margin-top: 4px; max-width: 320px; white-space: normal; }
 .tg-msg.in .tg-by { color: var(--blue); }
 .tg-msg.out.ai .tg-by { color: var(--blue); }
 .tg-msg.out.mgr .tg-by { color: var(--navy); }
@@ -5576,6 +5583,14 @@ button.tsk-mimp { cursor: pointer; }
 .tg-hint.mgr svg { color: var(--amber-ink); }
 .tg-hint b { font-weight: 700; color: var(--ink); }
 .tg-hint.mgr b { color: var(--amber-ink); }
+/* Куда уйдет ответ из CRM, когда клиент пишет в телеграм-аккаунт ассистента (22.11.2026).
+   Стоит между подсказкой про бота и полем ввода. Красное — только когда Telegram ответ
+   не пропустит: это предупреждение до отправки, а не справка. */
+.tg-tgw { flex: none; }
+.tg-hint.tgw.closed { align-items: flex-start; color: var(--red-ink); background: var(--red-soft); }
+.tg-hint.tgw.closed svg { margin-top: 2px; }
+.tg-hint.tgw.closed b { color: var(--red-ink); }
+.tg-hint.tgw.open { padding-top: 6px; padding-bottom: 6px; color: var(--ink-2); background: var(--fill); }
 /* действия над сообщением (изменить, убрать) — по наведению на пузырь */
 .tg-msg { position: relative; }
 .tg-acts { position: absolute; top: -7px; display: flex; gap: 4px; opacity: 0; transition: .12s; z-index: 2; }

@@ -51011,6 +51011,12 @@
     var pending = locals.filter(function (lm) {
       for (var i = msgs.length - 1; i >= 0; i--) {
         if (used[i] || msgs[i].sender !== 'manager' || msgs[i].text !== lm.text) continue;
+        /* С 22.11.2026 бот отдает в истории и НЕдоставленные сообщения менеджера
+           (undelivered, id пустой). Такая строка гасит только локальный пузырь с той же
+           пометкой — иначе менеджер видел бы отказ дважды до перезагрузки. А свежую
+           повторную отправку того же текста она гасить не должна: пузырь «отправляется»
+           пропадал бы, пока бот не запишет новую попытку. */
+        if (msgs[i].undelivered && !lm.undelivered) continue;
         used[i] = 1; return false;   // бэк это сообщение уже знает — локальный дубль убираем
       }
       return true;
@@ -51057,6 +51063,7 @@
           d.messages = mergeLocalMsgs(old, d);
           var newN = d.messages.length;
           state.bot.msgs[sel] = d;
+          tgReplyPaint(sel);
           if (newN !== oldN) { refreshOpenThread(true); }       // появились новые — дорисуем, докрутим вниз
           else if (changed) { refreshOpenThread(false); }
         }).catch(function () {});
@@ -51107,8 +51114,61 @@
         unread: c.unread, ai_on: c.ai_enabled, handoff: c.handoff_requested, taken_by: c.taken_by, msgs: c.msgs,
         /* Наш исполнитель, а не клиент: бот наружу один, и подрядчик пишет в него же,
            что школьник. Пометку считает сервер по телеграм-id карточки исполнителя. */
-        cz: c.contractor || null };
+        cz: c.contractor || null,
+        /* Где идет телеграм-диалог и куда уйдет ответ из CRM (см. tgWhereOf). Бот старой
+           версии этих полей не шлет — тогда они пустые, и на экране ничего не появляется. */
+        tg_where: c.tg_where, tg_assistant: c.tg_assistant,
+        tg_reply_via: c.tg_reply_via, tg_window: c.tg_window };
     });
+  }
+
+  /* ── ГДЕ ИДЕТ ТЕЛЕГРАМ-ДИАЛОГ (22.11.2026, ТЗ 3.10) ───────────────────────────
+     Клиент пишет либо самому боту, либо в личный телеграм коллеги-«ассистента»
+     (Telegram Business). Со стороны CRM это выглядело одинаково, а ведет себя
+     по-разному: от имени аккаунта бот может ответить только сутки после сообщения
+     клиента. Менеджер писал из CRM, получал «не доставлено» и не понимал почему —
+     теперь место разговора видно меткой, а о закрытом окне сказано ДО отправки.
+     Свежие поля лежат в ответе /messages открытой переписки, запасные — в строке списка. */
+  function tgWhereOf(c) {
+    var d = c && state.bot.msgs ? state.bot.msgs[c.id] : null;
+    var s = d && d.tg_where !== undefined ? d : (c || {});
+    return { where: s.tg_where || '', asst: s.tg_assistant || '', via: s.tg_reply_via || '', win: s.tg_window || '' };
+  }
+  /* Обычный чат с ботом не подписываем: это случай по умолчанию, и метка на каждой
+     строке списка была бы шумом. Состояний для менеджера два, а не три (владелец,
+     22.11.2026: «либо это бот, либо чат ассистента»): метка стоит, когда ответ из CRM
+     уйдет от имени ассистента. Человек, писавший и туда и туда, считается там, где
+     писал позже, — отдельная метка «бот и ассистент» только путала. */
+  function tgWhereTag(c) {
+    var w = tgWhereOf(c);
+    var t = w.via === 'assistant' ? 'чат ассистента' + (w.asst ? ' · ' + esc(w.asst) : '') : '';
+    return t ? '<span class="tg-tag asst"><span class="tg-tag-t">' + t + '</span></span>' : '';
+  }
+  /* Строка прямо над полем ввода, а не подсказка и не всплывашка: ее должны прочесть
+     до того, как нажмут «отправить». Поле при этом не запираем — окно могло открыться
+     секунду назад, и попробовать человек вправе. */
+  function tgReplyNote(c) {
+    var w = tgWhereOf(c);
+    if (w.via !== 'assistant') return '';
+    if (w.win === 'closed') {
+      return '<div class="tg-hint tgw closed">' + ic('alert', 12) +
+        '<span><b>Клиент не писал ассистенту больше суток.</b> Telegram не даст ответить из CRM — напишите ему из ' +
+        (w.asst ? 'аккаунта ' + esc(w.asst) : 'Telegram-аккаунта ассистента') + '.</span></div>';
+    }
+    if (w.win === 'open') {
+      return '<div class="tg-hint tgw open">' + ic('send', 12) + '<span>Ответ уйдет клиенту от имени ' +
+        (w.asst ? 'аккаунта ' + esc(w.asst) : 'аккаунта-ассистента') + '.</span></div>';
+    }
+    return '';
+  }
+  /* Окно закрывается и открывается, пока чат открыт (прошли сутки; клиент написал
+     ассистенту) — строку освежает тот же опрос, что и тред. Точечно, без пересборки
+     панели: рядом поле ввода. */
+  function tgReplyPaint(uid) {
+    var host = el('tg-tgw');
+    if (!host || String(state.inboxSel) !== String(uid)) return;
+    var c = inboxConvos().filter(function (x) { return String(x.id) === String(uid); })[0];
+    if (c) host.innerHTML = tgReplyNote(c);
   }
 
   /* нормализуем сообщения диалога в {who, text, at} */
@@ -51123,8 +51183,11 @@
                  // Можно ли ещё отозвать: считает сервер по правилам канала (48 часов у
                  // телеграма, сутки у ВК). Своей арифметики тут нет намеренно — вторая
                  // копия правила разъедется с первой в день, когда канал его поменяет.
-                 canDel: m.can_delete === true, delAt: m.deleted_at, delBy: m.deleted_by,
-                 canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by, orig: m.orig_content };
+                 // Без номера править и отзывать нечего: у недоставленного сообщения в
+                 // истории id пустой, и кнопка с data-edit="null" открыла бы правку сразу
+                 // у всех таких пузырей.
+                 canDel: m.can_delete === true && m.id != null, delAt: m.deleted_at, delBy: m.deleted_by,
+                 canEdit: m.can_edit === true && m.id != null, edAt: m.edited_at, edBy: m.edited_by, orig: m.orig_content };
       });
     }
     var dlg = getDialog(c.lead);
@@ -51322,7 +51385,10 @@
       var dk = m.at ? String(m.at).slice(0, 10) : '';
       if (dk && dk !== lastDay) { lastDay = dk; sep = '<div class="tg-day"><span>' + dayLabel(m.at) + '</span></div>'; }
       var foot = m.undelivered
-        ? '<span class="tg-by warn" title="' + esc(m.reason || '') + '">' + ic('alert', 9) + 'не доставлено клиенту</span>'
+        ? '<span class="tg-by warn" title="' + esc(m.reason || '') + '">' + ic('alert', 9) + 'не доставлено клиенту</span>' +
+          /* Причину пишем строкой, а не подсказкой при наведении: менеджеры отвечают с
+             телефона, наведения там нет, и до 22.11.2026 они видели только «tg 403». */
+          (m.reason ? '<div class="tg-why">' + esc(m.reason) + '</div>' : '')
         : (by ? '<span class="tg-by">' + (m.who === 'bot' ? ic('bot', 9) : ic('hand', 9)) + by + '</span>' : '');
       // Удалённое не прячем: переписка это доказательство разговора, и пропавшая
       // реплика читается как «менеджер соврал». Показываем зачёркнутым и кем убрано.
@@ -51370,7 +51436,7 @@
       if (m.sending) {
         foot = '<span class="tg-by">' + ic('clock', 9) + 'отправляется…</span>';
       }
-      var editing = state.msgEdit && String(state.msgEdit) === String(m.id);
+      var editing = m.id != null && state.msgEdit && String(state.msgEdit) === String(m.id);
       var bub = editing
         ? '<div class="tg-bub tg-edbox">' +
             '<textarea class="tg-edin" rows="3">' + esc(m.text || '') + '</textarea>' +
@@ -51479,8 +51545,10 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }),
       }).then(function (res) {
         if (res && res.delivered === false) {
-          tmp.undelivered = true; tmp.reason = res.reason || '';
-          showToast(res.reason ? ('Не доставлено клиенту: ' + res.reason) : 'Сообщение не доставлено клиенту');
+          // reason_text — причина словами от бота (что случилось и что делать); reason — код.
+          tmp.undelivered = true; tmp.reason = res.reason_text || res.reason || '';
+          showToast(res.reason_text ? 'Не доставлено клиенту — причина под сообщением'
+            : (res.reason ? ('Не доставлено клиенту: ' + res.reason) : 'Сообщение не доставлено клиенту'));
           refreshOpenThread(false);
         }
       }).catch(function () {
@@ -51538,8 +51606,9 @@
       }).then(function (res) {
         tmp.sending = false;
         if (res && res.delivered === false) {
-          tmp.undelivered = true; tmp.reason = res.reason || '';
-          showToast(res.reason ? ('Файл не доставлен: ' + res.reason) : 'Файл не доставлен клиенту');
+          tmp.undelivered = true; tmp.reason = res.reason_text || res.reason || '';
+          showToast(res.reason_text ? 'Файл не доставлен — причина под сообщением'
+            : (res.reason ? ('Файл не доставлен: ' + res.reason) : 'Файл не доставлен клиенту'));
           if (unmute) unmute();   // файл не ушёл — диалог боту возвращаем, иначе клиент остался без ответа вовсе
         }
         redraw();
@@ -51678,7 +51747,7 @@
           '<span class="tg-r3">' +
             (c.cz ? '<span class="tg-tag cz">' + ic('badge', 10) +
               (c.cz.id ? 'исполнитель' : 'наш') + '</span>' : '') +
-            st + '</span></span>' +
+            st + tgWhereTag(c) + '</span></span>' +
       '</button>';
     }
     var rows = list.length ? list.map(rowHtml).join('') : '<div class="tg-empty-list">Ничего не найдено</div>';
@@ -52146,7 +52215,7 @@
       '<div class="tg-chead">' +
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
         '<span class="tg-ava sm" style="--c:' + avaColor(c.id != null ? c.id : c.name) + '">' + esc(initials(c.name)) + '</span>' +
-        '<div class="tg-ci"><div class="tg-cn">' + esc(c.name) + '</div><div class="tg-cs">' + chBadge(c.channel) + statusLine + '</div></div>' +
+        '<div class="tg-ci"><div class="tg-cn">' + esc(c.name) + '</div><div class="tg-cs">' + chBadge(c.channel) + statusLine + tgWhereTag(c) + '</div></div>' +
         // Кнопки держим одной группой: их бывает четыре, и на ноутбуке группа целиком
         // уезжает под имя, а не рвется пополам между двумя строками шапки.
         '<div class="tg-cacts">' +
@@ -52180,6 +52249,7 @@
           ? '<span>Бот отвечает сам. <b>Напишешь — он замолчит в этом диалоге</b>, пока не включишь снова.</span>'
           : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы' + resumeNote(c) + '</span>') +
       '</div>' +
+      '<div class="tg-tgw" id="tg-tgw">' + tgReplyNote(c) + '</div>' +
       '<div class="tg-compose">' +
         '<label class="tg-clip" title="Отправить клиенту файл">' + ic('clip', 17) +
           '<input type="file" id="tg-file" hidden></label>' +
@@ -52258,8 +52328,9 @@
       var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
       return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
                atts: attsWithSrc(m.attachments, d.user_id, m.id), sending: m.sending === true,
-               canDel: m.can_delete === true, delAt: m.deleted_at, delBy: m.deleted_by,
-               canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by };
+               // id пустой у недоставленного — см. convoMessages: править и отзывать нечего
+               canDel: m.can_delete === true && m.id != null, delAt: m.deleted_at, delBy: m.deleted_by,
+               canEdit: m.can_edit === true && m.id != null, edAt: m.edited_at, edBy: m.edited_by };
     });
   }
   // Сколько текста письма показываем в ленте: дальше начинается цитата прошлой
@@ -60460,8 +60531,9 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }),
       }).then(function (res) {
         if (res && res.delivered === false) {
-          tmp.undelivered = true; tmp.reason = res.reason || '';
-          showToast(res.reason ? ('Не доставлено: ' + res.reason) : 'Сообщение не доставлено клиенту');
+          tmp.undelivered = true; tmp.reason = res.reason_text || res.reason || '';
+          showToast(res.reason_text ? 'Не доставлено клиенту — причина под сообщением'
+            : (res.reason ? ('Не доставлено: ' + res.reason) : 'Сообщение не доставлено клиенту'));
           if (state.modalSection === 'dialog') renderModalContent();
         }
       }).catch(function () {
