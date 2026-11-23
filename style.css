@@ -16260,3 +16260,90 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .tsk-whox { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--blue); cursor: pointer; }
 .tsk-whox:hover { text-decoration: underline; }
 .tsk-whox:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+
+/* ── Забота (раздел `care`, 23.11.2026) ──────────────────────────────────────
+   Причины технических проблем клиентов. Якорь экрана — столбики случаев по неделям:
+   синяя черта под неделей последней починки, красные столбики — случаи после нее.
+   Красное на экране одно и значит «вернулось» (чип `.care-back` той же формулы
+   -soft/-ink). Строка — рецепт `.trow` (ховер-фон и полоска слева), только выше:
+   у причины две строки текста. */
+.care-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.care-list { overflow: hidden; }
+.care-item { position: relative; }
+.care-item + .care-item { border-top: 1px solid var(--line); }
+.care-item::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: .14s; }
+.care-item:hover::before, .care-item.open::before { opacity: 1; }
+.care-row { display: grid; grid-template-columns: minmax(0, 1fr) 168px 96px 132px; gap: 22px;
+  align-items: center; width: 100%; text-align: left; padding: 16px 24px; cursor: pointer;
+  transition: background .14s; }
+.care-row:hover, .care-item.open .care-row { background: #FBFBFC; }
+.care-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.care-t { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.care-s { font-size: 13px; color: var(--ink-2); line-height: 1.45; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+.care-bars { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; height: 34px; align-items: end; }
+.care-bar { position: relative; height: 100%; display: flex; align-items: flex-end;
+  background: var(--fill); border-radius: 3px; }
+.care-bar i { display: block; width: 100%; background: var(--navy); border-radius: 3px;
+  animation: careGrow .6s var(--ease) both; transform-origin: bottom; }
+.care-bar i.back { background: var(--red); }
+.care-bar.fx::after { content: ''; position: absolute; left: -1px; right: -1px; bottom: -6px; height: 2px;
+  border-radius: 2px; background: var(--blue); }
+@keyframes careGrow { from { transform: scaleY(0); } }
+.care-n { display: flex; flex-direction: column; gap: 2px; }
+.care-n b { font-size: 20px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); line-height: 1.1; }
+.care-n span { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.care-v { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.care-vs { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.care-vs.back { color: var(--red-ink); font-weight: 600; }
+.sev.care-back { color: var(--red-ink); background: var(--red-soft); }
+.care-det { padding: 4px 24px 24px; display: flex; flex-direction: column; gap: 10px; background: #FBFBFC; }
+.care-lab { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-top: 8px; }
+.care-txt { font-size: 13.5px; line-height: 1.55; color: var(--ink); margin-top: 6px; max-width: 70ch; }
+.care-mute { color: var(--ink-3); }
+.care-fixes, .care-cases { display: flex; flex-direction: column; }
+.care-fix, .care-case { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; align-items: baseline;
+  padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.care-case { grid-template-columns: 52px minmax(0, 1fr) auto; }
+.care-fix:last-child, .care-case:last-child { border-bottom: none; }
+.care-cd { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.care-ref { display: block; font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.care-aft { display: block; font-size: 12px; font-weight: 600; color: var(--green-ink); margin-top: 3px; }
+.care-aft.back { color: var(--red-ink); }
+.care-cm { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.care-src { font-size: 12px; color: var(--ink-2); }
+.care-link { font-size: 12.5px; font-weight: 600; color: var(--blue); text-decoration: none; }
+.care-link:hover { text-decoration: underline; }
+.care-addfix { display: grid; grid-template-columns: 150px minmax(0, 1fr) 190px auto; gap: 8px; margin-top: 4px; align-items: end; }
+.care-fl { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.care-fl span { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.care-addfix .bp { height: 44px; }
+.care-more { align-self: flex-start; margin-top: 8px; font: 600 12.5px 'Manrope', sans-serif; color: var(--blue); padding: 6px 0; }
+.care-more:hover { color: var(--blue-d); }
+.care-move { grid-column: 2 / -1; max-width: 340px; }
+.care-move .al-sel { padding: 8px 34px 8px 11px; font-size: 13px; }
+.care-unsorted { padding: 18px 24px; }
+.care-newc { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; max-width: 520px; }
+.care-shim { height: 40px; margin: 10px 0; }
+.care-foot { font-size: 12.5px; color: var(--ink-3); margin: 12px 4px 0; line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { .care-bar i { animation: none; } }
+@media (max-width: 1180px) and (min-width: 761px) {
+  .care-row { grid-template-columns: minmax(0, 1fr) 128px 70px 116px; gap: 14px; padding: 16px 20px; }
+}
+@media (max-width: 760px) {
+  .care-row { grid-template-columns: minmax(0, 1fr) 92px; grid-template-areas: "m m" "b n" "v v"; gap: 10px 14px; padding: 14px 16px; }
+  .care-main { grid-area: m; }
+  .care-v { grid-area: v; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; }
+  .care-bars { grid-area: b; height: 28px; }
+  .care-n { grid-area: n; align-items: flex-end; }
+  .care-s { -webkit-line-clamp: 2; }
+  .care-det { padding: 4px 16px 18px; }
+  .care-addfix { grid-template-columns: 1fr; gap: 8px; }
+  .care-case { grid-template-columns: 44px minmax(0, 1fr); }
+  .care-cm { grid-column: 2; white-space: normal; flex-wrap: wrap; }
+  .care-move { grid-column: 1 / -1; max-width: none; }
+  .care-unsorted { padding: 14px 16px; }
+  .care-newc { grid-column: 1 / -1; grid-template-columns: 1fr; max-width: none; }
+}
