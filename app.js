@@ -59965,6 +59965,9 @@
         Array.prototype.forEach.call(el('deal-tar').querySelectorAll('button'), function (b) {
           b.addEventListener('click', function () {
             deal.tariff_id = b.getAttribute('data-v');
+            /* Сумма и график, прочитанные из договора, главнее прайса тарифа: Новиков
+               23.11.2026 — клик по тарифу заменил второй платеж 31.08.2028 шаблонным. */
+            if (deal.doc && !deal.scan) { renderDeal(); return; }
             var t = deal.tariffs.filter(function (x) { return x.id === deal.tariff_id; })[0];
             if (t && t.price) deal.amount_total = t.price;
             dealPlan(); renderDeal();
