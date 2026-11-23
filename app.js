@@ -42427,7 +42427,9 @@
   function rfdRow(r) {
     var st = r.step;
     var stepTxt = st ? st.title + ' · шаг ' + st.n + ' из ' + st.of
-      : r.source === 'manual' ? 'вернули руками, до цепочки' : 'все шаги сданы';
+      : r.source === 'manual' ? 'вернули руками, до цепочки'
+      : r.source === 'ledger' ? 'до CRM, по ведомости' + (r.id ? '' : ' · карточки нет')
+      : 'все шаги сданы';
     var due = st && st.due
       ? '<b class="num">' + fmtDay(st.due).slice(0, 5) + '</b><small>' +
           (r.state === 'late' ? 'шаг просрочен' : 'срок шага') + '</small>'
@@ -42435,10 +42437,13 @@
         ? '<b class="num">' + fmtDay(r.deadline).slice(0, 5) + '</b><small>весь возврат</small>'
         : r.refunded_at
           ? '<b class="num">' + fmtDay(r.refunded_at).slice(0, 5) + '</b><small>вернули</small>'
-          : '<small>' + (r.started ? 'начали ' + fmtDay(r.started).slice(0, 5) : 'дата не стоит') + '</small>';
+          : r.ledger
+            ? '<b class="num">' + esc(r.ledger) + '</b><small>ведомость</small>'
+            : '<small>' + (r.started ? 'начали ' + fmtDay(r.started).slice(0, 5) : 'дата не стоит') + '</small>';
     var money = r.refunded_rub
       ? '<b class="num">' + smRub(r.refunded_rub) + '</b><small>' +
-          (r.source === 'manual' ? 'по оплате в карточке' : 'по цепочке') + '</small>'
+          (r.source === 'manual' ? 'по оплате в карточке'
+            : r.source === 'ledger' ? esc(r.paid_from || 'по ведомости') : 'по цепочке') + '</small>'
       : '<small>еще не вернули</small>';
     var who = st ? (st.who || 'никто') : '';
     var attr = r.goal_id ? 'data-rfdgoal="' + r.goal_id + '"' : 'data-rfdlead="' + esc(r.id || '') + '"';
@@ -42486,7 +42491,7 @@
     view.innerHTML = '<div class="dash sb dbt rfd">' + head + '<div class="dbt-bar">' + stats + '</div>' +
       '<div class="card sp12"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
         '</span><div><div class="t">' + esc(fl) + ' · <span class="num">' + rows.length + '</span></div>' +
-        '<div class="s">строка открывает цель возврата с шагами, ручной возврат — карточку семьи</div></div>' +
+        '<div class="s">строка открывает цель возврата с шагами, ручной возврат — карточку семьи; возвраты до CRM взяты из ведомостей</div></div>' +
         (f ? '<button class="qchip dbt-all" data-rfdf="">Показать все</button>' : '') + '</div>' +
         (body ? '<div class="dbt-lh"><span>Семья</span><span>Держит шаг</span><span>Вернули</span><span>Срок</span></div>' +
           '<div class="dbt-list">' + body + '</div>' : '<div class="empty">Возвратов пока не было.</div>') +
