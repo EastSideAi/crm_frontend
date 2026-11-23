@@ -43171,9 +43171,15 @@
     if (n('free')) parts.push('свободных ' + n('free'));
     if (n('respond')) parts.push('не связались ' + n('respond'));
     if (n('no_contact')) parts.push('без телефона ' + n('no_contact'));
-    var norm = d.worked_norm || 50, done = d.worked || 0;
-    var worked = '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">сегодня обработал <b class="num">' + done +
-      '</b> из ' + norm + ' семей</span>';
+    var norm = d.worked_norm || 50, done = d.worked || 0, inShift = d.worked_shift;
+    /* Смену засчитывает объем: 50 семей за смену и 50 за день (Павел 23.11.2026).
+       Открыта смена — первым идет ее счет, день рядом. */
+    var worked = (inShift != null
+      ? '<span class="ms-wk' + (inShift >= norm ? ' ok' : '') + '">за смену <b class="num">' + inShift +
+        '</b> из ' + norm + '</span> · '
+      : '') +
+      '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">' + (inShift != null ? 'за день' : 'сегодня обработал') +
+      ' <b class="num">' + done + '</b> из ' + norm + ' семей</span>';
     var chips = '<div class="list-quick ms-spans">' + MS_SPANS.map(function (x) {
       return '<button class="qchip' + (x[0] === span ? ' on' : '') + '" data-msspan="' + x[0] + '">' + x[1] + '</button>';
     }).join('') + '</div>';
