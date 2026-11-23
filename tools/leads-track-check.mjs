@@ -31,7 +31,8 @@ const patched = src.replace(marker, marker +
   ' owner: function (l) { return ownerName(l); },' +
   ' tone: function (n) { return tutorTone(n); },' +
   ' pred: function (seg) { return quickPred(seg); },' +
-  ' setTracks: function (t) { DOC_TRACKS = t; }, state: state };');
+  ' setTracks: function (t) { DOC_TRACKS = t; },' +
+  ' seg: function (s) { return segLeads(s); }, state: state };');
 
 function el(tag) {
   const node = { tagName: tag, style: {}, dataset: {}, children: [], classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
@@ -317,6 +318,21 @@ const withD = dlLead('2026-12-05'), noD = dlLead('');
 check('без срока строка в конце по возрастанию', L.dlCmp(noD, withD, 1) === 1, L.dlCmp(noD, withD, 1));
 check('без срока строка в конце и по убыванию', L.dlCmp(noD, withD, -1) === 1, L.dlCmp(noD, withD, -1));
 check('ближний срок выше дальнего', L.dlCmp(dlLead('2026-12-01'), withD, 1) === -1, '');
+
+/* Порядок строк «Сопровождения»: по алфавиту, а не по дате прихода (Мария
+   23.11.2026). Нажатие на заголовок колонки сильнее — это state.sort. */
+const sup = (name) => ({ id: name, name: name, created_at: '2026-01-01T00:00:00Z',
+  score: 50, crm: { status: 'client', note: '', overrides: { support: 'on' }, tasks: [], comms: [] } });
+L.state.seg = 'support'; L.state.trk = ''; L.state.cls = 0; L.state.own = '';
+L.state.quick = ''; L.state.q = ''; L.state.sort = null; L.state.showBlank = true;
+L.state.filters = { funnel: '', period: '' };
+L.state.leads = [sup('Яшина Нина'), sup('Белов Петр'), sup('абрамов Илья'), sup('Ёлкина Вера')];
+const names = L.seg('support').map(l => l.name);
+check('«Сопровождение» идет по алфавиту',
+  names.join(',') === 'абрамов Илья,Белов Петр,Ёлкина Вера,Яшина Нина', names.join(','));
+L.state.sort = { col: 'score', dir: -1 };
+check('нажатие на колонку сильнее алфавита', L.seg('support').length === 4, '');
+L.state.sort = null;
 
 console.log(bad ? ('\nпровалено проверок: ' + bad) : '\nвсе проверки прошли');
 process.exit(bad ? 1 : 0);
