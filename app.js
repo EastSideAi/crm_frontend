@@ -57804,11 +57804,15 @@
      лежит, семья о нем не знает, и это должно быть видно сразу, а не вычитываться
      из пустой колонки. */
   var AP_TIERS = [
-    { k: 'a', t: 'Мечта',    h: 'куда целимся' },
-    { k: 'b', t: 'Реальный', h: 'по профилю проходим' },
-    { k: 'c', t: 'Запасной', h: 'подстраховка' },
+    { k: 'a', t: 'Мечта',    b: 'А', h: 'куда целимся' },
+    { k: 'b', t: 'Реальный', b: 'Б', h: 'по профилю проходим' },
+    { k: 'c', t: 'Запасной', b: 'С', h: 'подстраховка' },
   ];
-  var AP_TIER_T = { a: 'мечта', b: 'реальный', c: 'запасной' };
+  // Буква рядом со словом (Мария 23.11.2026): команда между собой говорит «вуз А»,
+  // «вуз Б», а в карточке и в кабинете семьи уровень назван словом. Два имени
+  // одного и того же — повод для путаницы, поэтому пишем их вместе, а не выбираем.
+  function apTierName(t) { return t.t + ' (' + t.b + ')'; }
+  var AP_TIER_T = { a: 'мечта (А)', b: 'реальный (Б)', c: 'запасной (С)' };
   var AP_OPEN = {};                 // lead id → раскрытая карточка вуза
   var AP_EV = {}, AP_EV_BUSY = {};  // лента заявки: id заявки → события
 
@@ -57870,7 +57874,7 @@
     // Уровень кнопками, а не только перетаскиванием: с телефона карточку мышью не
     // возьмешь, а список вузов разбирают и в дороге.
     var seg = AP_TIERS.map(function (t) {
-      return '<button class="uv-sb' + (a.tier === t.k ? ' on' : '') + '" data-uvtier="' + a.id + '" data-t="' + t.k + '">' + t.t + '</button>';
+      return '<button class="uv-sb' + (a.tier === t.k ? ' on' : '') + '" data-uvtier="' + a.id + '" data-t="' + t.k + '">' + apTierName(t) + '</button>';
     }).join('') +
       '<button class="uv-sb off' + (a.tier ? '' : ' on') + '" data-uvtier="' + a.id + '" data-t="">Без уровня</button>';
 
@@ -57937,7 +57941,7 @@
     var cols = AP_TIERS.map(function (t) {
       var mine = list.filter(function (a) { return a.tier === t.k; });
       return '<section class="uv-col" data-uvdrop="' + t.k + '">' +
-        '<div class="uv-col__h"><b>' + t.t + '</b><span class="uv-col__n">' + mine.length + '</span>' +
+        '<div class="uv-col__h"><b>' + apTierName(t) + '</b><span class="uv-col__n">' + mine.length + '</span>' +
           '<span class="uv-col__h2">' + t.h + '</span></div>' +
         '<div class="uv-col__b">' +
           (mine.length ? mine.map(function (a) { return apBoardCard(a, String(a.id) === String(openId)); }).join('')
@@ -57946,7 +57950,7 @@
     }).join('');
 
     return '<div class="m-ctitle">Университеты</div>' +
-      '<div class="m-csub">Три уровня: мечта, реальный, запасной. Карточка таскается мышью между колонками, ' +
+      '<div class="m-csub">Три уровня: мечта (А), реальный (Б), запасной (С). Карточка таскается мышью между колонками, ' +
         'флаг отмечает главный вуз. В кабинете семья видит только те, что разложены по уровням.</div>' +
       (list.length
         ? (hold.length
@@ -57974,7 +57978,7 @@
         '</div>' +
         '<div class="uv-newlv"><span>Уровень</span>' +
           AP_TIERS.map(function (t, i) {
-            return '<button class="uv-sb" data-uvnew="' + t.k + '">' + t.t + '</button>';
+            return '<button class="uv-sb" data-uvnew="' + t.k + '">' + apTierName(t) + '</button>';
           }).join('') +
           '<button class="uv-sb off on" data-uvnew="">Без уровня</button></div>' +
         '<button class="bp" id="ap-n-add">' + ic('plus', 13) + 'Добавить вуз</button></div></details>';
