@@ -280,10 +280,10 @@ ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": 
                "planfact", "finmodel", "zaezd_review", "academy", "academy_review"]}
 
 _D = lambda n: (date.today() + timedelta(days=n)).isoformat()
-REFUNDS = {"refunded_rub": 50990, "states": [
+REFUNDS = {"refunded_rub": 117990, "states": [
     {"key": "late", "label": "Шаг просрочен", "count": 1},
     {"key": "going", "label": "Идет", "count": 1},
-    {"key": "done", "label": "Вернули", "count": 2}], "rows": [
+    {"key": "done", "label": "Вернули", "count": 4}], "rows": [
     {"id": "d1", "goal_id": 101, "name": "Семья Демидовых", "source": "flow", "state": "late",
      "started": _D(-8), "deadline": _D(5), "steps_done": 1, "refunded_rub": 0, "refunded_at": None,
      "step": {"n": 2, "of": 5, "title": "подготовить расчет возврата", "task_id": 1, "who": "Лиана",
@@ -297,7 +297,14 @@ REFUNDS = {"refunded_rub": 50990, "states": [
      "step": None},
     {"id": "d4", "goal_id": None, "name": "Гость с лендинга", "source": "manual", "state": "done",
      "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 990, "refunded_at": _D(-100),
-     "step": None}]}
+     "step": None},
+    # возвраты до CRM, только в ведомости (миграция 335 бэкенда)
+    {"id": "d5", "goal_id": None, "name": "Семья Ведомостных", "source": "ledger", "state": "done",
+     "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 62000, "refunded_at": _D(-27),
+     "step": None, "ledger": "22.10–10.11", "paid_from": "фонд безопасности", "note": ""},
+    {"id": None, "goal_id": None, "name": "Тестова Анна", "source": "ledger", "state": "done",
+     "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 5000, "refunded_at": None,
+     "step": None, "ledger": "21.05–10.06", "paid_from": "фонд безопасности", "note": ""}]}
 
 
 class H(SimpleHTTPRequestHandler):
