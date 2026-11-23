@@ -21,7 +21,7 @@
 """
 import json
 import os, sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1]); ROOT = sys.argv[2]
@@ -140,6 +140,77 @@ def doc_plan(lead):
             "total": len(items), "items": items}
 
 
+
+# Доска «Университеты»: вузы одного ученика с уровнями (мечта / реальный /
+# запасной). В проде это eastside.uni_applications, тут — память процесса: доску
+# надо увидеть глазами и показать ее человеку до промоута, а живые фамилии и
+# вузы детей в превью и скриншоты не выносятся.
+TIER_T = {"a": "мечта", "b": "реальный", "c": "запасной"}
+AP_REQS = [("passport", "Загранпаспорт", True), ("transcript", "Транскрипт оценок", True),
+           ("lang_cert", "Языковой сертификат", True), ("photo", "Фото по требованиям", True),
+           ("letter", "Мотивационное письмо", False)]
+AP_SEED = [
+    ("Harbin Institute of Technology", "Computer Science", "2027 осень", 24, "collecting", "a", True),
+    ("Shanghai Jiao Tong University", "Civil Engineering", "2027 осень", 38, "draft", "a", False),
+    ("Zhejiang University", "Software Engineering", "2027 осень", 12, "check", "b", False),
+    ("Jilin University", "International Economics", "2027 осень", 61, "ready", "b", False),
+    ("Dalian University of Technology", "Mechanical Engineering", "2027 осень", 90, "submitted", "c", False),
+    ("Shandong University", None, None, None, "draft", None, False),
+]
+_APPS, _AP_EV, _AP_SEQ = {}, {}, [100]
+
+
+def apps_for(lead_id):
+    if lead_id in _APPS:
+        return _APPS[lead_id]
+    out = []
+    for n, (uni, prog, intake, dl, st, tier, main) in enumerate(AP_SEED):
+        _AP_SEQ[0] += 1
+        aid = _AP_SEQ[0]
+        reqs = []
+        for m, (key, title, req) in enumerate(AP_REQS):
+            state = "done" if m < (n % 4) else ("doing" if m == (n % 4) else "todo")
+            reqs.append({"key": key, "title": title, "required": req, "state": state, "note": ""})
+        done = sum(1 for r in reqs if r["state"] == "done")
+        out.append({
+            "id": aid, "uniName": uni, "programName": prog, "intake": intake,
+            "deadline": (date.today() + timedelta(days=dl)).isoformat() if dl is not None else None,
+            "status": st, "appNumber": "", "portalUrl": "", "portalLogin": "",
+            "hasSecret": n == 0, "requirements": reqs,
+            "progress": {"done": done, "total": len(reqs)},
+            "tier": tier, "tierTitle": TIER_T.get(tier or "", "без уровня"),
+            "isMain": main, "approved": bool(tier),
+            "approvedAt": "2026-11-20T10:00:00Z" if tier else None,
+            "approvedBy": "Мария Шустова" if tier else None,
+            "notes": "",
+        })
+        _AP_EV[aid] = [{"id": aid * 10, "kind": "created", "text": "Завели вуз: " + uni,
+                        "side": "team", "by": "Мария Шустова",
+                        "at": "2026-11-20T09:55:00Z", "family": True}]
+        if tier:
+            _AP_EV[aid].insert(0, {"id": aid * 10 + 1, "kind": "approved",
+                                   "text": "Вуз в вашем списке: " + uni, "side": "team",
+                                   "by": "Мария Шустова", "at": "2026-11-20T10:00:00Z",
+                                   "family": True})
+    _APPS[lead_id] = out
+    return out
+
+
+def app_by_id(aid):
+    for lead_id, lst in _APPS.items():
+        for a in lst:
+            if str(a["id"]) == str(aid):
+                return lead_id, a
+    return None, None
+
+
+def ap_log(aid, kind, text, family):
+    ev = _AP_EV.setdefault(aid, [])
+    ev.insert(0, {"id": (ev[0]["id"] + 1) if ev else 1, "kind": kind, "text": text,
+                  "side": "team", "by": "Демо Пользователь",
+                  "at": datetime.now().isoformat(timespec="seconds"), "family": family})
+
+
 _LEADS = None
 
 
@@ -248,6 +319,14 @@ class H(SimpleHTTPRequestHandler):
                 return self._json({"ok": True, **one[0], "docs": DOCS,
                                    "doc_fields": DOC_FIELDS,
                                    "doc_plan": doc_plan(one[0])})
+        # Доска «Университеты» в карточке: вузы ученика и лента одного вуза.
+        if p.startswith("/admin/api/leads/") and p.endswith("/applications"):
+            lead_id = p.split("/")[4]
+            return self._json({"ok": True, "applications": apps_for(lead_id),
+                               "statuses": [], "vault": True})
+        if p.startswith("/admin/api/applications/") and p.endswith("/events"):
+            aid = p.split("/")[4]
+            return self._json({"ok": True, "events": _AP_EV.get(int(aid), [])})
         if p == "/admin/api/docs/kinds":
             return self._json({"ok": True, "kinds": [], "tracks": TRACKS})
         if p.startswith("/admin/api/") or p.startswith("/api/"):
@@ -256,6 +335,80 @@ class H(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        """Действия доски «Университеты». Остальным POST-ам хватает «ok».
+
+        Уровень тут МЕНЯЕТ видимость для семьи — ровно как на бэкенде: поставили
+        уровень, вуз утвержден, сняли — ушел из кабинета. Мок, который молча
+        отвечал «ok», подтверждал бы перенос, которого не произошло, и проверка
+        глазами тогда ничего не значит.
+        """
+        p = self.path.split("?")[0].rstrip("/")
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(size) or b"{}")
+        except Exception:
+            body = {}
+        parts = p.split("/")
+        if p.startswith("/admin/api/leads/") and p.endswith("/applications"):
+            lead_id = parts[4]
+            lst = apps_for(lead_id)
+            _AP_SEQ[0] += 1
+            aid = _AP_SEQ[0]
+            reqs = [{"key": k, "title": ti, "required": rq, "state": "todo", "note": ""}
+                    for k, ti, rq in AP_REQS]
+            a = {"id": aid, "uniName": body.get("uni_name") or "Без названия",
+                 "programName": body.get("program_name"), "intake": body.get("intake"),
+                 "deadline": body.get("deadline"), "status": "draft", "appNumber": "",
+                 "portalUrl": body.get("portal_url") or "", "portalLogin": body.get("portal_login") or "",
+                 "hasSecret": False, "requirements": reqs,
+                 "progress": {"done": 0, "total": len(reqs)},
+                 "tier": None, "tierTitle": "без уровня", "isMain": False,
+                 "approved": False, "approvedAt": None, "approvedBy": None, "notes": ""}
+            lst.append(a)
+            ap_log(aid, "created", "Завели вуз: " + a["uniName"], True)
+            return self._json({"ok": True, **a})
+        if len(parts) >= 6 and parts[3] == "applications":
+            aid, what = parts[4], parts[5]
+            lead_id, a = app_by_id(aid)
+            if a is None:
+                return self._json({"ok": True})
+            if what == "tier":
+                tier = body.get("tier") or None
+                was = a["tier"]
+                a["tier"] = tier
+                a["tierTitle"] = TIER_T.get(tier or "", "без уровня")
+                a["approved"] = bool(tier)
+                a["approvedAt"] = a["approvedAt"] if (tier and a["approvedAt"]) else (
+                    datetime.now().isoformat(timespec="seconds") if tier else None)
+                if tier and was:
+                    ap_log(int(aid), "tier", "Перенесли из «%s» в «%s»"
+                           % (TIER_T.get(was, "без уровня"), TIER_T[tier]), False)
+                elif tier:
+                    ap_log(int(aid), "tier", "Поставили уровень: " + TIER_T[tier], False)
+                    ap_log(int(aid), "approved", "Вуз в вашем списке: " + a["uniName"], True)
+                else:
+                    ap_log(int(aid), "tier", "Сняли уровень «%s»"
+                           % TIER_T.get(was, "без уровня"), False)
+                return self._json({"ok": True, **a})
+            if what == "main":
+                on = bool(body.get("main"))
+                if on:
+                    for other in _APPS.get(lead_id, []):
+                        other["isMain"] = False
+                a["isMain"] = on
+                ap_log(int(aid), "main", ("Главный вуз: " if on else "Сняли отметку главного: ")
+                       + a["uniName"], a["approved"])
+                return self._json({"ok": True, **a})
+            if what == "status":
+                a["status"] = body.get("status") or a["status"]
+                ap_log(int(aid), "status", "Статус: " + a["status"], True)
+                return self._json({"ok": True, **a})
+            if what == "requirements":
+                for r in a["requirements"]:
+                    if r["key"] == body.get("key"):
+                        r["state"] = body.get("state") or r["state"]
+                a["progress"]["done"] = sum(1 for r in a["requirements"] if r["state"] == "done")
+                return self._json({"ok": True, **a})
         return self._json({"ok": True})
 
     def do_PATCH(self):
