@@ -433,6 +433,7 @@
       kanban: '<rect x="3" y="3" width="4.2" height="14" rx="1.4"/><rect x="8.4" y="3" width="4.2" height="9" rx="1.4"/><rect x="13.8" y="3" width="4.2" height="6" rx="1.4"/>',
       rows: '<path d="M3 5.5h14M3 10h14M3 14.5h9"/>',
       pin: '<path d="M10 18s-6-5.5-6-9.5a6 6 0 0 1 12 0C16 12.5 10 18 10 18z"/><circle cx="10" cy="8.5" r="2"/>',
+      flag: '<path d="M5.5 17.5V3.2"/><path d="M5.5 4.2h8.8l-1.9 3.1 1.9 3.1H5.5z" fill="currentColor" stroke-width="1"/>',
       pie: '<path d="M10 2.5a7.5 7.5 0 1 0 7.5 7.5H10V2.5z"/><path d="M13 2.9A7.5 7.5 0 0 1 17.1 7H13V2.9z"/>',
       bell: '<path d="M10 2.5a5 5 0 0 1 5 5c0 4 1.5 5 1.5 5h-13S5 11.5 5 7.5a5 5 0 0 1 5-5z"/><path d="M8.5 16a1.6 1.6 0 0 0 3 0"/>',
       task: '<rect x="3" y="3" width="14" height="14" rx="3"/><path d="M7 10.2l2.2 2.2L13.5 8"/>',
@@ -1149,6 +1150,17 @@
         else if (s.col === 'deadline') return dlCmp(a, b, s.dir);
         else { av = new Date(a.created_at || 0).getTime(); bv = new Date(b.created_at || 0).getTime(); }
         return (av - bv) * s.dir;
+      });
+    } else if (seg === 'support') {
+      /* «Сопровождение» — список, по которому ходят глазами изо дня в день, ища
+         конкретного ученика (Мария 23.11.2026: «все в разброс, не удобно»).
+         Поэтому по умолчанию он по алфавиту, а не по дате прихода: дата у клиента
+         в работе ничего не решает, а место строки в списке должно быть
+         предсказуемым. Нажатие на заголовок колонки по-прежнему сильнее — это
+         state.sort выше. */
+      arr.sort(function (a, b) {
+        return (a.name || 'яяя').toLowerCase()
+          .localeCompare((b.name || 'яяя').toLowerCase(), 'ru');
       });
     } else if (seg === 'queue') {
       /* Горячие (оставил заявку и ещё не в работе) всегда наверху — без фильтра:
@@ -49834,7 +49846,17 @@
           (risks.length ? '<span class="minib warn" title="' + esc(risks[0].label) + '">' + ic('flame', 9) + '</span>' : '') +
           (openTasks.length ? '<span class="minib' + (overdue ? ' warn' : '') + '">' + ic('task', 10) + openTasks.length + '</span>' : '') +
         '</div>' +
-          '<div class="t-sub">' + (profileBits.join(' · ') || FUNNEL[l.status]) + (l.crm.note ? ' · ' + esc(l.crm.note) : '') + '</div></div>' +
+          /* В «Сопровождении» под именем стоит ТОЛЬКО направление (Мария 23.11.2026:
+             «надо, чтобы где серое, было написано только как ученик сейчас поступает
+             — языковой платный, бакалавр, мага, как у нас по списку»). Класс, год
+             поступления и заметка карточки оттуда убраны: у клиента в работе вопрос
+             один — куда он идет, а заметка целиком все равно не влезала и обрывалась
+             на полуслове. Не проставлено — так и пишем: это повод зайти и поставить,
+             пока оно пустое, семья видит общий пакет документов. */
+          '<div class="t-sub">' + (tutorCol()
+            ? (leadTrack(l) ? esc(trackName(leadTrack(l))) : '<i class="t-sub-none">направление не проставлено</i>')
+            : (profileBits.join(' · ') || FUNNEL[l.status]) + (l.crm.note ? ' · ' + esc(l.crm.note) : '')) +
+          '</div></div>' +
         (tutorCol()
           /* В «Сопровождении» на месте балла — этап маршрута (Мария 20.11.2026): балл
              это оценка лида на входе, а у клиента в работе вопрос один, где он сейчас.
@@ -52708,7 +52730,7 @@
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'consult',   label: 'Консультации', icon: 'phone' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
-    { id: 'apply',     label: 'Подача',       icon: 'send' },
+    { id: 'apply',     label: 'Университеты', icon: 'cap' },
     // Контрольные точки тьютора: из них складывается его ставка за ученика
     // (_specs/tutors/motivation-v1.md). Рядом с «Подачей» намеренно: обе
     // секции про работу, которую принимают, а не про переписку.
@@ -57876,6 +57898,136 @@
     return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : String(iso);
   }
 
+  /* ── Доска «Университеты» ──────────────────────────────────────────────────
+     Три колонки по уровням — мечта, реальный, запасной (формулировки Марии
+     23.11.2026). Уровень лежит У ЗАЯВКИ (колонка tier), а не в отдельном списке
+     вузов: второй список рядом с заявками разъехался бы с ними на первой правке,
+     и было бы непонятно, по какому работать.
+
+     УРОВЕНЬ И ЕСТЬ УТВЕРЖДЕНИЕ. Мария: «нужно, чтобы клиенты видели только вузы
+     А, Б, С, все остальные им видеть не нужно». Поэтому отдельной кнопки
+     «утвердить» на доске нет: положили карточку в колонку — вуз появился у семьи
+     в кабинете, сняли уровень — пропал. Две кнопки на один смысл означали бы
+     «уровень есть, а семья не видит» и спор о том, где правда.
+
+     Полоса «Не разложены» сверху — вузы, которые завели и еще не разобрали. Это
+     рабочий черновик команды, и он намеренно стоит ВЫШЕ доски: пока вуз в нем
+     лежит, семья о нем не знает, и это должно быть видно сразу, а не вычитываться
+     из пустой колонки. */
+  var AP_TIERS = [
+    { k: 'a', t: 'Мечта',    h: 'куда целимся' },
+    { k: 'b', t: 'Реальный', h: 'по профилю проходим' },
+    { k: 'c', t: 'Запасной', h: 'подстраховка' },
+  ];
+  var AP_TIER_T = { a: 'мечта', b: 'реальный', c: 'запасной' };
+  var AP_OPEN = {};                 // lead id → раскрытая карточка вуза
+  var AP_EV = {}, AP_EV_BUSY = {};  // лента заявки: id заявки → события
+
+  function apStatusTitle(k) {
+    for (var i = 0; i < AP_STATUS.length; i++) if (AP_STATUS[i].k === k) return AP_STATUS[i].t;
+    return k || '';
+  }
+
+  function loadApEvents(appId, leadId) {
+    if (AP_EV_BUSY[appId]) return;
+    AP_EV_BUSY[appId] = true;
+    api('/admin/api/applications/' + appId + '/events').then(function (r) {
+      AP_EV_BUSY[appId] = false; AP_EV[appId] = r.events || [];
+      if (state.drawerId === leadId && state.modalSection === 'apply') renderModalContent();
+    }).catch(function () { AP_EV_BUSY[appId] = false; AP_EV[appId] = []; });
+  }
+
+  /* Карточка на доске: только то, что решает, куда ее двигать. Пакет и портал
+     живут в раскрытой карточке под доской — в колонке шириной 240px они
+     превращаются в нечитаемую стопку. */
+  function apBoardCard(a, open) {
+    var done = (a.progress && a.progress.done) || 0, total = (a.progress && a.progress.total) || 0;
+    var sub = [a.programName, a.intake].filter(Boolean).join(' · ');
+    return '<article class="uv-card' + (open ? ' on' : '') + (a.isMain ? ' main' : '') + '"' +
+        ' draggable="true" data-uvcard="' + a.id + '" data-tier="' + esc(a.tier || '') + '"' +
+        ' tabindex="0" role="button" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+      '<div class="uv-card__h">' +
+        (a.tier ? '<button class="uv-flag' + (a.isMain ? ' on' : '') + '" data-uvmain="' + a.id + '"' +
+          ' title="' + (a.isMain ? 'Главный вуз' : 'Отметить главным') + '"' +
+          ' aria-pressed="' + (a.isMain ? 'true' : 'false') + '">' + ic('flag', 14) + '</button>' : '') +
+        '<div class="uv-card__t"><div class="uv-uni">' + esc(a.uniName) + '</div>' +
+          (sub ? '<div class="uv-sub">' + esc(sub) + '</div>' : '') + '</div>' +
+      '</div>' +
+      '<div class="uv-card__f">' +
+        /* Старые заявки (до 23.11.2026) утверждены миграцией, но уровня у них нет:
+           семья их видит, а лежат они в «Не разложены». Молча это читается как
+           вранье полосы, поэтому у такой карточки стоит метка. */
+        (!a.tier && a.approved ? '<span class="uv-seen">видит семья</span>' : '') +
+        '<span class="uv-st st-' + esc(a.status) + '">' + esc(apStatusTitle(a.status)) + '</span>' +
+        (total ? '<span class="uv-pack">' + done + '/' + total + '</span>' : '') +
+        apDeadline(a) +
+      '</div></article>';
+  }
+
+  /* Подробности одного вуза — та же карточка, что была в «Подаче»: статусы, пакет,
+     дедлайн, доступ к порталу. Открывается под доской по клику, одна за раз: это
+     рабочее место по ОДНОМУ вузу, и два открытых рядом только отнимают высоту. */
+  function apOpenCard(a, vault, ev) {
+    var steps = AP_STATUS.map(function (s) {
+      return '<button class="ap-step' + (s.k === a.status ? ' on' : '') + '" data-apst="' + a.id + '" data-st="' + s.k + '">' + s.t + '</button>';
+    }).join('');
+    var reqs = (a.requirements || []).map(function (r) {
+      var st = AP_REQ[r.state] || AP_REQ.todo;
+      return '<button class="ap-req" data-apreq="' + a.id + '" data-key="' + esc(r.key) + '" data-state="' + esc(r.state || 'todo') + '">' +
+        '<span class="ap-req__t">' + esc(r.title || r.key) + (r.required ? '' : ' <i>по запросу вуза</i>') + '</span>' +
+        '<span class="ap-req__s ' + st[1] + '">' + st[0] + '</span></button>';
+    }).join('');
+    var done = (a.progress && a.progress.done) || 0, total = (a.progress && a.progress.total) || 0;
+    // Уровень кнопками, а не только перетаскиванием: с телефона карточку мышью не
+    // возьмешь, а список вузов разбирают и в дороге.
+    var seg = AP_TIERS.map(function (t) {
+      return '<button class="uv-sb' + (a.tier === t.k ? ' on' : '') + '" data-uvtier="' + a.id + '" data-t="' + t.k + '">' + t.t + '</button>';
+    }).join('') +
+      '<button class="uv-sb off' + (a.tier ? '' : ' on') + '" data-uvtier="' + a.id + '" data-t="">Без уровня</button>';
+
+    var log = ev === undefined
+      ? '<div class="uv-log__wait">читаю ленту…</div>'
+      : (ev.length ? ev.map(function (e) {
+          return '<div class="uv-ev"><span class="uv-ev__d">' + esc(fmtWhen(e.at)) + '</span>' +
+            '<span class="uv-ev__t">' + esc(e.text) + '</span>' +
+            (e.family ? '<span class="uv-ev__f">видит семья</span>' : '') + '</div>';
+        }).join('') : '<div class="uv-log__wait">пока ничего не происходило</div>');
+
+    return '<div class="uv-open" data-uvopen="' + a.id + '">' +
+      '<div class="uv-open__h">' +
+        '<div><div class="uv-open__t">' + esc(a.uniName) + '</div>' +
+          '<div class="uv-open__s">' + esc([a.programName, a.intake].filter(Boolean).join(' · ') || 'программа не указана') +
+            (a.approved ? ' · <b>вуз у семьи в кабинете</b>' : ' · <b>семья его не видит</b>') + '</div></div>' +
+        '<button class="uv-close" data-uvclose="1" title="Свернуть">' + ic('x', 14) + '</button>' +
+      '</div>' +
+      '<div class="uv-seg"><span class="uv-seg__k">Уровень</span>' + seg +
+        (a.tier ? '<button class="uv-main' + (a.isMain ? ' on' : '') + '" data-uvmain="' + a.id + '"' +
+          ' aria-pressed="' + (a.isMain ? 'true' : 'false') + '">' + ic('flag', 13) +
+          (a.isMain ? 'Главный вуз' : 'Сделать главным') + '</button>' : '') + '</div>' +
+      '<div class="ap-steps">' + steps + '</div>' +
+      '<div class="ap-pack"><span>Пакет</span><b>' + done + ' из ' + total + '</b>' +
+        '<span class="ap-bar"><i style="width:' + (total ? Math.round(done / total * 100) : 0) + '%"></i></span></div>' +
+      '<div class="ap-reqs">' + reqs + '</div>' +
+      '<div class="ap-grid">' +
+        '<label>Дедлайн<input type="date" data-apfield="deadline" data-apid="' + a.id + '" value="' + esc(a.deadline || '') + '"></label>' +
+        '<label>Номер заявки<input data-apfield="app_number" data-apid="' + a.id + '" value="' + esc(a.appNumber || '') + '" placeholder="как на портале"></label>' +
+        '<label>Портал<input data-apfield="portal_url" data-apid="' + a.id + '" value="' + esc(a.portalUrl || '') + '" placeholder="ссылка на кабинет вуза"></label>' +
+        '<label>Логин<input data-apfield="portal_login" data-apid="' + a.id + '" value="' + esc(a.portalLogin || '') + '" placeholder="логин семьи"></label>' +
+      '</div>' +
+      '<div class="ap-sec-row">' +
+        (a.hasSecret
+          ? '<button class="bp ghost sm" data-apshow="' + a.id + '">' + ic('lock', 13) + 'Показать пароль</button>'
+          : '<span class="ap-hint">' + (vault ? 'пароль от портала не сохранен' : 'сейф паролей не настроен: ключ portal_vault_key') + '</span>') +
+        (vault ? '<input class="ap-pass" data-appass="' + a.id + '" type="password" placeholder="новый пароль портала" autocomplete="new-password">' +
+          '<button class="bp sm" data-apsave="' + a.id + '">Сохранить</button>' : '') +
+      '</div>' +
+      '<div class="ap-shown" data-apshown="' + a.id + '"></div>' +
+      '<details class="m-fold uv-logf"><summary><span class="pm-t">Что происходило</span>' +
+        '<span class="pm-h">переносы, статусы, пакет</span>' + ic('go', 13) + '</summary>' +
+        '<div class="m-fold__body uv-log">' + log + '</div></details>' +
+    '</div>';
+  }
+
   function buildApplySection(ctx) {
     var id = ctx.id;
     var box = APPS[id];
@@ -57883,49 +58035,45 @@
     var list = box.applications || [];
     var vault = box.vault !== false;
 
-    var cards = list.map(function (a) {
-      var steps = AP_STATUS.map(function (s) {
-        return '<button class="ap-step' + (s.k === a.status ? ' on' : '') + '" data-apst="' + a.id + '" data-st="' + s.k + '">' + s.t + '</button>';
-      }).join('');
-      var reqs = (a.requirements || []).map(function (r) {
-        var st = AP_REQ[r.state] || AP_REQ.todo;
-        return '<button class="ap-req" data-apreq="' + a.id + '" data-key="' + esc(r.key) + '" data-state="' + esc(r.state || 'todo') + '">' +
-          '<span class="ap-req__t">' + esc(r.title || r.key) + (r.required ? '' : ' <i>по запросу вуза</i>') + '</span>' +
-          '<span class="ap-req__s ' + st[1] + '">' + st[0] + '</span></button>';
-      }).join('');
-      var done = (a.progress && a.progress.done) || 0, total = (a.progress && a.progress.total) || 0;
-      return '<div class="ap-card" data-apid="' + a.id + '">' +
-        '<div class="ap-card__h">' +
-          '<div class="ap-card__b"><div class="ap-uni">' + esc(a.uniName) + '</div>' +
-            '<div class="ap-sub">' + esc([a.programName, a.intake].filter(Boolean).join(' · ') || 'программа не указана') + '</div></div>' +
-          apDeadline(a) +
-        '</div>' +
-        '<div class="ap-steps">' + steps + '</div>' +
-        '<div class="ap-pack"><span>Пакет</span><b>' + done + ' из ' + total + '</b>' +
-          '<span class="ap-bar"><i style="width:' + (total ? Math.round(done / total * 100) : 0) + '%"></i></span></div>' +
-        '<div class="ap-reqs">' + reqs + '</div>' +
-        '<div class="ap-grid">' +
-          '<label>Дедлайн<input type="date" data-apfield="deadline" data-apid="' + a.id + '" value="' + esc(a.deadline || '') + '"></label>' +
-          '<label>Номер заявки<input data-apfield="app_number" data-apid="' + a.id + '" value="' + esc(a.appNumber || '') + '" placeholder="как на портале"></label>' +
-          '<label>Портал<input data-apfield="portal_url" data-apid="' + a.id + '" value="' + esc(a.portalUrl || '') + '" placeholder="ссылка на кабинет вуза"></label>' +
-          '<label>Логин<input data-apfield="portal_login" data-apid="' + a.id + '" value="' + esc(a.portalLogin || '') + '" placeholder="логин семьи"></label>' +
-        '</div>' +
-        '<div class="ap-sec-row">' +
-          (a.hasSecret
-            ? '<button class="bp ghost sm" data-apshow="' + a.id + '">' + ic('lock', 13) + 'Показать пароль</button>'
-            : '<span class="ap-hint">' + (vault ? 'пароль от портала не сохранен' : 'сейф паролей не настроен: ключ portal_vault_key') + '</span>') +
-          (vault ? '<input class="ap-pass" data-appass="' + a.id + '" type="password" placeholder="новый пароль портала" autocomplete="new-password">' +
-            '<button class="bp sm" data-apsave="' + a.id + '">Сохранить</button>' : '') +
-        '</div>' +
-        '<div class="ap-shown" data-apshown="' + a.id + '"></div>' +
-      '</div>';
+    var openId = AP_OPEN[id];
+    var open = null;
+    for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(openId)) open = list[i];
+    if (!open) openId = null;
+
+    // Лента открытой карточки едет отдельным запросом и подтягивается сюда же, как
+    // и сам список: иначе после переноса в «Что происходило» вечно висит «читаю».
+    if (open && AP_EV[open.id] === undefined) loadApEvents(open.id, id);
+
+    var hold = list.filter(function (a) { return !a.tier; });
+    var cols = AP_TIERS.map(function (t) {
+      var mine = list.filter(function (a) { return a.tier === t.k; });
+      return '<section class="uv-col" data-uvdrop="' + t.k + '">' +
+        '<div class="uv-col__h"><b>' + t.t + '</b><span class="uv-col__n">' + mine.length + '</span>' +
+          '<span class="uv-col__h2">' + t.h + '</span></div>' +
+        '<div class="uv-col__b">' +
+          (mine.length ? mine.map(function (a) { return apBoardCard(a, String(a.id) === String(openId)); }).join('')
+                       : '<div class="uv-drophint">перетащите вуз сюда</div>') +
+        '</div></section>';
     }).join('');
 
-    return '<div class="m-ctitle">Подача</div>' +
-      '<div class="m-csub">Заявки в вузы: пакет документов, дедлайн и доступ к кабинету на портале. ' +
-        'Все, что тут меняется, семья видит в кабинете лентой.</div>' +
-      (list.length ? cards : '<div class="ap-empty">Заявок нет. Заведите первую, когда вуз выбран.</div>') +
-      '<details class="m-fold ap-new"><summary><span class="pm-t">Новая заявка</span>' +
+    return '<div class="m-ctitle">Университеты</div>' +
+      '<div class="m-csub">Три уровня: мечта, реальный, запасной. Карточка таскается мышью между колонками, ' +
+        'флаг отмечает главный вуз. В кабинете семья видит только те, что разложены по уровням.</div>' +
+      (list.length
+        ? (hold.length
+            ? '<div class="uv-hold" data-uvdrop="">' +
+                '<div class="uv-hold__h"><b>Не разложены</b><span>' + hold.length + '</span>' +
+                  (hold.every(function (a) { return !a.approved; })
+                    ? '<i>семья их не видит</i>'
+                    : '<i>разложите по уровням</i>') + '</div>' +
+                '<div class="uv-hold__b">' +
+                  hold.map(function (a) { return apBoardCard(a, String(a.id) === String(openId)); }).join('') +
+                '</div></div>'
+            : '') +
+          '<div class="uv-board">' + cols + '</div>' +
+          (open ? apOpenCard(open, vault, AP_EV[open.id]) : '')
+        : '<div class="ap-empty">Вузов нет. Заведите первый, когда семья выбрала, куда целимся.</div>') +
+      '<details class="m-fold ap-new"><summary><span class="pm-t">Добавить вуз</span>' +
         '<span class="pm-h">вуз, программа, дедлайн</span>' + ic('go', 13) + '</summary>' +
         '<div class="m-fold__body"><div class="ap-grid">' +
           '<label>Вуз<input id="ap-n-uni" placeholder="Shanghai University"></label>' +
@@ -57935,7 +58083,12 @@
           '<label>Портал<input id="ap-n-url" placeholder="ссылка на кабинет вуза"></label>' +
           '<label>Логин<input id="ap-n-login" placeholder="логин семьи"></label>' +
         '</div>' +
-        '<button class="bp" id="ap-n-add">' + ic('plus', 13) + 'Завести заявку</button></div></details>';
+        '<div class="uv-newlv"><span>Уровень</span>' +
+          AP_TIERS.map(function (t, i) {
+            return '<button class="uv-sb" data-uvnew="' + t.k + '">' + t.t + '</button>';
+          }).join('') +
+          '<button class="uv-sb off on" data-uvnew="">Без уровня</button></div>' +
+        '<button class="bp" id="ap-n-add">' + ic('plus', 13) + 'Добавить вуз</button></div></details>';
   }
 
   function wireApplySection(id) {
@@ -57950,12 +58103,91 @@
         .catch(function () { showToast('Не сохранилось, попробуй еще раз'); });
     }
 
+    // Уровень меняет и перетаскивание, и кнопки в раскрытой карточке — путь к
+    // серверу у них один, чтобы «ушло/не ушло» не зависело от способа.
+    function setTier(appId, tier, was) {
+      delete AP_EV[appId];
+      api('/admin/api/applications/' + appId + '/tier', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: tier || null }),
+      }).then(function () {
+        showToast(tier ? (was ? 'Перенесли в «' + AP_TIER_T[tier] + '»'
+                              : 'Вуз в списке семьи: уровень «' + AP_TIER_T[tier] + '»')
+                       : 'Уровень снят — вуз ушел из кабинета семьи');
+        loadApps(id, true);
+      }).catch(function () { showToast('Не перенеслось, попробуй еще раз'); });
+    }
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-uvtier]'), function (b) {
+      b.addEventListener('click', function () {
+        var appId = b.getAttribute('data-uvtier');
+        var card = host.querySelector('[data-uvcard="' + appId + '"]');
+        setTier(appId, b.getAttribute('data-t'), card && card.getAttribute('data-tier'));
+      });
+    });
+
+    // Флаг главного вуза. Снимается тем же нажатием: «главный» один на ученика,
+    // и сервер сам гасит флаг у остальных.
+    Array.prototype.forEach.call(host.querySelectorAll('[data-uvmain]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var on = b.getAttribute('aria-pressed') === 'true';
+        api('/admin/api/applications/' + b.getAttribute('data-uvmain') + '/main', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ main: !on }),
+        }).then(function () { loadApps(id, true); })
+          .catch(function () { showToast('Флаг не поставился'); });
+      });
+    });
+
+    function openCard(appId) {
+      AP_OPEN[id] = (String(AP_OPEN[id]) === String(appId)) ? null : appId;
+      renderModalContent();
+      var box = el('m-content') && el('m-content').querySelector('.uv-open');
+      if (box && box.scrollIntoView) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-uvcard]'), function (c) {
+      c.addEventListener('click', function () { openCard(c.getAttribute('data-uvcard')); });
+      c.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCard(c.getAttribute('data-uvcard')); }
+      });
+      c.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', c.getAttribute('data-uvcard'));
+        e.dataTransfer.effectAllowed = 'move';
+        c.classList.add('drag');
+      });
+      c.addEventListener('dragend', function () {
+        c.classList.remove('drag');
+        Array.prototype.forEach.call(host.querySelectorAll('.over'), function (z) { z.classList.remove('over'); });
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-uvdrop]'), function (z) {
+      z.addEventListener('dragover', function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; z.classList.add('over'); });
+      z.addEventListener('dragleave', function (e) { if (!z.contains(e.relatedTarget)) z.classList.remove('over'); });
+      z.addEventListener('drop', function (e) {
+        e.preventDefault(); z.classList.remove('over');
+        var appId = e.dataTransfer.getData('text/plain');
+        var card = appId && host.querySelector('[data-uvcard="' + appId + '"]');
+        if (!card) return;
+        var was = card.getAttribute('data-tier') || '';
+        var now = z.getAttribute('data-uvdrop') || '';
+        if (was === now) return;                 // уронил там же — молча, это не действие
+        setTier(appId, now, was);
+      });
+    });
+
+    var close = host.querySelector('[data-uvclose]');
+    if (close) close.addEventListener('click', function () { AP_OPEN[id] = null; renderModalContent(); });
+
     Array.prototype.forEach.call(host.querySelectorAll('[data-apst]'), function (b) {
       b.addEventListener('click', function () {
         var st = b.getAttribute('data-st');
         // Отправку и ответ вуза семья увидит сообщением — спрашиваем, не промах ли это.
         if ((st === 'submitted' || st === 'offer' || st === 'rejected')
             && !confirm('Семья получит сообщение об этом. Продолжаем?')) return;
+        delete AP_EV[b.getAttribute('data-apst')];
         api('/admin/api/applications/' + b.getAttribute('data-apst') + '/status', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: st }),
@@ -57967,6 +58199,7 @@
     Array.prototype.forEach.call(host.querySelectorAll('[data-apreq]'), function (b) {
       b.addEventListener('click', function () {
         var next = AP_NEXT[b.getAttribute('data-state')] || 'doing';
+        delete AP_EV[b.getAttribute('data-apreq')];
         api('/admin/api/applications/' + b.getAttribute('data-apreq') + '/requirements', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ op: 'set', key: b.getAttribute('data-key'), state: next }),
@@ -57979,6 +58212,7 @@
       inp.addEventListener('change', function () {
         var body = {};
         body[inp.getAttribute('data-apfield')] = inp.value || null;
+        delete AP_EV[inp.getAttribute('data-apid')];
         patch(inp.getAttribute('data-apid'), body);
       });
     });
@@ -58015,6 +58249,18 @@
       });
     });
 
+    // Уровень нового вуза выбирается сразу: иначе каждый заведенный вуз сперва
+    // падает в «Не разложены», и его надо тащить вторым действием.
+    var newTier = '';
+    Array.prototype.forEach.call(host.querySelectorAll('[data-uvnew]'), function (b) {
+      b.addEventListener('click', function () {
+        newTier = b.getAttribute('data-uvnew') || '';
+        Array.prototype.forEach.call(host.querySelectorAll('[data-uvnew]'), function (o) {
+          o.classList.toggle('on', o === b);
+        });
+      });
+    });
+
     var add = el('ap-n-add');
     if (add) {
       add.addEventListener('click', function () {
@@ -58031,8 +58277,18 @@
             portal_url: (el('ap-n-url').value || '').trim() || null,
             portal_login: (el('ap-n-login').value || '').trim() || null,
           }),
-        }).then(function () { showToast('Заявка заведена'); loadApps(id, true); })
-          .catch(function () { add.disabled = false; showToast('Не получилось завести заявку'); });
+        }).then(function (r) {
+          if (newTier && r && r.id) {
+            return api('/admin/api/applications/' + r.id + '/tier', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tier: newTier }),
+            }).then(function () { return r; });
+          }
+          return r;
+        }).then(function () {
+          showToast(newTier ? 'Вуз добавлен в «' + AP_TIER_T[newTier] + '»' : 'Вуз добавлен, разложите по уровню');
+          loadApps(id, true);
+        }).catch(function () { add.disabled = false; showToast('Не получилось добавить вуз'); });
       });
     }
   }
