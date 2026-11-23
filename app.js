@@ -57833,6 +57833,10 @@
           (sub ? '<div class="uv-sub">' + esc(sub) + '</div>' : '') + '</div>' +
       '</div>' +
       '<div class="uv-card__f">' +
+        /* Старые заявки (до 23.11.2026) утверждены миграцией, но уровня у них нет:
+           семья их видит, а лежат они в «Не разложены». Молча это читается как
+           вранье полосы, поэтому у такой карточки стоит метка. */
+        (!a.tier && a.approved ? '<span class="uv-seen">видит семья</span>' : '') +
         '<span class="uv-st st-' + esc(a.status) + '">' + esc(apStatusTitle(a.status)) + '</span>' +
         (total ? '<span class="uv-pack">' + done + '/' + total + '</span>' : '') +
         apDeadline(a) +
@@ -57938,7 +57942,9 @@
         ? (hold.length
             ? '<div class="uv-hold" data-uvdrop="">' +
                 '<div class="uv-hold__h"><b>Не разложены</b><span>' + hold.length + '</span>' +
-                  '<i>семья их не видит</i></div>' +
+                  (hold.every(function (a) { return !a.approved; })
+                    ? '<i>семья их не видит</i>'
+                    : '<i>разложите по уровням</i>') + '</div>' +
                 '<div class="uv-hold__b">' +
                   hold.map(function (a) { return apBoardCard(a, String(a.id) === String(openId)); }).join('') +
                 '</div></div>'

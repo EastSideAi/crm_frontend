@@ -156,6 +156,9 @@ AP_SEED = [
     ("Jilin University", "International Economics", "2027 осень", 61, "ready", "b", False),
     ("Dalian University of Technology", "Mechanical Engineering", "2027 осень", 90, "submitted", "c", False),
     ("Shandong University", None, None, None, "draft", None, False),
+    # Заявка «как до 23.11.2026»: уровня нет, но утверждена миграцией — семья ее
+    # видит. Нужна в моке, чтобы метку «видит семья» было видно глазами.
+    ("Sichuan University", "Chinese Language", "2027 весна", 45, "collecting", "legacy", False),
 ]
 _APPS, _AP_EV, _AP_SEQ = {}, {}, [100]
 
@@ -172,6 +175,9 @@ def apps_for(lead_id):
             state = "done" if m < (n % 4) else ("doing" if m == (n % 4) else "todo")
             reqs.append({"key": key, "title": title, "required": req, "state": state, "note": ""})
         done = sum(1 for r in reqs if r["state"] == "done")
+        legacy = tier == "legacy"
+        if legacy:
+            tier = None
         out.append({
             "id": aid, "uniName": uni, "programName": prog, "intake": intake,
             "deadline": (date.today() + timedelta(days=dl)).isoformat() if dl is not None else None,
@@ -179,9 +185,9 @@ def apps_for(lead_id):
             "hasSecret": n == 0, "requirements": reqs,
             "progress": {"done": done, "total": len(reqs)},
             "tier": tier, "tierTitle": TIER_T.get(tier or "", "без уровня"),
-            "isMain": main, "approved": bool(tier),
-            "approvedAt": "2026-11-20T10:00:00Z" if tier else None,
-            "approvedBy": "Мария Шустова" if tier else None,
+            "isMain": main, "approved": bool(tier) or legacy,
+            "approvedAt": "2026-11-20T10:00:00Z" if (tier or legacy) else None,
+            "approvedBy": "перенос 23.11.2026" if legacy else ("Мария Шустова" if tier else None),
             "notes": "",
         })
         _AP_EV[aid] = [{"id": aid * 10, "kind": "created", "text": "Завели вуз: " + uni,

@@ -10254,6 +10254,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .uv-st.st-offer { background: var(--green-soft); color: var(--green-ink); }
 .uv-st.st-rejected { background: var(--red-soft); color: var(--red-ink); }
 .uv-pack { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+/* «видит семья» у вуза без уровня: заявки, заведенные до 23.11.2026, утверждены
+   миграцией, и полоса «Не разложены» без этой метки врала бы про них. */
+.uv-seen { font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--blue-tint); color: var(--blue); }
 
 /* Раскрытая карточка — рабочее место по одному вузу: статусы, пакет, портал.
    Живет под доской, одна за раз, и отличается от колонок белым фоном. */
