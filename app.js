@@ -41785,6 +41785,7 @@
   function renderSales(view) {
     if (sbTab() === 'money') { renderSalesMoney(view); return; }
     if (sbTab() === 'debts') { renderSalesDebts(view); return; }
+    if (sbTab() === 'refunds') { renderSalesRefunds(view); return; }
     if (sbTab() === 'plan') { renderSalesPlan(view); return; }
     // Экран смотрят по ходу дня: данные старше минуты перезапрашиваем при заходе.
     if (state._sb && Date.now() - (state._sbAt || 0) > 60000) state._sb = null;
@@ -42019,12 +42020,13 @@
   // видны всем, кому открыты «Продажи»; деньги, план и дебиторка — финансовым ролям.
   var SB_TABS = [{ id: 'funnel', label: 'Воронка' }, { id: 'plan', label: 'План периода', fin: true },
                  { id: 'hyp', label: 'Гипотезы' },
-                 { id: 'money', label: 'Деньги и сверка', fin: true }, { id: 'debts', label: 'Дебиторка', fin: true }];
+                 { id: 'money', label: 'Деньги и сверка', fin: true }, { id: 'debts', label: 'Дебиторка', fin: true },
+                 { id: 'refunds', label: 'Возвраты' }];
   var SM_KIND = { new: 'новая продажа', more: 'доплата', renew: 'продление', rest: 'прочее' };
 
   function smCan() { return can('finance') || can('finmodel'); }
   function sbTab() {
-    if (state.sbTab === 'hyp') return 'hyp';
+    if (state.sbTab === 'hyp' || state.sbTab === 'refunds') return state.sbTab;
     return ['money', 'plan', 'debts'].indexOf(state.sbTab) >= 0 && smCan() ? state.sbTab : 'funnel';
   }
   function sbTabs() {
@@ -42397,6 +42399,115 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dbtlead]'), function (b) {
       b.addEventListener('click', function () {
         openDrawer(b.getAttribute('data-dbtlead'), ids);
+        state.modalSection = 'pay';
+        renderDrawer(true);
+      });
+    });
+  }
+
+  /* ── ПРОДАЖИ → ВОЗВРАТЫ ──────────────────────────────────────────────────────
+     Задача 10808 (цель 9007, 16.11.2026): возврат идет цепочкой из пяти шагов у
+     разных людей (бэкенд services/refund_flow.py), и ответа «сколько возвратов
+     сейчас, на каком шаге, кто держит» не было нигде одним взглядом. Здесь каждая
+     семья одной строкой: идущая цепочка с шагом и сроком, просроченный шаг красным,
+     и уже вернувшие деньги, в том числе руками до цепочки (оплата карточки со
+     статусом «возврат»). Считает сервер (GET /admin/api/sales/refunds), экран рисует.
+     Строка цепочки открывает цель возврата, ручная — карточку на «Оплатах». */
+  function rfdFetch() {
+    state._rfdAt = Date.now();
+    api('/admin/api/sales/refunds').then(function (r) {
+      state._rfd = r || 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      state._rfd = e.message === '403acl' ? 'acl' : 'none';
+      if (state.page === 'sales') renderView();
+    });
+  }
+  function rfdRow(r) {
+    var st = r.step;
+    var stepTxt = st ? st.title + ' · шаг ' + st.n + ' из ' + st.of
+      : r.source === 'manual' ? 'вернули руками, до цепочки' : 'все шаги сданы';
+    var due = st && st.due
+      ? '<b class="num">' + fmtDay(st.due).slice(0, 5) + '</b><small>' +
+          (r.state === 'late' ? 'шаг просрочен' : 'срок шага') + '</small>'
+      : r.deadline && r.state !== 'done'
+        ? '<b class="num">' + fmtDay(r.deadline).slice(0, 5) + '</b><small>весь возврат</small>'
+        : r.refunded_at
+          ? '<b class="num">' + fmtDay(r.refunded_at).slice(0, 5) + '</b><small>вернули</small>'
+          : '<small>' + (r.started ? 'начали ' + fmtDay(r.started).slice(0, 5) : 'дата не стоит') + '</small>';
+    var money = r.refunded_rub
+      ? '<b class="num">' + smRub(r.refunded_rub) + '</b><small>' +
+          (r.source === 'manual' ? 'по оплате в карточке' : 'по цепочке') + '</small>'
+      : '<small>еще не вернули</small>';
+    var who = st ? (st.who || 'никто') : '';
+    var attr = r.goal_id ? 'data-rfdgoal="' + r.goal_id + '"' : 'data-rfdlead="' + esc(r.id || '') + '"';
+    return '<button class="dbt-r rfd-r ' + r.state + '" ' + attr + '>' +
+      '<span class="sb-pn"><b>' + esc(r.name) + '</b><small>' + esc(stepTxt) + '</small></span>' +
+      '<span class="sb-po' + (who ? ' calm' : ' none') + '" data-l="Держит">' + esc(who || (st ? 'никто' : '')) + '</span>' +
+      '<span class="dbt-v" data-l="Вернули">' + money + '</span>' +
+      '<span class="dbt-v" data-l="Срок">' + due + '</span>' +
+    '</button>';
+  }
+  function renderSalesRefunds(view) {
+    if (state._rfd && Date.now() - (state._rfdAt || 0) > 60000) state._rfd = null;
+    if (!state._rfd) { view.innerHTML = dashSkeleton(); rfdFetch(); return; }
+    if (state._rfd === 'none' || state._rfd === 'acl') {
+      view.innerHTML = '<div class="dash sb"><div class="card pf-head sb-thead">' + sbTabs() + '</div>' +
+        '<div class="card"><div class="empty">' + (state._rfd === 'acl'
+        ? 'Реестр возвратов видят руководители продаж и финансы.'
+        : 'Не удалось загрузить возвраты. Проверьте интернет.') + '</div></div></div>';
+      sbTabsBind(view);
+      return;
+    }
+    var d = state._rfd, st = {};
+    d.states.forEach(function (x) { st[x.key] = x; });
+    var f = state.rfdF || '';
+    var going = st.late.count + st.going.count;
+    var v = st.late.count
+      ? { cls: 'miss', t: 'Просрочено ' + st.late.count + ' ' + plural(st.late.count, 'шаг', 'шага', 'шагов'),
+          s: 'пока шаг не сдан, следующий не встанет, а на весь возврат по договору 14 дней' }
+      : going
+        ? { cls: 'calm', t: 'Идет ' + going + ' ' + plural(going, 'возврат', 'возврата', 'возвратов'),
+            s: 'все шаги в срок' }
+        : { cls: 'ok', t: 'Открытых возвратов нет',
+            s: 'новый начинается кнопкой «Семья отказывается» в карточке семьи' };
+    var head = '<div class="card pf-head sb-thead">' + sbTabs() +
+      '<div class="pf-verdict ' + v.cls + '"><div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div></div></div>';
+    var stats = statBar(d.states.map(function (x) {
+      return { label: x.label, value: String(x.count), lead: x.key === 'late' && x.count > 0,
+               sub: x.key === 'done' ? 'на ' + smRub(d.refunded_rub)
+                 : x.key === 'late' ? 'срок шага прошел' : 'шаг в срок' };
+    }), 'compact');
+    var rows = d.rows.filter(function (r) { return !f || r.state === f; });
+    var body = rows.map(rfdRow).join('');
+    var fl = f ? st[f].label : 'Все возвраты';
+    view.innerHTML = '<div class="dash sb dbt rfd">' + head + '<div class="dbt-bar">' + stats + '</div>' +
+      '<div class="card sp12"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
+        '</span><div><div class="t">' + esc(fl) + ' · <span class="num">' + rows.length + '</span></div>' +
+        '<div class="s">строка открывает цель возврата с шагами, ручной возврат — карточку семьи</div></div>' +
+        (f ? '<button class="qchip dbt-all" data-rfdf="">Показать все</button>' : '') + '</div>' +
+        (body ? '<div class="dbt-lh"><span>Семья</span><span>Держит шаг</span><span>Вернули</span><span>Срок</span></div>' +
+          '<div class="dbt-list">' + body + '</div>' : '<div class="empty">Возвратов пока не было.</div>') +
+      '</div></div>';
+    sbTabsBind(view);
+    Array.prototype.forEach.call(view.querySelectorAll('.dbt-bar .stat'), function (b, i) {
+      var k = d.states[i].key;
+      b.classList.toggle('on', f === k);
+      b.setAttribute('aria-pressed', f === k ? 'true' : 'false');
+      b.addEventListener('click', function () { state.rfdF = f === k ? '' : k; renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rfdf]'), function (b) {
+      b.addEventListener('click', function () { state.rfdF = ''; renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rfdgoal]'), function (b) {
+      b.addEventListener('click', function () { openTask(parseInt(b.getAttribute('data-rfdgoal'), 10)); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rfdlead]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!b.getAttribute('data-rfdlead')) return;
+        openDrawer(b.getAttribute('data-rfdlead'));
         state.modalSection = 'pay';
         renderDrawer(true);
       });
@@ -60114,6 +60225,9 @@
         Array.prototype.forEach.call(el('deal-tar').querySelectorAll('button'), function (b) {
           b.addEventListener('click', function () {
             deal.tariff_id = b.getAttribute('data-v');
+            /* Сумма и график, прочитанные из договора, главнее прайса тарифа: Новиков
+               23.11.2026 — клик по тарифу заменил второй платеж 31.08.2028 шаблонным. */
+            if (deal.doc && !deal.scan) { renderDeal(); return; }
             var t = deal.tariffs.filter(function (x) { return x.id === deal.tariff_id; })[0];
             if (t && t.price) deal.amount_total = t.price;
             dealPlan(); renderDeal();
