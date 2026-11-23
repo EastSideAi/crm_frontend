@@ -54105,21 +54105,98 @@
   // показывает сам звонок с кнопками, а CRM поверх любого раздела звонит, мигает
   // рамкой и заголовком вкладки и шлет уведомление, если вкладка в фоне. Рамку
   // получает только право phone_in: входящие на АТС звонят одной линии crmin.
-  var PL = { dock: null, frame: null, ring: null, blink: null, title: '', num: '', name: '' };
+  var PL = { dock: null, frame: null, ring: null, blink: null, title: '', num: '', name: '', ctx: null };
+  var PL_POS = 'eastside_crm_pl_pos';
   function plMount() {
     if (PL.dock || !can('phone') || !can('phone_in')) return;
     var d = document.createElement('div');
     d.className = 'pl-dock'; d.id = 'pl-dock';
-    d.innerHTML = '<iframe class="pl-frame" title="Телефон" allow="microphone; autoplay" src="' +
-      location.origin + '/zvonilka/?embed=1"></iframe>';
+    d.innerHTML = '<div class="pl-bar"><span class="pl-grip" title="Перетащить" aria-hidden="true">' +
+      '<svg viewBox="0 0 8 14" width="8" height="14"><g fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/>' +
+      '<circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/></g></svg></span>' +
+      '<iframe class="pl-frame" title="Телефон" allow="microphone; autoplay" src="' +
+      location.origin + '/zvonilka/?embed=1"></iframe></div>' +
+      '<button type="button" class="pl-snd" hidden>' + ic('bell', 13) + '<span>Нажмите, чтобы включить звук звонка</span></button>';
     document.body.appendChild(d);
     var fl = document.createElement('div');
     fl.className = 'pl-flash'; fl.id = 'pl-flash';
     document.body.appendChild(fl);
-    PL.dock = d; PL.frame = d.firstChild;
+    PL.dock = d; PL.frame = d.querySelector('.pl-frame');
     window.addEventListener('message', plMsg);
     // Разрешение на уведомления браузер дает только в ответ на нажатие: просим на первом.
     document.addEventListener('click', plAskNotify, true);
+    plSoundInit();
+    plDrag(d);
+  }
+  // Звук. Браузер не дает странице играть, пока по ней не нажали после загрузки
+  // (23.11.2026: Костя обновил вкладку, не кликал, и звонок пришел молча). Поэтому
+  // AudioContext один на вкладку и включается первым же нажатием или клавишей, а пока
+  // звука нет, рамка просит нажать на нее.
+  function plSoundInit() {
+    var ua = navigator.userActivation;
+    if (!ua || ua.hasBeenActive) plUnlock();
+    if (plSoundOn()) return;
+    var b = PL.dock.querySelector('.pl-snd');
+    b.hidden = false;
+    b.addEventListener('click', plUnlock);
+    document.addEventListener('pointerdown', plUnlock, true);
+    document.addEventListener('keydown', plUnlock, true);
+  }
+  function plSoundOn() { return !!(PL.ctx && PL.ctx.state === 'running'); }
+  function plUnlock() {
+    try {
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return;
+      if (!PL.ctx) PL.ctx = new C();
+      var done = function () {
+        if (!plSoundOn()) return;
+        document.removeEventListener('pointerdown', plUnlock, true);
+        document.removeEventListener('keydown', plUnlock, true);
+        var b = PL.dock && PL.dock.querySelector('.pl-snd');
+        if (b) b.hidden = true;
+      };
+      if (PL.ctx.state === 'suspended' && PL.ctx.resume) PL.ctx.resume().then(done, function () {});
+      done();
+    } catch (e) {}
+  }
+  // Рамку таскают за ручку слева (Костя 23.11.2026: «закрывает важную информацию»).
+  // Место помнит браузер; на узком экране рамка встает по низу и не таскается.
+  function plDrag(d) {
+    var g = d.querySelector('.pl-grip'), st = null;
+    function put(x, y) {
+      var w = d.offsetWidth, h = d.offsetHeight;
+      x = Math.max(8, Math.min(window.innerWidth - w - 8, x));
+      y = Math.max(8, Math.min(window.innerHeight - h - 8, y));
+      d.style.left = x + 'px'; d.style.top = y + 'px'; d.style.right = 'auto'; d.style.bottom = 'auto';
+      return { x: x, y: y };
+    }
+    try {
+      var p = JSON.parse(localStorage.getItem(PL_POS) || 'null');
+      if (p && typeof p.x === 'number') put(p.x, p.y);
+    } catch (e) {}
+    g.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      var r = d.getBoundingClientRect();
+      st = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      d.classList.add('drag');
+      g.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    g.addEventListener('pointermove', function (e) {
+      if (st) put(e.clientX - st.dx, e.clientY - st.dy);
+    });
+    function end() {
+      if (!st) return;
+      st = null; d.classList.remove('drag');
+      var r = d.getBoundingClientRect();
+      try { localStorage.setItem(PL_POS, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) })); } catch (e) {}
+    }
+    g.addEventListener('pointerup', end);
+    g.addEventListener('pointercancel', end);
+    // Окно сузили — рамка не должна остаться за краем.
+    window.addEventListener('resize', function () {
+      if (d.style.left) { var r = d.getBoundingClientRect(); put(r.left, r.top); }
+    });
   }
   function plAskNotify() {
     document.removeEventListener('click', plAskNotify, true);
@@ -54162,18 +54239,19 @@
         document.title = odd ? 'Звонит ' + plWho() : 'Входящий звонок';
       }, 900);
       try {
-        var C = window.AudioContext || window.webkitAudioContext, ctx = new C(), g = ctx.createGain();
+        plUnlock();
+        var ctx = PL.ctx, g = ctx.createGain(), osc = [];
         g.gain.value = 0; g.connect(ctx.destination);
-        [440, 480].forEach(function (f) { var o = ctx.createOscillator(); o.frequency.value = f; o.connect(g); o.start(); });
-        var t = 0;
+        [440, 480].forEach(function (f) { var o = ctx.createOscillator(); o.frequency.value = f; o.connect(g); o.start(); osc.push(o); });
+        var t = 0, VOL = 0.3;
         // Ритм обычного телефона: секунда звонка, две тишины.
-        PL.ring = { ctx: ctx, iv: setInterval(function () { g.gain.setTargetAtTime(t++ % 3 === 0 ? 0.12 : 0, ctx.currentTime, 0.02); }, 1000) };
-        g.gain.setTargetAtTime(0.12, ctx.currentTime, 0.02);
-      } catch (e) { PL.ring = { ctx: null, iv: null }; }
+        PL.ring = { g: g, osc: osc, iv: setInterval(function () { g.gain.setTargetAtTime(t++ % 3 === 0 ? VOL : 0, ctx.currentTime, 0.02); }, 1000) };
+        g.gain.setTargetAtTime(VOL, ctx.currentTime, 0.02);
+      } catch (e) { PL.ring = { g: null, osc: [], iv: null }; }
       plNotify();
     } else if (!on && PL.ring) {
       clearInterval(PL.ring.iv);
-      try { if (PL.ring.ctx) PL.ring.ctx.close(); } catch (e) {}
+      try { PL.ring.osc.forEach(function (o) { o.stop(); }); if (PL.ring.g) PL.ring.g.disconnect(); } catch (e) {}
       PL.ring = null;
       clearInterval(PL.blink); PL.blink = null;
       document.title = PL.title || document.title;
