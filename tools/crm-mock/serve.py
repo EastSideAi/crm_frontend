@@ -279,6 +279,27 @@ ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": 
       "caps": ["dash", "clients", "team", "tasks", "tasks_all", "finance", "marketing",
                "planfact", "finmodel", "zaezd_review", "academy", "academy_review"]}
 
+_D = lambda n: (date.today() + timedelta(days=n)).isoformat()
+REFUNDS = {"refunded_rub": 50990, "states": [
+    {"key": "late", "label": "Шаг просрочен", "count": 1},
+    {"key": "going", "label": "Идет", "count": 1},
+    {"key": "done", "label": "Вернули", "count": 2}], "rows": [
+    {"id": "d1", "goal_id": 101, "name": "Семья Демидовых", "source": "flow", "state": "late",
+     "started": _D(-8), "deadline": _D(5), "steps_done": 1, "refunded_rub": 0, "refunded_at": None,
+     "step": {"n": 2, "of": 5, "title": "подготовить расчет возврата", "task_id": 1, "who": "Лиана",
+              "due": _D(-2), "status": "doing"}},
+    {"id": "d2", "goal_id": 102, "name": "Семья Орловых", "source": "flow", "state": "going",
+     "started": _D(-2), "deadline": _D(11), "steps_done": 0, "refunded_rub": 0, "refunded_at": None,
+     "step": {"n": 1, "of": 5, "title": "передать дело агенту-юристу", "task_id": 2, "who": "Павел Дьяков",
+              "due": _D(1), "status": "wait"}},
+    {"id": "d3", "goal_id": None, "name": "Семья Ручных", "source": "manual", "state": "done",
+     "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 50000, "refunded_at": _D(-20),
+     "step": None},
+    {"id": "d4", "goal_id": None, "name": "Гость с лендинга", "source": "manual", "state": "done",
+     "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 990, "refunded_at": _D(-100),
+     "step": None}]}
+
+
 class H(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
@@ -325,6 +346,9 @@ class H(SimpleHTTPRequestHandler):
                 return self._json({"ok": True, **one[0], "docs": DOCS,
                                    "doc_fields": DOC_FIELDS,
                                    "doc_plan": doc_plan(one[0])})
+        # Реестр возвратов «Продаж» (10808): выдуманные семьи во всех трех состояниях.
+        if p == "/admin/api/sales/refunds":
+            return self._json(REFUNDS)
         # Доска «Университеты» в карточке: вузы ученика и лента одного вуза.
         if p.startswith("/admin/api/leads/") and p.endswith("/applications"):
             lead_id = p.split("/")[4]
