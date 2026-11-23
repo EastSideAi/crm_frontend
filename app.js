@@ -44685,9 +44685,14 @@
         if (!g || side == null) return;
         var ppl = g.kin.people, nm = {};
         g.cards.forEach(function (c) { nm[c.id] = c.name || c.label || 'без имени'; });
-        var par = ppl[side][0], kid = ppl[1 - side][0];
-        if (!confirm('Связать семьей: «' + nm[kid] + '» ребенок, «' + nm[par] + '» родитель? ' +
-                     'Карточки останутся разными, ребенок перестанет считаться новым лидом.')) return;
+        // Детей бывает несколько (Клец 23.11.2026): к родителю привязываются все.
+        var par = ppl[side][0];
+        var kids = ppl.filter(function (p, i) { return i !== side && p.length; })
+          .map(function (p) { return '«' + nm[p[0]] + '»'; });
+        var many = kids.length > 1;
+        if (!confirm('Связать семьей: ' + kids.join(', ') + (many ? ' дети' : ' ребенок') +
+                     ', «' + nm[par] + '» родитель? Карточки останутся разными, ' +
+                     (many ? 'дети перестанут' : 'ребенок перестанет') + ' считаться новым лидом.')) return;
         b.disabled = true;
         send('/admin/api/dupes/family', { key: g.key, parent: par }, 'Связал семьей').then(function () { b.disabled = false; });
       });
