@@ -21,6 +21,9 @@
 """
 import json
 import os, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tasks as mock_tasks  # noqa: E402  (рядом с этим файлом)
 from datetime import date, datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -334,6 +337,12 @@ class H(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         p = self.path.split("?")[0]
+        # Задачник живет в соседнем файле: «План», «Цели» и приемка.
+        qs = (self.path.split("?") + [""])[1]
+        q = dict(x.split("=", 1) for x in qs.split("&") if "=" in x)
+        answer = mock_tasks.route(p, q)
+        if answer is not None:
+            return self._json(answer)
         if p in ("/", "/index.html"):
             html = open(os.path.join(ROOT, "index.html"), encoding="utf-8").read()
             html = html.replace("<script src=\"app.js\">",
