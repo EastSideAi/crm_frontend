@@ -36402,7 +36402,15 @@
     return { key: 'efir', label: 'Были на эфире', value: live, step: 'viewers',
              stepPlate: live,
              sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
-                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : ''),
+                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : '') +
+                  /* Кто был на эфире и не заплатил ничего — база обзвона продаж (Павел
+                     24.11.2026). Только узнанные: зрителю без регистрации не позвонить. */
+                  (v.known.viewers_nobuy != null
+                    ? ' · <span class="go-sub" data-lstep="viewers_nobuy" data-lfree="1"' +
+                      ' data-ltitle="Были на эфире и ничего не купили"' +
+                      ' data-lplate="' + v.known.viewers_nobuy + '" role="button" tabindex="0"' +
+                      ' title="Показать этих людей поименно">не купили ' + v.known.viewers_nobuy + '</span>'
+                    : ''),
              pct: launchPct(live, regShown, 'от регистраций') };
   }
 
@@ -39232,6 +39240,12 @@
       var openIt = function () {
         var key = n.getAttribute('data-lstep');
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
+        /* Срез, которого нет в лестнице пути (подпись «не купили» под залом): список
+           тот же, ступень описывает сама подпись. */
+        if (!st && n.getAttribute('data-lfree')) {
+          st = { key: key, title: n.getAttribute('data-ltitle') || '',
+                 people: parseInt(n.getAttribute('data-lplate') || '0', 10) };
+        }
         if (!st) return;
         /* Плашка «по всему запуску» открывает список блока — тот самый, из которого
            посчитано её крупное число. Список записавшихся тут был бы пустым и снова
@@ -39255,9 +39269,11 @@
         }) : st;
         launchPeopleOpen(cur.slug, st2, cur.title, n, ot || '', !!ttl);
       };
-      n.addEventListener('click', openIt);
+      /* Подпись-ссылка внутри плашки: клик не должен открыть еще и список самой
+         плашки поверх. */
+      n.addEventListener('click', function (e) { if (n.getAttribute('data-lfree')) e.stopPropagation(); openIt(); });
       n.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openIt(); }
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-lsplit]'), function (n) {
@@ -42042,7 +42058,13 @@
     return '<div class="list-quick sb-tabs">' + SB_TABS.filter(function (t) { return !t.fin || smCan(); }).map(function (t) {
       return '<button class="qchip' + (t.id === sbTab() ? ' on' : '') + '" data-sbtab="' + t.id + '">' +
         esc(t.label) + (t.id === 'hyp' && n ? ' · ' + n : '') + '</button>';
-    }).join('') + '</div>';
+    }).join('') +
+      /* Интенсивы считает один экран — «Запуски» в Маркетинге (Павел 24.11.2026: у Оли
+         и в Продажах должны быть одни цифры). Отсюда только переход туда, своего
+         подсчета у Продаж нет. */
+      (can('marketing') ? '<a class="qchip sb-out" href="#page/marketing/launch"' +
+        ' title="Регистрации, кто был на эфире, кто купил и кто нет — экран Запусков">Интенсивы</a>' : '') +
+      '</div>';
   }
   function sbTabsBind(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-sbtab]'), function (b) {

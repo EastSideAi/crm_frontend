@@ -16540,3 +16540,7 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
   .rfd-r.done .dbt-v[data-l="Вернули"] { grid-row: 1; }
   .rfd-r.done .dbt-v[data-l="Срок"] { grid-row: 2; }
 }
+
+/* Переход из «Продаж» в «Запуски»: ссылка, а не вкладка, поэтому стоит справа от вкладок
+   (Павел 24.11.2026). */
+.sb-tabs .sb-out { margin-left: auto; text-decoration: none; }
