@@ -75,6 +75,14 @@ ACCEPT = [
 ]
 
 
+# Задачи без срока: с 24.11.2026 они лежат в плане полосой «Без дня», а не в
+# «Потом» (ADR 001, пункт 7). Вид week отдает их вместе с задачами недели.
+NO_DUE = [
+    ("Переписать памятку по возвратам", "ops"),
+    ("Разобраться с дублями задач по ученикам", "product"),
+]
+
+
 def week_tasks() -> list:
     out = []
     for i, (title, dept, shift, goal) in enumerate(WEEK):
@@ -82,6 +90,8 @@ def week_tasks() -> list:
                         parent_id=500 + (i % 3), parent_title=goal,
                         overdue=shift <= TODAY.weekday() - 1,
                         carry_count=2 if i == 0 else 0))
+    for i, (title, dept) in enumerate(NO_DUE):
+        out.append(task(650 + i, title=title, dept=dept, due_at=None))
     return out
 
 
@@ -101,7 +111,8 @@ def accept_tasks() -> list:
 
 
 def later_tasks() -> list:
-    return [task(800 + i, title=f"Отложенное дело {i + 1}", due_at=None)
+    """«Потом» — то, что не взято в неделю. Со сроком: без срока уехало в план."""
+    return [task(800 + i, title=f"Отложенное дело {i + 1}", due_at=_day(14 + i))
             for i in range(4)]
 
 
@@ -145,12 +156,13 @@ def route(path: str, q: dict):
                     "week_label": f"{MON.day}-{(MON + timedelta(days=6)).day} ноября"}
         return {"tasks": [], "can_all": True, "me": ME_ID}
     if path == "/admin/api/rhythm":
-        return {"ok": True, "cap": 50, "load": len(WEEK),
+        return {"ok": True, "cap": 50, "load": len(WEEK) + len(NO_DUE),
                 "label": f"{MON.day}-{(MON + timedelta(days=6)).day} ноября",
                 "plan": {"given": True}, "report": {"given": False}}
     if path == "/admin/api/tasks/summary":
-        return {"ok": True, "open": len(WEEK), "overdue": 4, "review": 3,
-                "to_accept": 22, "week": len(WEEK)}
+        return {"ok": True, "open": len(WEEK) + len(NO_DUE), "overdue": 4,
+                "review": 3, "to_accept": 22, "week": len(WEEK) + len(NO_DUE),
+                "later": 4}
     if path == "/admin/api/tasks/goals":
         return {"goals": [{"id": g["id"], "title": g["title"], "dept": g["dept"],
                            "is_goal": True, "assignee_name": "Демо Руководитель"}
