@@ -13354,6 +13354,8 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sp-det.on b { color: var(--blue); }
 .sp-det:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .sp-detail { margin-top: 18px; animation: nxIn .2s ease-out; }
+/* цифра в строке таблицы KPI и лидов: кнопка по размеру числа, а не во всю ячейку */
+.sp-det.sp-num { display: inline-flex; width: auto; margin: 0 -4px; padding: 1px 4px; }
 .sp-rh, .sp-rl { grid-template-columns: 48px minmax(160px, 1.5fr) minmax(140px, 1fr) 120px; }
 @media (prefers-reduced-motion: reduce) { .sp-detail { animation: none; } }
 @media (max-width: 860px) { .sp-rl { grid-template-columns: 44px minmax(0, 1fr) auto; } }

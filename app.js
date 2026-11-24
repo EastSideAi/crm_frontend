@@ -42923,9 +42923,14 @@
     return '<button class="sp-det' + spDetOn(i, k) + '" data-spdet="' + i + ':' + k + '" title="Из чего сложилось">' +
       esc(label) + ' <b class="num">' + smRub(v) + '</b></button>';
   }
-  function spDetail(d) {
+  function spDetail(d, where) {
     var o = state._spDet;
-    var p = o && d.parts[o.i];
+    if (!o) return '';
+    // KPI и лиды раскрываются под своей карточкой, периоды — под периодами
+    var zone = o.k.indexOf('|') > 0 ? o.k.split('|')[0] : 'part';
+    if (zone !== (where || 'part')) return '';
+    if (zone === 'kpi' || zone === 'lead') return spDetailOf(d, o.k);
+    var p = d.parts[o.i];
     if (!p) return '';
     var lab = {};
     d.products.forEach(function (g) { lab[g.key] = g.label; });
@@ -42968,6 +42973,46 @@
     }
     return '<div class="card sp12 sm-lines sp-detail" id="sp-detail"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
       '</span><div><div class="t">' + esc(t) + ' · <span class="num">' + smRub(sum || 0) + '</span></div>' +
+      '<div class="s">' + esc(s) + '</div></div>' +
+      '<button class="qchip sm-reset" data-spdet="close">Свернуть</button></div>' +
+      (body ? head + '<div class="sm-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') + '</div>';
+  }
+  // KPI человека и лиды канала (Павел 10967: «все цифры кликабельные»): та же раскрывашка,
+  // что у плиток периода, только строки — оплаты продавца или люди, пришедшие из канала.
+  function spDetailOf(d, key) {
+    var id = key.split('|').slice(1).join('|'), t, s, head, body, sum;
+    if (key.indexOf('kpi|') === 0) {
+      var r = d.kpi.filter(function (x) { return String(x.id) === id; })[0];
+      if (!r) return '';
+      var lab = {};
+      d.products.forEach(function (g) { lab[g.key] = g.label; });
+      t = r.name + ': деньги месяца'; sum = smRub(r.money);
+      s = 'оплаты месяца, у которых продавцом стоит ' + r.name + '. Договор засчитан, если это новая продажа сопровождения';
+      head = '<div class="sm-lh"><span>Дата</span><span>Клиент</span><span>Канал</span><span>Продал</span><span>Сумма</span></div>';
+      body = (r.rows || []).slice().reverse().map(function (x) {
+        return smLead(x.case_id,
+          '<span class="sm-d num">' + fmtDay(x.date).slice(0, 5) + '</span>' +
+          '<span class="sb-pn"><b>' + esc(x.client || 'Без клиента') + '</b><small>' + esc(lab[x.product] || x.item || '') + '</small></span>' +
+          '<span class="sb-po calm" data-l="Канал">' + esc(x.ch || '—') + '</span>' +
+          '<span class="sb-po calm" data-l="Продал">' + esc(x.seller || '—') + '</span>' +
+          '<span class="sm-v num">' + smRub(x.amount) + '</span>', 'sm-ln');
+      }).join('');
+    } else {
+      var c = d.leads.filter(function (x) { return x.name === id; })[0];
+      if (!c) return '';
+      t = 'Лиды месяца: ' + c.name; sum = String(c.fact);
+      s = 'новые карточки с контактом, пришедшие из канала; то же правило, что «Лиды» в маркетинге';
+      head = '<div class="sm-lh sp-rh"><span>Пришел</span><span>Человек</span><span>Ведет</span><span></span></div>';
+      body = (c.people || []).slice().sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); }).map(function (x) {
+        return smLead(x.id,
+          '<span class="sm-d num">' + (x.at ? fmtDay(x.at).slice(0, 5) : '—') + '</span>' +
+          '<span class="sb-pn"><b>' + esc(x.name || 'Без имени') + '</b></span>' +
+          '<span class="sb-po' + (x.owner ? ' calm' : ' none') + '" data-l="Ведет">' + esc(x.owner || 'никто') + '</span>' +
+          '<span></span>', 'sm-ln sp-rl');
+      }).join('');
+    }
+    return '<div class="card sp12 sm-lines sp-detail" id="sp-detail"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
+      '</span><div><div class="t">' + esc(t) + ' · <span class="num">' + sum + '</span></div>' +
       '<div class="s">' + esc(s) + '</div></div>' +
       '<button class="qchip sm-reset" data-spdet="close">Свернуть</button></div>' +
       (body ? head + '<div class="sm-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') + '</div>';
@@ -43063,7 +43108,8 @@
     var rows = d.kpi.map(function (r) {
       return '<div class="sp-tr"><span class="sp-nm">' + esc(r.name) + '</span>' +
         '<span class="sp-pair"><b class="num">' + r.contracts + '</b> из ' + spSet('kpi_c:' + r.id, r.contracts_plan, false) + '</span>' +
-        '<span class="sp-pair"><b class="num">' + smRub(r.money) + '</b> из ' + spSet('kpi_r:' + r.id, r.money_plan, true) + '</span>' +
+        '<span class="sp-pair"><button class="sp-det sp-num' + spDetOn(-1, 'kpi|' + r.id) + '" data-spdet="-1:kpi|' + r.id + '" title="Из каких оплат">' +
+          '<b class="num">' + smRub(r.money) + '</b></button> из ' + spSet('kpi_r:' + r.id, r.money_plan, true) + '</span>' +
         '<span class="sp-prog">' + spBar(r.money, r.money_plan) + spPct(r.money, r.money_plan) + '</span></div>';
     }).join('');
     var add = d.kpi_add && d.kpi_add.length ? '<select class="tm-sel sp-add" id="sp-add"><option value="">Добавить человека</option>' +
@@ -43085,7 +43131,8 @@
     var rows = d.leads.map(function (r) {
       return '<div class="sp-tr"><span class="sp-nm">' + esc(r.name) + '</span>' +
         '<span>' + spSet(r.metric, r.plan, false) + '</span>' +
-        '<span class="num">' + r.fact + '</span>' +
+        '<span>' + (r.fact ? '<button class="sp-det sp-num' + spDetOn(-1, 'lead|' + r.name) + '" data-spdet="-1:lead|' + esc(r.name) +
+          '" title="Кто эти люди"><b class="num">' + r.fact + '</b></button>' : '<span class="num">0</span>') + '</span>' +
         '<span class="sp-prog">' + spBar(r.fact, r.plan) + spPct(r.fact, r.plan) + '</span></div>';
     }).join('');
     var n = d.funnel_norm;
@@ -43168,7 +43215,7 @@
         '<div class="pf-vs">' + esc(v.s) + '</div></div>' +
     '</div>';
     view.innerHTML = '<div class="dash sb sp">' + head + spParts(d) + spOwners(d) + spProducts(d) +
-      '<div class="sp-split">' + spKpi(d) + spLeads(d) + '</div>' + spBudget(d) + spExpenses(d) + spFunds(d) + '</div>';
+      '<div class="sp-split">' + spKpi(d) + spLeads(d) + '</div>' + spDetail(d, 'kpi') + spDetail(d, 'lead') + spBudget(d) + spExpenses(d) + spFunds(d) + '</div>';
     sbTabsBind(view);
     spBind(view);
     animBars(view);
@@ -43181,7 +43228,7 @@
         var o = state._spDet;
         if (v === 'close') state._spDet = null;
         else {
-          var i = +v.split(':')[0], k = v.split(':')[1];
+          var i = +v.split(':')[0], k = v.split(':').slice(1).join(':');
           state._spDet = o && o.i === i && o.k === k ? null : { i: i, k: k };
         }
         renderView();
