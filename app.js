@@ -8762,7 +8762,7 @@
       else later = later.concat(byDay[key]);
     });
     out += wkBand('Дальше', '', later, rowFn);
-    out += wkBand('Без дня', 'до пятницы', noDay, rowFn);
+    out += wkBand('Без дня', 'срок не назначен', noDay, rowFn);
     out += wkBand('На приемке', 'сдано, ждет постановщика', review, rowFn);
     out += wkBand('Сделано', '', done, rowFn);
     return out;
@@ -9111,7 +9111,6 @@
     var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     var tomorrow = new Date(today.getTime() + 864e5);
     var tKey = dyKey(today), tmKey = dyKey(tomorrow);
-    var friday = today.getDay() === 5 || today.getDay() === 6 || today.getDay() === 0;
     var tasks = w.tasks || [];
     var live = tasks.filter(function (t) { return t.status !== 'done' && t.status !== 'review' && t.status !== 'cancel'; });
     var over = live.filter(function (t) { return t.overdue; });
@@ -9124,8 +9123,9 @@
       else if (k < tKey) todayL.push(t);
       else (rest[k] = rest[k] || []).push(t);
     });
-    // Без дня — до пятницы: в пятницу это уже «сегодня», раньше — остаток недели.
-    if (friday) todayL = todayL.concat(noDay); else if (noDay.length) rest['z-noday'] = noDay;
+    // Задачи без срока не прячем ни под «еще на неделе», ни в «сегодня»: срока у
+    // них нет, обещания нет, но видеть их надо каждый день — иначе получается то,
+    // с чего все началось: задача есть, а ее никто не видит (Павел 24.11.2026).
     var doneToday = tasks.filter(function (t) { return t.status === 'done' && t.closed_at && dyDayOf(t.closed_at) === tKey; });
     var doneWeek = tasks.filter(function (t) { return t.status === 'done' && !(t.closed_at && dyDayOf(t.closed_at) === tKey); });
     var review = tasks.filter(function (t) { return t.status === 'review'; });
@@ -9137,7 +9137,8 @@
     var main = '';
     if (over.length) main += dyBand('Просрочено', over, 'over', dmix);
     if (todayL.length) main += (over.length ? dyBand('Сегодня', todayL, '', dmix) : todayL.map(function (t) { return dyRow(t, dmix); }).join(''));
-    if (!over.length && !todayL.length) {
+    if (noDay.length) main += dyBand('Без дня', noDay, 'noday', dmix);
+    if (!over.length && !todayL.length && !noDay.length) {
       main += '<div class="dy-empty">' + (restN
         ? 'На сегодня ничего не назначено. <b>Ниже остаток недели</b> — открой задачу и поставь ей день, или просто делай по порядку.'
         : (tasks.length ? 'На сегодня ничего. Неделя сделана — можно взять что-то из «Потом».' : 'Неделя пустая. Собери ее: возьми задачи из «Потом».')) + '</div>';
@@ -9145,7 +9146,6 @@
     var restHtml = '';
     if (restN) {
       var hint = restKeys.map(function (k) {
-        if (k === 'z-noday') return 'без дня ' + rest[k].length;
         var d = new Date(k + 'T00:00:00');
         return WDAYS_RU[d.getDay()] + ' ' + rest[k].length;
       }).join(' · ');
@@ -9154,7 +9154,6 @@
         (open ? 'Свернуть' : 'Еще ' + restN + ' на неделе · ' + esc(hint)) + '</button>' +
         '<div class="dy-rest"' + (open ? '' : ' hidden') + '>' +
           restKeys.map(function (k) {
-            if (k === 'z-noday') return dyBand('Без дня, до пятницы', rest[k], '', dmix);
             var d = new Date(k + 'T00:00:00');
             return dyBand(dyTitle(d), rest[k], '', dmix);
           }).join('') + '</div>';
@@ -12510,7 +12509,7 @@
     }).join('');
     return '<div class="card dy-card dy-later' + (state.laterOpen ? ' open' : '') + '">' +
       '<button class="dy-h dy-later-h" id="dy-later"><span class="t">Потом</span>' +
-        '<span class="dy-h-n num"><b>' + later.length + '</b> ' + plural(later.length, 'задача', 'задачи', 'задач') + ' без срока</span>' +
+        '<span class="dy-h-n num"><b>' + later.length + '</b> ' + plural(later.length, 'задача', 'задачи', 'задач') + ' вне недели</span>' +
         '<span class="dy-later-ic">' + ic('go', 14) + '</span></button>' +
       (state.laterOpen ? '<div class="dy-body">' + rows + '</div>' : '') + '</div>';
   }
@@ -12723,7 +12722,7 @@
         '<div class="wk-empty-t">' + (sh < 0 ? 'На этой неделе ничего не было' : 'Неделя пустая') + '</div>' +
         (sh >= 0
           ? '<div class="wk-empty-s">Возьми задачи из «Потом»' + (capOn ? ' — не больше ' + cap + ' — ' : ' ') + 'и нажми «Собрать неделю». ' +
-            'Задача со сроком на этой неделе попадает сюда сама.</div>' +
+            'Задача со сроком на этой неделе и задача без срока попадают сюда сами.</div>' +
             '<button class="bp sm" id="wk-collect2">' + ic('plus', 14) + 'Собрать неделю</button>'
           : '') +
         '</div>';
