@@ -13234,6 +13234,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .dbt-v small { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: 1px; }
 .dbt-r.late .dbt-v:last-child small { color: var(--red-ink); }
 .dbt-r.todo .dbt-v:last-child small, .dbt-r.check .dbt-v:last-child small { color: var(--amber-ink); }
+.dbt-r .dbt-v:last-child small.dbt-later { color: var(--ink-3); font-weight: 500; white-space: normal; }
 .dbt-list { max-height: 680px; overflow-y: auto; }
 .dbt-list .dbt-r:first-child { border-top: 0; }
 

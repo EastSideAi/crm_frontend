@@ -42624,11 +42624,22 @@
       if (state.page === 'sales') renderView();
     });
   }
+  /* Дальше по графику (Павел 11223: «хочется видеть, когда они должны внести»): взносы
+     после ближайшего, коротко. Взнос без даты — тот, что по договору после письма о
+     зачислении. */
+  function dbtLater(r) {
+    var rest = (r.plan || []).slice(1);
+    if (!rest.length) return '';
+    return '<small class="dbt-later">потом ' + esc(rest.map(function (x) {
+      return smRub(x.rub) + ' ' + (x.due ? 'до ' + fmtDay(x.due).slice(0, 5) : 'после зачисления');
+    }).join(', потом ')) + '</small>';
+  }
   function dbtRow(r) {
     var next = r.state === 'late' || r.state === 'wait'
       ? '<b class="num">' + smRub(r.next_rub) + '</b><small>' + (r.state === 'late'
           ? 'просрочен ' + r.late_days + ' ' + plural(r.late_days, 'день', 'дня', 'дней')
-          : 'до ' + fmtDay(r.next_due).slice(0, 5)) + '</small>'
+          : r.next_due ? 'до ' + fmtDay(r.next_due).slice(0, 5) : 'после зачисления') + '</small>' +
+        dbtLater(r)
       : r.state === 'done'
         ? '<small>' + (r.mark === 'none' ? 'отмечено, долга нет' : 'график закрыт') + '</small>'
         // Без графика показываем остаток по прайсу тарифа (Павел 11096): это прикидка,

@@ -308,7 +308,8 @@ DEBTS = {"no_contract": 2, "rows": [
     _debt(4, "Семья Лисиных", "check", ledger_rub=137200, est_left=162790, owner=""),
     _debt(5, "Семья Гордеевых", "check", contract=False),
     _debt(6, "Семья Зуевых", "wait", paid_rub=140000, last_paid="2026-11-19",
-          left_rub=149500, next_due="2026-12-15", next_rub=80000),
+          left_rub=160000, next_due="2026-12-15", next_rub=80000,
+          plan=[{"due": "2026-12-15", "rub": 80000}, {"due": None, "rub": 80000}]),
     _debt(7, "Семья Миронец", "done", tariff="prem", paid_rub=399990,
           last_paid="2026-08-10", support=False),
 ], "states": [
