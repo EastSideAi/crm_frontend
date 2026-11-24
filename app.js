@@ -30076,17 +30076,58 @@
       '</div>';
     }
 
+    /* Круг-прогресс: как собран месяц по закрытым задачам. Наглядная подгонялка —
+       Павел 24.11: «график в виде кружочка, заполняющийся, плюс мотивирующие истории». */
+    var ring = '';
+    if (tk && tk !== 'loading' && tk !== 'none') {
+      var tt = tk.totals || {};
+      var pl = tt.plan || 0, dn = tt.done || 0;
+      var pct = pl ? Math.round(dn / pl * 100) : 0;
+      var off = 264 - 264 * Math.min(pct, 100) / 100;
+      var left = Math.max(0, pl - dn);
+      var cap = pl === 0 ? 'Задачи на месяц ещё не заведены.'
+        : (left === 0 ? 'Все задачи месяца закрыты — месяц собран.'
+          : 'Закрой ещё ' + left + ' ' + plural(left, 'задачу', 'задачи', 'задач') + ' — и круг полный.');
+      ring = '<div class="card sp12"><div class="mp-ring">' +
+        '<div class="mp-ring-wrap"><svg class="mp-prog" viewBox="0 0 100 100" width="104" height="104">' +
+          '<circle class="mp-prog-bg" cx="50" cy="50" r="42"/>' +
+          '<circle class="mp-prog-fg" cx="50" cy="50" r="42" transform="rotate(-90 50 50)" ' +
+            'style="stroke-dasharray:264;stroke-dashoffset:' + off + '"/>' +
+        '</svg><div class="mp-ring-val"><b>' + pct + '%</b><small>' + dn + ' из ' + pl + '</small></div></div>' +
+        '<div class="mp-ring-cap"><div class="t">Как идёт месяц</div>' +
+          '<div class="s">' + cap + '</div></div>' +
+      '</div></div>';
+    }
+
+    /* Напоминание, что сверху фикса можно добрать: свои продажи и партнёрка. Партнёрский
+       процент не закреплён (ждёт Виталия) — жёсткую цифру не ставим, см. partner-program. */
+    var earn = '<div class="card sp12">' +
+      '<div class="sec-head"><div><div class="t">Можно зарабатывать больше</div>' +
+        '<div class="s">фикс и KPI — не потолок, сверху можно добрать</div></div></div>' +
+      '<div class="mp-earn">' +
+        '<div class="mp-earn-row"><span class="mp-earn-k">Продал сам</span>' +
+          '<span class="mp-earn-v">до 3,2% с каждой оплаты клиента</span></div>' +
+        '<div class="mp-earn-row"><span class="mp-earn-k">Привёл семью</span>' +
+          '<span class="mp-earn-v">партнёрский процент с её оплат</span></div>' +
+        '<button class="bp ghost mp-earn-cta" data-motivearn="1">Подключить и получить ссылку</button>' +
+        '<div class="s mp-earn-note">Партнёрский процент закрепим точнее — пока без фиксированной цифры.</div>' +
+      '</div></div>';
+
     view.innerHTML = back +
       '<div class="card sp12"><div class="sec-head rw-head"><div>' +
         '<div class="t">' + esc(s.name) +
           (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</div>' +
         '<div class="s">расчёт за ' + esc(pfMonthTitle(state._motivRw.period)) + '</div></div></div></div>' +
-      statBar(tiles) + whenPay + kpi + tasks +
+      ring + statBar(tiles) + whenPay + kpi + tasks + earn +
       '<div class="fin-note">' + ic('alert', 13) +
         'Это те же деньги, что у Романа в расчётном листе — показаны в твоём окне. ' +
         'Пока только просмотр: выставлять фикс и назначать KPI отсюда подключу отдельным ' +
         'шагом, когда сверимся с Романом, куда это писать.' +
       '</div>';
+    var eb = view.querySelector('[data-motivearn]');
+    if (eb) eb.addEventListener('click', function () {
+      showToast('Партнёрскую ссылку подключим — закрепим процент, и кнопка станет рабочей.');
+    });
     motivPersonBack(view); pageAnim(view);
   }
   function motivPersonBack(view) {
