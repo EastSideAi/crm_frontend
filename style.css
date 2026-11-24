@@ -198,6 +198,14 @@ a { color: inherit; text-decoration: none; }
 .verdict .vspark { width: 24px; height: 24px; border-radius: 7px; background: var(--blue-tint);
   display: grid; place-items: center; color: var(--blue); flex: none; margin-top: 1px; }
 .verdict b { color: var(--ink); font-weight: 600; }
+/* Фраза в шапке умеет быть входом: счет сданного мне открывает экран приемки.
+   Не кнопка-коробка, а подчеркнутое слово внутри предложения — чтобы строка
+   осталась фразой, а не панелью. */
+.vlink { font: inherit; color: var(--blue); background: none; border: 0; padding: 0;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: rgba(43,143,255,.35); transition: .14s var(--ease); }
+.vlink:hover { text-decoration-color: var(--blue); }
+.vlink b { color: inherit; }
 .hactions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .freshchip { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500;
   color: var(--ink-2); background: var(--fill); border-radius: var(--r-pill); padding: 9px 14px; }
@@ -815,7 +823,11 @@ a { color: inherit; text-decoration: none; }
 .dl-grid { grid-template-columns: 1.4fr 190px 110px 30px; }
 .tsk-grid { grid-template-columns: minmax(0,1.7fr) 178px 150px 116px; }
 /* Свои задачи: колонки исполнителя нет — в каждой строке стояло бы свое же имя. */
-.tsk-grid.mine { grid-template-columns: minmax(0,1.7fr) 150px 116px; }
+/* Третий столбец под статус — auto, а не фиксированные 116px: статус в своем
+   плане показывается только как отклонение (app.js, wkRow), и у обычной строки
+   этот столбец пустой. Фиксированная ширина оставляла справа полосу пустоты в
+   треть экрана (Павел 24.11.2026 про перегруженный планер). */
+.tsk-grid.mine { grid-template-columns: minmax(0,1.7fr) 150px auto; }
 /* воронка курса в записи на «Маркетинге»: источник, шаги, деньги */
 .cf-grid { grid-template-columns: minmax(0,1.4fr) 74px 92px 106px 84px 116px; }
 .cf-grid .num { text-align: right; }
@@ -11252,6 +11264,22 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .wk-cap.full { color: var(--amber-ink); }
 .wk-caps { font-size: 12px; font-weight: 600; color: var(--ink-3); }
 .wk-search { flex: 1; min-width: 160px; }
+/* Приемка отдельным экраном: шапка «назад к плану» и заголовок со счетом.
+   Полосы сданного поверх недели больше нет (app.js, renderAccept). */
+.wk-back { flex: none; }
+.wk-back svg { transform: rotate(180deg); }
+.wk-h { margin: 0; font: 700 17px/1.2 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.wk-h .num { color: var(--ink-3); font-weight: 600; }
+/* Направление задачи в строке: метка, а не статус, поэтому серая и тихая.
+   Ставится, только когда в списке есть задачи разных направлений. */
+.tsk-dept { display: inline-flex; align-items: center; margin-left: 6px;
+  font: 600 11px 'Manrope', sans-serif; color: var(--ink-3); background: var(--fill);
+  border-radius: var(--r-pill); padding: 2px 8px; white-space: nowrap; }
+.dy-meta .tsk-dept { margin-left: 0; }
+/* Фильтр по направлению свернут в одну кнопку: раскрывается кликом. */
+.dept-pick button { display: inline-flex; align-items: center; gap: 6px; }
+.dept-pick svg { color: var(--ink-3); }
+.dept-pick button.on svg { color: inherit; }
 /* Состояние недели под панелью: собрана / закрыта, ждет / принята / вернули. */
 .wk-state { display: flex; align-items: flex-start; gap: 8px; margin: 12px 24px 0;
   padding: 10px 14px; border-radius: 12px; background: var(--fill);

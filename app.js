@@ -3735,21 +3735,30 @@
     }
     if (state.page === 'tasks') {
       var ts = state.taskSum, tphr;
+      // Счет сданного мне — кнопка: отсюда открывается экран приемки.
+      var acceptLink = function (n) {
+        return '<button type="button" class="vlink" id="tsk-acc">Тебе сдали <b>' + n + '</b></button>';
+      };
       if (!ts) tphr = 'Смотрю, что на тебе.';
       else if (ts.overdue) tphr = '<b>' + ts.overdue + ' ' + plural(ts.overdue, 'задача просрочена', 'задачи просрочены', 'задач просрочено') + '.</b> Начни с них — они выше в списке.';
-      else if (ts.to_accept) tphr = 'Просрочки нет. Тебе сдали <b>' + ts.to_accept + '</b> — прими или верни, пока человек ждет.';
+      else if (ts.to_accept) tphr = 'Просрочки нет. ' + acceptLink(ts.to_accept) + ' — прими или верни, пока человек ждет.';
       else if (ts.open) tphr = 'Все в срок: <b>' + ts.open + '</b> ' + plural(ts.open, 'открытая задача', 'открытые задачи', 'открытых задач') + '.';
       // Сводка всегда про МОИ задачи (summary считает по assignee_id), а список
       // рядом может показывать всю команду — без «на тебе» фраза противоречит списку.
       else tphr = 'Открытых задач на тебе нет.';
       // На «Неделе» сводка про неделю, а не про все открытое: экран отвечает
       // «что я обещал на эту неделю и как идет».
-      if (TASK_SEGS[taskSeg()].view === 'myweek') {
+      if (state.planMode === 'accept') {
+        // На самом экране приемки счет уже стоит в заголовке — второй раз его
+        // в шапке не повторяем.
+        tphr = 'Сданное тебе. Принял — ушло из списка, вернул — уехало человеку с твоим замечанием.';
+      }
+      else if (TASK_SEGS[taskSeg()].view === 'myweek') {
         var mw = state.myweek && state.myweek !== 'none' ? state.myweek : null;
         var mf = mw && mw.r && mw.r.facts ? mw.r.facts : null;
         if (!mw) tphr = 'Смотрю, что на сегодня.';
         else if (mf && mf.overdue && wkShift()) tphr = '<b>' + mf.overdue + ' ' + plural(mf.overdue, 'задача просрочена', 'задачи просрочены', 'задач просрочено') + '</b> на той неделе.';
-        else if (ts && ts.to_accept && !wkShift()) tphr = 'Тебе сдали <b>' + ts.to_accept + '</b> — прими или верни, пока человек ждет.';
+        else if (ts && ts.to_accept && !wkShift()) tphr = acceptLink(ts.to_accept) + ' — прими или верни, пока человек ждет.';
         else if (mf && mf.stuck) tphr = '<b>' + mf.stuck + '</b> ' + plural(mf.stuck, 'задача застряла', 'задачи застряли', 'задач застряло') + ': переносишь второй раз. Разбери или сними.';
         else if (mf && mf.plan) tphr = 'Неделя: <b>' + mf.done + '</b> из <b>' + mf.plan + '</b> сделано.';
         else tphr = 'Неделя пустая. Собери ее из «Потом».';
@@ -4302,6 +4311,15 @@
     var whx = el('tsk-whox');
     if (whx) whx.addEventListener('click', function () {
       state.taskWho = null; state.tasks = null;
+      syncPageHash(); renderHead(); renderView();
+    });
+    // Счет «тебе сдали» в шапке — единственный вход в приемку: полосы поверх
+    // плана больше нет (см. renderAccept).
+    var acc = el('tsk-acc');
+    if (acc) acc.addEventListener('click', function () {
+      if (state.planMode !== 'accept') state.planBack = state.planMode || 'week';
+      state.planMode = 'accept';
+      state.taskSeg = 'week';
       syncPageHash(); renderHead(); renderView();
     });
     var gb = el('tsk-guide');
@@ -8654,7 +8672,11 @@
     var closed = t.status === 'done' || t.status === 'cancel';
     var sub = [];
     if (t.client_name) sub.push(t.client_name);
-    if (t.author_name && !own && !opts.hideAuthor) sub.push('поставил ' + t.author_name);
+    // На экране приемки постановщик — это я, и подпись «поставил я» ничего не
+    // сообщает. Там важно, кто сдал: с ним и разговаривать, если вернуть.
+    // Слово без рода: «сдал Ирина» читается как ошибка системы.
+    if (opts.accept && t.assignee_name) sub.push('исполнитель ' + t.assignee_name);
+    else if (t.author_name && !own && !opts.hideAuthor) sub.push('поставил ' + t.author_name);
     var marks = '';
     // Кто положил в неделю — словами в подписи, а не чипом: чип в цвете статуса
     // «поставлена» читался бы как второй статус (design.md, словари не смешиваем).
@@ -8664,6 +8686,12 @@
     if (t.carry_count) {
       marks += '<span class="sev ' + (t.stuck ? 'rv-wait' : 'st-wait') + ' wk-mark">' +
         (t.stuck ? 'переносили ×' + t.carry_count : 'перенос') + '</span>';
+    }
+    // Направление — тихой меткой и только у строк, выбивающихся из главного
+    // направления списка (deptMain). Павел 24.11.2026: «пометки, только если они
+    // в разных отделах». Вся неделя по одному отделу — меток нет вовсе.
+    if (opts.dept != null && t.dept && t.dept !== opts.dept && DEPTS[t.dept]) {
+      marks += '<span class="tsk-dept">' + esc(DEPTS[t.dept]) + '</span>';
     }
     marks += agMark(t, closed);
     var quick = '';
@@ -8686,7 +8714,11 @@
         (sub.length ? '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' : '') +
       '</div>' +
       '<div class="tsk-due ' + (closed ? '' : due.cls) + '">' + esc(closed ? (t.closed_at ? dayLabel(t.closed_at) : '') : due.text) + '</div>' +
-      '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      // Статус показываем, только когда он отклонение: «поставлена» стоит почти
+      // у каждой строки плана и столбцом серых чипов ничего не сообщает (то же
+      // правило уже работает в строке дня, dyRow).
+      '<div>' + (t.status === 'wait' || t.status === 'doing' || closed || opts.accept ? ''
+        : '<span class="sev ' + st.cls + '">' + st.label + '</span>') + '</div>' +
     '</div>';
   }
 
@@ -8716,14 +8748,20 @@
       var key = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
       (byDay[key] = byDay[key] || []).push(t);
     });
+    // Полос максимум четыре: просрочено, сегодня, завтра, дальше. Раньше была
+    // полоса на каждый день недели, и четырнадцать задач разъезжались на пять
+    // заголовков — список переставал читаться одним движением глаз (Павел
+    // 24.11.2026). День никуда не делся: он стоит справа в самой строке.
     var out = wkBand('Просрочено', 'обещал и не сделал', over, rowFn);
+    var later = [];
     Object.keys(byDay).sort().forEach(function (key) {
       var d = new Date(key + 'T00:00:00');
       var diff = Math.round((d - today) / 864e5);
-      var title = diff === 0 ? 'Сегодня' : diff === 1 ? 'Завтра'
-        : WDAYS_RU[d.getDay()] + ', ' + d.getDate() + ' ' + MONTHS_RU[d.getMonth()];
-      out += wkBand(title, '', byDay[key], rowFn);
+      if (diff === 0) out += wkBand('Сегодня', '', byDay[key], rowFn);
+      else if (diff === 1) out += wkBand('Завтра', '', byDay[key], rowFn);
+      else later = later.concat(byDay[key]);
     });
+    out += wkBand('Дальше', '', later, rowFn);
     out += wkBand('Без дня', 'до пятницы', noDay, rowFn);
     out += wkBand('На приемке', 'сдано, ждет постановщика', review, rowFn);
     out += wkBand('Сделано', '', done, rowFn);
@@ -9044,6 +9082,10 @@
               : (opts.tickSlot !== false && !opts.readOnly ? '<span class="tsk-chk quiet"></span>' : '')));
     var meta = dyRoles(t, opts);
     if (t.client_name && !opts.noClient) meta.push('<span class="dy-m dy-cl">' + esc(t.client_name) + '</span>');
+    // Направление — только у строк не из главного направления (см. wkRow).
+    if (opts.dept != null && t.dept && t.dept !== opts.dept && DEPTS[t.dept]) {
+      meta.push('<span class="tsk-dept">' + esc(DEPTS[t.dept]) + '</span>');
+    }
     // Шаг цели носит метку цели: план и цели — одна сущность; клик открывает цель.
     if (!opts.noGoal && t.parent_id && t.parent_title) {
       meta.push('<button class="tsk-goal dy-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></button>');
@@ -9059,10 +9101,10 @@
       '<div class="dy-r">' + right + '</div>' +
     '</div>';
   }
-  function dyBand(title, items, cls) {
+  function dyBand(title, items, cls, opts) {
     if (!items.length) return '';
     return '<div class="tsk-band' + (cls ? ' ' + cls : '') + '"><span class="tsk-band-t">' + esc(title) + '</span></div>' +
-      items.map(function (t) { return dyRow(t); }).join('');
+      items.map(function (t) { return dyRow(t, opts); }).join('');
   }
   function renderMyDay(view, w, r, tools) {
     var now = new Date();
@@ -9091,9 +9133,10 @@
     var restN = restKeys.reduce(function (a, k) { return a + rest[k].length; }, 0);
 
     // Сегодня — якорь экрана.
+    var dmix = { dept: deptMain(tasks) };
     var main = '';
-    if (over.length) main += dyBand('Просрочено', over, 'over');
-    if (todayL.length) main += (over.length ? dyBand('Сегодня', todayL) : todayL.map(function (t) { return dyRow(t); }).join(''));
+    if (over.length) main += dyBand('Просрочено', over, 'over', dmix);
+    if (todayL.length) main += (over.length ? dyBand('Сегодня', todayL, '', dmix) : todayL.map(function (t) { return dyRow(t, dmix); }).join(''));
     if (!over.length && !todayL.length) {
       main += '<div class="dy-empty">' + (restN
         ? 'На сегодня ничего не назначено. <b>Ниже остаток недели</b> — открой задачу и поставь ей день, или просто делай по порядку.'
@@ -9111,9 +9154,9 @@
         (open ? 'Свернуть' : 'Еще ' + restN + ' на неделе · ' + esc(hint)) + '</button>' +
         '<div class="dy-rest"' + (open ? '' : ' hidden') + '>' +
           restKeys.map(function (k) {
-            if (k === 'z-noday') return dyBand('Без дня, до пятницы', rest[k]);
+            if (k === 'z-noday') return dyBand('Без дня, до пятницы', rest[k], '', dmix);
             var d = new Date(k + 'T00:00:00');
-            return dyBand(dyTitle(d), rest[k]);
+            return dyBand(dyTitle(d), rest[k], '', dmix);
           }).join('') + '</div>';
     }
     var todayN = over.length + todayL.length;
@@ -9122,18 +9165,14 @@
         '<span class="dy-h-n num">' + (todayN ? '<b>' + todayN + '</b> ' + plural(todayN, 'задача', 'задачи', 'задач') : '') + '</span></div>' +
       '<div class="dy-body">' + main + restHtml + '</div></div>';
 
-    // Сбоку: сдали мне (только если есть), завтра, сделано.
+    // Сбоку: завтра, участвую, на контроле, сделано. Сданного мне тут больше
+    // нет — оно уехало на свой экран (renderAccept), вход из шапки.
     var side = '';
-    if ((w.accept || []).length) {
-      side += '<div class="card dy-card"><div class="dy-h blue"><span class="t">Тебе сдали</span>' +
-        '<span class="dy-h-n num"><b>' + w.accept.length + '</b></span></div><div class="dy-body">' +
-        w.accept.map(function (t) { return dyRow(t, { readOnly: true, accept: true }); }).join('') + '</div></div>';
-    }
     var tmTitle = tomorrow.getDay() === 6 ? 'В понедельник' : 'Завтра';
     side += '<div class="card dy-card"><div class="dy-h"><span class="t">' + tmTitle + '</span>' +
       '<span class="dy-h-n num">' + (tomorrowL.length ? '<b>' + tomorrowL.length + '</b>' : '') + '</span></div>' +
       '<div class="dy-body">' + (tomorrowL.length
-        ? tomorrowL.map(function (t) { return dyRow(t, { today: true }); }).join('')
+        ? tomorrowL.map(function (t) { return dyRow(t, { today: true, dept: dmix.dept }); }).join('')
         : '<div class="dy-empty">Пока пусто</div>') + '</div></div>';
     // Участвую: чужие задачи, где я соисполнитель или наблюдатель — видны
     // сразу, это и моя работа. На контроле: поставил не себе — свернуто, это
@@ -12328,7 +12367,7 @@
     var how = howOff ? '' : '<div class="rh-how tb-how"><div class="rh-hh">' + ic('kanban', 13) + 'Как работает доска' +
       '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
       '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
-    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
+    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptPick() + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти задачу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
@@ -12336,7 +12375,7 @@
       how +
       (dept ? boardGoalStrip(state.myboard.dept, base) : '') +
       '<div class="kb-wrap tb-wrap">' + cols + '</div>';
-    wirePlanMode(view); wireDeptChips(view); wirePrio(view);
+    wirePlanMode(view); wireDeptChips(view); wireDeptPick(view); wirePrio(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-bgoal]'), function (b) {
       b.addEventListener('click', function () { state.boardGoal = b.getAttribute('data-bgoal'); renderView(); });
     });
@@ -12638,6 +12677,7 @@
     if (state.planMode === 'month') { renderMyMonth(view); return; }
     if (state.planMode === 'board') { renderMyBoard(view); return; }
     if (state.myweek === null) { view.innerHTML = dashSkeleton(); loadMyWeek(); return; }
+    if (state.planMode === 'accept' && state.myweek !== 'none') { renderAccept(view); return; }
     if (state.myweek === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
       return;
@@ -12671,15 +12711,14 @@
           '<span class="num">' + load + ' из ' + cap + '</span></div>'
       : '';
 
-    var accept = (w.accept || []).length && sh === 0
-      ? '<div class="tsk-band wk-accept"><span class="tsk-band-t">Тебе сдали</span>' +
-          '<span class="tsk-band-h">прими или верни, пока человек ждет</span>' +
-          '<span class="tsk-band-n num">' + w.accept.length + '</span></div>' +
-        w.accept.map(function (t) { return wkRow(t, { readOnly: true, accept: true }); }).join('')
-      : '';
+    // Сданное на приемку живет на своем экране (renderAccept), а не полосой
+    // поверх плана. На боевых данных 24.11.2026 эта полоса занимала 1891
+    // пиксель из 3742: собственный план руководителя начинался ниже двух с
+    // половиной экранов чужой работы. Вход — счет «тебе сдали» в шапке.
+    var mixed = deptMain(tasks);
 
     var body;
-    if (!tasks.length && !accept) {
+    if (!tasks.length) {
       body = '<div class="wk-empty">' +
         '<div class="wk-empty-t">' + (sh < 0 ? 'На этой неделе ничего не было' : 'Неделя пустая') + '</div>' +
         (sh >= 0
@@ -12689,10 +12728,10 @@
           : '') +
         '</div>';
     } else {
-      body = accept + wkBands(tasks, function (t) { return wkRow(t); });
+      body = wkBands(tasks, function (t) { return wkRow(t, { dept: mixed }); });
     }
 
-    var head = planModeSeg() + deptChips() + prioSeg();
+    var head = planModeSeg() + deptPick() + prioSeg();
     if (state.planMode === 'day' && sh === 0) {
       // Текущая неделя — это день. Поиск тут раньше не ставили: фильтровать
       // десять строк нечего. Теперь он ищет по всему задачнику, и экран дня —
@@ -12722,7 +12761,7 @@
       '</div>' + laterBand(w.later || []) + (w.repeats && sh === 0 ? repeatBand(w.repeats) : '');
     }
 
-    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wirePrio(view); wireLater(view); wireRepeats(view);
+    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wireDeptPick(view); wirePrio(view); wireLater(view); wireRepeats(view);
     if (el('tsk-new')) el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
     if (qi) {
@@ -12787,15 +12826,46 @@
             '<div class="gl-meta">' + (f.plan ? 'взял ' + f.plan + ' · сделано ' + f.done + (f.carried ? ' · перенос ' + f.carried : '') + (f.stuck ? ' · застряло ' + f.stuck : '') : 'ничего не взято') + esc(rv) + '</div></div>' +
           st + '</div>' + rows + '</div>';
     }).join('');
-    view.innerHTML = '<div class="wk-top">' + planModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
+    view.innerHTML = '<div class="wk-top">' + planModeSeg() + deptPick() + '<span class="wk-spacer"></span>' + nav + '</div>' +
       stats + weeks;
-    wirePlanMode(view); wireDeptChips(view); wirePrio(view);
+    wirePlanMode(view); wireDeptChips(view); wireDeptPick(view); wirePrio(view);
     function go(d) { state.monthShift = Math.max(-12, Math.min(3, (state.monthShift || 0) + d)); state.mymonth = null; renderView(); }
     if (el('mo-prev')) el('mo-prev').addEventListener('click', function () { go(-1); });
     if (el('mo-next')) el('mo-next').addEventListener('click', function () { go(1); });
     if (el('mo-now')) el('mo-now').addEventListener('click', function () { state.monthShift = 0; state.mymonth = null; renderView(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-wtoggle]'), function (h) {
       h.addEventListener('click', function () { var k = 'w' + h.getAttribute('data-wtoggle'); state.glOpen[k] = !state.glOpen[k]; renderView(); });
+    });
+    wkWireRows(view);
+  }
+
+  /* ── Приемка: отдельный экран, а не полоса поверх плана ──────────────────────
+     Раньше сданное мне лежало первой полосой в «Неделе». На боевых данных
+     24.11.2026 это 22 чужие задачи и 1891 пиксель из 3742: собственный план
+     руководителя начинался ниже двух с половиной экранов чужой работы. Теперь
+     вход сюда — счет «тебе сдали» в шапке, а план показывает только мое.
+
+     Принимать можно прямо из строки, не открывая карточку: галочка слева.
+     Экран держится на том же state.myweek — отдельной загрузки не завел. */
+  function renderAccept(view) {
+    var w = state.myweek;
+    var rows = w.accept || [];
+    var mixed = deptMain(rows);
+    var body = rows.length
+      ? rows.map(function (t) { return wkRow(t, { readOnly: true, accept: true, dept: mixed }); }).join('')
+      : '<div class="wk-empty"><div class="wk-empty-t">Ничего не ждет приемки</div>' +
+        '<div class="wk-empty-s">Сюда попадает то, что люди сдали тебе на проверку.</div></div>';
+    view.innerHTML = '<div class="wk-top">' +
+        '<button class="qchip wk-back" id="acc-back">' + ic('go', 12) + 'К плану</button>' +
+        '<h3 class="wk-h">Тебе сдали' + (rows.length ? ' <span class="num">' + rows.length + '</span>' : '') + '</h3>' +
+      '</div>' +
+      '<div class="card listcard">' +
+        (rows.length ? '<div class="wk-state"><span>Галочка слева принимает задачу. Нужно вернуть или посмотреть результат — открой строку.</span></div>' : '') +
+        '<div class="list-body">' + body + '</div>' +
+      '</div>';
+    el('acc-back').addEventListener('click', function () {
+      state.planMode = state.planBack || 'week';
+      renderHead(); renderView();
     });
     wkWireRows(view);
   }
@@ -14228,10 +14298,48 @@
         (d ? esc(DEPTS[d]) : 'Все') + '</button>';
     }).join('') + '</div>';
   }
+  /* Фильтр по направлению в плане: семь кнопок в ряд стояли всегда, а нужны
+     раз в неделю (Павел 24.11.2026 про перегруженный планер). Поэтому ряд
+     свернут в одну кнопку и раскрывается кликом; выбранное направление видно
+     прямо на ней, чтобы человек не гадал, почему список короткий. */
+  function deptPick() {
+    if (state.deptOpen) return deptChips();
+    var cur = state.taskDept || '';
+    return '<div class="dept-seg pay-seg dept-pick">' +
+      '<button type="button" class="' + (cur ? 'on' : '') + '" id="dept-open">' +
+        ic('filter', 12) + (cur ? esc(DEPTS[cur]) : 'Все отделы') + '</button></div>';
+  }
+  function wireDeptPick(view) {
+    if (view.querySelector('#dept-open')) {
+      view.querySelector('#dept-open').addEventListener('click', function () {
+        state.deptOpen = true; renderView();
+      });
+    }
+  }
+  /* Какое направление в списке главное. Метку отдела ставим не всем подряд, а
+     только выбивающимся из него строкам: у человека неделя обычно вся по своему
+     направлению, и метка на каждой строке не значит ничего. Возвращает:
+     null — направление одно, метки не нужны;
+     ключ отдела — он главный, метим остальных;
+     '' — явного большинства нет, метим всех. */
+  function deptMain(list) {
+    var n = {}, kinds = 0, total = 0, top = '', topN = 0;
+    (list || []).forEach(function (t) {
+      var d = t.dept || '';
+      if (!d) return;
+      if (!n[d]) kinds++;
+      n[d] = (n[d] || 0) + 1;
+      total++;
+      if (n[d] > topN) { topN = n[d]; top = d; }
+    });
+    if (kinds < 2) return null;
+    return topN * 2 > total ? top : '';
+  }
   function wireDeptChips(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
+        state.deptOpen = false;
         state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null; state.teamStats = null; state.person = null; state.gantt = null;
         // Карта офиса тоже собрана под направление: без сброса чип включается,
         // а рассадка остается от прошлого фильтра.
