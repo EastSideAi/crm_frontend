@@ -794,7 +794,24 @@ a { color: inherit; text-decoration: none; }
 .lr-grid { grid-template-columns: 138px 1.4fr 130px 170px 110px 30px; }
 /* «Сопровождение»: вместо балла и контакта — этап маршрута (Мария 20.11.2026).
    Контакт там не нужен: клиенту пишут из карточки, а не копируя почту из списка. */
-.lr-grid.sup { grid-template-columns: 138px 1.4fr 200px 110px 30px; }
+/* В «Сопровождении» колонка ученика НЕ тянется на всю свободную ширину (Мария
+   23.11.2026 обвела пустое место между подписью и «Этапом»: «подвинь туда этап и
+   дедлайн»). У нее стоит потолок, лишняя ширина уходит в последнюю колонку, и
+   стрелка прижата к правому краю строки. Так этап и дедлайн стоят сразу за именем,
+   а воздух собран в одном месте, а не размазан посередине. На узком окне колонка
+   сжимается сама: нижняя граница minmax — ноль. */
+.lr-grid.sup { grid-template-columns: 138px minmax(0, 430px) minmax(220px, 2fr) 110px minmax(30px, 1fr); }
+.lr-grid.sup .t-go, .lr-grid.sup .th:last-child { justify-self: end; }
+/* Подпись ученика обрывается на половине колонки (Мария 23.11.2026). В ней лежит
+   заметка карточки целиком — пара строк про договор и условия, — и на всю ширину
+   она шла впритык к этапу: глазу не за что зацепиться, строки сливались. Половина
+   оставляет поле справа, по которому читается край колонки. Текст не теряется:
+   обрыв многоточием был и раньше, он просто стал наступать раньше, а заметка
+   целиком лежит в карточке. На телефоне правило снимается — там ширины и так нет. */
+.lr-grid.sup .t-sub { max-width: 85%; }
+/* «направление не проставлено» — не данные, а дырка: тон тише обычной подписи и
+   курсива нет, чтобы строка не читалась как чье-то название. */
+.t-sub-none { font-style: normal; color: var(--ink-3); }
 .dl-grid { grid-template-columns: 1.4fr 190px 110px 30px; }
 .tsk-grid { grid-template-columns: minmax(0,1.7fr) 178px 150px 116px; }
 /* Свои задачи: колонки исполнителя нет — в каждой строке стояло бы свое же имя. */
@@ -5797,6 +5814,9 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
     height: auto; padding: 11px 14px; row-gap: 7px; }
   .trow.lr-grid.sup .t-tutor { grid-area: 1 / 1 / 3 / 2; align-self: center; }
   .trow.lr-grid.sup .t-cell { grid-area: 1 / 2 / 2 / 4; }
+  /* Обрыв подписи на половине — лекарство от слишком широкой колонки, а на телефоне
+     колонка и так узкая: половина от нее оставила бы пару слов. */
+  .trow.lr-grid.sup .t-sub { max-width: none; }
   /* Палец крупнее курсора: плашка держит высоту нажатия, а не рисуется в один пиксель.
      Рамка пунктиром (Мария 20.11.2026): заливка спорила с цветной плашкой тьютора в
      той же строке, пунктир говорит «сюда можно нажать» и не добавляет второго пятна. */
@@ -10160,6 +10180,134 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 @media (max-width: 720px) {
   .ap-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Доска «Университеты» (buildApplySection) ───────────────────────────────
+   Три колонки уровней и карточки, которые таскают мышью. Якорь экрана — сама
+   доска, поэтому колонка тихая: светлая подложка, волосок рамки, без теней и
+   заливок. Единственное цветное пятно в колонке — красный флаг главного вуза,
+   он здесь и должен ловить глаз первым.
+   Полоса «Не разложены» стоит НАД доской и выделена амбером: пока вуз лежит в
+   ней, семья его не видит, и это состояние требует действия, а не украшения. */
+.uv-hold { margin-top: 4px; padding: 12px 14px 14px; border-radius: var(--r-lg);
+  background: var(--amber-soft); border: 1px solid rgba(224,146,47,.22); }
+.uv-hold.over { border-color: var(--amber); }
+.uv-hold__h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.uv-hold__h b { font-size: 13px; font-weight: 700; color: var(--amber-ink); letter-spacing: -.01em; }
+.uv-hold__h span { font-size: 11.5px; font-weight: 700; color: var(--amber-ink);
+  background: rgba(224,146,47,.18); border-radius: var(--r-pill); padding: 1px 7px; }
+.uv-hold__h i { margin-left: auto; font-style: normal; font-size: 12px; color: var(--amber-ink); opacity: .85; }
+.uv-hold__b { display: flex; flex-wrap: wrap; gap: 8px; }
+.uv-hold__b .uv-card { flex: 1 1 210px; max-width: 320px; }
+
+.uv-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px; margin-top: 14px; align-items: start; }
+.uv-col { background: #FBFBFC; border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 12px 10px 10px; min-height: 148px;
+  transition: background .14s cubic-bezier(.22,1,.36,1), border-color .14s cubic-bezier(.22,1,.36,1); }
+.uv-col.over { background: var(--blue-tint); border-color: rgba(47,107,255,.35); }
+.uv-col__h { display: flex; align-items: baseline; gap: 7px; padding: 0 4px 10px; }
+.uv-col__h b { font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.uv-col__n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.uv-col__h2 { margin-left: auto; font-size: 11px; color: var(--ink-3); }
+.uv-col__b { display: flex; flex-direction: column; gap: 8px; }
+.uv-drophint { padding: 16px 10px; border: 1px dashed var(--line-2); border-radius: 12px;
+  font-size: 12px; color: var(--ink-3); text-align: center; }
+
+.uv-card { background: #fff; border: 1px solid var(--line-2); border-radius: 12px;
+  padding: 10px 11px; cursor: grab; text-align: left;
+  transition: border-color .14s cubic-bezier(.22,1,.36,1), transform .14s cubic-bezier(.22,1,.36,1); }
+.uv-card:hover { border-color: #CFD4DE; }
+.uv-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.uv-card.on { border-color: var(--blue); }
+.uv-card.drag { opacity: .45; cursor: grabbing; transform: scale(.98); }
+.uv-card__h { display: flex; align-items: flex-start; gap: 8px; }
+.uv-card__t { min-width: 0; }
+.uv-uni { font-size: 13.5px; font-weight: 650; line-height: 1.25; letter-spacing: -.01em; color: var(--ink); }
+.uv-sub { margin-top: 2px; font-size: 11.5px; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Флаг главного вуза. Серый контур у остальных, заливка только у главного:
+   «главный» один на ученика, и второго красного пятна на доске быть не должно. */
+.uv-flag { flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; margin: -2px 0 0 -2px; border-radius: 7px;
+  background: transparent; color: #CDD2DC; cursor: pointer; opacity: 0;
+  transition: color .14s cubic-bezier(.22,1,.36,1), background .14s cubic-bezier(.22,1,.36,1),
+    opacity .14s cubic-bezier(.22,1,.36,1); }
+/* Серый флажок на каждой карточке читался бы как «вуз отмечен». Поэтому у не
+   главного он проступает по наведению, а поставить главный с телефона можно
+   кнопкой в раскрытой карточке — наведения там нет. */
+.uv-card:hover .uv-flag, .uv-card:focus-within .uv-flag { opacity: 1; }
+.uv-flag:hover { background: var(--fill); color: var(--ink-2); }
+.uv-flag.on { background: var(--red-soft); color: var(--red); opacity: 1; }
+
+.uv-main { display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: #fff; color: var(--ink-2); cursor: pointer;
+  transition: color .12s cubic-bezier(.22,1,.36,1), border-color .12s cubic-bezier(.22,1,.36,1); }
+.uv-main svg { color: #CDD2DC; transition: color .12s cubic-bezier(.22,1,.36,1); }
+.uv-main:hover { color: var(--ink); border-color: #CFD4DE; }
+.uv-main.on { background: var(--red-soft); border-color: rgba(229,72,77,.3); color: var(--red-ink); }
+.uv-main.on svg { color: var(--red); }
+.uv-card.main { border-color: rgba(229,72,77,.4); }
+.uv-card__f { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.uv-card__f .ap-dl { font-size: 11px; padding: 3px 8px; }
+.uv-st { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--fill); color: var(--ink-2); }
+.uv-st.st-submitted { background: var(--blue-tint); color: var(--blue); }
+.uv-st.st-offer { background: var(--green-soft); color: var(--green-ink); }
+.uv-st.st-rejected { background: var(--red-soft); color: var(--red-ink); }
+.uv-pack { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+/* «видит семья» у вуза без уровня: заявки, заведенные до 23.11.2026, утверждены
+   миграцией, и полоса «Не разложены» без этой метки врала бы про них. */
+.uv-seen { font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--blue-tint); color: var(--blue); }
+
+/* Раскрытая карточка — рабочее место по одному вузу: статусы, пакет, портал.
+   Живет под доской, одна за раз, и отличается от колонок белым фоном. */
+.uv-open { margin-top: 16px; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r-xl); padding: 16px 18px; }
+.uv-open__h { display: flex; align-items: flex-start; gap: 12px; }
+.uv-open__t { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.uv-open__s { margin-top: 3px; font-size: 12.5px; color: var(--ink-2); }
+.uv-open__s b { font-weight: 650; color: var(--ink); }
+.uv-close { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center;
+  justify-content: center; width: 28px; height: 28px; border-radius: 8px;
+  color: var(--ink-3); cursor: pointer; transition: background .14s, color .14s; }
+.uv-close:hover { background: var(--fill); color: var(--ink); }
+
+.uv-seg { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.uv-seg__k { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); margin-right: 4px; }
+.uv-sb { font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: #fff; color: var(--ink-2); cursor: pointer;
+  transition: color .12s cubic-bezier(.22,1,.36,1), background .12s cubic-bezier(.22,1,.36,1),
+    border-color .12s cubic-bezier(.22,1,.36,1); }
+.uv-sb:hover { color: var(--blue); border-color: var(--blue); }
+.uv-sb.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+/* «Без уровня» — не такой же выбор, как остальные: он прячет вуз от семьи,
+   поэтому включенным красится тихо, а не синим как рабочее состояние. */
+.uv-sb.off.on { background: var(--fill); border-color: var(--line-2); color: var(--ink-2); }
+.uv-newlv { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.uv-newlv > span { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); margin-right: 4px; }
+
+.uv-logf { margin-top: 14px; }
+.uv-ev { display: flex; align-items: baseline; gap: 10px; padding: 7px 0;
+  border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.uv-ev:last-child { border-bottom: 0; }
+.uv-ev__d { flex: 0 0 auto; font-size: 11.5px; color: var(--ink-3); min-width: 92px; }
+.uv-ev__t { flex: 1 1 auto; min-width: 0; color: var(--ink); }
+.uv-ev__f { flex: 0 0 auto; font-size: 10.5px; font-weight: 600; padding: 2px 7px;
+  border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue); }
+.uv-log__wait { padding: 8px 0; font-size: 12.5px; color: var(--ink-3); }
+
+@media (max-width: 900px) {
+  /* Три колонки на телефоне дают три полоски по 90px — читать нечего и таскать
+     нечем. Колонки встают одна под другой, перенос делают кнопки «Уровень»
+     в раскрытой карточке. */
+  .uv-board { grid-template-columns: 1fr; }
+  .uv-col { min-height: 0; }
+  .uv-hold__b .uv-card { flex: 1 1 100%; max-width: none; }
 }
 
 /* ── Контрольные точки тьютора (секция «Точки» в карточке) ──────────────────
@@ -16346,4 +16494,14 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
   .care-move { grid-column: 1 / -1; max-width: none; }
   .care-unsorted { padding: 14px 16px; }
   .care-newc { grid-column: 1 / -1; grid-template-columns: 1fr; max-width: none; }
+/* Продажи → Возвраты (10808): тот же рецепт строк, что «Дебиторка». */
+.rfd-r.going::before { background: var(--blue); opacity: .45; }
+@media (max-width: 860px) {
+  .rfd-r .dbt-v[data-l="Вернули"] { grid-column: 2; grid-row: 2; }
+  .rfd-r .dbt-v[data-l="Вернули"] small { display: none; }
+}
+@media (max-width: 860px) {
+  /* у закрытого возврата сумма важнее даты: она встает справа сверху */
+  .rfd-r.done .dbt-v[data-l="Вернули"] { grid-row: 1; }
+  .rfd-r.done .dbt-v[data-l="Срок"] { grid-row: 2; }
 }
