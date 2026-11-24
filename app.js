@@ -43238,7 +43238,8 @@
      человек тоже здесь, ему пишут в диалог. Состояние считает сервер (поле state). */
   var MS_FRESH = {
     free: ['ms-t late', 'свободный'], no_contact: ['ms-t warn', 'без телефона'],
-    respond: ['ms-t late', 'не связались'], follow: ['ms-ok', 'связались'],
+    respond: ['ms-t late', 'не связались'], silent: ['ms-t warn', 'написали, молчит'],
+    follow: ['ms-ok', 'связались'],
     meet: ['ms-ok', 'записан'], decide: ['ms-ok', 'думает'], client: ['ms-ok', 'клиент'],
     out: ['ms-when', 'вне работы']
   };
@@ -43275,6 +43276,7 @@
     var parts = [];
     if (n('free')) parts.push('свободных ' + n('free'));
     if (n('respond')) parts.push('не связались ' + n('respond'));
+    if (n('silent')) parts.push('написали, молчат ' + n('silent'));
     if (n('no_contact')) parts.push('без телефона ' + n('no_contact'));
     var norm = d.worked_norm || 50, done = d.worked || 0, inShift = d.worked_shift;
     /* Смену засчитывает объем: 50 семей за смену и 50 за день (Павел 23.11.2026).
