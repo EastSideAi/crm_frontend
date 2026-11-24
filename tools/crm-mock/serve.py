@@ -15,7 +15,7 @@
 не годится — в app.js он берется как `window.EASTSIDE_API_BASE || ...`, и пустое
 значение молча уводит запросы на боевой api.истсайд.рф.
 
-Отвечают три ручки — /admin/api/me, /admin/api/leads, /admin/api/docs/kinds;
+Отвечают ручки /admin/api/me, /admin/api/leads, /admin/api/docs/kinds и «Забота» (care.json);
 остальные /admin/api/* и /api/* получают пустую заглушку, чтобы фоновые опросы
 не роняли экран. Нужны другие данные — правьте PEOPLE и ME здесь же.
 """
@@ -277,7 +277,11 @@ def leads():
 
 ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": "super_admin",
       "caps": ["dash", "clients", "team", "tasks", "tasks_all", "finance", "marketing",
-               "planfact", "finmodel", "zaezd_review", "academy", "academy_review"]}
+               "planfact", "finmodel", "zaezd_review", "academy", "academy_review", "care"]}
+
+# «Забота» (раздел care): причины и случаи, обезличенные из разбора 23.11.2026, id
+# диалогов выдуманные. Собирается заново, если поменялся сид причин в бэкенде.
+CARE = json.load(open(os.path.join(os.path.dirname(__file__), "care.json"), encoding="utf-8"))
 
 _D = lambda n: (date.today() + timedelta(days=n)).isoformat()
 REFUNDS = {"refunded_rub": 117990, "states": [
@@ -353,6 +357,11 @@ class H(SimpleHTTPRequestHandler):
                 return self._json({"ok": True, **one[0], "docs": DOCS,
                                    "doc_fields": DOC_FIELDS,
                                    "doc_plan": doc_plan(one[0])})
+        if p == "/admin/api/care":
+            return self._json(CARE["overview"])
+        if p == "/admin/api/care/cases":
+            key = (self.path.split("cause=", 1) + [""])[1].split("&")[0]
+            return self._json({"cases": CARE["cases"].get(key, [])})
         # Реестр возвратов «Продаж» (10808): выдуманные семьи во всех трех состояниях.
         if p == "/admin/api/sales/refunds":
             return self._json(REFUNDS)
