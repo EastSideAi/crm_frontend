@@ -45176,7 +45176,9 @@
     return '<div class="care-case"><span class="care-cd num">' + careDay(x.seen_on) + '</span>' +
       '<span class="care-cs">' + esc(x.symptom) +
         (x.said ? '<span class="care-said">«' + esc(x.said) + '»</span>' : '') +
-        (x.action ? '<span class="care-act"><b>Что сделать:</b> ' + esc(x.action) + '</span>' : '') + '</span>' +
+        (x.action ? '<span class="care-act"><b>Что сделать:</b> ' + esc(x.action) + '</span>' : '') +
+        ((x.final_reply || x.reply) ? '<span class="care-act"><b>' + (x.decision === 'changed' ? 'Ответили своим:' : x.decision === 'ok' ? 'Ответ ушел:' : 'Ответ клиенту:') +
+          '</b> ' + esc(x.final_reply || x.reply) + '</span>' : '') + '</span>' +
       '<span class="care-cm">' + (x.resolved === 'no' ? '<span class="sev care-back">не решено</span>' : '') +
       '<span class="care-src">' + esc(careCh(x)) + '</span>' + link +
       '<button class="care-dis" data-cdis="' + x.id + '" title="Разбор ошибся: это не техническая проблема">не забота</button></span>' +
