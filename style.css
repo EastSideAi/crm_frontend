@@ -16546,3 +16546,10 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
   .rfd-r.done .dbt-v[data-l="Вернули"] { grid-row: 1; }
   .rfd-r.done .dbt-v[data-l="Срок"] { grid-row: 2; }
 }
+
+/* Проектная деятельность: тариф и подборка курсов */
+.pj-tier{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.pj-tier select{width:auto;min-width:200px}
+.pj-c{display:grid;gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+.pj-c-r{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pj-c .bp{justify-self:start}

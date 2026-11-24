@@ -55879,9 +55879,10 @@
     var r = PJ[id];
     if (!r) { loadProject(id); return skeletonSection('projects'); }
     var head = '<div class="m-ctitle">Проектная деятельность</div>' +
-      '<div class="m-csub">Услуга: ученик с командой делает свой проект для заявки. В кабинете ' +
-      'у него дорожная карта из шести шагов, здесь вы открываете услугу, даете тему и ' +
-      'отвечаете по шагам. Каждый ответ приходит ученику уведомлением.</div>';
+      '<div class="m-csub">Усиление портфолио в трех тарифах: «Курсы» (подборка онлайн-курсов), ' +
+      '«Курсы и упаковка» (плюс методичка по письмам и видеовизитке), «Проект» (плюс свой проект ' +
+      'по дорожной карте). Здесь вы открываете тариф, собираете ученику подборку курсов, даете ' +
+      'тему и отвечаете по шагам. Каждое действие приходит ученику уведомлением.</div>';
     if (r === 'none') return head + '<div class="field-empty">Не удалось загрузить проект, обновите страницу.</div>';
 
     var on = !!r.open, p = r.project;
@@ -55890,17 +55891,52 @@
           ? 'Кабинет по почте карточки есть, но почта в нем не подтверждена. Пусть ученик войдет и подтвердит ее.'
           : 'У ученика нет кабинета на платформе. Пусть зарегистрируется по почте из карточки, потом откройте услугу.')
       : '';
+    // Тариф и срок: открыть, сменить тариф, продлить. Срок всегда считается от
+    // сегодня, поэтому «продлить» — это та же кнопка с тем же тарифом.
+    var tiers = r.tiers || [];
+    var curTier = (p && p.tier) || 'project';
+    var tierOf = function (k) { return (tiers.filter(function (t) { return t.key === k; })[0] || {}); };
+    var until = p && p.expires_at ? new Date(p.expires_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    var stTxt = on ? 'Тариф «' + esc(tierOf(curTier).title || curTier) + '» · ' + (until ? 'до ' + esc(until) : 'без срока')
+      : r.expired ? 'Срок вышел ' + esc(until) + ', ученик видит «доступ закончился»'
+      : 'закрыт, ученик раздела не видит';
+    var picker = '<div class="pj-tier">' +
+      '<select class="al-in" id="pj-tier">' + tiers.map(function (t) {
+        return '<option value="' + t.key + '"' + (t.key === curTier ? ' selected' : '') + '>' + esc(t.title) + ' · ' + t.days + ' дн.</option>';
+      }).join('') + '</select>' +
+      '<select class="al-in" id="pj-days"><option value="">срок по тарифу</option><option value="0">без срока</option></select>' +
+      '<button class="bp sm" id="pj-open">' + (on ? 'Сохранить и продлить с сегодня' : 'Открыть') + '</button></div>';
     var access = '<div class="m-sec"><div class="m-sec-h">Доступ' +
         '<span class="hr" id="pj-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
       (why ? '<div class="field-empty">' + esc(why) + '</div>'
         : '<div class="det-sw-row"><div class="det-sw-b"><div class="det-sw-t">Раздел в Обучении</div>' +
-            '<div class="det-sw-s">' + (on ? 'ученик видит дорожную карту проекта' : 'закрыт, ученик раздела не видит') + '</div></div>' +
-          '<button type="button" class="pd-sw' + (on ? ' on' : '') + '" id="pj-sw">' +
-            '<span class="pd-sw-l">' + (on ? 'Открыт' : 'Закрыт') + '</span>' +
-            '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+            '<div class="det-sw-s">' + stTxt + '</div></div>' +
+          (on ? '<button type="button" class="pd-sw on" id="pj-sw">' +
+            '<span class="pd-sw-l">Открыт</span>' +
+            '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button>' : '') + '</div>' +
+          picker +
           (on && p && p.granted_by ? '<div class="det-sw-by">открыл ' + esc(p.granted_by) + ' · ' + esc(fmtWhen(p.granted_at)) + '</div>' : '')) +
       '</div>';
     if (!on || !p) return head + access;
+
+    var crow = function (c, i) {
+      c = c || {};
+      return '<div class="pj-c" data-pjc="' + i + '">' +
+        '<div class="pj-c-r"><input class="al-in" data-f="title" maxlength="200" placeholder="Название курса" value="' + esc(c.title || '') + '">' +
+          '<input class="al-in" data-f="org" maxlength="120" placeholder="Кто дает: вуз, площадка" value="' + esc(c.org || '') + '"></div>' +
+        '<input class="al-in" data-f="url" maxlength="1000" placeholder="Ссылка на курс: https://" value="' + esc(c.url || '') + '">' +
+        '<textarea class="al-in" rows="2" data-f="why" maxlength="600" placeholder="Зачем этому ученику">' + esc(c.why || '') + '</textarea>' +
+        '<textarea class="al-in" rows="2" data-f="how" maxlength="600" placeholder="Как записаться, подводные камни (китайский ID, VPN, даты)">' + esc(c.how || '') + '</textarea>' +
+        '<button class="bp ghost sm" data-pjcdel="' + i + '">Убрать</button></div>';
+    };
+    var list = p.courses || [];
+    var courses = '<div class="m-sec"><div class="m-sec-h">Подборка курсов</div>' +
+      '<div class="m-csub" style="margin:0 0 10px">Ученик видит каждый курс карточкой с кнопкой «Открыть курс». ' +
+        'Первая сохраненная подборка приходит ему уведомлением.</div>' +
+      '<div id="pj-courses">' + (list.length ? list : [{}]).map(crow).join('') + '</div>' +
+      '<div class="pj-acts"><button class="bp ghost sm" id="pj-cadd">' + ic('plus', 13) + 'Еще курс</button>' +
+        '<button class="bp sm" id="pj-csave">Сохранить подборку</button></div></div>';
+    if (curTier !== 'project') return head + access + courses;
 
     var topic = '<div class="m-sec"><div class="m-sec-h">Тема проекта</div>' +
       (!p.topic && p.topic_requested ? '<div class="m-csub" style="margin:0 0 10px;color:var(--amber-ink)">Ученик запросил тему и ждет ее.</div>' : '') +
@@ -55910,7 +55946,7 @@
 
     var steps = '<div class="m-sec"><div class="m-sec-h">Дорожная карта</div>' +
       p.steps.map(function (st, i) { return pjStep(st, i, p.current); }).join('') + '</div>';
-    return head + access + topic + steps;
+    return head + access + courses + topic + steps;
   }
 
   function wireProject(id, host) {
@@ -55933,9 +55969,47 @@
     if (rf) rf.addEventListener('click', function () { loadProject(id, true); });
     var sw = el('pj-sw');
     if (sw) sw.addEventListener('click', function () {
+      if (!confirm('Закрыть ученику раздел «Проектная деятельность»? Прогресс и подборка сохранятся.')) return;
+      call('/access', 'POST', { open: false }, 'Раздел закрыт');
+    });
+    var op = el('pj-open');
+    if (op) op.addEventListener('click', function () {
+      var d = el('pj-days').value;
       var on = !!(PJ[id] || {}).open;
-      if (on && !confirm('Закрыть ученику раздел «Проектная деятельность»? Прогресс сохранится.')) return;
-      call('/access', 'POST', { open: !on }, on ? 'Раздел закрыт' : 'Раздел открыт, ученику ушло уведомление');
+      call('/access', 'POST', { open: true, tier: el('pj-tier').value, days: d === '' ? null : +d },
+        on ? 'Тариф и срок сохранены' : 'Раздел открыт, ученику ушло уведомление');
+    });
+    var cbox = el('pj-courses');
+    var readCourses = function () {
+      return Array.prototype.map.call(cbox.querySelectorAll('[data-pjc]'), function (row) {
+        var o = {};
+        Array.prototype.forEach.call(row.querySelectorAll('[data-f]'), function (f) { o[f.getAttribute('data-f')] = f.value.trim(); });
+        return o;
+      }).filter(function (c) { return c.title || c.url; });
+    };
+    var ca = el('pj-cadd');
+    if (ca) ca.addEventListener('click', function () {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = '<div class="pj-c" data-pjc="n"><div class="pj-c-r"><input class="al-in" data-f="title" maxlength="200" placeholder="Название курса">' +
+        '<input class="al-in" data-f="org" maxlength="120" placeholder="Кто дает: вуз, площадка"></div>' +
+        '<input class="al-in" data-f="url" maxlength="1000" placeholder="Ссылка на курс: https://">' +
+        '<textarea class="al-in" rows="2" data-f="why" maxlength="600" placeholder="Зачем этому ученику"></textarea>' +
+        '<textarea class="al-in" rows="2" data-f="how" maxlength="600" placeholder="Как записаться, подводные камни (китайский ID, VPN, даты)"></textarea>' +
+        '<button class="bp ghost sm" data-pjcdel="n">Убрать</button></div>';
+      var row = tmp.firstChild;
+      cbox.appendChild(row);
+      row.querySelector('[data-pjcdel]').addEventListener('click', function () { row.remove(); });
+      row.querySelector('input').focus();
+    });
+    if (cbox) Array.prototype.forEach.call(cbox.querySelectorAll('[data-pjcdel]'), function (b) {
+      b.addEventListener('click', function () { b.parentNode.remove(); });
+    });
+    var cs = el('pj-csave');
+    if (cs) cs.addEventListener('click', function () {
+      var list = readCourses();
+      var bad = list.filter(function (c) { return !c.title || !/^https?:\/\//i.test(c.url); })[0];
+      if (bad) { showToast('У каждого курса нужны название и ссылка с https://'); return; }
+      call('/courses', 'PUT', { courses: list }, 'Подборка сохранена');
     });
     var ts = el('pj-topic-save');
     if (ts) ts.addEventListener('click', function () {
