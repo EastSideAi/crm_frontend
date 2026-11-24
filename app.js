@@ -56033,7 +56033,21 @@
       '<div id="pj-courses">' + (list.length ? list : [{}]).map(crow).join('') + '</div>' +
       '<div class="pj-acts"><button class="bp ghost sm" id="pj-cadd">' + ic('plus', 13) + 'Еще курс</button>' +
         '<button class="bp sm" id="pj-csave">Сохранить подборку</button></div></div>';
-    if (curTier !== 'project') return head + access + courses;
+    // Вопросы куратору вне шагов — у всех тарифов: у купившего только курсы нет плана
+    // сопровождения, а значит и общих сообщений кабинета (Павел 24.11.2026).
+    var qs = p.questions || [];
+    var waiting = qs.length && qs[qs.length - 1].by === 'client';
+    var ask = '<div class="m-sec"><div class="m-sec-h">Вопросы куратору</div>' +
+      (waiting ? '<div class="m-csub" style="margin:0 0 10px;color:var(--amber-ink)">Ученик ждет ответа.</div>' : '') +
+      (qs.length ? '<div class="pj-ms">' + qs.map(function (c) {
+        var me = c.by !== 'client';
+        return '<div class="pj-m' + (me ? ' team' : '') + '"><b>' + esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) +
+          '</b> · ' + esc(fmtWhen(c.at)) + '<div>' + esc(c.text) + '</div></div>';
+      }).join('') + '</div>' : '<div class="m-csub" style="margin:0 0 10px">Ученик пока ничего не спрашивал. Его вопрос из раздела придет сюда и уведомлением.</div>') +
+      '<div class="pj-reply"><textarea class="al-in" rows="1" id="pj-ask-note" maxlength="4000" ' +
+        'placeholder="Написать ученику"></textarea>' +
+        '<div class="pj-acts"><button class="bp ghost sm" id="pj-ask-send">' + ic('send', 13) + 'Ответить</button></div></div></div>';
+    if (curTier !== 'project') return head + access + ask + courses;
 
     var topic = '<div class="m-sec"><div class="m-sec-h">Тема проекта</div>' +
       (!p.topic && p.topic_requested ? '<div class="m-csub" style="margin:0 0 10px;color:var(--amber-ink)">Ученик запросил тему и ждет ее.</div>' : '') +
@@ -56043,7 +56057,7 @@
 
     var steps = '<div class="m-sec"><div class="m-sec-h">Дорожная карта</div>' +
       p.steps.map(function (st, i) { return pjStep(st, i, p.current); }).join('') + '</div>';
-    return head + access + courses + topic + steps;
+    return head + access + ask + courses + topic + steps;
   }
 
   function wireProject(id, host) {
@@ -56107,6 +56121,12 @@
       var bad = list.filter(function (c) { return !c.title || !/^https?:\/\//i.test(c.url); })[0];
       if (bad) { showToast('У каждого курса нужны название и ссылка с https://'); return; }
       call('/courses', 'PUT', { courses: list }, 'Подборка сохранена');
+    });
+    var as = el('pj-ask-send');
+    if (as) as.addEventListener('click', function () {
+      var ta = el('pj-ask-note'), note = ta ? ta.value.trim() : '';
+      if (!note) { if (ta) ta.focus(); return; }
+      call('/ask', 'POST', { note: note }, 'Ответ отправлен ученику');
     });
     var ts = el('pj-topic-save');
     if (ts) ts.addEventListener('click', function () {
