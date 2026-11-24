@@ -15,7 +15,7 @@
 не годится — в app.js он берется как `window.EASTSIDE_API_BASE || ...`, и пустое
 значение молча уводит запросы на боевой api.истсайд.рф.
 
-Отвечают три ручки — /admin/api/me, /admin/api/leads, /admin/api/docs/kinds;
+Отвечают ручки /admin/api/me, /admin/api/leads, /admin/api/docs/kinds и «Забота» (care.json);
 остальные /admin/api/* и /api/* получают пустую заглушку, чтобы фоновые опросы
 не роняли экран. Нужны другие данные — правьте PEOPLE и ME здесь же.
 """
@@ -277,13 +277,17 @@ def leads():
 
 ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": "super_admin",
       "caps": ["dash", "clients", "team", "tasks", "tasks_all", "finance", "marketing",
-               "planfact", "finmodel", "zaezd_review", "academy", "academy_review"]}
+               "planfact", "finmodel", "zaezd_review", "academy", "academy_review", "care"]}
+
+# «Забота» (раздел care): причины и случаи, обезличенные из разбора 23.11.2026, id
+# диалогов выдуманные. Собирается заново, если поменялся сид причин в бэкенде.
+CARE = json.load(open(os.path.join(os.path.dirname(__file__), "care.json"), encoding="utf-8"))
 
 _D = lambda n: (date.today() + timedelta(days=n)).isoformat()
-REFUNDS = {"refunded_rub": 50990, "states": [
+REFUNDS = {"refunded_rub": 117990, "states": [
     {"key": "late", "label": "Шаг просрочен", "count": 1},
     {"key": "going", "label": "Идет", "count": 1},
-    {"key": "done", "label": "Вернули", "count": 2}], "rows": [
+    {"key": "done", "label": "Вернули", "count": 4}], "rows": [
     {"id": "d1", "goal_id": 101, "name": "Семья Демидовых", "source": "flow", "state": "late",
      "started": _D(-8), "deadline": _D(5), "steps_done": 1, "refunded_rub": 0, "refunded_at": None,
      "step": {"n": 2, "of": 5, "title": "подготовить расчет возврата", "task_id": 1, "who": "Лиана",
@@ -297,7 +301,14 @@ REFUNDS = {"refunded_rub": 50990, "states": [
      "step": None},
     {"id": "d4", "goal_id": None, "name": "Гость с лендинга", "source": "manual", "state": "done",
      "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 990, "refunded_at": _D(-100),
-     "step": None}]}
+     "step": None},
+    # возвраты до CRM, только в ведомости (миграция 335 бэкенда)
+    {"id": "d5", "goal_id": None, "name": "Семья Ведомостных", "source": "ledger", "state": "done",
+     "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 62000, "refunded_at": _D(-27),
+     "step": None, "ledger": "22.10–10.11", "paid_from": "фонд безопасности", "note": ""},
+    {"id": None, "goal_id": None, "name": "Тестова Анна", "source": "ledger", "state": "done",
+     "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 5000, "refunded_at": None,
+     "step": None, "ledger": "21.05–10.06", "paid_from": "фонд безопасности", "note": ""}]}
 
 
 class H(SimpleHTTPRequestHandler):
@@ -346,6 +357,11 @@ class H(SimpleHTTPRequestHandler):
                 return self._json({"ok": True, **one[0], "docs": DOCS,
                                    "doc_fields": DOC_FIELDS,
                                    "doc_plan": doc_plan(one[0])})
+        if p == "/admin/api/care":
+            return self._json(CARE["overview"])
+        if p == "/admin/api/care/cases":
+            key = (self.path.split("cause=", 1) + [""])[1].split("&")[0]
+            return self._json({"cases": CARE["cases"].get(key, [])})
         # Реестр возвратов «Продаж» (10808): выдуманные семьи во всех трех состояниях.
         if p == "/admin/api/sales/refunds":
             return self._json(REFUNDS)

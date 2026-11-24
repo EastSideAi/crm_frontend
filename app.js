@@ -411,6 +411,8 @@
       path: '<path d="M3 16.5c4.5 0 4-5.5 7-6.5s3.5-4.5 7-4.5"/><circle cx="3" cy="16.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17" cy="5.5" r="1.5" fill="currentColor" stroke="none"/>',
       csv: '<path d="M10 3v9M6 9l4 4 4-4"/><path d="M3.5 16.5h13"/>',
       chev: '<path d="M6 8l4 4 4-4"/>',
+      /* Спасательный круг — раздел «Забота» (служба заботы о клиентах). */
+      care: '<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/><path d="M5.1 5.1l2.8 2.8M12.1 12.1l2.8 2.8M14.9 5.1l-2.8 2.8M7.9 12.1l-2.8 2.8"/>',
       exit: '<path d="M12 3.5H6a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h6"/><path d="M9 10h8M14.5 7l3 3-3 3"/>',
       refresh: '<path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6"/><path d="M16.5 2.5v3.5h-3.5"/>',
       go: '<path d="M7.5 5l5 5-5 5"/>',
@@ -2768,6 +2770,10 @@
     /* «Процессы» — карта сквозных процессов компании. Право личное, его выдают учетке,
        а не роли (crm_users.extra_caps): пока карта черновик, ее видит только Вера. */
     { id: 'processes', label: 'Процессы', icon: 'flow', cap: 'processes' },
+    /* «Забота» — причины технических проблем клиентов и вернулись ли они после починки
+       (Вера 23.11.2026: «чиним или ходим по кругу»). Право личное, как у «Процессов»:
+       видят Вера, Павел и Виталий (миграция 332 бэкенда). */
+    { id: 'care', label: 'Забота', icon: 'care', cap: 'care' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     /* Две двери в один раздел: свои приходят по `marketing` и видят все вкладки,
        подрядчик по трафику — по `ads`, и у него остается одна «Реклама» (mkTabsFor). */
@@ -3695,6 +3701,7 @@
         '</span></div></div>';
     }
     if (state.page === 'cmap') html = cmHeadHtml();
+    if (state.page === 'care') html = careHeadHtml();
     if (state.page === 'leads') {
       html = '<div><h2>Контакты</h2>' +
         '<div class="verdict" style="margin-top:8px"><span>' + esc(SEGS[state.seg].hint) + '</span></div></div>';
@@ -4397,6 +4404,7 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'org') renderOrg(view);
     else if (state.page === 'processes') renderProcesses(view);
+    else if (state.page === 'care') renderCare(view);
     else if (state.page === 'roadmap') renderRoadmap(view);
     else if (state.page === 'dupes') renderDupes(view);
     else if (state.page === 'students') renderStudents(view);
@@ -34787,7 +34795,7 @@
     /* Salebot — сторонняя платформа, через неё шли рассылки по старой базе. Название
        платформы в отчёте бесполезно: важно, что это рассылка, а не новый трафик. */
     salebot: 'Рассылка по старой базе',
-    max: 'MAX', vk_bot: 'Бот ВКонтакте', site: 'Наш сайт', email: 'Письмо',
+    max: 'MAX', vk_bot: 'Бот ВКонтакте', site: 'Наш сайт', email: 'Письмо', vk_ads: 'Реклама ВК',
     /* Служебная дверь запуска: карточку завёл бот, выдавая человеку личную ссылку
        на эфир. Метки у неё нет и не будет, но в «источник не размечен» она не идёт —
        иначе рассылка получит чужую заслугу (ТЗ Олеси 6.4). */
@@ -36394,7 +36402,15 @@
     return { key: 'efir', label: 'Были на эфире', value: live, step: 'viewers',
              stepPlate: live,
              sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
-                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : ''),
+                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : '') +
+                  /* Кто был на эфире и не заплатил ничего — база обзвона продаж (Павел
+                     24.11.2026). Только узнанные: зрителю без регистрации не позвонить. */
+                  (v.known.viewers_nobuy != null
+                    ? ' · <span class="go-sub" data-lstep="viewers_nobuy" data-lfree="1"' +
+                      ' data-ltitle="Были на эфире и ничего не купили"' +
+                      ' data-lplate="' + v.known.viewers_nobuy + '" role="button" tabindex="0"' +
+                      ' title="Показать этих людей поименно">не купили ' + v.known.viewers_nobuy + '</span>'
+                    : ''),
              pct: launchPct(live, regShown, 'от регистраций') };
   }
 
@@ -39224,6 +39240,12 @@
       var openIt = function () {
         var key = n.getAttribute('data-lstep');
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
+        /* Срез, которого нет в лестнице пути (подпись «не купили» под залом): список
+           тот же, ступень описывает сама подпись. */
+        if (!st && n.getAttribute('data-lfree')) {
+          st = { key: key, title: n.getAttribute('data-ltitle') || '',
+                 people: parseInt(n.getAttribute('data-lplate') || '0', 10) };
+        }
         if (!st) return;
         /* Плашка «по всему запуску» открывает список блока — тот самый, из которого
            посчитано её крупное число. Список записавшихся тут был бы пустым и снова
@@ -39247,9 +39269,11 @@
         }) : st;
         launchPeopleOpen(cur.slug, st2, cur.title, n, ot || '', !!ttl);
       };
-      n.addEventListener('click', openIt);
+      /* Подпись-ссылка внутри плашки: клик не должен открыть еще и список самой
+         плашки поверх. */
+      n.addEventListener('click', function (e) { if (n.getAttribute('data-lfree')) e.stopPropagation(); openIt(); });
       n.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openIt(); }
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-lsplit]'), function (n) {
@@ -40936,17 +40960,26 @@
     var kinds = SB_REG_KINDS.filter(function (k) { return g.by[k.k].n; }).map(function (k) {
       return tile(k.k, k.t, g.by[k.k].n, 'с контактом ' + g.by[k.k].c, '');
     }).join('');
-    var list = '';
-    if (open && g.list[open]) {
+    var intb = sbIntBlock(cc, open, tile);
+    var list = intb.list;
+    if (!list && open && g.list[open]) {
       var lbl = open === 'all' ? 'Все, кто пришел' : open === 'own' ? 'Взяли в работу' : open === 'free' ? 'Без менеджера'
         : (SB_REG_KINDS.filter(function (k) { return k.k === open; })[0] || {}).t;
       list = mgWhoCard([[lbl, '', 'reg_' + open]], {k: 'reg_' + open}, g.list[open], mgSpan(r.a, r.b))
         .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
     }
     var rest = g.total - own.length - free.length;
-    return '<div class="card sp12 sb-reg"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
-      '<div><div class="t">Сверка лидов <span class="sb-rdate">· ' + esc(mgSpan(r.a, r.b)) + '</span></div>' +
-      '<div class="s">новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру: в списке этап, кто ведет и история</div></div></div>' +
+    /* Кого показывает сверка — выбор в шапке, а не отдельный блок (Павел 24.11.2026: «чтобы я
+       мог его выбирать внутри страницы»): лиды отрезка или люди интенсива. */
+    var head = '<div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
+      '<div><div class="t">Сверка лидов <span class="sb-rdate">· ' +
+        esc(intb.on ? intb.title : mgSpan(r.a, r.b)) + '</span></div>' +
+      '<div class="s">' + (intb.on
+        ? 'все, кто зарегистрировался на интенсив, период сверки тут не действует. Нажмите на цифру: в списке этап, кто ведет и история'
+        : 'новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру: в списке этап, кто ведет и история') +
+      '</div></div>' + intb.pick + '</div>';
+    if (intb.on) return '<div class="card sp12 sb-reg">' + head + intb.html + list + '</div>';
+    return '<div class="card sp12 sb-reg">' + head +
       '<div class="sb-rtop three">' +
         tile('all', 'Пришло', g.total, 'с контактом ' + g.contact + ', без контакта ' + (g.total - g.contact), 'big') +
         tile('own', 'Взяли в работу', own.length, 'есть ведущий или уже связались', 'big') +
@@ -40957,6 +40990,68 @@
         ' не в работе: без контакта, отказ, уже клиент или отмечены «не лид».</div>' : '') +
       (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
   }
+
+  /* Интенсив в «Сверке лидов» (Павел 24.11.2026: «это должно отображаться в лидах, чтобы я
+     мог просто отфильтровать», «посмотреть, кто у нас купил после интенсива»). Признаки
+     людей считает сервер теми же флагами, что плашки «Запусков» (`/launch/cards`), здесь
+     только выбор интенсива и фильтр. Отрезок сверки на интенсив не действует: люди
+     интенсива пришли в свои даты, и фильтр показывает их всех. В список идут те, кто есть
+     в лидах (сквозная): по ним видно этап, ведущего и историю. */
+  var SB_INT_STEPS = [
+    ['int_v', 'Были на эфире', 'узнанные зрители', function (c) { return c.viewed; }],
+    ['int_b', 'Купили', 'любая оплата после регистрации', function (c) { return c.bought; }],
+    ['int_n', 'Были и не купили', 'оплат нет, база для обзвона', function (c) { return c.viewed && !c.bought; }]
+  ];
+  function sbIntLoad() {
+    if (state._sbInt) return;
+    state._sbInt = 'wait';
+    api('/admin/api/marketing/launch/cards').then(function (r) {
+      state._sbInt = r && r.launches ? r : 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function () { state._sbInt = 'none'; });
+  }
+  function sbIntBlock(cc, open, tile) {
+    sbIntLoad();
+    var d = state._sbInt, none = { on: false, html: '', list: '', pick: '', title: '' };
+    if (!d || d === 'wait' || d === 'none' || !d.launches.length) return none;
+    var pick = '<span class="al-selwrap sb-rwho"><select class="al-sel" data-sbint aria-label="Кого показывать в сверке">' +
+      '<option value="">Лиды периода</option>' + d.launches.map(function (x) {
+        return '<option value="' + esc(x.slug) + '"' + (x.slug === state.sbIntSlug ? ' selected' : '') + '>' +
+          esc(x.title) + '</option>';
+      }).join('') + '</select></span>';
+    var lc = d.launches.filter(function (x) { return x.slug === state.sbIntSlug; })[0];
+    if (!lc) return Object.assign(none, { pick: pick });
+    if (cc._byId !== cc.leads) {
+      cc._idx = {};
+      (cc.leads || []).forEach(function (x) { cc._idx[x.i] = x; });
+      cc._byId = cc.leads;
+    }
+    var lists = {};
+    var tiles = SB_INT_STEPS.map(function (st) {
+      var out = [];
+      var rub = 0;
+      /* Сумма оплат человека — справа в строке (Павел 24.11.2026: «кто купил и на какую
+         сумму»). Копия строки сквозной: свою `v` у лида сквозной трогать нельзя. */
+      lc.cards.forEach(function (c) {
+        var x = cc._idx[c.id];
+        if (!x || !st[3](c)) return;
+        rub += c.rub || 0;
+        out.push(c.rub ? Object.assign({}, x, { v: c.rub }) : x);
+      });
+      lists[st[0]] = out;
+      var sub = st[0] === 'int_b' && rub ? 'на ' + fmtMoney(rub) + ' ₽' : st[2];
+      return tile(st[0], st[1], out.length, sub, 'big' + (st[0] === 'int_b' ? ' cons' : ''));
+    }).join('');
+    var list = '';
+    if (lists[open]) {
+      var st = SB_INT_STEPS.filter(function (z) { return z[0] === open; })[0];
+      list = mgWhoCard([[st[1], '', 'reg_' + open]], {k: 'reg_' + open}, lists[open], lc.title)
+        .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
+    }
+    return { on: true, pick: pick, title: lc.title, list: list,
+             html: '<div class="sb-rtop three sb-rint">' + tiles + '</div>' };
+  }
+
 
   // Цифры отрезка той же функцией, что лестница: вердикт шапки не спорит с ней.
   function sbLadderNums() {
@@ -41924,6 +42019,13 @@
         renderView();
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('select[data-sbint]'), function (b) {
+      b.addEventListener('change', function () {
+        state.sbIntSlug = b.value;
+        state._sbReg = null;
+        renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sbreg]'), function (b) {
       b.addEventListener('click', function () {
         var k = b.getAttribute('data-sbreg');
@@ -42427,7 +42529,9 @@
   function rfdRow(r) {
     var st = r.step;
     var stepTxt = st ? st.title + ' · шаг ' + st.n + ' из ' + st.of
-      : r.source === 'manual' ? 'вернули руками, до цепочки' : 'все шаги сданы';
+      : r.source === 'manual' ? 'вернули руками, до цепочки'
+      : r.source === 'ledger' ? 'до CRM, по ведомости' + (r.id ? '' : ' · карточки нет')
+      : 'все шаги сданы';
     var due = st && st.due
       ? '<b class="num">' + fmtDay(st.due).slice(0, 5) + '</b><small>' +
           (r.state === 'late' ? 'шаг просрочен' : 'срок шага') + '</small>'
@@ -42435,10 +42539,13 @@
         ? '<b class="num">' + fmtDay(r.deadline).slice(0, 5) + '</b><small>весь возврат</small>'
         : r.refunded_at
           ? '<b class="num">' + fmtDay(r.refunded_at).slice(0, 5) + '</b><small>вернули</small>'
-          : '<small>' + (r.started ? 'начали ' + fmtDay(r.started).slice(0, 5) : 'дата не стоит') + '</small>';
+          : r.ledger
+            ? '<b class="num">' + esc(r.ledger) + '</b><small>ведомость</small>'
+            : '<small>' + (r.started ? 'начали ' + fmtDay(r.started).slice(0, 5) : 'дата не стоит') + '</small>';
     var money = r.refunded_rub
       ? '<b class="num">' + smRub(r.refunded_rub) + '</b><small>' +
-          (r.source === 'manual' ? 'по оплате в карточке' : 'по цепочке') + '</small>'
+          (r.source === 'manual' ? 'по оплате в карточке'
+            : r.source === 'ledger' ? esc(r.paid_from || 'по ведомости') : 'по цепочке') + '</small>'
       : '<small>еще не вернули</small>';
     var who = st ? (st.who || 'никто') : '';
     var attr = r.goal_id ? 'data-rfdgoal="' + r.goal_id + '"' : 'data-rfdlead="' + esc(r.id || '') + '"';
@@ -42486,7 +42593,7 @@
     view.innerHTML = '<div class="dash sb dbt rfd">' + head + '<div class="dbt-bar">' + stats + '</div>' +
       '<div class="card sp12"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
         '</span><div><div class="t">' + esc(fl) + ' · <span class="num">' + rows.length + '</span></div>' +
-        '<div class="s">строка открывает цель возврата с шагами, ручной возврат — карточку семьи</div></div>' +
+        '<div class="s">строка открывает цель возврата с шагами, ручной возврат — карточку семьи; возвраты до CRM взяты из ведомостей</div></div>' +
         (f ? '<button class="qchip dbt-all" data-rfdf="">Показать все</button>' : '') + '</div>' +
         (body ? '<div class="dbt-lh"><span>Семья</span><span>Держит шаг</span><span>Вернули</span><span>Срок</span></div>' +
           '<div class="dbt-list">' + body + '</div>' : '<div class="empty">Возвратов пока не было.</div>') +
@@ -42582,11 +42689,67 @@
     'сентябре', 'октябре', 'ноябре', 'декабре'];
   function spMonthIn(m) { return SP_MON_IN[parseInt(String(m).split('-')[1], 10) - 1] || ''; }
   function spState(p) {
-    if (p.ended) return { t: 'закрыт', cls: '' };
+    if (p.ended) return { t: 'прошел', cls: '' };
     if (p.started) return { t: 'идет сейчас', cls: 'now' };
     if (p.due_in < 0) return { t: 'план вносили до ' + p.due_label, cls: 'late' };
     if (p.due_in === 0) return { t: 'внести план сегодня', cls: 'soon' };
     return { t: 'внести план до ' + p.due_label, cls: p.due_in <= 2 ? 'soon' : '' };
+  }
+  // Цифра плитки периода раскрывается в строки, из которых сложилась (Павел 23.11.2026:
+  // «цифры кликабельные, от кого пришли, из чего складывались»). Раскрыта одна за раз.
+  function spDetOn(i, k) { var o = state._spDet; return o && o.i === i && o.k === k ? ' on' : ''; }
+  function spDetBtn(i, k, label, v) {
+    return '<button class="sp-det' + spDetOn(i, k) + '" data-spdet="' + i + ':' + k + '" title="Из чего сложилось">' +
+      esc(label) + ' <b class="num">' + smRub(v) + '</b></button>';
+  }
+  function spDetail(d) {
+    var o = state._spDet;
+    var p = o && d.parts[o.i];
+    if (!p) return '';
+    var lab = {};
+    d.products.forEach(function (g) { lab[g.key] = g.label; });
+    var money = function (rows) {
+      return rows.slice().reverse().map(function (r) {
+        return smLead(r.case_id,
+          '<span class="sm-d num">' + fmtDay(r.date).slice(0, 5) + '</span>' +
+          '<span class="sb-pn"><b>' + esc(r.client || 'Без клиента') + '</b><small>' +
+            esc(lab[r.product] || r.item || '') + '</small></span>' +
+          '<span class="sb-po calm" data-l="Канал">' + esc(r.ch || '—') + '</span>' +
+          '<span class="sb-po' + (r.seller && r.seller !== 'Не указан' ? ' calm' : ' none') + '" data-l="Продал">' + esc(r.seller || '—') + '</span>' +
+          '<span class="sm-v num">' + smRub(r.amount) + '</span>', 'sm-ln');
+      }).join('');
+    };
+    var head = '<div class="sm-lh"><span>Дата</span><span>Клиент</span><span>Канал</span><span>Продал</span><span>Сумма</span></div>';
+    var t, s, body, sum;
+    if (o.k === 'came') {
+      t = 'Пришло за ' + p.period_label; sum = p.period_fact;
+      s = 'строки ведомости за весь период, свежие сверху; нажми, откроется карточка клиента';
+      body = money(p.came || []);
+    } else if (o.k === 'pace') {
+      var f = p.forecast || {};
+      t = 'Темп новых денег'; sum = d.pace_sum;
+      s = 'за последние ' + d.pace_days + ' дней пришло ' + smRub(d.pace_sum) + ' новых денег (без доплат и школы), это ' +
+        smRub(Math.round(d.pace_sum / d.pace_days)) + ' в день; на ' + (f.days_left || 0) + ' ' +
+        plural(f.days_left || 0, 'оставшийся день', 'оставшихся дня', 'оставшихся дней') + ' периода выходит ' + smRub(f.pace || 0) + '. Вот из каких оплат';
+      body = money(d.pace_rows || []);
+    } else {
+      var rr = (p.forecast && p.forecast.receivables_rows) || [];
+      t = 'Взносы рассрочки по графикам'; sum = p.forecast ? p.forecast.receivables : 0;
+      s = 'кто и когда должен заплатить в этот период. Нет графика в карточке, значит семьи здесь не будет';
+      head = '<div class="sm-lh sp-rh"><span>Срок</span><span>Семья</span><span>За что</span><span>Сумма</span></div>';
+      body = rr.map(function (r) {
+        return smLead(r.case_id,
+          '<span class="sm-d num">' + (r.due_on ? fmtDay(r.due_on).slice(0, 5) : '—') + '</span>' +
+          '<span class="sb-pn"><b>' + esc(r.client) + '</b></span>' +
+          '<span class="sb-po calm" data-l="За что">' + esc(r.item || '') + '</span>' +
+          '<span class="sm-v num">' + smRub(r.amount) + '</span>', 'sm-ln sp-rl');
+      }).join('');
+    }
+    return '<div class="card sp12 sm-lines sp-detail" id="sp-detail"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
+      '</span><div><div class="t">' + esc(t) + ' · <span class="num">' + smRub(sum || 0) + '</span></div>' +
+      '<div class="s">' + esc(s) + '</div></div>' +
+      '<button class="qchip sm-reset" data-spdet="close">Свернуть</button></div>' +
+      (body ? head + '<div class="sm-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') + '</div>';
   }
   function spParts(d) {
     var fundsBy = (d.funds.rows || []).filter(function (f) { return f.amount; });
@@ -42599,9 +42762,9 @@
         var gap = (p.period_plan || 0) - f.total;
         fore = '<div class="sp-fc"><div class="sp-fcv"><span>реально ждем</span><b class="num">' + smRub(f.total) + '</b></div>' +
           '<div class="sp-fcl">' +
-            (f.fact ? '<span>пришло <b class="num">' + smRub(f.fact) + '</b></span>' : '') +
-            '<span>взносы рассрочки по графикам <b class="num">' + smRub(f.receivables) + '</b></span>' +
-            '<span>новые деньги по темпу ' + d.pace_days + ' дней <b class="num">' + smRub(f.pace) + '</b></span>' +
+            (f.fact ? spDetBtn(i, 'came', 'пришло', f.fact) : '') +
+            spDetBtn(i, 'recv', 'взносы рассрочки по графикам', f.receivables) +
+            spDetBtn(i, 'pace', 'новые деньги по темпу ' + d.pace_days + ' дней', f.pace) +
             (f.school ? '<span>школа: ' + (f.school.renewals ? f.school.renewals + ' ' + plural(f.school.renewals, 'продление', 'продления', 'продлений') : 'продлений нет') +
               (f.school.invoices_rub ? ' и счета' : '') + ' <b class="num">' + smRub(f.school.expected) + '</b>' +
               '</span>' + (f.school.teachers ? '<span class="sp-cost">расход на преподавателей школы <b class="num">' + smRub(f.school.teachers) + '</b></span>' : '') : '') +
@@ -42611,7 +42774,8 @@
             : 'план перекрыт на <b class="num">' + smRub(-gap) + '</b>') + '</div>' : '') +
         '</div>';
       } else {
-        fore = '<div class="sp-fc"><div class="sp-fcv"><span>пришло</span><b class="num">' + smRub(p.fact) + '</b></div></div>';
+        fore = '<div class="sp-fc"><button class="sp-fcv sp-det' + spDetOn(i, 'came') + '" data-spdet="' + i + ':came" title="Из каких приходов">' +
+          '<span>пришло за период</span><b class="num">' + smRub(p.period_fact != null ? p.period_fact : p.fact) + '</b></button></div>';
       }
       var cut = p.period_from !== p.from || p.period_to !== p.to;
       return '<div class="sp-part ' + st.cls + '">' +
@@ -42636,7 +42800,7 @@
     }).join('');
     return spCard('sp-parts', 'cal', 'Периоды',
       'план периода собран из планов месяцев по дням; «реально ждем» — что уже пришло, взносы рассрочки по графикам, новые деньги в темпе последних ' + d.pace_days + ' дней и продления школы по ее расписанию. Не открытые в ведомости периоды идут по модели 10–20 и 21–9',
-      '<div class="sp-partgrid">' + tiles + '</div>');
+      '<div class="sp-partgrid">' + tiles + '</div>') + spDetail(d);
   }
 
   // Кто что внес к сроку ближайшего периода. Люди — подписи, права режет сервер.
@@ -42790,6 +42954,23 @@
   }
 
   function spBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spdet]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-spdet');
+        var o = state._spDet;
+        if (v === 'close') state._spDet = null;
+        else {
+          var i = +v.split(':')[0], k = v.split(':')[1];
+          state._spDet = o && o.i === i && o.k === k ? null : { i: i, k: k };
+        }
+        renderView();
+        var el = state._spDet && document.getElementById('sp-detail');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('#sp-detail [data-sblead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-spmon]'), function (b) {
       b.addEventListener('click', function () {
         var p = pfMonth().split('-');
@@ -43092,9 +43273,15 @@
     if (n('free')) parts.push('свободных ' + n('free'));
     if (n('respond')) parts.push('не связались ' + n('respond'));
     if (n('no_contact')) parts.push('без телефона ' + n('no_contact'));
-    var norm = d.worked_norm || 50, done = d.worked || 0;
-    var worked = '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">сегодня обработал <b class="num">' + done +
-      '</b> из ' + norm + ' семей</span>';
+    var norm = d.worked_norm || 50, done = d.worked || 0, inShift = d.worked_shift;
+    /* Смену засчитывает объем: 50 семей за смену и 50 за день (Павел 23.11.2026).
+       Открыта смена — первым идет ее счет, день рядом. */
+    var worked = (inShift != null
+      ? '<span class="ms-wk' + (inShift >= norm ? ' ok' : '') + '">за смену <b class="num">' + inShift +
+        '</b> из ' + norm + '</span> · '
+      : '') +
+      '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">' + (inShift != null ? 'за день' : 'сегодня обработал') +
+      ' <b class="num">' + done + '</b> из ' + norm + ' семей</span>';
     var chips = '<div class="list-quick ms-spans">' + MS_SPANS.map(function (x) {
       return '<button class="qchip' + (x[0] === span ? ' on' : '') + '" data-msspan="' + x[0] + '">' + x[1] + '</button>';
     }).join('') + '</div>';
@@ -44952,6 +45139,340 @@
         if (!confirm('Разделить обратно? Уроки и оплаты вернутся на свою карточку.')) return;
         send('/admin/api/intensive/duplicates/unmerge',
              { merge_id: +b.getAttribute('data-iunmerge') }, 'Разделили обратно');
+      });
+    });
+  }
+
+  /* ── Забота: причины технических проблем клиентов ─────────────────────────
+     Вера 23.11.2026: «мы реально что-то ремонтируем или ходим по кругу?» Статуса руками
+     нет («судить будем по факту, если опять прилетает обращение — опять открываем»):
+     записали починку — причина закрыта, пришел случай позже починки — открыта снова.
+     У каждой починки видно, сколько случаев пришло после нее до следующей: это и есть
+     круг. Столбики по неделям показывают то же глазами: недели после последней починки
+     со случаями красные. Случаи из переписки бота кладет ночной разбор бэкенда
+     (services/care_scan.py), случай без причины ложится в «Неразобранное».
+     Данные — /admin/api/care, состояние причины (state) считает сервер. */
+  var CARE_SRC = { bot: 'из бота', operator: 'из аккаунтов школы', task: 'из задачника' };
+  /* Откуда пришел случай из переписки (Вера 24.11.2026: «нужно видеть, кто с какого
+     канала что написал»). Ключ — bot_user.channel; «telegram:study» и прочие вторые боты
+     сводим к телеграму. */
+  var CARE_CH = { telegram: 'Телеграм', vk: 'ВК группа', vk_page: 'ВК страница', max: 'Макс',
+    max_page: 'Макс школы', instagram: 'Инстаграм', whatsapp: 'WhatsApp', platform: 'Кабинет' };
+  function careCh(x) {
+    if (!x.channel) return CARE_SRC[x.source] || x.source;
+    return CARE_CH[x.channel] || CARE_CH[String(x.channel).split(':')[0]] || x.channel;
+  }
+  var CARE_CASES_SHOWN = 6;
+
+  function careToday() {
+    var d = new Date();   // локальная дата: Вера и практикантки живут восточнее Москвы
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+
+  function careLoad(quiet) {
+    api('/admin/api/care')
+      .then(function (d) { state._care = d; if (state.page === 'care') { renderHead(); careRender(); } })
+      .catch(function () {
+        if (quiet) return showToast('Не удалось обновить раздел, проверь интернет');
+        state._care = 'none'; if (state.page === 'care') renderView();
+      });
+  }
+  function careCases(key, force) {
+    state._careCases = state._careCases || {};
+    if (state._careCases[key] && !force) return state._careCases[key];
+    if (!state._careCases[key]) state._careCases[key] = 'loading';
+    api('/admin/api/care/cases?cause=' + encodeURIComponent(key))
+      .then(function (d) { state._careCases[key] = d.cases || []; if (state.page === 'care') careRender(); })
+      .catch(function () { if (!force) state._careCases[key] = 'none'; if (state.page === 'care') careRender(); });
+    return state._careCases[key];
+  }
+  /* После сохранения данные обновляются на месте: без скелетона, раскрытая причина,
+     прокрутка и набранное в форме остаются (приемка 23.11). */
+  function careRefresh() {
+    careLoad(true);
+    Object.keys(state._careCases || {}).forEach(function (k) { careCases(k, true); });
+  }
+  function careRender() {
+    var y = window.scrollY;
+    renderView();
+    window.scrollTo(0, y);
+  }
+  function careDay(iso) {
+    if (!iso) return '';
+    var p = iso.slice(0, 10).split('-');
+    return p[2] + '.' + p[1];
+  }
+  function careHeadHtml() {
+    var d = state._care && state._care !== 'none' ? state._care : null;
+    var phrase = 'Технические проблемы клиентов по причинам: платформа, тренажеры, занятия, документы, доступы.';
+    if (d) {
+      var back = d.causes.filter(function (c) { return c.state === 'reopened'; }).length;
+      var fixed = back + d.causes.filter(function (c) { return c.state === 'closed'; }).length;
+      if (back) {
+        phrase = '<b>После починки открылись снова ' + back + ' ' + plural(back, 'причина', 'причины', 'причин') +
+          ' из ' + fixed + '.</b> Там чинили случаи, а не причину.';
+      } else if (fixed) {
+        phrase = '<b>После починок пока ничего не вернулось.</b> Придет новый случай — причина откроется сама.';
+      }
+      if (d.scanned_at) {
+        var st = new Date(d.scanned_at);
+        phrase += ' Переписку разбираю каждые 5 минут, последний раз ' + careDay(d.scanned_at) + ' в ' +
+          ('0' + st.getHours()).slice(-2) + ':' + ('0' + st.getMinutes()).slice(-2) + '.';
+      }
+    }
+    return '<div><h2>Забота</h2><div class="verdict"><span class="vspark">' + ic('care', 13) +
+      '</span><span>' + phrase + '</span></div></div>';
+  }
+
+  function careBars(c, from) {
+    var max = Math.max.apply(null, c.weeks.concat([1]));
+    var fix = c.fixes.length ? c.fixes[0].done_on : null;
+    var start = new Date(from + 'T00:00:00');
+    var fixD = fix ? new Date(fix + 'T00:00:00') : null;
+    return '<div class="care-bars" aria-hidden="true">' + c.weeks.map(function (n, i) {
+      var wk = new Date(start.getTime() + i * 7 * 864e5);
+      var wkEnd = new Date(wk.getTime() + 6 * 864e5);
+      var after = fixD && wk > fixD;
+      var here = fixD && fixD >= wk && fixD <= wkEnd;
+      var h = n ? Math.max(14, Math.round(n / max * 100)) : 0;
+      return '<span class="care-bar' + (here ? ' fx' : '') + '"><i class="' + (after && n ? 'back' : '') +
+        '" style="height:' + h + '%"></i></span>';
+    }).join('') + '</div>';
+  }
+
+  function careVerdict(c) {
+    var sub = '';
+    if (c.fixes.length) {
+      sub = 'починка ' + careDay(c.fixes[0].done_on);
+      /* Один возврат уже сказан чипом «вернулось»; круг из нескольких — отдельной строкой. */
+      if (c.returns > 1) sub += '</span><span class="care-vs back">возвращалась ' + c.returns + ' ' + plural(c.returns, 'раз', 'раза', 'раз');
+      sub = '<span class="care-vs">' + sub + '</span>';
+    }
+    var chip;
+    if (c.state === 'reopened') chip = '<span class="sev care-back">вернулось · ' + c.after_fix + '</span>';
+    else if (c.state === 'closed') chip = '<span class="sev n-ok">закрыта</span>';
+    else chip = c.total ? '<span class="sev">не чинили</span>' : '<span class="sev">случаев нет</span>';
+    return chip + sub;
+  }
+
+  function careCaseRow(x, d, movable) {
+    var link = x.dialog_id ? '<a class="care-link" href="#dialog/' + encodeURIComponent(x.dialog_id) + '">открыть диалог</a>' : '';
+    var move = '';
+    if (movable) {
+      var nw = state.careNewFor === x.id;
+      move = '<span class="al-selwrap care-move"><select class="al-sel" aria-label="Отнести случай к причине" data-cmove="' + x.id + '">' +
+        '<option value="">Отнести к причине…</option>' +
+        d.causes.map(function (c) { return '<option value="' + c.id + '">' + esc(c.title) + '</option>'; }).join('') +
+        '<option value="new"' + (nw ? ' selected' : '') + '>+ Новая причина…</option></select></span>' +
+        (nw ? '<span class="care-newc"><input class="al-in" aria-label="Название новой причины" placeholder="Название новой причины" data-cnew="' + x.id + '">' +
+          '<button class="bp sm" data-cnewb="' + x.id + '">Завести и отнести</button></span>' : '');
+    }
+    return '<div class="care-case"><span class="care-cd num">' + careDay(x.seen_on) + '</span>' +
+      '<span class="care-cs">' + esc(x.symptom) +
+        (x.said ? '<span class="care-said">«' + esc(x.said) + '»</span>' : '') +
+        (x.action ? '<span class="care-act"><b>Что сделать:</b> ' + esc(x.action) + '</span>' : '') +
+        ((x.final_reply || x.reply) ? '<span class="care-act"><b>' + (x.decision === 'changed' ? 'Ответили своим:' : x.decision === 'ok' ? 'Ответ ушел:' : 'Ответ клиенту:') +
+          '</b> ' + esc(x.final_reply || x.reply) + '</span>' : '') + '</span>' +
+      '<span class="care-cm">' + (x.resolved === 'no' ? '<span class="sev care-back">не решено</span>' : '') +
+      '<span class="care-src">' + esc(careCh(x)) + '</span>' + link +
+      '<button class="care-dis" data-cdis="' + x.id + '" title="Разбор ошибся: это не техническая проблема">не забота</button></span>' +
+      move + '</div>';
+  }
+
+  /* «Как решаем» — справочник будущего агента заботы (Вера 24.11.2026: «ты пишешь, как
+     решил бы, я говорю ок или не ок; если ок — подобные потом решаешь сам»). Текст
+     «Ответить: … Руками: … Починить: …» раскладываем по строкам. */
+  function carePlaybook(c) {
+    var editing = state.carePbEdit === c.id;
+    var head = '<div class="care-lab care-pbh">Как решаем' +
+      (c.playbook ? (c.playbook_ok ? '<span class="sev care-ok">согласовано</span>' : '<span class="sev care-wait">ждет твоего ок</span>') : '') +
+      '</div>';
+    if (editing) {
+      return head + '<div class="care-pbe"><textarea class="al-in care-pbt" rows="5" aria-label="Как решаем" data-pbt="' + c.id + '">' +
+        esc(c.playbook || '') + '</textarea>' +
+        '<div class="care-pba"><button class="bp sm" data-pbsave="' + c.id + '">Сохранить и согласовать</button>' +
+        '<button class="bp sm ghost" data-pbcancel="' + c.id + '">Отмена</button></div></div>';
+    }
+    var lines = (c.playbook || '').split(/\s(?=(?:Ответить|Руками|Починить):)/).map(function (ln) {
+      var m = ln.match(/^(Ответить|Руками|Починить):\s*(.*)$/);
+      return m ? '<div class="care-pbl"><b>' + m[1] + '</b><span>' + esc(m[2]) + '</span></div>' : '<div class="care-pbl"><span>' + esc(ln) + '</span></div>';
+    }).join('');
+    return head + (c.playbook ? '<div class="care-pb">' + lines + '</div>' : '<div class="care-txt care-mute">Еще не описали</div>') +
+      '<div class="care-pba">' +
+        (c.playbook && !c.playbook_ok ? '<button class="bp sm" data-pbok="' + c.id + '">Согласовать</button>' : '') +
+        '<button class="bp sm ghost" data-pbedit="' + c.id + '">' + (c.playbook ? 'Изменить' : 'Описать') + '</button>' +
+      '</div>';
+  }
+
+  function careDetail(c, d) {
+    var cases = careCases(String(c.id));
+    var all = state.careAll === c.id;
+    var casesHtml = cases === 'loading' ? '<div class="shim care-shim"></div>' :
+      cases === 'none' ? '<div class="field-empty">Не удалось загрузить случаи</div>' :
+      cases.length ? cases.slice(0, all ? cases.length : CARE_CASES_SHOWN).map(function (x) { return careCaseRow(x, d, false); }).join('') +
+        (!all && cases.length > CARE_CASES_SHOWN ? '<button class="care-more" data-call="' + c.id + '">Показать все ' + cases.length + '</button>' : '') :
+      '<div class="field-empty">Случаев пока нет</div>';
+    var dr = (state.careDraft || {})[c.id] || {};
+    var today = careToday();
+    return '<div class="care-det">' +
+      '<div class="care-lab">Настоящая причина</div><div class="care-txt">' + (esc(c.root) || 'Еще не нашли') + '</div>' +
+      carePlaybook(c) +
+      '<div class="care-lab">Починки</div>' +
+      (c.fixes.length ? '<div class="care-fixes">' + c.fixes.map(function (f) {
+        var aft = f.after ? '<span class="care-aft back">после нее вернулось · ' + f.after + '</span>'
+                          : '<span class="care-aft">после нее случаев нет</span>';
+        return '<div class="care-fix"><span class="care-cd num">' + careDay(f.done_on) + '</span><span>' + esc(f.what) +
+          (f.ref ? '<span class="care-ref">' + esc(f.ref) + '</span>' : '') + aft + '</span></div>';
+      }).join('') + '</div>' : '<div class="care-txt care-mute">Еще не чинили</div>') +
+      '<div class="care-addfix">' +
+        '<label class="care-fl"><span>Когда</span><input class="al-in" type="date" max="' + today + '" value="' + esc(dr.d || today) + '" data-fd="' + c.id + '"></label>' +
+        '<label class="care-fl"><span>Что поменяли</span><input class="al-in" value="' + esc(dr.w || '') + '" data-fw="' + c.id + '"></label>' +
+        '<label class="care-fl"><span>Коммит или задача</span><input class="al-in" value="' + esc(dr.r || '') + '" data-fr="' + c.id + '"></label>' +
+        '<button class="bp sm" data-fadd="' + c.id + '">Записать починку</button>' +
+      '</div>' +
+      '<div class="care-lab">Случаи · ' + c.total + '</div><div class="care-cases">' + casesHtml + '</div>' +
+    '</div>';
+  }
+
+  function renderCare(view) {
+    if (!state._care) {
+      view.innerHTML = '<div class="card care-list">' + [0, 1, 2, 3].map(function () {
+        return '<div class="care-row"><div class="shim care-shim"></div></div>'; }).join('') + '</div>';
+      careLoad();
+      return;
+    }
+    if (state._care === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить раздел. Проверь интернет и обнови страницу.</div></div>';
+      return;
+    }
+    var d = state._care, tab = state.careTab === 'unsorted' ? 'unsorted' : 'causes';
+    var tabs = '<div class="care-tabs" role="tablist">' +
+      '<button role="tab" aria-selected="' + (tab === 'causes') + '" class="qchip' + (tab === 'causes' ? ' on' : '') + '" data-ctab="causes">Причины <span class="qn">' + d.causes.length + '</span></button>' +
+      '<button role="tab" aria-selected="' + (tab === 'unsorted') + '" class="qchip' + (tab === 'unsorted' ? ' on' : '') + (d.unsorted ? ' hot' : '') + '" data-ctab="unsorted">Неразобранное <span class="qn">' + d.unsorted + '</span></button>' +
+      '</div>';
+    var body;
+    if (tab === 'causes') {
+      body = '<div class="card care-list">' + d.causes.map(function (c) {
+        var open = state.careOpen === c.id;
+        return '<div class="care-item' + (open ? ' open' : '') + '">' +
+          '<button class="care-row" aria-expanded="' + open + '" data-copen="' + c.id + '">' +
+            '<span class="care-main"><span class="care-t">' + esc(c.title) + '</span>' +
+              '<span class="care-s">' + (c.area ? '<b class="care-ar">' + esc(c.area) + '</b> · ' : '') + esc(c.seen) + '</span></span>' +
+            careBars(c, d.weeks_from) +
+            '<span class="care-n"><b class="num">' + c.total + '</b><span>за 12 нед.</span></span>' +
+            '<span class="care-v">' + careVerdict(c) + '</span>' +
+          '</button>' + (open ? careDetail(c, d) : '') + '</div>';
+      }).join('') + '</div>' +
+      '<div class="care-foot">Столбик — неделя, всего 12 недель. Синяя черта — неделя последней починки, красные столбики — случаи после нее. ' +
+      'Причина закрывается починкой и открывается сама, когда приходит новый случай.</div>';
+    } else {
+      var cs = careCases('unsorted');
+      body = '<div class="card care-unsorted">' +
+        (cs === 'loading' ? '<div class="shim care-shim"></div>' :
+         cs === 'none' ? '<div class="empty">Не удалось загрузить случаи</div>' :
+         cs.length ? '<div class="care-cases">' + cs.map(function (x) { return careCaseRow(x, d, true); }).join('') + '</div>' :
+         '<div class="empty">Все случаи разложены по причинам.</div>') + '</div>';
+    }
+    view.innerHTML = tabs + body;
+    careWire(view, d);
+  }
+
+  function careSend(path, method, payload, ok) {
+    return api(path, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function (r) { if (ok) showToast(ok); careRefresh(); return r; })
+      .catch(function (e) {
+        if (e.message === '403' || e.message === '403acl') showToast('Нет прав менять раздел «Забота»');
+        else showToast('Не получилось сохранить: ' + ((e.body && e.body.detail) || 'проверь интернет'));
+        throw e;
+      });
+  }
+
+  function careWire(view, d) {
+    function each(sel, fn) { Array.prototype.forEach.call(view.querySelectorAll(sel), fn); }
+    function bad(inp) { inp.classList.add('al-err'); inp.focus(); }
+    each('[data-ctab]', function (b) {
+      b.addEventListener('click', function () { state.careTab = b.getAttribute('data-ctab'); renderView(); });
+    });
+    each('[data-copen]', function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-copen');
+        state.careOpen = state.careOpen === id ? null : id;
+        careRender();
+      });
+    });
+    each('[data-call]', function (b) {
+      b.addEventListener('click', function () { state.careAll = +b.getAttribute('data-call'); careRender(); });
+    });
+    /* Набранное в форме починки живет в state.careDraft: обновление данных перерисовывает
+       экран, и без черновика текст пропадал бы (приемка 23.11). */
+    each('[data-fd],[data-fw],[data-fr]', function (inp) {
+      inp.addEventListener('input', function () {
+        inp.classList.remove('al-err');
+        var id = inp.getAttribute('data-fd') || inp.getAttribute('data-fw') || inp.getAttribute('data-fr');
+        var k = inp.hasAttribute('data-fd') ? 'd' : inp.hasAttribute('data-fw') ? 'w' : 'r';
+        state.careDraft = state.careDraft || {};
+        (state.careDraft[id] = state.careDraft[id] || {})[k] = inp.value;
+      });
+    });
+    each('[data-fadd]', function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-fadd');
+        var w = view.querySelector('[data-fw="' + id + '"]'), dd = view.querySelector('[data-fd="' + id + '"]');
+        if ((w.value || '').trim().length < 3) { bad(w); return showToast('Напиши, что поменяли'); }
+        if (!dd.value || dd.value > careToday()) { bad(dd); return showToast('Выбери день починки, не позже сегодня'); }
+        careSend('/admin/api/care/causes/' + id + '/fixes', 'POST', {
+          done_on: dd.value, what: w.value.trim(),
+          ref: (view.querySelector('[data-fr="' + id + '"]').value || '').trim()
+        }, 'Починку записал, причина закрыта. Придет новый случай — откроется сама').then(function () {
+          if (state.careDraft) delete state.careDraft[id];
+        }).catch(function () {});
+      });
+    });
+    each('[data-cmove]', function (s) {
+      s.addEventListener('change', function () {
+        var cid = +s.getAttribute('data-cmove');
+        if (s.value === 'new') { state.careNewFor = cid; careRender(); var i = view.querySelector('[data-cnew="' + cid + '"]'); if (i) i.focus(); return; }
+        state.careNewFor = null;
+        if (!s.value) return;
+        careSend('/admin/api/care/cases/' + cid, 'PATCH', { cause_id: +s.value },
+                 'Случай отнесен к «' + s.options[s.selectedIndex].text + '»').catch(function () {});
+      });
+    });
+    each('[data-cdis]', function (b) {
+      b.addEventListener('click', function () {
+        careSend('/admin/api/care/cases/' + b.getAttribute('data-cdis') + '/dismiss', 'POST', {},
+                 'Убрал. Разбор запомнит, что такое не забота').catch(function () {});
+      });
+    });
+    each('[data-pbedit]', function (b) {
+      b.addEventListener('click', function () { state.carePbEdit = +b.getAttribute('data-pbedit'); careRender(); });
+    });
+    each('[data-pbcancel]', function (b) {
+      b.addEventListener('click', function () { state.carePbEdit = null; careRender(); });
+    });
+    each('[data-pbok]', function (b) {
+      b.addEventListener('click', function () {
+        careSend('/admin/api/care/causes/' + b.getAttribute('data-pbok'), 'PATCH', { playbook_ok: true },
+                 'Согласовано: такие случаи дальше решаю сам').catch(function () {});
+      });
+    });
+    each('[data-pbsave]', function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-pbsave'), t = view.querySelector('[data-pbt="' + id + '"]');
+        if ((t.value || '').trim().length < 10) { bad(t); return showToast('Опиши, как решаем'); }
+        careSend('/admin/api/care/causes/' + id, 'PATCH', { playbook: t.value.trim(), playbook_ok: true },
+                 'Сохранил и согласовал').then(function () { state.carePbEdit = null; }).catch(function () {});
+      });
+    });
+    each('[data-cnewb]', function (b) {
+      b.addEventListener('click', function () {
+        var cid = b.getAttribute('data-cnewb'), inp = view.querySelector('[data-cnew="' + cid + '"]');
+        var t = (inp.value || '').trim();
+        if (t.length < 3) { bad(inp); return showToast('Назови причину'); }
+        careSend('/admin/api/care/causes', 'POST', { title: t }, null).then(function (r) {
+          state.careNewFor = null;
+          return careSend('/admin/api/care/cases/' + cid, 'PATCH', { cause_id: r.id }, 'Причина заведена, случай отнесен к ней');
+        }).catch(function () {});
       });
     });
   }
@@ -49490,7 +50011,9 @@
   var PR_CHAN = {
     telegram: { label: 'Телеграм', icon: 'bot' },
     vk:       { label: 'ВКонтакте', icon: 'vk' },
+    vk_page:  { label: 'ВК страница', icon: 'vk' },
     max:      { label: 'Макс',     icon: 'max' },
+    max_page: { label: 'Макс школы', icon: 'max' },
     whatsapp: { label: 'WhatsApp', icon: 'wa' },
     instagram: { label: 'Instagram', icon: 'inst' },
   };
@@ -51031,12 +51554,17 @@
     telegram: { label: 'Telegram',  icon: 'send', c: '#2AABEE' },
     whatsapp: { label: 'WhatsApp',  icon: 'wa',   c: '#25D366' },
     vk:       { label: 'VK',        icon: 'vk',   c: '#0077FF' },
+    /* Личная страница «Истсайд Команда»: ее читает браузер на сервере (eastside-bot
+       webinbox), ответа оттуда пока нет — бот вернет «ответьте со страницы». */
+    vk_page:  { label: 'ВК страница', icon: 'vk', c: '#0057B8' },
     max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
+    /* Личный макс школы (+7 924 …), тоже читается браузером на сервере. */
+    max_page: { label: 'Макс школы', icon: 'max', c: '#5A3FD9' },
     instagram:{ label: 'Instagram', icon: 'inst', c: '#E1306C' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'instagram', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'vk_page', 'max', 'max_page', 'instagram', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
@@ -51597,7 +52125,12 @@
     }).join('');
   }
   /* единый бейдж статуса диалога (список + точечное обновление при тумблере) */
+  /* Личная страница ВК: переписку читает браузер на сервере, бот там не отвечает, а
+     ответа из CRM пока нет (Вера 24.11.2026: сначала только чтение). */
+  var CONV_RO = { vk_page: 'Личная страница ВК «Истсайд Команда»', max_page: 'Личный макс школы' };
+  function convReadOnly(c) { return !!(c && CONV_RO[c.channel]); }
   function inboxTag(c) {
+    if (convReadOnly(c)) return '<span class="tg-tag mgr">' + ic('eye', 10) + 'читаем</span>';
     return c.handoff ? '<span class="tg-tag wait">' + ic('hand', 10) + 'просит менеджера</span>'
       : (c.ai_on === false) ? '<span class="tg-tag mgr">' + ic('hand', 10) + (c.taken_by ? esc(c.taken_by) : 'ведёт менеджер') + '</span>'
       : '<span class="tg-tag ai">' + ic('bot', 10) + 'AI</span>';
@@ -51870,7 +52403,7 @@
     var chips = '<button class="tg-fch' + (!state.inboxCh ? ' on' : '') + '" data-ch="">Все</button>' +
       CHAN_ORDER.map(function (k) {
         if (!counts[k]) return '';
-        return '<button class="tg-fch' + (state.inboxCh === k ? ' on' : '') + '" data-ch="' + k + '" style="--c:' + CHANNELS[k].c + '">' +
+        return '<button class="tg-fch' + (state.inboxCh === k ? ' on' : '') + '" data-ch="' + k + '" title="' + CHANNELS[k].label + '" aria-label="' + CHANNELS[k].label + '" style="--c:' + CHANNELS[k].c + '">' +
           ic(CHANNELS[k].icon, 12) + '<span class="tg-fn num">' + counts[k] + '</span></button>';
       }).join('');
 
@@ -52346,7 +52879,9 @@
     }
     var thread = buildThread(msgs);
 
-    var statusLine = c.handoff ? '<span class="tg-st hot">' + ic('hand', 11) + 'просит менеджера</span>'
+    var ro = convReadOnly(c);
+    var statusLine = ro ? '<span class="tg-st mgr">' + ic('eye', 11) + 'только чтение</span>'
+      : c.handoff ? '<span class="tg-st hot">' + ic('hand', 11) + 'просит менеджера</span>'
       : aiOn ? '<span class="tg-st ai">' + ic('bot', 11) + 'AI ведёт</span>'
       : '<span class="tg-st mgr">' + ic('hand', 11) + (c.taken_by ? 'ведёт ' + esc(c.taken_by) : 'ведёт менеджер') + '</span>';
 
@@ -52361,8 +52896,8 @@
         '<div class="tg-cacts">' +
           '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
           '<span class="tg-cwrap" id="tg-school">' + convSchoolHtml(c.id) + '</span>' +
-          '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
-            '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>' +
+          (ro ? '' : '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
+            '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>') +
         '</div>' +
       '</div>' +
       // Пометка накрывает две разные ситуации: это может быть исполнитель с карточкой
@@ -52384,19 +52919,21 @@
         '</div>' : '') +
       (c.handoff ? '<div class="handoff-banner"><span>' + ic('hand', 14) + '</span><div><b>Клиент просит менеджера</b><span>напиши ответ ниже — бот сам замолчит в этом диалоге, и он перейдёт к тебе.</span></div></div>' : '') +
       '<div class="tg-thread" id="tg-thread">' + thread + '</div>' +
-      '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
+      (ro
+        ? '<div class="tg-hint mgr">' + ic('eye', 12) + '<span>' + CONV_RO[c.channel] + '. Переписка подтягивается сама раз в 4 минуты, бот здесь не отвечает. <b>Ответить отсюда пока нельзя</b> — ответь из самого аккаунта.</span></div>'
+        : '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
         (aiOn
           ? '<span>Бот отвечает сам. <b>Напишешь — он замолчит в этом диалоге</b>, пока не включишь снова.</span>'
           : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы' + resumeNote(c) + '</span>') +
       '</div>' +
-      '<div class="tg-tgw" id="tg-tgw">' + tgReplyNote(c) + '</div>' +
-      '<div class="tg-compose">' +
+      '<div class="tg-tgw" id="tg-tgw">' + tgReplyNote(c) + '</div>') +
+      (ro ? '' : '<div class="tg-compose">' +
         '<label class="tg-clip" title="Отправить клиенту файл">' + ic('clip', 17) +
           '<input type="file" id="tg-file" hidden></label>' +
         '<textarea id="tg-input" rows="1" data-conv="' + esc(c.id) + '" autocomplete="off" ' +
           'placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '"></textarea>' +
         '<button class="tg-send" id="tg-send" title="Отправить (Enter · Shift+Enter — новая строка)">' + ic('send', 16) + '</button>' +
-      '</div>';
+      '</div>');
     state._composerRendering = false;
 
     var cw = el('tg-card'); if (cw) wireConvCard(cw, c.id);
@@ -53922,9 +54459,18 @@
        диагностику у тьюторов». Берём последнюю регистрацию: их бывает несколько, а в
        шапке место под одну строку, остальные видно на экране «Запуски». */
     var lnch = (d && d.launches && d.launches[0]) || null;
+    /* С каким вариантом главной истсайд.рф человек пришел (?v= → utm_segment) и откуда:
+       менеджер сразу видит, с чего начинать разговор (Вера, 23.11.2026). */
+    var utm = (d && d.utm) || {};
+    var segName = { '9': '9 класс', '10': '10 класс', '11': '11 класс', student: 'студент', shkolnik: 'школьник' }[utm.utm_segment];
+    var cameAs = segName || utm.utm_source
+      ? '<span title="Вариант главной и источник перехода">' +
+        esc([segName ? 'как ' + segName : '', utm.utm_source ? mkSourceName(utm.utm_source) : ''].filter(Boolean).join(', ')) + '</span>'
+      : '';
     var subBits = [
       sevPill(lead || { crm: crm, booking: booking }),
       '<span>пришел ' + fmtWhen(base.created_at) + '</span>',
+      cameAs,
       (lnch ? '<span title="Человек зарегистрирован на этот запуск">' + esc(lnch.title) +
         (lnch.minutes ? ', ' + lnch.minutes + ' мин эфира' : '') + '</span>' : ''),
       (lnch && lnch.call_at
