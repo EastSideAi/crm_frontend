@@ -16462,6 +16462,9 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .care-aft.back { color: var(--red-ink); }
 .care-cm { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .care-src { font-size: 12px; color: var(--ink-2); }
+/* Слова клиента под пересказом: по ним проверяют, верно ли случай отнесен к причине. */
+.care-said { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  margin-top: 4px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
 .care-link { font-size: 12.5px; font-weight: 600; color: var(--blue); text-decoration: none; }
 .care-link:hover { text-decoration: underline; }
 .care-addfix { display: grid; grid-template-columns: 150px minmax(0, 1fr) 190px auto; gap: 8px; margin-top: 4px; align-items: end; }

@@ -44979,6 +44979,15 @@
      (services/care_scan.py), случай без причины ложится в «Неразобранное».
      Данные — /admin/api/care, состояние причины (state) считает сервер. */
   var CARE_SRC = { bot: 'из бота', operator: 'из аккаунтов школы', task: 'из задачника' };
+  /* Откуда пришел случай из переписки (Вера 24.11.2026: «нужно видеть, кто с какого
+     канала что написал»). Ключ — bot_user.channel; «telegram:study» и прочие вторые боты
+     сводим к телеграму. */
+  var CARE_CH = { telegram: 'Телеграм', vk: 'ВК группа', vk_page: 'ВК страница', max: 'Макс',
+    max_page: 'Макс школы', instagram: 'Инстаграм', whatsapp: 'WhatsApp', platform: 'Кабинет' };
+  function careCh(x) {
+    if (!x.channel) return CARE_SRC[x.source] || x.source;
+    return CARE_CH[x.channel] || CARE_CH[String(x.channel).split(':')[0]] || x.channel;
+  }
   var CARE_CASES_SHOWN = 6;
 
   function careToday() {
@@ -45031,7 +45040,11 @@
       } else if (fixed) {
         phrase = '<b>После починок пока ничего не вернулось.</b> Придет новый случай — причина откроется сама.';
       }
-      if (d.scanned_at) phrase += ' Переписку разбираю каждую ночь, последний раз ' + careDay(d.scanned_at) + '.';
+      if (d.scanned_at) {
+        var st = new Date(d.scanned_at);
+        phrase += ' Переписку разбираю каждые 5 минут, последний раз ' + careDay(d.scanned_at) + ' в ' +
+          ('0' + st.getHours()).slice(-2) + ':' + ('0' + st.getMinutes()).slice(-2) + '.';
+      }
     }
     return '<div><h2>Забота</h2><div class="verdict"><span class="vspark">' + ic('care', 13) +
       '</span><span>' + phrase + '</span></div></div>';
@@ -45081,9 +45094,10 @@
           '<button class="bp sm" data-cnewb="' + x.id + '">Завести и отнести</button></span>' : '');
     }
     return '<div class="care-case"><span class="care-cd num">' + careDay(x.seen_on) + '</span>' +
-      '<span class="care-cs">' + esc(x.symptom) + '</span>' +
+      '<span class="care-cs">' + esc(x.symptom) +
+        (x.said ? '<span class="care-said">«' + esc(x.said) + '»</span>' : '') + '</span>' +
       '<span class="care-cm">' + (x.resolved === 'no' ? '<span class="sev care-back">не решено</span>' : '') +
-      '<span class="care-src">' + esc(CARE_SRC[x.source] || x.source) + '</span>' + link + '</span>' + move + '</div>';
+      '<span class="care-src">' + esc(careCh(x)) + '</span>' + link + '</span>' + move + '</div>';
   }
 
   function careDetail(c, d) {
