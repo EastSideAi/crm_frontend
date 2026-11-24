@@ -13209,10 +13209,12 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .dbt .pf-sec { padding: 20px 24px 14px; }
 .dbt .card.sp12 { overflow: hidden; }
 .dbt-bar .stat { cursor: pointer; }
+/* пять состояний дебиторки (11096) — в один ряд, иначе пятая плитка висит одна */
+@media (min-width: 900px) { .dbt-bar .statbar { grid-template-columns: repeat(5, 1fr); } }
 .dbt-bar .stat.on { background: var(--blue-tint); }
 .dbt .pf-sec .dbt-all { margin-left: auto; }
 .dbt-r, .dbt-lh { display: grid; gap: 14px; align-items: center;
-  grid-template-columns: minmax(200px, 1.6fr) minmax(120px, .8fr) 130px 150px; padding: 8px 24px; }
+  grid-template-columns: minmax(200px, 1.6fr) minmax(120px, .8fr) 140px 190px; padding: 8px 24px; }
 .dbt-r { width: 100%; min-height: 54px; border: 0; border-top: 1px solid var(--line); background: #fff;
   text-align: left; font: inherit; position: relative; cursor: pointer;
   transition: background .14s var(--ease); }
@@ -13221,7 +13223,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .dbt-r::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
   border-radius: 0 3px 3px 0; background: transparent; }
 .dbt-r.late::before { background: var(--red); }
-.dbt-r.todo::before { background: var(--amber); }
+.dbt-r.todo::before, .dbt-r.check::before { background: var(--amber); }
 .dbt-lh { height: 32px; padding-top: 0; padding-bottom: 0; background: var(--fill);
   border-top: 1px solid var(--line); }
 .dbt-lh span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
@@ -13231,7 +13233,8 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .dbt-v b { display: block; font-size: 13.5px; font-weight: 700; color: var(--ink); }
 .dbt-v small { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: 1px; }
 .dbt-r.late .dbt-v:last-child small { color: var(--red-ink); }
-.dbt-r.todo .dbt-v:last-child small { color: var(--amber-ink); }
+.dbt-r.todo .dbt-v:last-child small, .dbt-r.check .dbt-v:last-child small { color: var(--amber-ink); }
+.dbt-r .dbt-v:last-child small.dbt-later { color: var(--ink-3); font-weight: 500; white-space: normal; }
 .dbt-list { max-height: 680px; overflow-y: auto; }
 .dbt-list .dbt-r:first-child { border-top: 0; }
 
