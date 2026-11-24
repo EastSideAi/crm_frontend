@@ -16494,6 +16494,7 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
   .care-move { grid-column: 1 / -1; max-width: none; }
   .care-unsorted { padding: 14px 16px; }
   .care-newc { grid-column: 1 / -1; grid-template-columns: 1fr; max-width: none; }
+}
 /* Продажи → Возвраты (10808): тот же рецепт строк, что «Дебиторка». */
 .rfd-r.going::before { background: var(--blue); opacity: .45; }
 @media (max-width: 860px) {
