@@ -1826,7 +1826,8 @@ a { color: inherit; text-decoration: none; }
 }
 @media (prefers-reduced-motion: reduce) { .qi-send { animation: none; } }
 
-/* ── «Сейчас»: херо «что делать» ── */
+/* ── «Главное»: херо «что делать сейчас» (классы .now-do остались от вкладки
+     «Сейчас», влитой в «Главное» 24.11.2026) ── */
 .now-do { border-radius: 16px; padding: 20px 22px; position: relative; overflow: hidden;
   background: var(--blue-tint); border: 1px solid #DCE7FF; }
 .now-do.calm { background: var(--green-soft); border-color: #C7EBD6; }
@@ -1840,8 +1841,24 @@ a { color: inherit; text-decoration: none; }
 .now-do .nd-s { font-size: 13px; color: var(--ink-2); margin-top: 7px; line-height: 1.55; }
 .now-do.warn .nd-s { color: #7A6438; }
 .now-do .nd-act { display: flex; gap: 9px; margin-top: 17px; flex-wrap: wrap; }
+/* Балл диагностики стоит рядом с действием (Мария 24.11.2026, слияние «Сейчас» и
+   «Главного»): отдельной плашки под него больше нет, а число без действия рядом
+   ничего не решает. На узком экране уходит под текст — в строку они не встают. */
+.now-do .nd-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.now-do .nd-main { flex: 1; min-width: 0; }
+/* Балл лежит на белой подложке: фон плашки красит СОСТОЯНИЕ (синий, зеленый,
+   амбер), а цвет числа — ШКАЛА балла, и на амберном фоне амберное число тонуло. */
+.now-do .nd-score { flex: none; text-align: right; background: rgba(255,255,255,.72);
+  border-radius: 13px; padding: 10px 14px; }
+.now-do .nd-score b { font-size: 26px; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+.now-do .nd-score b small { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+.now-do .nd-score span { display: block; font-size: 11.5px; font-weight: 600; margin-top: 3px; }
+@media (max-width: 560px) {
+  .now-do .nd-row { flex-direction: column; gap: 12px; }
+  .now-do .nd-score { text-align: left; }
+}
 
-/* ── «Сейчас»: карточка «Кто это» (редактируемая сводка) ── */
+/* ── Карточка контактов в «Главном» (редактируемая сводка) ── */
 .who { background: var(--fill); border-radius: 15px; padding: 6px 16px; }
 .ed-field { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-2); }
 .ed-field:first-child { border-top: none; }
@@ -1866,16 +1883,6 @@ a { color: inherit; text-decoration: none; }
 .ed-save { font-size: 11px; color: var(--green-ink); font-weight: 600; }
 .ed-save.err { color: var(--red-ink); }
 
-/* «Главное» — верхняя плашка статус + балл */
-.main-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  background: var(--fill); border-radius: 15px; padding: 16px 18px; margin-bottom: 4px; }
-.main-hero .mh-st { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.main-hero .mh-slot { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
-  color: var(--blue); background: var(--blue-tint); border-radius: var(--r-pill); padding: 5px 11px; }
-.main-hero .mh-score { text-align: right; flex: none; }
-.main-hero .mh-score b { font-size: 26px; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
-.main-hero .mh-score b small { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
-.main-hero .mh-score span { display: block; font-size: 11.5px; font-weight: 600; margin-top: 3px; }
 
 /* dropzone в состоянии загрузки */
 .dropzone.loading { border-style: solid; border-color: #DCE7FF; background: var(--blue-tint); color: var(--blue); cursor: default; }
@@ -10206,10 +10213,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   padding: 12px 10px 10px; min-height: 148px;
   transition: background .14s cubic-bezier(.22,1,.36,1), border-color .14s cubic-bezier(.22,1,.36,1); }
 .uv-col.over { background: var(--blue-tint); border-color: rgba(47,107,255,.35); }
-.uv-col__h { display: flex; align-items: baseline; gap: 7px; padding: 0 4px 10px; }
+.uv-col__h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 7px; padding: 0 4px 10px; }
 .uv-col__h b { font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
 .uv-col__n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
-.uv-col__h2 { margin-left: auto; font-size: 11px; color: var(--ink-3); }
+.uv-col__h2 { flex: 1 0 100%; font-size: 11px; color: var(--ink-3); }
 .uv-col__b { display: flex; flex-direction: column; gap: 8px; }
 .uv-drophint { padding: 16px 10px; border: 1px dashed var(--line-2); border-radius: 12px;
   font-size: 12px; color: var(--ink-3); text-align: center; }

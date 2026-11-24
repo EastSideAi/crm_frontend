@@ -124,7 +124,7 @@
     convLead: {},       // обратный ход: карточка лида по диалогу бота { user_id: ответ | 'load' }
     convSchool: {},     // чей это чат на странице учета уроков { user_id: {links:[…]} | 'load' }
     schoolPick: null,   // открытый выбор ученика: { uid, q, list, busy }
-    drawerId: null, drawerList: [], modalSection: 'now',
+    drawerId: null, drawerList: [], modalSection: 'main',
     details: {}, detailAt: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, planBlock: {}, assignees: null,
     _templates: null, _tplEdit: null, _tplDraft: null,
@@ -41691,7 +41691,7 @@
     }).then(function () {
       state._potBusy = false;
       if (state.page === 'sales' || state.page === 'dash') renderView();
-      if (state.drawerId && state.modalSection === 'now') renderModalContent();
+      if (state.drawerId && state.modalSection === 'main') renderModalContent();
     });
   }
   function potWhen(r) {
@@ -53264,9 +53264,14 @@
   /* ════ КАРТОЧКА КЛИЕНТА — центр-модалка с левой навигацией ════ */
   var MODAL_SECTIONS = [
     { id: 'main',      label: 'Главное',     icon: 'target' },
-    { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'consult',   label: 'Консультации', icon: 'phone' },
-    { id: 'admission', label: 'Поступление', icon: 'cap' },
+    // «План», а не «Поступление» (Мария 24.11.2026): команда везде говорит про эту
+    // доску «план» — «план не собран» в «Сопровождении», «План с AI», «раскатать
+    // план из шаблона». «Этапы» стояли бы через строку от «Точек» и путались с
+    // ними, «Дорожная карта» длинна для колонки и спорит с разделом «Карта» в
+    // левом меню. Значок свой (`flow`, этапы цепочкой): шапочка выпускника тут
+    // стояла та же, что у «Университетов», и два соседних пункта были на одно лицо.
+    { id: 'admission', label: 'План',        icon: 'flow' },
     { id: 'apply',     label: 'Университеты', icon: 'cap' },
     // Контрольные точки тьютора: из них складывается его ставка за ученика
     // (_specs/tutors/motivation-v1.md). Рядом с «Подачей» намеренно: обе
@@ -54123,7 +54128,7 @@
     var reviewN = tasks.filter(function (t) { return t.status === 'review'; }).length;
     var pct = tasks.length ? Math.round(totalDone / tasks.length * 100) : 0;
 
-    var html = '<div class="m-ctitle">Поступление в Китай</div>' +
+    var html = '<div class="m-ctitle">План поступления</div>' +
       '<div class="m-csub">Путь клиента по этапам: что делает он, что делаем мы. Раскрой задачу — увидишь присланное, примешь или вернешь, оставишь комментарий.</div>';
 
     html += '<div class="rm-summary">' +
@@ -54441,7 +54446,7 @@
       return true;
     }).map(function (sct) {
       var extra = '';
-      if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
+      if (sct.id === 'main' && risks.length) extra = '<span class="dotw"></span>';
       else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
       else if (sct.id === 'det' && lead && lead.det && lead.det.overall != null) extra = '<span class="cnt num">' + lead.det.overall + '</span>';
       // Курс открыт — зеленая точка на разделе. Без нее «он у нас учится китайскому»
@@ -54543,7 +54548,7 @@
       navOn.parentNode.scrollLeft = navOn.offsetLeft - (navOn.parentNode.clientWidth - navOn.offsetWidth) / 2;
     }
     var ownJump = el('m-own-jump');
-    if (ownJump) ownJump.addEventListener('click', function () { setModalSection('now'); });
+    if (ownJump) ownJump.addEventListener('click', function () { setModalSection('main'); });
     var hideBtn = el('m-hide');
     if (hideBtn) hideBtn.addEventListener('click', function () {
       if (window.confirm('Скрыть этого лида? Он уйдёт из списков в архив, данные сохранятся — можно вернуть.')) rmHideLead(id, true);
@@ -54584,6 +54589,10 @@
     if (!host || !id) return;
     var ctx = leadCtx(id);
     var s = state.modalSection;
+    // «Сейчас» влилось в «Главное» 24.11.2026 (Мария: «их нет смысла держать 2»).
+    // Раздел помнится у каждого в своем браузере и живет в старых ссылках, поэтому
+    // имя не умирает молча, а ведет туда, где теперь лежит его содержимое.
+    if (s === 'now') { s = state.modalSection = 'main'; }
     // Секцию оплат без права на деньги не открыть даже прямым переключением
     // состояния — уводим на «Главное». Право = finance или pay_create (приём платежа).
     if (s === 'pay' && !can('finance|pay_create')) { s = state.modalSection = 'main'; }
@@ -54595,7 +54604,6 @@
     if (s === 'calls' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
-    else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'consult') host.innerHTML = buildConsultSection(id);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
     else if (s === 'calls') host.innerHTML = buildCallsSection(id);
@@ -54658,7 +54666,8 @@
   function skeletonSection(kind) {
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
                  pay: ['Оплаты', 'Считаю платежи'],
-                 apply: ['Подача', 'Поднимаю заявки в вузы'],
+                 apply: ['Университеты', 'Поднимаю заявки в вузы'],
+                 admission: ['План поступления', 'Собираю план ученика'],
                  points: ['Контрольные точки', 'Считаю точки и деньги по ним'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
@@ -56302,7 +56311,19 @@
     '</div>';
   }
 
-  /* ── РАЗДЕЛ «Главное» — вся ключевая инфа о клиенте на одном экране ── */
+  /* ── РАЗДЕЛ «Главное» — одна сводка по клиенту ───────────────────────────────
+     Вкладок было две. «Главное» держало анкету, контакты и заявку, «Сейчас» —
+     что делать, стадию воронки, квалификацию и дубли; контакты стояли в обеих,
+     а статус читался сразу из трех мест (плашка «Главного», степпер «Сейчас» и
+     подпись в шапке карточки). Обе отвечали на один вопрос — что это за человек
+     и что с ним делать, — и человек открывал карточку, не зная, в какой из них
+     искать. Мария 24.11.2026: «их нет смысла держать 2». Слиты в «Главное»:
+     это первая вкладка карточки, она и открывается по умолчанию.
+     Порядок блоков идет от действия к справке: что делать сейчас (балл рядом с
+     действием, а не отдельной плашкой) → стадия в воронке → чей человек и его
+     семья → контакты → квалификация → анкета → заявка → наши продукты →
+     пробный урок → дубли. Дубли внизу намеренно: это служебная сверка, а не
+     то, ради чего открывают карточку. */
   function buildMain(ctx) {
     var lead = ctx.lead, d = ctx.d, base = ctx.base, crm = ctx.crm;
     var booking = base.booking;
@@ -56313,25 +56334,63 @@
     var get = function (k) { return (ans[k] != null && ans[k] !== '') ? ans[k] : ((lead && lead[k] != null) ? lead[k] : null); };
     var dirs = (lead && lead.directions) || ans.directions;
     if (Array.isArray(dirs)) dirs = dirs.join(', ');
+    var contact = ov(ctx, 'contact'), email = ov(ctx, 'email'), city = ov(ctx, 'city');
+    var act = contactAction(contact);
+    var na = nextAction(lead || { created_at: base.created_at }, crm, booking, act, contact);
 
-    var html = '<div class="m-ctitle">О клиенте</div>' +
-      '<div class="m-csub">Самое важное: кто это, что заполнил на платформе, на каком он шаге.</div>';
+    var html = '<div class="m-ctitle">Главное</div>' +
+      '<div class="m-csub">Что делать с человеком сейчас, где он в воронке и что мы о нем знаем.</div>';
 
-    /* верхняя плашка — статус + балл */
-    html += '<div class="main-hero">' +
-      '<div class="mh-st">' + sevPill(lead || { crm: crm, booking: booking }) +
-        (booking && booking.slot ? '<span class="mh-slot">' + ic('cal', 12) + esc(booking.slot) + '</span>' : '') + '</div>' +
-      (tone ? '<div class="mh-score"><b class="num" style="color:' + tone.c + '">' + score + '<small>/100</small></b>' +
-        '<span style="color:' + tone.c + '">' + esc(tone.label) + '</span></div>'
-            // Балла нет — говорим почему. Молчащий прочерк менеджер читает как
-            // «человек ничего не проходил», а расчет мог просто упасть.
-            : (d ? '<button class="mh-nodiag" data-goto="ai">' +
-                   ((d.stage_status || {}).diagnostics === 'running' ? 'Балл считается'
-                     : (d.stage_status || {}).diagnostics === 'error' ? 'Балл не посчитался'
-                     : 'Балла нет') + '</button>' : '')) +
+    /* 1. ЧТО ДЕЛАТЬ ПРЯМО СЕЙЧАС, рядом балл диагностики.
+       Балла нет — говорим почему. Молчащий прочерк менеджер читает как
+       «человек ничего не проходил», а расчет мог просто упасть. */
+    var scoreHtml = tone
+      ? '<div class="nd-score"><b class="num" style="color:' + tone.c + '">' + score + '<small>/100</small></b>' +
+          '<span style="color:' + tone.c + '">' + esc(tone.label) + '</span></div>'
+      : (d ? '<div class="nd-score"><button class="mh-nodiag" data-goto="ai">' +
+               ((d.stage_status || {}).diagnostics === 'running' ? 'Балл считается'
+                 : (d.stage_status || {}).diagnostics === 'error' ? 'Балл не посчитался'
+                 : 'Балла нет') + '</button></div>' : '');
+    html += '<div class="now-do ' + na.cls + '"><div class="nd-row"><div class="nd-main">' +
+      '<div class="nd-k">' + na.k + '</div>' +
+      '<div class="nd-t">' + na.t + '</div>' +
+      (na.s ? '<div class="nd-s">' + na.s + '</div>' : '') +
+      (na.a ? '<div class="nd-act">' + na.a + '</div>' : '') +
+    '</div>' + scoreHtml + '</div></div>';
+
+    if (booking && booking.slot) {
+      html += '<div class="slotchip">' + ic('cal', 13) + 'Консультация назначена: ' + esc(booking.slot) + '</div>';
+    }
+
+    /* 2. СТАДИЯ — степпер воронки сразу под действием */
+    var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
+    var isRej = crm.status === 'rejected';
+    var curOrder = CRM[crm.status].order;
+    var pipe = flow.map(function (s) {
+      var o = CRM[s].order;
+      var cls = isRej ? '' : (o < curOrder ? 'past' : o === curOrder ? 'cur' : 'next');
+      return '<button class="pstep ' + cls + ' s-' + s + '" data-s="' + s + '">' +
+        '<span class="pdot"></span><span class="plbl">' + CRM[s].label + '</span></button>';
+    }).join('');
+    html += '<div class="m-sec stage-sec" id="m-st"><div class="m-sec-h">Стадия в воронке' +
+        '<button class="dr-rej hr" data-s="' + (isRej ? 'new' : 'rejected') + '">' + (isRej ? 'Вернуть в работу' : 'Отметить отказ') + '</button></div>' +
+      (isRej ? '<div class="rej-banner">' + ic('x', 13) + 'Сейчас в статусе «отказ» — сделка закрыта</div>' : '<div class="pipe">' + pipe + '</div>') +
     '</div>';
 
-    /* анкета абитуриента */
+    /* 3. ЧЕЙ ЭТО ЧЕЛОВЕК, успели ли мы ответить, семья и отметки */
+    html += buildOwn(ctx);
+    html += buildFamily(ctx);
+    html += buildPotChat(ctx);
+    html += buildShortMark(ctx);
+
+    /* 4. КОНТАКТЫ — один блок на карточку (в двух вкладках их было два) */
+    html += '<div class="m-sec"><div class="m-sec-h">Контакты</div><div class="who">' +
+      efRow('contact', contact, true) + efRow('email', email, false) + efRow('city', city, false) + '</div></div>';
+
+    /* 5. КВАЛИФИКАЦИЯ — квал ли он для маркетинга и подтвердили ли продажи */
+    html += buildQual(ctx);
+
+    /* 6. АНКЕТА АБИТУРИЕНТА */
     var pairs = [];
     if (dirs) pairs.push(['Направления', dirs]);
     SNAPSHOT.forEach(function (p) { var v = fmtVal(get(p[0])); if (v != null && v !== '') pairs.push([p[1], v]); });
@@ -56343,7 +56402,20 @@
            : '<div class="sk-rows"><div class="sk row"></div><div class="sk row"></div></div>');
     html += '<div class="m-sec"><div class="m-sec-h">Анкета абитуриента</div>' + profInner + '</div>';
 
-    /* что у человека открыто из наших продуктов — сразу на «Главном».
+    /* 7. ЗАЯВКА НА КОНСУЛЬТАЦИЮ */
+    if (booking) {
+      html += '<div class="m-sec"><div class="m-sec-h">Заявка на консультацию</div><div class="ab">' +
+        (booking.slot ? '<div class="r"><span class="k">Слот</span><span class="v">' + esc(booking.slot) + '</span></div>' : '') +
+        '<div class="r"><span class="k">Оставлена</span><span class="v">' + fmtWhen(booking.at || base.created_at) + '</span></div>' +
+        (booking.channel ? '<div class="r"><span class="k">Канал</span><span class="v">' + esc(booking.channel) + '</span></div>' : '') +
+        /* Что человек выбрал и написал в форме лендинга: до звонка это важнее слота,
+           по нему видно, с чем человек пришел и какой тариф уже смотрел. */
+        (booking.plan ? '<div class="r"><span class="k">Интересует</span><span class="v">' + esc(booking.plan) + '</span></div>' : '') +
+        (booking.comment ? '<div class="r"><span class="k">Написал</span><span class="v">' + esc(booking.comment) + '</span></div>' : '') +
+      '</div></div>';
+    }
+
+    /* 8. ЧТО У ЧЕЛОВЕКА ОТКРЫТО ИЗ НАШИХ ПРОДУКТОВ.
        Раньше это жило только на своей вкладке, и менеджер, открыв карточку клиента,
        который у нас учится, честно не видел, что он у нас учится. */
     var crs = lead && lead.course;
@@ -56357,7 +56429,7 @@
       '</div></div>';
     }
 
-    /* пробный урок с преподавателем — запись прямо отсюда, без страницы школы */
+    /* 9. ПРОБНЫЙ УРОК с преподавателем — запись прямо отсюда, без страницы школы */
     if (can('clients')) {
       html += '<div class="m-sec"><div class="m-sec-h">Пробный урок с преподавателем</div>' +
         '<div id="trial-host" class="ab"><div class="field-empty">Загружаю…</div></div>' +
@@ -56365,23 +56437,8 @@
           ic('cal', 14) + ' Записать на пробный урок</button></div></div>';
     }
 
-    /* контакты (редактируемые) */
-    var contact = ov(ctx, 'contact'), email = ov(ctx, 'email'), city = ov(ctx, 'city');
-    html += '<div class="m-sec"><div class="m-sec-h">Контакты</div><div class="who">' +
-      efRow('contact', contact, true) + efRow('email', email, false) + efRow('city', city, false) + '</div></div>';
-
-    /* заявка */
-    if (booking) {
-      html += '<div class="m-sec"><div class="m-sec-h">Заявка на консультацию</div><div class="ab">' +
-        (booking.slot ? '<div class="r"><span class="k">Слот</span><span class="v">' + esc(booking.slot) + '</span></div>' : '') +
-        '<div class="r"><span class="k">Оставлена</span><span class="v">' + fmtWhen(booking.at || base.created_at) + '</span></div>' +
-        (booking.channel ? '<div class="r"><span class="k">Канал</span><span class="v">' + esc(booking.channel) + '</span></div>' : '') +
-        /* Что человек выбрал и написал в форме лендинга: до звонка это важнее слота,
-           по нему видно, с чем человек пришел и какой тариф уже смотрел. */
-        (booking.plan ? '<div class="r"><span class="k">Интересует</span><span class="v">' + esc(booking.plan) + '</span></div>' : '') +
-        (booking.comment ? '<div class="r"><span class="k">Написал</span><span class="v">' + esc(booking.comment) + '</span></div>' : '') +
-      '</div></div>';
-    }
+    /* 10. ДУБЛИ — тот же человек другой дверью */
+    html += buildDupes(ctx);
     return html;
   }
 
@@ -56571,7 +56628,7 @@
     FAM_BUSY[id] = true;
     api('/admin/api/rnp/leads/' + id + '/family').then(function (r) {
       FAM_BUSY[id] = false; FAM[id] = r;
-      if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+      if (state.drawerId === id && state.modalSection === 'main') renderModalContent();
     }).catch(function () { FAM_BUSY[id] = false; FAM[id] = { parent: null, kids: [], off: true }; });
   }
   function famLink(p) {
@@ -56880,7 +56937,7 @@
     DUP_BUSY[id] = true;
     api('/admin/api/leads/' + id + '/duplicates').then(function (r) {
       DUP_BUSY[id] = false; DUP[id] = r;
-      if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+      if (state.drawerId === id && state.modalSection === 'main') renderModalContent();
     }).catch(function () {
       DUP_BUSY[id] = false; DUP[id] = { duplicates: [] };
     });
@@ -56986,59 +57043,6 @@
           (x.paid ? '' : '<button class="dup-b primary" data-merge="' + esc(x.id) + '">Это дубль</button>') +
         '</div>';
       }).join('') + '</div></div>';
-    return html;
-  }
-
-  function buildNow(ctx) {
-    var lead = ctx.lead, crm = ctx.crm, base = ctx.base;
-    var booking = base.booking;
-    var contact = ov(ctx, 'contact');
-    var act = contactAction(contact);
-    var na = nextAction(lead || { created_at: base.created_at }, crm, booking, act, contact);
-
-    /* 1. ХЕРО — что делать прямо сейчас */
-    var html = '<div class="now-do ' + na.cls + '">' +
-      '<div class="nd-k">' + na.k + '</div>' +
-      '<div class="nd-t">' + na.t + '</div>' +
-      (na.s ? '<div class="nd-s">' + na.s + '</div>' : '') +
-      (na.a ? '<div class="nd-act">' + na.a + '</div>' : '') +
-    '</div>';
-
-    if (booking && booking.slot) {
-      html += '<div class="slotchip">' + ic('cal', 13) + 'Консультация назначена: ' + esc(booking.slot) + '</div>';
-    }
-
-    /* 1а. ЧЕЙ ЭТО ЧЕЛОВЕК И УСПЕЛИ ЛИ МЫ ОТВЕТИТЬ */
-    html += buildOwn(ctx);
-    html += buildFamily(ctx);
-    html += buildPotChat(ctx);
-    html += buildShortMark(ctx);
-
-    /* 2. СТАДИЯ — степпер воронки (поднят выше: это главное действие на экране) */
-    var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
-    var isRej = crm.status === 'rejected';
-    var curOrder = CRM[crm.status].order;
-    var pipe = flow.map(function (s) {
-      var o = CRM[s].order;
-      var cls = isRej ? '' : (o < curOrder ? 'past' : o === curOrder ? 'cur' : 'next');
-      return '<button class="pstep ' + cls + ' s-' + s + '" data-s="' + s + '">' +
-        '<span class="pdot"></span><span class="plbl">' + CRM[s].label + '</span></button>';
-    }).join('');
-    html += '<div class="m-sec stage-sec" id="m-st"><div class="m-sec-h">Стадия в воронке' +
-        '<button class="dr-rej hr" data-s="' + (isRej ? 'new' : 'rejected') + '">' + (isRej ? 'Вернуть в работу' : 'Отметить отказ') + '</button></div>' +
-      (isRej ? '<div class="rej-banner">' + ic('x', 13) + 'Сейчас в статусе «отказ» — сделка закрыта</div>' : '<div class="pipe">' + pipe + '</div>') +
-    '</div>';
-
-    /* 3. КВАЛИФИКАЦИЯ — квал ли он для маркетинга и подтвердили ли продажи */
-    html += buildQual(ctx);
-
-    /* 3а. ДУБЛИ — тот же человек другой дверью */
-    html += buildDupes(ctx);
-
-    /* 4. КТО ЭТО — редактируемая сводка контактов (компактная) */
-    var email = ov(ctx, 'email'), city = ov(ctx, 'city');
-    html += '<div class="m-sec"><div class="m-sec-h">Кто это</div>' +
-      '<div class="who compact">' + efRow('contact', contact, true) + efRow('email', email, false) + efRow('city', city, false) + '</div></div>';
     return html;
   }
 
@@ -58535,11 +58539,15 @@
      лежит, семья о нем не знает, и это должно быть видно сразу, а не вычитываться
      из пустой колонки. */
   var AP_TIERS = [
-    { k: 'a', t: 'Мечта',    h: 'куда целимся' },
-    { k: 'b', t: 'Реальный', h: 'по профилю проходим' },
-    { k: 'c', t: 'Запасной', h: 'подстраховка' },
+    { k: 'a', t: 'Мечта',    b: 'А', h: 'куда целимся' },
+    { k: 'b', t: 'Реальный', b: 'Б', h: 'по профилю проходим' },
+    { k: 'c', t: 'Запасной', b: 'С', h: 'подстраховка' },
   ];
-  var AP_TIER_T = { a: 'мечта', b: 'реальный', c: 'запасной' };
+  // Буква рядом со словом (Мария 23.11.2026): команда между собой говорит «вуз А»,
+  // «вуз Б», а в карточке и в кабинете семьи уровень назван словом. Два имени
+  // одного и того же — повод для путаницы, поэтому пишем их вместе, а не выбираем.
+  function apTierName(t) { return t.t + ' (' + t.b + ')'; }
+  var AP_TIER_T = { a: 'мечта (А)', b: 'реальный (Б)', c: 'запасной (С)' };
   var AP_OPEN = {};                 // lead id → раскрытая карточка вуза
   var AP_EV = {}, AP_EV_BUSY = {};  // лента заявки: id заявки → события
 
@@ -58601,7 +58609,7 @@
     // Уровень кнопками, а не только перетаскиванием: с телефона карточку мышью не
     // возьмешь, а список вузов разбирают и в дороге.
     var seg = AP_TIERS.map(function (t) {
-      return '<button class="uv-sb' + (a.tier === t.k ? ' on' : '') + '" data-uvtier="' + a.id + '" data-t="' + t.k + '">' + t.t + '</button>';
+      return '<button class="uv-sb' + (a.tier === t.k ? ' on' : '') + '" data-uvtier="' + a.id + '" data-t="' + t.k + '">' + apTierName(t) + '</button>';
     }).join('') +
       '<button class="uv-sb off' + (a.tier ? '' : ' on') + '" data-uvtier="' + a.id + '" data-t="">Без уровня</button>';
 
@@ -58668,7 +58676,7 @@
     var cols = AP_TIERS.map(function (t) {
       var mine = list.filter(function (a) { return a.tier === t.k; });
       return '<section class="uv-col" data-uvdrop="' + t.k + '">' +
-        '<div class="uv-col__h"><b>' + t.t + '</b><span class="uv-col__n">' + mine.length + '</span>' +
+        '<div class="uv-col__h"><b>' + apTierName(t) + '</b><span class="uv-col__n">' + mine.length + '</span>' +
           '<span class="uv-col__h2">' + t.h + '</span></div>' +
         '<div class="uv-col__b">' +
           (mine.length ? mine.map(function (a) { return apBoardCard(a, String(a.id) === String(openId)); }).join('')
@@ -58677,7 +58685,7 @@
     }).join('');
 
     return '<div class="m-ctitle">Университеты</div>' +
-      '<div class="m-csub">Три уровня: мечта, реальный, запасной. Карточка таскается мышью между колонками, ' +
+      '<div class="m-csub">Три уровня: мечта (А), реальный (Б), запасной (С). Карточка таскается мышью между колонками, ' +
         'флаг отмечает главный вуз. В кабинете семья видит только те, что разложены по уровням.</div>' +
       (list.length
         ? (hold.length
@@ -58705,7 +58713,7 @@
         '</div>' +
         '<div class="uv-newlv"><span>Уровень</span>' +
           AP_TIERS.map(function (t, i) {
-            return '<button class="uv-sb" data-uvnew="' + t.k + '">' + t.t + '</button>';
+            return '<button class="uv-sb" data-uvnew="' + t.k + '">' + apTierName(t) + '</button>';
           }).join('') +
           '<button class="uv-sb off on" data-uvnew="">Без уровня</button></div>' +
         '<button class="bp" id="ap-n-add">' + ic('plus', 13) + 'Добавить вуз</button></div></details>';
@@ -60025,7 +60033,7 @@
       // список коллег тянем лениво и перерисовываем секцию, иначе в селекте
       // виден только уже назначенный человек; протухший освежаем (PEOPLE_TTL)
       if (!OWN_PEOPLE || !peopleFresh(OWN_AT)) fetchAssignees(function () {
-        if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+        if (state.drawerId === id && state.modalSection === 'main') renderModalContent();
       });
       var ownSel = ownHost.querySelector('select[data-owner]');
       if (ownSel) ownSel.addEventListener('change', function () {
