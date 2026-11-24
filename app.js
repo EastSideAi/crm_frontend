@@ -1104,6 +1104,9 @@
   var QUICK = {
     '':            { label: 'Все',              icon: 'rows' },
     hot:           { label: 'Горячие',          icon: 'flame', pred: function (l) { return l.booking && l.crm.status === 'new'; } },
+    // Павел 11262: заявки с сайта, лендинга, платформы и запись в окно — не отдельный
+    // раздел, а срез лидов: человек лежит в общем списке, а здесь они одни.
+    applied:       { label: 'Оставили заявку',  icon: 'cal',   pred: function (l) { return !!l.booking; } },
     mql:           { label: 'Квал-лиды',        icon: 'target', pred: function (l) { return !!(l.crm.mql && l.crm.mql.ok); } },
     sql:           { label: 'Квал продаж',      icon: 'badge', pred: function (l) { return !!l.crm.sql; } },
     scheduled:     { label: 'Назначен созвон',  icon: 'cal',   pred: function (l) { return l.crm.status === 'call_scheduled'; } },
@@ -1117,7 +1120,7 @@
      три пункта там не нужны»): квалификация лида и «без контакта» — вопросы к
      холодному человеку, а на этой вкладке лежат те, с кем мы уже работаем и у кого
      контакт есть по определению. Остаются «Все», «С задачами» и «Внимание». */
-  var QUICK_ORDER = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short'];
+  var QUICK_ORDER = ['', 'hot', 'applied', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short'];
   var QUICK_SUPPORT = ['', 'tasks', 'attention'];
   function quickKeys(seg) { return trackTab(seg) ? QUICK_SUPPORT : QUICK_ORDER; }
   function quickPred(seg) {
@@ -43758,7 +43761,11 @@
     var title = 'Лиды: с кем связаться';
     if (all === null) return msSection('fresh', title, 'считаю, список появится через минуту', '', 'Считаю сверку лидов…');
     var from = msFreshFrom(span);
-    var f = all.filter(function (p) { return !p.date || p.date >= from; });
+    var inSpan = all.filter(function (p) { return !p.date || p.date >= from; });
+    // «Оставили заявку» (Павел 11262): только те, кто сам попросил консультацию
+    var nApplied = inSpan.filter(function (p) { return p.applied; }).length;
+    var onlyApplied = !!state.msFreshApplied && nApplied > 0;
+    var f = onlyApplied ? inSpan.filter(function (p) { return p.applied; }) : inSpan;
     var n = function (k) { return f.filter(function (p) { return p.state === k; }).length; };
     var parts = [];
     if (n('free')) parts.push('свободных ' + n('free'));
@@ -43776,7 +43783,8 @@
       ' <b class="num">' + done + '</b> из ' + norm + ' семей</span>';
     var chips = '<div class="list-quick ms-spans">' + MS_SPANS.map(function (x) {
       return '<button class="qchip' + (x[0] === span ? ' on' : '') + '" data-msspan="' + x[0] + '">' + x[1] + '</button>';
-    }).join('') + '</div>';
+    }).join('') + (nApplied ? '<span class="ms-chipsep"></span><button class="qchip' + (onlyApplied ? ' on' : '') +
+      '" data-msapplied="1" aria-pressed="' + onlyApplied + '">' + ic('cal', 13) + 'Оставили заявку<span class="qn num">' + nApplied + '</span></button>' : '') + '</div>';
     var sub = worked + ' · ' + (f.length ? 'пришло ' + f.length + (parts.length ? ': ' + parts.join(', ') : ', все в работе') +
       '; сверху горячие, с кем еще не связались' : 'за этот отрезок новых не было');
     var more = state.msFreshMore ? f : f.slice(0, MS_FRESH_MAX);
@@ -44029,6 +44037,11 @@
     msBind(view);
     msTick();
     dialBind(view, function () { MS.d = null; msLoad(true); shLoad(true); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-msapplied]'), function (b) {
+      b.addEventListener('click', function () {
+        state.msFreshApplied = !state.msFreshApplied; state.msFreshMore = false; renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-msspan]'), function (b) {
       b.addEventListener('click', function () {
         state.msFreshSpan = b.getAttribute('data-msspan'); state.msFreshMore = false; renderView();

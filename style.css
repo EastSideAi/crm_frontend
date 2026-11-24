@@ -16615,3 +16615,6 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .pj-c{display:grid;gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
 .pj-c-r{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .pj-c .bp{justify-self:start}
+
+/* Моя смена: разделитель между отрезком и срезом «Оставили заявку» (Павел 11262) */
+.ms-spans .ms-chipsep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); }
