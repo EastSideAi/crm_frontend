@@ -42439,13 +42439,13 @@
       return '<span class="sb-po' + (none ? ' none' : ' calm') + '" data-l="Продал">' +
         esc(none ? 'Не указан' : l.seller) + '</span>';
     }
-    var guess = l.seller_src ? l.seller_id : null;
+    var guess = l.seller_guess || null;
     return '<span class="sb-po sm-sel" data-l="Продал"><select class="sm-seller" data-smpay="' + l.pay_id + '"' +
       ' aria-label="Кто продал">' +
       '<option value="">не указан</option>' + (d.seller_opts || []).map(function (u) {
         return '<option value="' + u.id + '"' + (String(u.id) === String(guess) ? ' selected' : '') + '>' + esc(u.name) + '</option>';
       }).join('') + '</select>' +
-      (guess ? '<small>по встрече? выбери, чтобы записать</small>' : '<small>выбери продавца</small>') + '</span>';
+      (guess ? '<small>' + (l.seller_src === 'meet' ? 'по встрече' : 'ведет карточку') + '? выбери, чтобы засчитать</small>' : '<small>выбери продавца</small>') + '</span>';
   }
 
   /* От кого ждем деньги в периоде (Павел 20.11.2026: «видно, от кого ждем оплаты»): взносы
