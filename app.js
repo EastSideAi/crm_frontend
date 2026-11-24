@@ -49766,6 +49766,7 @@
   var PR_CHAN = {
     telegram: { label: 'Телеграм', icon: 'bot' },
     vk:       { label: 'ВКонтакте', icon: 'vk' },
+    vk_page:  { label: 'ВК страница', icon: 'vk' },
     max:      { label: 'Макс',     icon: 'max' },
     whatsapp: { label: 'WhatsApp', icon: 'wa' },
     instagram: { label: 'Instagram', icon: 'inst' },
@@ -51307,12 +51308,15 @@
     telegram: { label: 'Telegram',  icon: 'send', c: '#2AABEE' },
     whatsapp: { label: 'WhatsApp',  icon: 'wa',   c: '#25D366' },
     vk:       { label: 'VK',        icon: 'vk',   c: '#0077FF' },
+    /* Личная страница «Истсайд Команда»: ее читает браузер на сервере (eastside-bot
+       webinbox), ответа оттуда пока нет — бот вернет «ответьте со страницы». */
+    vk_page:  { label: 'ВК страница', icon: 'vk', c: '#0057B8' },
     max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
     instagram:{ label: 'Instagram', icon: 'inst', c: '#E1306C' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'instagram', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'vk_page', 'max', 'instagram', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
@@ -51873,7 +51877,11 @@
     }).join('');
   }
   /* единый бейдж статуса диалога (список + точечное обновление при тумблере) */
+  /* Личная страница ВК: переписку читает браузер на сервере, бот там не отвечает, а
+     ответа из CRM пока нет (Вера 24.11.2026: сначала только чтение). */
+  function convReadOnly(c) { return c && c.channel === 'vk_page'; }
   function inboxTag(c) {
+    if (convReadOnly(c)) return '<span class="tg-tag mgr">' + ic('eye', 10) + 'читаем</span>';
     return c.handoff ? '<span class="tg-tag wait">' + ic('hand', 10) + 'просит менеджера</span>'
       : (c.ai_on === false) ? '<span class="tg-tag mgr">' + ic('hand', 10) + (c.taken_by ? esc(c.taken_by) : 'ведёт менеджер') + '</span>'
       : '<span class="tg-tag ai">' + ic('bot', 10) + 'AI</span>';
@@ -52146,7 +52154,7 @@
     var chips = '<button class="tg-fch' + (!state.inboxCh ? ' on' : '') + '" data-ch="">Все</button>' +
       CHAN_ORDER.map(function (k) {
         if (!counts[k]) return '';
-        return '<button class="tg-fch' + (state.inboxCh === k ? ' on' : '') + '" data-ch="' + k + '" style="--c:' + CHANNELS[k].c + '">' +
+        return '<button class="tg-fch' + (state.inboxCh === k ? ' on' : '') + '" data-ch="' + k + '" title="' + CHANNELS[k].label + '" aria-label="' + CHANNELS[k].label + '" style="--c:' + CHANNELS[k].c + '">' +
           ic(CHANNELS[k].icon, 12) + '<span class="tg-fn num">' + counts[k] + '</span></button>';
       }).join('');
 
@@ -52622,7 +52630,9 @@
     }
     var thread = buildThread(msgs);
 
-    var statusLine = c.handoff ? '<span class="tg-st hot">' + ic('hand', 11) + 'просит менеджера</span>'
+    var ro = convReadOnly(c);
+    var statusLine = ro ? '<span class="tg-st mgr">' + ic('eye', 11) + 'только чтение</span>'
+      : c.handoff ? '<span class="tg-st hot">' + ic('hand', 11) + 'просит менеджера</span>'
       : aiOn ? '<span class="tg-st ai">' + ic('bot', 11) + 'AI ведёт</span>'
       : '<span class="tg-st mgr">' + ic('hand', 11) + (c.taken_by ? 'ведёт ' + esc(c.taken_by) : 'ведёт менеджер') + '</span>';
 
@@ -52637,8 +52647,8 @@
         '<div class="tg-cacts">' +
           '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
           '<span class="tg-cwrap" id="tg-school">' + convSchoolHtml(c.id) + '</span>' +
-          '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
-            '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>' +
+          (ro ? '' : '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
+            '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>') +
         '</div>' +
       '</div>' +
       // Пометка накрывает две разные ситуации: это может быть исполнитель с карточкой
@@ -52660,19 +52670,21 @@
         '</div>' : '') +
       (c.handoff ? '<div class="handoff-banner"><span>' + ic('hand', 14) + '</span><div><b>Клиент просит менеджера</b><span>напиши ответ ниже — бот сам замолчит в этом диалоге, и он перейдёт к тебе.</span></div></div>' : '') +
       '<div class="tg-thread" id="tg-thread">' + thread + '</div>' +
-      '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
+      (ro
+        ? '<div class="tg-hint mgr">' + ic('eye', 12) + '<span>Личная страница ВК «Истсайд Команда». Переписка подтягивается сама раз в 4 минуты, бот здесь не отвечает. <b>Ответить отсюда пока нельзя</b> — ответь со страницы.</span></div>'
+        : '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
         (aiOn
           ? '<span>Бот отвечает сам. <b>Напишешь — он замолчит в этом диалоге</b>, пока не включишь снова.</span>'
           : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы' + resumeNote(c) + '</span>') +
       '</div>' +
-      '<div class="tg-tgw" id="tg-tgw">' + tgReplyNote(c) + '</div>' +
-      '<div class="tg-compose">' +
+      '<div class="tg-tgw" id="tg-tgw">' + tgReplyNote(c) + '</div>') +
+      (ro ? '' : '<div class="tg-compose">' +
         '<label class="tg-clip" title="Отправить клиенту файл">' + ic('clip', 17) +
           '<input type="file" id="tg-file" hidden></label>' +
         '<textarea id="tg-input" rows="1" data-conv="' + esc(c.id) + '" autocomplete="off" ' +
           'placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '"></textarea>' +
         '<button class="tg-send" id="tg-send" title="Отправить (Enter · Shift+Enter — новая строка)">' + ic('send', 16) + '</button>' +
-      '</div>';
+      '</div>');
     state._composerRendering = false;
 
     var cw = el('tg-card'); if (cw) wireConvCard(cw, c.id);
