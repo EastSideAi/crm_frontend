@@ -2751,7 +2751,7 @@
     // Право `clients`, а не `zaezdy`: раздел показывает учеников и их чек-листы, и
     // ручка доски закрыта тем же правом. У преподавателя `zaezdy` есть, а клиентов
     // нет — он увидел бы пункт меню, который отвечает ему отказом.
-    { id: 'points', label: 'Мотивация', icon: 'target', cap: 'clients', hideCap: 'planfact' },
+    { id: 'points', label: 'Мотивация', icon: 'target', cap: 'clients', hideCap: 'planfact|finmodel' },
     /* Из меню убран у всех (Павел 24.11.2026: «пока его в целом скрою», раздел переедет
        в рабочее окно тьютора). Экран живет по ссылке #page/zaezdy. */
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy', hidden: true },
@@ -2765,7 +2765,13 @@
     /* «Мотивация» — сколько заработал каждый продающий за месяц. Рядом с «Платежами»
        намеренно: считается она из тех же оплат, и человек, который видит деньги
        клиентов, видит и начисление с них. */
-    { id: 'motivation', label: 'Мотивация', icon: 'award', cap: 'finance' },
+    { id: 'motivation', label: 'Мотивация', icon: 'award', cap: 'finance', hideCap: 'finmodel' },
+    /* Единый раздел «Мотивация» для руководителя (Павел 19-24.11.2026): план-факт по
+       команде со светофором поверх ведомости, без второй цифры. У кого есть finmodel —
+       видит только его, старые points/motivation у него спрятаны через hideCap. Тьютор и
+       продавец пока держат прежние экраны; свести всех сюда с маршрутизацией по роли —
+       следующим шагом, после прогона ролей на превью. */
+    { id: 'motiv', label: 'Мотивация', icon: 'award', cap: 'finmodel' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
     { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
     /* «Структура» — кто кому подчиняется и что входит в роль. Рядом с «Порталом»
@@ -4385,6 +4391,7 @@
     else if (state.page === 'path') renderPath(view);
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'motivation') renderMotivation(view);
+    else if (state.page === 'motiv') return renderMotiv(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'meetx') renderMeetx(view);
@@ -29680,6 +29687,80 @@
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-goto]'), function (btn) {
       btn.addEventListener('click', function () { setPage(btn.getAttribute('data-goto')); });
+    });
+    pageAnim(view);
+  }
+
+  /* ── ЕДИНЫЙ РАЗДЕЛ «МОТИВАЦИЯ» ────────────────────────────────────────────
+     Решение Павла 19-24.11.2026: вместо двух пунктов «Мотивация» — один раздел,
+     содержимое по роли. Здесь директорский вид: план-факт по команде за месяц со
+     светофором полноты, поверх той же ведомости, без второй цифры. Данные — plan-status
+     (те же, что «План отделов»), новых таблиц не заводим. Нажатие на группу ведет
+     заполнять ее план (планирование KPI). Тьютор и продавец пока на своих экранах. */
+  function motivLoadStatus() {
+    var m = finPlanMonth();
+    finBusy('planstatus', function (done) {
+      api('/admin/api/fin/plan-status?month=' + m).then(function (r) {
+        FIN.planstatus = r; FIN.err = '';
+        if (state.page === 'motiv' || curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'planstatus'); }).then(done);
+    });
+  }
+  function renderMotiv(view) { return renderMotivDirector(view); }
+  function renderMotivDirector(view) {
+    if (!FIN.planstatus) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); motivLoadStatus(); return;
+    }
+    if (FIN.planstatus === 'none') return finErrView(view);
+    var p = FIN.planstatus, secs = p.sections || [];
+    var planTotal = secs.reduce(function (a, s) { return a + (s.plan || 0); }, 0);
+    var factTotal = secs.reduce(function (a, s) { return a + (s.fact || 0); }, 0);
+    var leftRub = Math.max(0, planTotal - factTotal);
+    var tiles = [
+      { label: 'Заполнено', value: p.submitted + ' из ' + p.total, sub: 'групп за месяц' },
+      { label: 'План', value: finRub(planTotal, 0), sub: 'заложено на команду' },
+      { label: 'Факт', value: finRub(factTotal, 0), sub: 'уже начислено' },
+      { label: 'Осталось', value: finRub(leftRub, 0), sub: leftRub ? 'план минус факт' : 'все начислено' },
+    ];
+    var rows = secs.map(function (s) {
+      var ok = s.submitted;
+      var badge = '<span class="pl-badge ' + (ok ? 'ok' : (s.draft ? 'draft' : 'no')) + '">' +
+        (ok ? 'заполнено' : (s.draft ? 'черновик' : 'пусто')) + '</span>';
+      var planCell = s.plan
+        ? '<span class="pl-sum num' + (ok ? '' : ' muted') + '">' + finRub(s.plan) + '</span>'
+        : '<span class="pl-sum num muted">—</span>';
+      var factCell = '<span class="pl-fact num' + (s.fact ? '' : ' muted') + '">' +
+        (s.fact ? 'факт ' + finRub(s.fact) : 'факт —') + '</span>';
+      return '<div class="pl-row pl-go' + (ok ? '' : ' wait') +
+          '" data-plsec="' + esc(s.key) + '">' +
+        '<span class="pl-nm">' + esc(s.label) + '</span>' + badge +
+        '<span class="pl-val">' + planCell + factCell + '</span>' +
+      '</div>';
+    }).join('');
+    view.innerHTML = statBar(tiles) +
+      '<div class="card listcard">' +
+        '<div class="list-tools plm-head"><div>' +
+          '<div class="t fe-t">Мотивация команды: план и факт</div>' +
+          '<div class="s fe-s">сколько заложено на команду за месяц и сколько уже начислено. ' +
+            'нажми на группу, чтобы заполнить или поправить ее план.</div>' +
+        '</div>' + finMonthNav() + '</div>' +
+        '<div class="pl-list">' + rows + '</div>' +
+        '<div class="fin-note">' + ic('alert', 13) +
+          'Это те же деньги, что в Финансах: план и факт берутся из ведомости, вторая цифра ' +
+          'не заводится. Фиксы и KPI команды — в плане группы; проценты продаж и точки ' +
+          'тьюторов приходят фактом по мере начисления. Когда все группы заполнены — ' +
+          'раздел горит зеленым, значит план месяца собран.' +
+        '</div>' +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('.pl-row[data-plsec]'), function (r) {
+      r.addEventListener('click', function () { finPlanGoSheet(r.getAttribute('data-plsec')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-plm]'), function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-plm');
+        if (a === 'prev') finMonthShift(-1); else if (a === 'next') finMonthShift(1);
+      });
     });
     pageAnim(view);
   }
