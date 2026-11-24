@@ -287,6 +287,39 @@ ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": 
 CARE = json.load(open(os.path.join(os.path.dirname(__file__), "care.json"), encoding="utf-8"))
 
 _D = lambda n: (date.today() + timedelta(days=n)).isoformat()
+# Дебиторка «Продаж» (11096): выдуманные семьи во всех пяти состояниях, включая
+# остаток по прайсу у клиента без графика и деньги только в ведомости.
+def _debt(i, name, state, **kw):
+    row = {"id": f"dbt-{i}", "name": name, "state": state, "owner": "Павел", "seller": "",
+           "tariff": "plus", "mark": "", "paid_rub": 0, "last_paid": None, "order_rub": 0,
+           "left_rub": 0, "next_due": None, "next_rub": None, "late_days": 0,
+           "contract": True, "support": True, "ledger_rub": 0, "price_rub": 299990,
+           "est_left": None}
+    row.update(kw)
+    return row
+
+
+DEBTS = {"no_contract": 2, "rows": [
+    _debt(1, "Орлова Анна (мама)", "late", paid_rub=149995, last_paid="2026-09-18",
+          left_rub=149995, next_due="2026-11-20", next_rub=149995, late_days=4),
+    _debt(2, "Семья Белых", "todo", paid_rub=100000, last_paid="2026-10-04", est_left=199990),
+    _debt(3, "Семья Кравец", "todo", tariff="std", price_rub=159000, paid_rub=159000,
+          last_paid="2026-09-02", est_left=0),
+    _debt(4, "Семья Лисиных", "check", ledger_rub=137200, est_left=162790, owner=""),
+    _debt(5, "Семья Гордеевых", "check", contract=False),
+    _debt(6, "Семья Зуевых", "wait", paid_rub=140000, last_paid="2026-11-19",
+          left_rub=160000, next_due="2026-12-15", next_rub=80000,
+          plan=[{"due": "2026-12-15", "rub": 80000}, {"due": None, "rub": 80000}]),
+    _debt(7, "Семья Миронец", "done", tariff="prem", paid_rub=399990,
+          last_paid="2026-08-10", support=False),
+], "states": [
+    {"key": "late", "label": "Просрочен взнос", "count": 1, "rub": 149995},
+    {"key": "todo", "label": "Нет графика", "count": 2, "rub": 199990},
+    {"key": "check", "label": "Нет оплат в карточке", "count": 2, "rub": 0},
+    {"key": "wait", "label": "Ждем взнос", "count": 1, "rub": 149500},
+    {"key": "done", "label": "Долга нет", "count": 1, "rub": 0},
+]}
+
 REFUNDS = {"refunded_rub": 117990, "states": [
     {"key": "late", "label": "Шаг просрочен", "count": 1},
     {"key": "going", "label": "Идет", "count": 1},
@@ -374,6 +407,8 @@ class H(SimpleHTTPRequestHandler):
         # Реестр возвратов «Продаж» (10808): выдуманные семьи во всех трех состояниях.
         if p == "/admin/api/sales/refunds":
             return self._json(REFUNDS)
+        if p == "/admin/api/sales/debts":
+            return self._json(DEBTS)
         # Доска «Университеты» в карточке: вузы ученика и лента одного вуза.
         if p.startswith("/admin/api/leads/") and p.endswith("/applications"):
             lead_id = p.split("/")[4]

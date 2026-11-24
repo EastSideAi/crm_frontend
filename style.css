@@ -13209,10 +13209,12 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .dbt .pf-sec { padding: 20px 24px 14px; }
 .dbt .card.sp12 { overflow: hidden; }
 .dbt-bar .stat { cursor: pointer; }
+/* пять состояний дебиторки (11096) — в один ряд, иначе пятая плитка висит одна */
+@media (min-width: 900px) { .dbt-bar .statbar { grid-template-columns: repeat(5, 1fr); } }
 .dbt-bar .stat.on { background: var(--blue-tint); }
 .dbt .pf-sec .dbt-all { margin-left: auto; }
 .dbt-r, .dbt-lh { display: grid; gap: 14px; align-items: center;
-  grid-template-columns: minmax(200px, 1.6fr) minmax(120px, .8fr) 130px 150px; padding: 8px 24px; }
+  grid-template-columns: minmax(200px, 1.6fr) minmax(120px, .8fr) 140px 190px; padding: 8px 24px; }
 .dbt-r { width: 100%; min-height: 54px; border: 0; border-top: 1px solid var(--line); background: #fff;
   text-align: left; font: inherit; position: relative; cursor: pointer;
   transition: background .14s var(--ease); }
@@ -13221,7 +13223,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .dbt-r::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
   border-radius: 0 3px 3px 0; background: transparent; }
 .dbt-r.late::before { background: var(--red); }
-.dbt-r.todo::before { background: var(--amber); }
+.dbt-r.todo::before, .dbt-r.check::before { background: var(--amber); }
 .dbt-lh { height: 32px; padding-top: 0; padding-bottom: 0; background: var(--fill);
   border-top: 1px solid var(--line); }
 .dbt-lh span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
@@ -13231,7 +13233,8 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .dbt-v b { display: block; font-size: 13.5px; font-weight: 700; color: var(--ink); }
 .dbt-v small { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: 1px; }
 .dbt-r.late .dbt-v:last-child small { color: var(--red-ink); }
-.dbt-r.todo .dbt-v:last-child small { color: var(--amber-ink); }
+.dbt-r.todo .dbt-v:last-child small, .dbt-r.check .dbt-v:last-child small { color: var(--amber-ink); }
+.dbt-r .dbt-v:last-child small.dbt-later { color: var(--ink-3); font-weight: 500; white-space: normal; }
 .dbt-list { max-height: 680px; overflow-y: auto; }
 .dbt-list .dbt-r:first-child { border-top: 0; }
 
@@ -13351,6 +13354,8 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .sp-det.on b { color: var(--blue); }
 .sp-det:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .sp-detail { margin-top: 18px; animation: nxIn .2s ease-out; }
+/* цифра в строке таблицы KPI и лидов: кнопка по размеру числа, а не во всю ячейку */
+.sp-det.sp-num { display: inline-flex; width: auto; margin: 0 -4px; padding: 1px 4px; }
 .sp-rh, .sp-rl { grid-template-columns: 48px minmax(160px, 1.5fr) minmax(140px, 1fr) 120px; }
 @media (prefers-reduced-motion: reduce) { .sp-detail { animation: none; } }
 @media (max-width: 860px) { .sp-rl { grid-template-columns: 44px minmax(0, 1fr) auto; } }
@@ -13526,6 +13531,28 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   margin-top: 2px; }
 /* Закрытый месяц тише живого: по нему уже заплатили, трогать нечего. */
 .rw-shut .rw-total b { color: var(--ink-2); }
+
+/* Карточка сотрудника в разделе «Мотивация»: окно Павла поверх расчёта —
+   график выплат 10/20 и список регулярных задач человека за месяц. */
+.mp-back { margin-bottom: 14px; }
+.mp-pay { padding: 6px 24px 20px; }
+.mp-pay-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 14px; padding: 13px 0; border-top: 1px solid var(--line); }
+.mp-pay-row:first-child { border-top: 0; }
+.mp-pay-row .num { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mp-pd { font-size: 12.5px; font-weight: 700; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 5px 12px; white-space: nowrap; }
+.mp-pt { font-size: 13.5px; color: var(--ink-2); min-width: 0; }
+.mp-tasks { padding: 4px 24px 18px; }
+.mp-task { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+  padding: 11px 0; border-top: 1px solid var(--line); }
+.mp-task:first-child { border-top: 0; }
+.mp-tk-nm { font-size: 13.5px; color: var(--ink); min-width: 0; }
+@media (max-width: 560px) {
+  .mp-pay, .mp-tasks { padding-left: 16px; padding-right: 16px; }
+  .mp-pay-row { grid-template-columns: auto 1fr; row-gap: 2px; }
+  .mp-pay-row .num { grid-column: 2; text-align: right; }
+}
 
 /* KPI месяца в расчетном листе ведомости: те же строки, что в «Вознаграждении»,
    свернуты по людям. Раскрытие — по нажатию на человека. */
@@ -16588,3 +16615,6 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .pj-c{display:grid;gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
 .pj-c-r{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .pj-c .bp{justify-self:start}
+
+/* Моя смена: разделитель между отрезком и срезом «Оставили заявку» (Павел 11262) */
+.ms-spans .ms-chipsep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); }
