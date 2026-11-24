@@ -411,6 +411,8 @@
       path: '<path d="M3 16.5c4.5 0 4-5.5 7-6.5s3.5-4.5 7-4.5"/><circle cx="3" cy="16.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17" cy="5.5" r="1.5" fill="currentColor" stroke="none"/>',
       csv: '<path d="M10 3v9M6 9l4 4 4-4"/><path d="M3.5 16.5h13"/>',
       chev: '<path d="M6 8l4 4 4-4"/>',
+      /* Спасательный круг — раздел «Забота» (служба заботы о клиентах). */
+      care: '<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/><path d="M5.1 5.1l2.8 2.8M12.1 12.1l2.8 2.8M14.9 5.1l-2.8 2.8M7.9 12.1l-2.8 2.8"/>',
       exit: '<path d="M12 3.5H6a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h6"/><path d="M9 10h8M14.5 7l3 3-3 3"/>',
       refresh: '<path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6"/><path d="M16.5 2.5v3.5h-3.5"/>',
       go: '<path d="M7.5 5l5 5-5 5"/>',
@@ -2768,6 +2770,10 @@
     /* «Процессы» — карта сквозных процессов компании. Право личное, его выдают учетке,
        а не роли (crm_users.extra_caps): пока карта черновик, ее видит только Вера. */
     { id: 'processes', label: 'Процессы', icon: 'flow', cap: 'processes' },
+    /* «Забота» — причины технических проблем клиентов и вернулись ли они после починки
+       (Вера 23.11.2026: «чиним или ходим по кругу»). Право личное, как у «Процессов»:
+       видят Вера, Павел и Виталий (миграция 332 бэкенда). */
+    { id: 'care', label: 'Забота', icon: 'care', cap: 'care' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     /* Две двери в один раздел: свои приходят по `marketing` и видят все вкладки,
        подрядчик по трафику — по `ads`, и у него остается одна «Реклама» (mkTabsFor). */
@@ -3695,6 +3701,7 @@
         '</span></div></div>';
     }
     if (state.page === 'cmap') html = cmHeadHtml();
+    if (state.page === 'care') html = careHeadHtml();
     if (state.page === 'leads') {
       html = '<div><h2>Контакты</h2>' +
         '<div class="verdict" style="margin-top:8px"><span>' + esc(SEGS[state.seg].hint) + '</span></div></div>';
@@ -4397,6 +4404,7 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'org') renderOrg(view);
     else if (state.page === 'processes') renderProcesses(view);
+    else if (state.page === 'care') renderCare(view);
     else if (state.page === 'roadmap') renderRoadmap(view);
     else if (state.page === 'dupes') renderDupes(view);
     else if (state.page === 'students') renderStudents(view);
@@ -34787,7 +34795,7 @@
     /* Salebot — сторонняя платформа, через неё шли рассылки по старой базе. Название
        платформы в отчёте бесполезно: важно, что это рассылка, а не новый трафик. */
     salebot: 'Рассылка по старой базе',
-    max: 'MAX', vk_bot: 'Бот ВКонтакте', site: 'Наш сайт', email: 'Письмо',
+    max: 'MAX', vk_bot: 'Бот ВКонтакте', site: 'Наш сайт', email: 'Письмо', vk_ads: 'Реклама ВК',
     /* Служебная дверь запуска: карточку завёл бот, выдавая человеку личную ссылку
        на эфир. Метки у неё нет и не будет, но в «источник не размечен» она не идёт —
        иначе рассылка получит чужую заслугу (ТЗ Олеси 6.4). */
@@ -44961,6 +44969,269 @@
     });
   }
 
+  /* ── Забота: причины технических проблем клиентов ─────────────────────────
+     Вера 23.11.2026: «мы реально что-то ремонтируем или ходим по кругу?» Статуса руками
+     нет («судить будем по факту, если опять прилетает обращение — опять открываем»):
+     записали починку — причина закрыта, пришел случай позже починки — открыта снова.
+     У каждой починки видно, сколько случаев пришло после нее до следующей: это и есть
+     круг. Столбики по неделям показывают то же глазами: недели после последней починки
+     со случаями красные. Случаи из переписки бота кладет ночной разбор бэкенда
+     (services/care_scan.py), случай без причины ложится в «Неразобранное».
+     Данные — /admin/api/care, состояние причины (state) считает сервер. */
+  var CARE_SRC = { bot: 'из бота', operator: 'из аккаунтов школы', task: 'из задачника' };
+  var CARE_CASES_SHOWN = 6;
+
+  function careToday() {
+    var d = new Date();   // локальная дата: Вера и практикантки живут восточнее Москвы
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+
+  function careLoad(quiet) {
+    api('/admin/api/care')
+      .then(function (d) { state._care = d; if (state.page === 'care') { renderHead(); careRender(); } })
+      .catch(function () {
+        if (quiet) return showToast('Не удалось обновить раздел, проверь интернет');
+        state._care = 'none'; if (state.page === 'care') renderView();
+      });
+  }
+  function careCases(key, force) {
+    state._careCases = state._careCases || {};
+    if (state._careCases[key] && !force) return state._careCases[key];
+    if (!state._careCases[key]) state._careCases[key] = 'loading';
+    api('/admin/api/care/cases?cause=' + encodeURIComponent(key))
+      .then(function (d) { state._careCases[key] = d.cases || []; if (state.page === 'care') careRender(); })
+      .catch(function () { if (!force) state._careCases[key] = 'none'; if (state.page === 'care') careRender(); });
+    return state._careCases[key];
+  }
+  /* После сохранения данные обновляются на месте: без скелетона, раскрытая причина,
+     прокрутка и набранное в форме остаются (приемка 23.11). */
+  function careRefresh() {
+    careLoad(true);
+    Object.keys(state._careCases || {}).forEach(function (k) { careCases(k, true); });
+  }
+  function careRender() {
+    var y = window.scrollY;
+    renderView();
+    window.scrollTo(0, y);
+  }
+  function careDay(iso) {
+    if (!iso) return '';
+    var p = iso.slice(0, 10).split('-');
+    return p[2] + '.' + p[1];
+  }
+  function careHeadHtml() {
+    var d = state._care && state._care !== 'none' ? state._care : null;
+    var phrase = 'Технические проблемы клиентов по причинам: платформа, тренажеры, занятия, документы, доступы.';
+    if (d) {
+      var back = d.causes.filter(function (c) { return c.state === 'reopened'; }).length;
+      var fixed = back + d.causes.filter(function (c) { return c.state === 'closed'; }).length;
+      if (back) {
+        phrase = '<b>После починки открылись снова ' + back + ' ' + plural(back, 'причина', 'причины', 'причин') +
+          ' из ' + fixed + '.</b> Там чинили случаи, а не причину.';
+      } else if (fixed) {
+        phrase = '<b>После починок пока ничего не вернулось.</b> Придет новый случай — причина откроется сама.';
+      }
+      if (d.scanned_at) phrase += ' Переписку разбираю каждую ночь, последний раз ' + careDay(d.scanned_at) + '.';
+    }
+    return '<div><h2>Забота</h2><div class="verdict"><span class="vspark">' + ic('care', 13) +
+      '</span><span>' + phrase + '</span></div></div>';
+  }
+
+  function careBars(c, from) {
+    var max = Math.max.apply(null, c.weeks.concat([1]));
+    var fix = c.fixes.length ? c.fixes[0].done_on : null;
+    var start = new Date(from + 'T00:00:00');
+    var fixD = fix ? new Date(fix + 'T00:00:00') : null;
+    return '<div class="care-bars" aria-hidden="true">' + c.weeks.map(function (n, i) {
+      var wk = new Date(start.getTime() + i * 7 * 864e5);
+      var wkEnd = new Date(wk.getTime() + 6 * 864e5);
+      var after = fixD && wk > fixD;
+      var here = fixD && fixD >= wk && fixD <= wkEnd;
+      var h = n ? Math.max(14, Math.round(n / max * 100)) : 0;
+      return '<span class="care-bar' + (here ? ' fx' : '') + '"><i class="' + (after && n ? 'back' : '') +
+        '" style="height:' + h + '%"></i></span>';
+    }).join('') + '</div>';
+  }
+
+  function careVerdict(c) {
+    var sub = '';
+    if (c.fixes.length) {
+      sub = 'починка ' + careDay(c.fixes[0].done_on);
+      /* Один возврат уже сказан чипом «вернулось»; круг из нескольких — отдельной строкой. */
+      if (c.returns > 1) sub += '</span><span class="care-vs back">возвращалась ' + c.returns + ' ' + plural(c.returns, 'раз', 'раза', 'раз');
+      sub = '<span class="care-vs">' + sub + '</span>';
+    }
+    var chip;
+    if (c.state === 'reopened') chip = '<span class="sev care-back">вернулось · ' + c.after_fix + '</span>';
+    else if (c.state === 'closed') chip = '<span class="sev n-ok">закрыта</span>';
+    else chip = c.total ? '<span class="sev">не чинили</span>' : '<span class="sev">случаев нет</span>';
+    return chip + sub;
+  }
+
+  function careCaseRow(x, d, movable) {
+    var link = x.dialog_id ? '<a class="care-link" href="#dialog/' + encodeURIComponent(x.dialog_id) + '">открыть диалог</a>' : '';
+    var move = '';
+    if (movable) {
+      var nw = state.careNewFor === x.id;
+      move = '<span class="al-selwrap care-move"><select class="al-sel" aria-label="Отнести случай к причине" data-cmove="' + x.id + '">' +
+        '<option value="">Отнести к причине…</option>' +
+        d.causes.map(function (c) { return '<option value="' + c.id + '">' + esc(c.title) + '</option>'; }).join('') +
+        '<option value="new"' + (nw ? ' selected' : '') + '>+ Новая причина…</option></select></span>' +
+        (nw ? '<span class="care-newc"><input class="al-in" aria-label="Название новой причины" placeholder="Название новой причины" data-cnew="' + x.id + '">' +
+          '<button class="bp sm" data-cnewb="' + x.id + '">Завести и отнести</button></span>' : '');
+    }
+    return '<div class="care-case"><span class="care-cd num">' + careDay(x.seen_on) + '</span>' +
+      '<span class="care-cs">' + esc(x.symptom) + '</span>' +
+      '<span class="care-cm">' + (x.resolved === 'no' ? '<span class="sev care-back">не решено</span>' : '') +
+      '<span class="care-src">' + esc(CARE_SRC[x.source] || x.source) + '</span>' + link + '</span>' + move + '</div>';
+  }
+
+  function careDetail(c, d) {
+    var cases = careCases(String(c.id));
+    var all = state.careAll === c.id;
+    var casesHtml = cases === 'loading' ? '<div class="shim care-shim"></div>' :
+      cases === 'none' ? '<div class="field-empty">Не удалось загрузить случаи</div>' :
+      cases.length ? cases.slice(0, all ? cases.length : CARE_CASES_SHOWN).map(function (x) { return careCaseRow(x, d, false); }).join('') +
+        (!all && cases.length > CARE_CASES_SHOWN ? '<button class="care-more" data-call="' + c.id + '">Показать все ' + cases.length + '</button>' : '') :
+      '<div class="field-empty">Случаев пока нет</div>';
+    var dr = (state.careDraft || {})[c.id] || {};
+    var today = careToday();
+    return '<div class="care-det">' +
+      '<div class="care-lab">Настоящая причина</div><div class="care-txt">' + (esc(c.root) || 'Еще не нашли') + '</div>' +
+      '<div class="care-lab">Починки</div>' +
+      (c.fixes.length ? '<div class="care-fixes">' + c.fixes.map(function (f) {
+        var aft = f.after ? '<span class="care-aft back">после нее вернулось · ' + f.after + '</span>'
+                          : '<span class="care-aft">после нее случаев нет</span>';
+        return '<div class="care-fix"><span class="care-cd num">' + careDay(f.done_on) + '</span><span>' + esc(f.what) +
+          (f.ref ? '<span class="care-ref">' + esc(f.ref) + '</span>' : '') + aft + '</span></div>';
+      }).join('') + '</div>' : '<div class="care-txt care-mute">Еще не чинили</div>') +
+      '<div class="care-addfix">' +
+        '<label class="care-fl"><span>Когда</span><input class="al-in" type="date" max="' + today + '" value="' + esc(dr.d || today) + '" data-fd="' + c.id + '"></label>' +
+        '<label class="care-fl"><span>Что поменяли</span><input class="al-in" value="' + esc(dr.w || '') + '" data-fw="' + c.id + '"></label>' +
+        '<label class="care-fl"><span>Коммит или задача</span><input class="al-in" value="' + esc(dr.r || '') + '" data-fr="' + c.id + '"></label>' +
+        '<button class="bp sm" data-fadd="' + c.id + '">Записать починку</button>' +
+      '</div>' +
+      '<div class="care-lab">Случаи · ' + c.total + '</div><div class="care-cases">' + casesHtml + '</div>' +
+    '</div>';
+  }
+
+  function renderCare(view) {
+    if (!state._care) {
+      view.innerHTML = '<div class="card care-list">' + [0, 1, 2, 3].map(function () {
+        return '<div class="care-row"><div class="shim care-shim"></div></div>'; }).join('') + '</div>';
+      careLoad();
+      return;
+    }
+    if (state._care === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить раздел. Проверь интернет и обнови страницу.</div></div>';
+      return;
+    }
+    var d = state._care, tab = state.careTab === 'unsorted' ? 'unsorted' : 'causes';
+    var tabs = '<div class="care-tabs" role="tablist">' +
+      '<button role="tab" aria-selected="' + (tab === 'causes') + '" class="qchip' + (tab === 'causes' ? ' on' : '') + '" data-ctab="causes">Причины <span class="qn">' + d.causes.length + '</span></button>' +
+      '<button role="tab" aria-selected="' + (tab === 'unsorted') + '" class="qchip' + (tab === 'unsorted' ? ' on' : '') + (d.unsorted ? ' hot' : '') + '" data-ctab="unsorted">Неразобранное <span class="qn">' + d.unsorted + '</span></button>' +
+      '</div>';
+    var body;
+    if (tab === 'causes') {
+      body = '<div class="card care-list">' + d.causes.map(function (c) {
+        var open = state.careOpen === c.id;
+        return '<div class="care-item' + (open ? ' open' : '') + '">' +
+          '<button class="care-row" aria-expanded="' + open + '" data-copen="' + c.id + '">' +
+            '<span class="care-main"><span class="care-t">' + esc(c.title) + '</span>' +
+              '<span class="care-s">' + esc(c.seen) + '</span></span>' +
+            careBars(c, d.weeks_from) +
+            '<span class="care-n"><b class="num">' + c.total + '</b><span>за 12 нед.</span></span>' +
+            '<span class="care-v">' + careVerdict(c) + '</span>' +
+          '</button>' + (open ? careDetail(c, d) : '') + '</div>';
+      }).join('') + '</div>' +
+      '<div class="care-foot">Столбик — неделя, всего 12 недель. Синяя черта — неделя последней починки, красные столбики — случаи после нее. ' +
+      'Причина закрывается починкой и открывается сама, когда приходит новый случай.</div>';
+    } else {
+      var cs = careCases('unsorted');
+      body = '<div class="card care-unsorted">' +
+        (cs === 'loading' ? '<div class="shim care-shim"></div>' :
+         cs === 'none' ? '<div class="empty">Не удалось загрузить случаи</div>' :
+         cs.length ? '<div class="care-cases">' + cs.map(function (x) { return careCaseRow(x, d, true); }).join('') + '</div>' :
+         '<div class="empty">Все случаи разложены по причинам.</div>') + '</div>';
+    }
+    view.innerHTML = tabs + body;
+    careWire(view, d);
+  }
+
+  function careSend(path, method, payload, ok) {
+    return api(path, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function (r) { if (ok) showToast(ok); careRefresh(); return r; })
+      .catch(function (e) {
+        if (e.message === '403' || e.message === '403acl') showToast('Нет прав менять раздел «Забота»');
+        else showToast('Не получилось сохранить: ' + ((e.body && e.body.detail) || 'проверь интернет'));
+        throw e;
+      });
+  }
+
+  function careWire(view, d) {
+    function each(sel, fn) { Array.prototype.forEach.call(view.querySelectorAll(sel), fn); }
+    function bad(inp) { inp.classList.add('al-err'); inp.focus(); }
+    each('[data-ctab]', function (b) {
+      b.addEventListener('click', function () { state.careTab = b.getAttribute('data-ctab'); renderView(); });
+    });
+    each('[data-copen]', function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-copen');
+        state.careOpen = state.careOpen === id ? null : id;
+        careRender();
+      });
+    });
+    each('[data-call]', function (b) {
+      b.addEventListener('click', function () { state.careAll = +b.getAttribute('data-call'); careRender(); });
+    });
+    /* Набранное в форме починки живет в state.careDraft: обновление данных перерисовывает
+       экран, и без черновика текст пропадал бы (приемка 23.11). */
+    each('[data-fd],[data-fw],[data-fr]', function (inp) {
+      inp.addEventListener('input', function () {
+        inp.classList.remove('al-err');
+        var id = inp.getAttribute('data-fd') || inp.getAttribute('data-fw') || inp.getAttribute('data-fr');
+        var k = inp.hasAttribute('data-fd') ? 'd' : inp.hasAttribute('data-fw') ? 'w' : 'r';
+        state.careDraft = state.careDraft || {};
+        (state.careDraft[id] = state.careDraft[id] || {})[k] = inp.value;
+      });
+    });
+    each('[data-fadd]', function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-fadd');
+        var w = view.querySelector('[data-fw="' + id + '"]'), dd = view.querySelector('[data-fd="' + id + '"]');
+        if ((w.value || '').trim().length < 3) { bad(w); return showToast('Напиши, что поменяли'); }
+        if (!dd.value || dd.value > careToday()) { bad(dd); return showToast('Выбери день починки, не позже сегодня'); }
+        careSend('/admin/api/care/causes/' + id + '/fixes', 'POST', {
+          done_on: dd.value, what: w.value.trim(),
+          ref: (view.querySelector('[data-fr="' + id + '"]').value || '').trim()
+        }, 'Починку записал, причина закрыта. Придет новый случай — откроется сама').then(function () {
+          if (state.careDraft) delete state.careDraft[id];
+        }).catch(function () {});
+      });
+    });
+    each('[data-cmove]', function (s) {
+      s.addEventListener('change', function () {
+        var cid = +s.getAttribute('data-cmove');
+        if (s.value === 'new') { state.careNewFor = cid; careRender(); var i = view.querySelector('[data-cnew="' + cid + '"]'); if (i) i.focus(); return; }
+        state.careNewFor = null;
+        if (!s.value) return;
+        careSend('/admin/api/care/cases/' + cid, 'PATCH', { cause_id: +s.value },
+                 'Случай отнесен к «' + s.options[s.selectedIndex].text + '»').catch(function () {});
+      });
+    });
+    each('[data-cnewb]', function (b) {
+      b.addEventListener('click', function () {
+        var cid = b.getAttribute('data-cnewb'), inp = view.querySelector('[data-cnew="' + cid + '"]');
+        var t = (inp.value || '').trim();
+        if (t.length < 3) { bad(inp); return showToast('Назови причину'); }
+        careSend('/admin/api/care/causes', 'POST', { title: t }, null).then(function (r) {
+          state.careNewFor = null;
+          return careSend('/admin/api/care/cases/' + cid, 'PATCH', { cause_id: r.id }, 'Причина заведена, случай отнесен к ней');
+        }).catch(function () {});
+      });
+    });
+  }
+
   /* ── Кейсы выпускников ────────────────────────────────────────────────────
      Бот собирает истории поступивших (четыре вопроса, видео, фото, согласие), и
      до 13.10.2026 все это лежало в базе без единого экрана: Вера спрашивала,
@@ -53928,9 +54199,18 @@
        диагностику у тьюторов». Берём последнюю регистрацию: их бывает несколько, а в
        шапке место под одну строку, остальные видно на экране «Запуски». */
     var lnch = (d && d.launches && d.launches[0]) || null;
+    /* С каким вариантом главной истсайд.рф человек пришел (?v= → utm_segment) и откуда:
+       менеджер сразу видит, с чего начинать разговор (Вера, 23.11.2026). */
+    var utm = (d && d.utm) || {};
+    var segName = { '9': '9 класс', '10': '10 класс', '11': '11 класс', student: 'студент', shkolnik: 'школьник' }[utm.utm_segment];
+    var cameAs = segName || utm.utm_source
+      ? '<span title="Вариант главной и источник перехода">' +
+        esc([segName ? 'как ' + segName : '', utm.utm_source ? mkSourceName(utm.utm_source) : ''].filter(Boolean).join(', ')) + '</span>'
+      : '';
     var subBits = [
       sevPill(lead || { crm: crm, booking: booking }),
       '<span>пришел ' + fmtWhen(base.created_at) + '</span>',
+      cameAs,
       (lnch ? '<span title="Человек зарегистрирован на этот запуск">' + esc(lnch.title) +
         (lnch.minutes ? ', ' + lnch.minutes + ' мин эфира' : '') + '</span>' : ''),
       (lnch && lnch.call_at
