@@ -15820,7 +15820,12 @@ video.cs-media { background: #000; }
 .sb-rt.big .sb-rn { font-size: 34px; letter-spacing: -.03em; }
 .sb-rt.cons .sb-rn { color: var(--navy); }
 .sb-reg .mg-who { margin: 0 20px 20px; }
+/* Интенсив в сверке (Павел 24.11.2026): выбор интенсива и три фильтра людей под входами. */
+.sb-rint { border-top: 1px solid var(--line); margin-top: 2px; }
+.sb-rint-h { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 20px 0; }
+.sb-rint-h .list-quick { padding: 0; border: 0; margin: 0; }
 @media (max-width: 760px) {
+  .sb-rint-h { padding: 12px 16px 0; }
   .sb-rtop { grid-template-columns: 1fr; padding: 0 16px; }
   .sb-rkinds { grid-template-columns: 1fr 1fr; padding: 10px 16px 16px; }
   .sb-rt.big .sb-rn { font-size: 28px; }
@@ -16540,7 +16545,3 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
   .rfd-r.done .dbt-v[data-l="Вернули"] { grid-row: 1; }
   .rfd-r.done .dbt-v[data-l="Срок"] { grid-row: 2; }
 }
-
-/* Переход из «Продаж» в «Запуски»: ссылка, а не вкладка, поэтому стоит справа от вкладок
-   (Павел 24.11.2026). */
-.sb-tabs .sb-out { margin-left: auto; text-decoration: none; }

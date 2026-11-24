@@ -40960,8 +40960,9 @@
     var kinds = SB_REG_KINDS.filter(function (k) { return g.by[k.k].n; }).map(function (k) {
       return tile(k.k, k.t, g.by[k.k].n, 'с контактом ' + g.by[k.k].c, '');
     }).join('');
-    var list = '';
-    if (open && g.list[open]) {
+    var intb = sbIntBlock(cc, open, tile);
+    var list = intb.list;
+    if (!list && open && g.list[open]) {
       var lbl = open === 'all' ? 'Все, кто пришел' : open === 'own' ? 'Взяли в работу' : open === 'free' ? 'Без менеджера'
         : (SB_REG_KINDS.filter(function (k) { return k.k === open; })[0] || {}).t;
       list = mgWhoCard([[lbl, '', 'reg_' + open]], {k: 'reg_' + open}, g.list[open], mgSpan(r.a, r.b))
@@ -40979,7 +40980,64 @@
       '</div>' +
       (rest > 0 ? '<div class="sb-rnote">Еще ' + rest + ' ' + plural(rest, 'человек', 'человека', 'человек') +
         ' не в работе: без контакта, отказ, уже клиент или отмечены «не лид».</div>' : '') +
-      (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
+      (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + intb.html + list + '</div>';
+  }
+
+  /* Интенсив в «Сверке лидов» (Павел 24.11.2026: «это должно отображаться в лидах, чтобы я
+     мог просто отфильтровать», «посмотреть, кто у нас купил после интенсива»). Признаки
+     людей считает сервер теми же флагами, что плашки «Запусков» (`/launch/cards`), здесь
+     только выбор интенсива и фильтр. Отрезок сверки на интенсив не действует: люди
+     интенсива пришли в свои даты, и фильтр показывает их всех. В список идут те, кто есть
+     в лидах (сквозная): по ним видно этап, ведущего и историю. */
+  var SB_INT_STEPS = [
+    ['int_v', 'Были на эфире', 'узнанные зрители', function (c) { return c.viewed; }],
+    ['int_b', 'Купили', 'любая оплата после регистрации', function (c) { return c.bought; }],
+    ['int_n', 'Были и не купили', 'оплат нет, база для обзвона', function (c) { return c.viewed && !c.bought; }]
+  ];
+  function sbIntLoad() {
+    if (state._sbInt) return;
+    state._sbInt = 'wait';
+    api('/admin/api/marketing/launch/cards').then(function (r) {
+      state._sbInt = r && r.launches ? r : 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function () { state._sbInt = 'none'; });
+  }
+  function sbIntBlock(cc, open, tile) {
+    sbIntLoad();
+    var d = state._sbInt;
+    if (!d || d === 'wait' || d === 'none' || !d.launches.length) return { html: '', list: '' };
+    var lc = d.launches.filter(function (x) { return x.slug === state.sbIntSlug; })[0] || d.launches[0];
+    if (cc._byId !== cc.leads) {
+      cc._idx = {};
+      (cc.leads || []).forEach(function (x) { cc._idx[x.i] = x; });
+      cc._byId = cc.leads;
+    }
+    var pick = function (f) {
+      var out = [];
+      lc.cards.forEach(function (c) { var x = cc._idx[c.id]; if (x && f(c)) out.push(x); });
+      return out;
+    };
+    var lists = {};
+    var tiles = SB_INT_STEPS.map(function (st) {
+      lists[st[0]] = pick(st[3]);
+      return tile(st[0], st[1], lists[st[0]].length, st[2], '');
+    }).join('');
+    var chips = d.launches.map(function (x) {
+      return '<button class="qchip' + (x.slug === lc.slug ? ' on' : '') + '" data-sbint="' + esc(x.slug) + '">' +
+        esc(x.title) + '</button>';
+    }).join('');
+    var list = '';
+    if (lists[open]) {
+      var st = SB_INT_STEPS.filter(function (z) { return z[0] === open; })[0];
+      list = mgWhoCard([[st[1], '', 'reg_' + open]], {k: 'reg_' + open}, lists[open], lc.title)
+        .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
+    }
+    return {
+      html: '<div class="sb-rint"><div class="sb-rint-h"><span class="sb-rl">Интенсив</span>' +
+        '<div class="list-quick">' + chips + '</div></div>' +
+        '<div class="sb-rkinds">' + tiles + '</div></div>',
+      list: list
+    };
   }
 
   // Цифры отрезка той же функцией, что лестница: вердикт шапки не спорит с ней.
@@ -41948,6 +42006,12 @@
         renderView();
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sbint]'), function (b) {
+      b.addEventListener('click', function () {
+        state.sbIntSlug = b.getAttribute('data-sbint');
+        renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sbreg]'), function (b) {
       b.addEventListener('click', function () {
         var k = b.getAttribute('data-sbreg');
@@ -42058,13 +42122,7 @@
     return '<div class="list-quick sb-tabs">' + SB_TABS.filter(function (t) { return !t.fin || smCan(); }).map(function (t) {
       return '<button class="qchip' + (t.id === sbTab() ? ' on' : '') + '" data-sbtab="' + t.id + '">' +
         esc(t.label) + (t.id === 'hyp' && n ? ' · ' + n : '') + '</button>';
-    }).join('') +
-      /* Интенсивы считает один экран — «Запуски» в Маркетинге (Павел 24.11.2026: у Оли
-         и в Продажах должны быть одни цифры). Отсюда только переход туда, своего
-         подсчета у Продаж нет. */
-      (can('marketing') ? '<a class="qchip sb-out" href="#page/marketing/launch"' +
-        ' title="Регистрации, кто был на эфире, кто купил и кто нет — экран Запусков">Интенсивы</a>' : '') +
-      '</div>';
+    }).join('') + '</div>';
   }
   function sbTabsBind(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-sbtab]'), function (b) {
