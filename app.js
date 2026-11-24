@@ -36953,6 +36953,10 @@
     var pr = pay.product, cr = pay.crm || {}, ld = pay.ledger || {};
     var rub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
     var n = (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
+    /* Сервер считает плашку тем же запросом, что и список по клику: люди, а не
+       счета и строки ведомости, и одна оплата один раз (Ольга 24.11.2026: «я должна
+       всех видеть»). Старый счет по трем дорогам — только для старого бэкенда. */
+    if (pay.support) { rub = pay.support.rub || 0; n = pay.support.people || 0; }
     return [{
       /* Заголовок короткий, да ещё с мягким переносом внутри слова: колонка в самой
          плотной полосе уже «Сопровождения», и без переноса слово обрезалось на
@@ -37427,6 +37431,20 @@
       'maxlength="120" placeholder="как есть" value="' + esc(fx.real_source || '') + '"></span>';
   }
 
+  /* Оплаты человека строками: сумма, дата, за что. И крупные, и мелкие — все, что
+     внесено. Строки, которые не входят в сумму «Сопровождения» (участие 690 ₽,
+     мелкие доплаты), видны приглушенно с пометкой (Ольга 24.11.2026). */
+  function lpPays(p) {
+    var ls = p.pays || [];
+    if (!ls.length) return '';
+    return ls.map(function (x) {
+      var day = x[1] ? String(x[1]).split('-').reverse().join('.') : 'дата не указана';
+      return '<small class="lp-pay' + (x[3] ? '' : ' off') + '"><b class="num">' +
+        fmtMoney(x[0]) + ' ₽</b> · ' + esc(day) + ' · ' + esc(x[2] || 'оплата') +
+        (x[3] ? '' : ' · не в сумме') + '</small>';
+    }).join('');
+  }
+
   function launchPeopleRow(p, edit) {
     var id = (p.session_id == null || p.session_id === '') ? '' : String(p.session_id);
     /* Откуда пришёл: метка ссылки — главное, канал связи — подпись. Метки нет —
@@ -37441,7 +37459,7 @@
     return '<div class="lp-tr' + (id ? ' go' : '') + off + '"' +
       (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
       '><span class="lp-nm">' + esc(p.name || 'Без имени') +
-        (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</span>' +
+        (p.note ? '<small>' + esc(p.note) + '</small>' : '') + lpPays(p) + '</span>' +
       '<span class="lp-ct">' + lpCell(p.contact) + '</span>' +
       /* Название ссылки длиннее колонки и обрезается многоточием: полное отдаём
          подсказкой, иначе «Консультация · рассылка бота 12:…» ничего не говорит. */
@@ -37534,8 +37552,14 @@
        цифра на плашке — про одно и то же, иначе проверка ничего не доказывает. */
     /* .mk-modal-t — flex-контейнер, поэтому вся подпись идёт ОДНИМ элементом:
        иначе «·» и число разъезжались на ширину gap и читались как два заголовка. */
+    /* У «Сопровождения» рядом с числом людей — их сумма, сложенная из строк
+       списка: она обязана совпасть с суммой на плашке. */
+    var supSum = p.step === 'support' ? p.rows.reduce(function (a, r) {
+      return a + (r.pays || []).reduce(function (b, x) { return b + (x[3] ? (+x[0] || 0) : 0); }, 0);
+    }, 0) : 0;
     var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
-        ' · <span class="num">' + fmtMoney(total) + '</span></span></div>' +
+        ' · <span class="num">' + fmtMoney(total) + '</span>' +
+        (supSum ? ' · <span class="num">' + fmtMoney(supSum) + ' ₽</span>' : '') + '</span></div>' +
       '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') +
         esc(p.kind === 'block' ? (p.from ? 'с ' + p.from.split('-').reverse().join('.')
                                           : 'весь запуск')
