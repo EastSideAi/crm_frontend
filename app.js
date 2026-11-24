@@ -40969,9 +40969,17 @@
         .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
     }
     var rest = g.total - own.length - free.length;
-    return '<div class="card sp12 sb-reg"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
-      '<div><div class="t">Сверка лидов <span class="sb-rdate">· ' + esc(mgSpan(r.a, r.b)) + '</span></div>' +
-      '<div class="s">новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру: в списке этап, кто ведет и история</div></div></div>' +
+    /* Кого показывает сверка — выбор в шапке, а не отдельный блок (Павел 24.11.2026: «чтобы я
+       мог его выбирать внутри страницы»): лиды отрезка или люди интенсива. */
+    var head = '<div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
+      '<div><div class="t">Сверка лидов <span class="sb-rdate">· ' +
+        esc(intb.on ? intb.title : mgSpan(r.a, r.b)) + '</span></div>' +
+      '<div class="s">' + (intb.on
+        ? 'все, кто зарегистрировался на интенсив, период сверки тут не действует. Нажмите на цифру: в списке этап, кто ведет и история'
+        : 'новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру: в списке этап, кто ведет и история') +
+      '</div></div>' + intb.pick + '</div>';
+    if (intb.on) return '<div class="card sp12 sb-reg">' + head + intb.html + list + '</div>';
+    return '<div class="card sp12 sb-reg">' + head +
       '<div class="sb-rtop three">' +
         tile('all', 'Пришло', g.total, 'с контактом ' + g.contact + ', без контакта ' + (g.total - g.contact), 'big') +
         tile('own', 'Взяли в работу', own.length, 'есть ведущий или уже связались', 'big') +
@@ -40980,7 +40988,7 @@
       '</div>' +
       (rest > 0 ? '<div class="sb-rnote">Еще ' + rest + ' ' + plural(rest, 'человек', 'человека', 'человек') +
         ' не в работе: без контакта, отказ, уже клиент или отмечены «не лид».</div>' : '') +
-      (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + intb.html + list + '</div>';
+      (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
   }
 
   /* Интенсив в «Сверке лидов» (Павел 24.11.2026: «это должно отображаться в лидах, чтобы я
@@ -41004,27 +41012,26 @@
   }
   function sbIntBlock(cc, open, tile) {
     sbIntLoad();
-    var d = state._sbInt;
-    if (!d || d === 'wait' || d === 'none' || !d.launches.length) return { html: '', list: '' };
-    var lc = d.launches.filter(function (x) { return x.slug === state.sbIntSlug; })[0] || d.launches[0];
+    var d = state._sbInt, none = { on: false, html: '', list: '', pick: '', title: '' };
+    if (!d || d === 'wait' || d === 'none' || !d.launches.length) return none;
+    var pick = '<span class="al-selwrap sb-rwho"><select class="al-sel" data-sbint aria-label="Кого показывать в сверке">' +
+      '<option value="">Лиды периода</option>' + d.launches.map(function (x) {
+        return '<option value="' + esc(x.slug) + '"' + (x.slug === state.sbIntSlug ? ' selected' : '') + '>' +
+          esc(x.title) + '</option>';
+      }).join('') + '</select></span>';
+    var lc = d.launches.filter(function (x) { return x.slug === state.sbIntSlug; })[0];
+    if (!lc) return Object.assign(none, { pick: pick });
     if (cc._byId !== cc.leads) {
       cc._idx = {};
       (cc.leads || []).forEach(function (x) { cc._idx[x.i] = x; });
       cc._byId = cc.leads;
     }
-    var pick = function (f) {
-      var out = [];
-      lc.cards.forEach(function (c) { var x = cc._idx[c.id]; if (x && f(c)) out.push(x); });
-      return out;
-    };
     var lists = {};
     var tiles = SB_INT_STEPS.map(function (st) {
-      lists[st[0]] = pick(st[3]);
-      return tile(st[0], st[1], lists[st[0]].length, st[2], '');
-    }).join('');
-    var chips = d.launches.map(function (x) {
-      return '<button class="qchip' + (x.slug === lc.slug ? ' on' : '') + '" data-sbint="' + esc(x.slug) + '">' +
-        esc(x.title) + '</button>';
+      var out = [];
+      lc.cards.forEach(function (c) { var x = cc._idx[c.id]; if (x && st[3](c)) out.push(x); });
+      lists[st[0]] = out;
+      return tile(st[0], st[1], out.length, st[2], 'big' + (st[0] === 'int_b' ? ' cons' : ''));
     }).join('');
     var list = '';
     if (lists[open]) {
@@ -41032,13 +41039,10 @@
       list = mgWhoCard([[st[1], '', 'reg_' + open]], {k: 'reg_' + open}, lists[open], lc.title)
         .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
     }
-    return {
-      html: '<div class="sb-rint"><div class="sb-rint-h"><span class="sb-rl">Интенсив</span>' +
-        '<div class="list-quick">' + chips + '</div></div>' +
-        '<div class="sb-rkinds">' + tiles + '</div></div>',
-      list: list
-    };
+    return { on: true, pick: pick, title: lc.title, list: list,
+             html: '<div class="sb-rtop three sb-rint">' + tiles + '</div>' };
   }
+
 
   // Цифры отрезка той же функцией, что лестница: вердикт шапки не спорит с ней.
   function sbLadderNums() {
@@ -42006,9 +42010,10 @@
         renderView();
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-sbint]'), function (b) {
-      b.addEventListener('click', function () {
-        state.sbIntSlug = b.getAttribute('data-sbint');
+    Array.prototype.forEach.call(view.querySelectorAll('select[data-sbint]'), function (b) {
+      b.addEventListener('change', function () {
+        state.sbIntSlug = b.value;
+        state._sbReg = null;
         renderView();
       });
     });

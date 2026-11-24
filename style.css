@@ -15820,12 +15820,13 @@ video.cs-media { background: #000; }
 .sb-rt.big .sb-rn { font-size: 34px; letter-spacing: -.03em; }
 .sb-rt.cons .sb-rn { color: var(--navy); }
 .sb-reg .mg-who { margin: 0 20px 20px; }
-/* Интенсив в сверке (Павел 24.11.2026): выбор интенсива и три фильтра людей под входами. */
-.sb-rint { border-top: 1px solid var(--line); margin-top: 2px; }
-.sb-rint-h { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 20px 0; }
-.sb-rint-h .list-quick { padding: 0; border: 0; margin: 0; }
+/* Кого показывает сверка: выбор в шапке (Павел 24.11.2026). Лиды периода или люди интенсива. */
+.sb-reg .sec-head .sb-rwho { width: auto; min-width: 220px; margin-left: auto; align-self: center; }
+.sb-rint { padding-bottom: 20px; }
 @media (max-width: 760px) {
-  .sb-rint-h { padding: 12px 16px 0; }
+  .sb-reg .sec-head { flex-wrap: wrap; }
+  .sb-reg .sec-head .sb-rwho { width: 100%; margin-left: 0; }
+  .sb-rint { padding-bottom: 16px; }
   .sb-rtop { grid-template-columns: 1fr; padding: 0 16px; }
   .sb-rkinds { grid-template-columns: 1fr 1fr; padding: 10px 16px 16px; }
   .sb-rt.big .sb-rn { font-size: 28px; }
