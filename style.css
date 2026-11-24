@@ -13530,6 +13530,28 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 /* Закрытый месяц тише живого: по нему уже заплатили, трогать нечего. */
 .rw-shut .rw-total b { color: var(--ink-2); }
 
+/* Карточка сотрудника в разделе «Мотивация»: окно Павла поверх расчёта —
+   график выплат 10/20 и список регулярных задач человека за месяц. */
+.mp-back { margin-bottom: 14px; }
+.mp-pay { padding: 6px 24px 20px; }
+.mp-pay-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 14px; padding: 13px 0; border-top: 1px solid var(--line); }
+.mp-pay-row:first-child { border-top: 0; }
+.mp-pay-row .num { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mp-pd { font-size: 12.5px; font-weight: 700; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 5px 12px; white-space: nowrap; }
+.mp-pt { font-size: 13.5px; color: var(--ink-2); min-width: 0; }
+.mp-tasks { padding: 4px 24px 18px; }
+.mp-task { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+  padding: 11px 0; border-top: 1px solid var(--line); }
+.mp-task:first-child { border-top: 0; }
+.mp-tk-nm { font-size: 13.5px; color: var(--ink); min-width: 0; }
+@media (max-width: 560px) {
+  .mp-pay, .mp-tasks { padding-left: 16px; padding-right: 16px; }
+  .mp-pay-row { grid-template-columns: auto 1fr; row-gap: 2px; }
+  .mp-pay-row .num { grid-column: 2; text-align: right; }
+}
+
 /* KPI месяца в расчетном листе ведомости: те же строки, что в «Вознаграждении»,
    свернуты по людям. Раскрытие — по нажатию на человека. */
 .frw { padding: 0; overflow: hidden; margin-bottom: 14px; }

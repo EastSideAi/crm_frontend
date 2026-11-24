@@ -29813,7 +29813,30 @@
       }).catch(function (e) { finFail(e, 'planstatus'); }).then(done);
     });
   }
-  function renderMotiv(view) { return renderMotivDirector(view); }
+  function renderMotiv(view) {
+    if (state.motivPerson) return renderMotivPerson(view);
+    if (state.motivTab === 'people') return renderMotivPeople(view);
+    return renderMotivDirector(view);
+  }
+  /* Переключатель раздела: план команды (план-факт) и поименные карточки. Системный
+     сегмент .tabs, как в каскаде Факт/План. */
+  function motivSeg() {
+    var t = state.motivTab === 'people' ? 'people' : 'team';
+    var opt = [['team', 'План команды'], ['people', 'Сотрудники']];
+    return '<nav class="tabs" style="margin-bottom:14px">' + opt.map(function (o) {
+      return '<a class="tab' + (t === o[0] ? ' on' : '') + '" data-motivtab="' + o[0] + '">' +
+        o[1] + '</a>';
+    }).join('') + '</nav>';
+  }
+  function motivSegBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-motivtab]'), function (a) {
+      a.addEventListener('click', function () {
+        state.motivTab = a.getAttribute('data-motivtab');
+        state.motivPerson = null; saveUi();
+        renderView();
+      });
+    });
+  }
   function renderMotivDirector(view) {
     if (!FIN.planstatus) {
       if (FIN.err) return finErrView(view);
@@ -29845,7 +29868,7 @@
         '<span class="pl-val">' + planCell + factCell + '</span>' +
       '</div>';
     }).join('');
-    view.innerHTML = statBar(tiles) +
+    view.innerHTML = motivSeg() + statBar(tiles) +
       '<div class="card listcard">' +
         '<div class="list-tools plm-head"><div>' +
           '<div class="t fe-t">Мотивация команды: план и факт</div>' +
@@ -29869,7 +29892,206 @@
         if (a === 'prev') finMonthShift(-1); else if (a === 'next') finMonthShift(1);
       });
     });
+    motivSegBind(view);
     pageAnim(view);
+  }
+
+  /* ── Карточка сотрудника: окно Павла поверх расчёта Романа ─────────────────
+     Фикс, KPI и выплаты берём из того же листа «Вознаграждение» (reward_sheet) —
+     вторую базу не заводим, это те же деньги, что у Романа, показанные удобно
+     Павлу. Регулярные задачи — из ритма. Экран на ЧТЕНИЕ: запись (Павел задаёт
+     фикс и KPI → в базу Романа) включается отдельным шагом после сверки с
+     Романом и security-audit. */
+  function motivRwLoad() {
+    var m = finPlanMonth();
+    if (state._motivRwMon === m && state._motivRw) return;
+    state._motivRwMon = m; state._motivRw = null;
+    api('/admin/api/reward?period=' + m).then(function (r) {
+      if (finPlanMonth() !== m) return;
+      state._motivRw = r;
+      if (state.page === 'motiv') renderView();
+    }).catch(function (e) {
+      if (finPlanMonth() !== m) return;
+      state._motivRw = e.message === '403' ? 'noaccess' : 'none';
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  function motivTasksLoad(id) {
+    state._motivTasks = state._motivTasks || {};
+    if (state._motivTasks[id]) return;
+    state._motivTasks[id] = 'loading';
+    api('/admin/api/rhythm/team/stats/person?user_id=' + id + '&period=month').then(function (r) {
+      state._motivTasks[id] = r;
+      if (state.page === 'motiv') renderView();
+    }).catch(function () {
+      state._motivTasks[id] = 'none';
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  /* Ближайшая выплата-остаток: расчёт месяца закрывается в начале следующего,
+     остаток и KPI платят 10-го. Отдаём ближайшее 10-е от сегодня. */
+  function motivNextPay() {
+    var now = new Date();
+    var d = new Date(now.getFullYear(), now.getMonth(), 10);
+    if (now.getDate() >= 10) d = new Date(now.getFullYear(), now.getMonth() + 1, 10);
+    var mon = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
+               'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    return '10 ' + mon[d.getMonth()];
+  }
+
+  function renderMotivPeople(view) {
+    if (!state._motivRw) { view.innerHTML = motivSeg() + dashSkeleton(); motivRwLoad(); return; }
+    if (state._motivRw === 'noaccess') {
+      view.innerHTML = motivSeg() + '<div class="card"><div class="empty">Поимённые карточки ' +
+        'открыты тем, у кого есть доступ к расчётным листам. Попроси Романа или открой ' +
+        'раздел «Вознаграждение» в Финансах.</div></div>';
+      motivSegBind(view); return;
+    }
+    if (state._motivRw === 'none') {
+      view.innerHTML = motivSeg() + '<div class="card"><div class="empty">Не удалось ' +
+        'загрузить людей — проверь сеть.</div></div>';
+      motivSegBind(view); return;
+    }
+    var d = state._motivRw, all = d.sheets || [];
+    var groups = (d.depts || []).map(function (g) {
+      var mine = all.filter(function (s) { return (s.dept || '') === g.key; });
+      if (!mine.length) return '';
+      return '<div class="rw-dept"><div class="rw-dept-t">' + esc(g.label) + '</div>' +
+          '<div class="rw-dept-s">' + mine.length + ' ' +
+            plural(mine.length, 'человек', 'человека', 'человек') + '</div></div>' +
+        mine.map(motivPersonRow).join('');
+    }).join('');
+    view.innerHTML = motivSeg() +
+      '<div class="card listcard">' +
+        '<div class="list-tools plm-head"><div>' +
+          '<div class="t fe-t">Сотрудники</div>' +
+          '<div class="s fe-s">нажми на человека — фикс, что в него входит, KPI на период ' +
+            'и когда выплата. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
+        '</div>' + finMonthNav() + '</div>' +
+        (groups || '<div class="empty">Ни одного расчётного листа пока нет.</div>') +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-motivperson]'), function (r) {
+      r.addEventListener('click', function () {
+        state.motivPerson = parseInt(r.getAttribute('data-motivperson'), 10); saveUi();
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-plm]'), function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-plm');
+        if (a === 'prev') finMonthShift(-1); else if (a === 'next') finMonthShift(1);
+      });
+    });
+    motivSegBind(view); pageAnim(view);
+  }
+  function motivPersonRow(s) {
+    return '<div class="pl-row pl-go" data-motivperson="' + s.person_id + '">' +
+      '<span class="pl-nm">' + esc(s.name) +
+        (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</span>' +
+      '<span class="pl-val">' +
+        '<span class="pl-sum num">фикс ' + fmtMoney(s.fund_rub) + '</span>' +
+        '<span class="pl-fact num' + (s.total_rub ? '' : ' muted') + '">к выплате ' +
+          fmtMoney(s.total_rub) + '</span>' +
+      '</span>' + ic('go', 15) +
+    '</div>';
+  }
+
+  function renderMotivPerson(view) {
+    var id = state.motivPerson;
+    if (!state._motivRw) { view.innerHTML = dashSkeleton(); motivRwLoad(); return; }
+    if (state._motivRw === 'noaccess' || state._motivRw === 'none') {
+      state.motivPerson = null; return renderMotivPeople(view);
+    }
+    var s = (state._motivRw.sheets || []).filter(function (x) {
+      return x.person_id === id;
+    })[0];
+    var back = '<button class="qchip mp-back" data-motivback="1">← К сотрудникам</button>';
+    if (!s) {
+      view.innerHTML = back + '<div class="card"><div class="empty">У этого человека нет ' +
+        'расчётного листа в «Вознаграждении». Деньги тьюторов считаются по вехам, ' +
+        'продавцов — процентом и сменами, это отдельные окна.</div></div>';
+      motivPersonBack(view); return;
+    }
+    motivTasksLoad(id);
+    var tk = (state._motivTasks || {})[id];
+    var rows = s.rows || [];
+    var tiles = [
+      { label: 'Фикс', value: fmtMoney(s.fund_rub) + ' ₽', sub: 'постоянная часть' },
+      { label: 'Начислено за месяц', value: fmtMoney(s.month_rub) + ' ₽', sub: 'фикс и показатели' },
+      { label: 'Ближайшая выплата', value: fmtMoney(s.total_rub) + ' ₽', sub: motivNextPay(), lead: true },
+      { label: 'Ушло авансом', value: fmtMoney(s.first_pay_rub) + ' ₽', sub: '20-го, половина фикса' },
+    ];
+
+    var whenPay = '<div class="card sp12">' +
+      '<div class="sec-head"><div><div class="t">Когда выплата</div>' +
+        '<div class="s">два раза в месяц, как у всей команды</div></div></div>' +
+      '<div class="mp-pay">' +
+        '<div class="mp-pay-row"><span class="mp-pd">20 числа</span>' +
+          '<span class="mp-pt">аванс — первая половина фикса</span>' +
+          '<span class="num">' + fmtMoney(s.first_pay_rub) + ' ₽</span></div>' +
+        '<div class="mp-pay-row"><span class="mp-pd">10 числа</span>' +
+          '<span class="mp-pt">остаток фикса и весь KPI за месяц</span>' +
+          '<span class="num">' + fmtMoney(s.total_rub) + ' ₽</span></div>' +
+      '</div></div>';
+
+    var kpi = '<div class="card sp12">' +
+      '<div class="sec-head"><div><div class="t">KPI на период</div>' +
+        '<div class="s">' + (s.questions
+          ? s.questions + ' ' + plural(s.questions, 'строка ждёт', 'строки ждут', 'строк ждут') +
+            ' цифру — пока сумма не окончательная'
+          : 'все строки посчитаны') + '</div></div>' +
+        '<div class="rw-total"><b>' + fmtMoney(s.total_rub) + ' ₽</b><small>к выплате</small></div>' +
+      '</div>' +
+      (rows.length
+        ? '<div class="rw-rows">' + rows.map(function (r) { return rwRow(r, true); }).join('') + '</div>'
+        : '<div class="empty">В листе нет ни одной строки — его ещё не заполнили.</div>') +
+    '</div>';
+
+    var tasks;
+    if (!tk || tk === 'loading') {
+      tasks = '<div class="card sp12"><div class="sec-head"><div><div class="t">' +
+        'Регулярные задачи</div></div></div><div class="empty">Собираем задачи…</div></div>';
+    } else if (tk === 'none') {
+      tasks = '';
+    } else {
+      var t = tk.totals || {};
+      var done = (tk.tasks || []).filter(function (x) { return x.status === 'done'; }).slice(0, 8);
+      tasks = '<div class="card sp12">' +
+        '<div class="sec-head"><div><div class="t">Регулярные задачи и отчётность</div>' +
+          '<div class="s">это и есть, что входит в фикс — работа человека за месяц</div></div>' +
+          '<div class="rw-total"><b>' + (t.done || 0) + ' из ' + (t.plan || 0) + '</b>' +
+            '<small>сделано' + (t.overdue ? ', ' + t.overdue + ' просрочено' : '') + '</small></div>' +
+        '</div>' +
+        (done.length
+          ? '<div class="mp-tasks">' + done.map(function (x) {
+              return '<div class="mp-task"><span class="mp-tk-nm">' + esc(x.title) +
+                (x.client_name ? ' <span class="smut">' + esc(x.client_name) + '</span>' : '') +
+                '</span><span class="smut">' + (x.closed_at ? dayLabel(x.closed_at) : '') +
+                '</span></div>';
+            }).join('') + '</div>'
+          : '<div class="empty">За этот месяц закрытых задач ещё нет.</div>') +
+      '</div>';
+    }
+
+    view.innerHTML = back +
+      '<div class="card sp12"><div class="sec-head rw-head"><div>' +
+        '<div class="t">' + esc(s.name) +
+          (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</div>' +
+        '<div class="s">расчёт за ' + esc(pfMonthTitle(state._motivRw.period)) + '</div></div></div></div>' +
+      statBar(tiles) + whenPay + kpi + tasks +
+      '<div class="fin-note">' + ic('alert', 13) +
+        'Это те же деньги, что у Романа в расчётном листе — показаны в твоём окне. ' +
+        'Пока только просмотр: выставлять фикс и назначать KPI отсюда подключу отдельным ' +
+        'шагом, когда сверимся с Романом, куда это писать.' +
+      '</div>';
+    motivPersonBack(view); pageAnim(view);
+  }
+  function motivPersonBack(view) {
+    var b = view.querySelector('[data-motivback]');
+    if (b) b.addEventListener('click', function () {
+      state.motivPerson = null; state.motivTab = 'people'; saveUi(); renderView();
+    });
+    motivSegBind(view);
   }
 
   function renderFinPlans(view) {
