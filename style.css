@@ -15820,7 +15820,13 @@ video.cs-media { background: #000; }
 .sb-rt.big .sb-rn { font-size: 34px; letter-spacing: -.03em; }
 .sb-rt.cons .sb-rn { color: var(--navy); }
 .sb-reg .mg-who { margin: 0 20px 20px; }
+/* Кого показывает сверка: выбор в шапке (Павел 24.11.2026). Лиды периода или люди интенсива. */
+.sb-reg .sec-head .sb-rwho { width: auto; min-width: 220px; margin-left: auto; align-self: center; }
+.sb-rint { padding-bottom: 20px; }
 @media (max-width: 760px) {
+  .sb-reg .sec-head { flex-wrap: wrap; }
+  .sb-reg .sec-head .sb-rwho { width: 100%; margin-left: 0; }
+  .sb-rint { padding-bottom: 16px; }
   .sb-rtop { grid-template-columns: 1fr; padding: 0 16px; }
   .sb-rkinds { grid-template-columns: 1fr 1fr; padding: 10px 16px 16px; }
   .sb-rt.big .sb-rn { font-size: 28px; }

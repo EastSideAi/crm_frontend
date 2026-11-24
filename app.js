@@ -36402,7 +36402,15 @@
     return { key: 'efir', label: 'Были на эфире', value: live, step: 'viewers',
              stepPlate: live,
              sub: (v.known.viewers || 0) + ' с карточкой · ' + (v.anon.viewers || 0) +
-                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : ''),
+                  ' без регистрации' + (rec ? ' · запись смотрели ' + rec : '') +
+                  /* Кто был на эфире и не заплатил ничего — база обзвона продаж (Павел
+                     24.11.2026). Только узнанные: зрителю без регистрации не позвонить. */
+                  (v.known.viewers_nobuy != null
+                    ? ' · <span class="go-sub" data-lstep="viewers_nobuy" data-lfree="1"' +
+                      ' data-ltitle="Были на эфире и ничего не купили"' +
+                      ' data-lplate="' + v.known.viewers_nobuy + '" role="button" tabindex="0"' +
+                      ' title="Показать этих людей поименно">не купили ' + v.known.viewers_nobuy + '</span>'
+                    : ''),
              pct: launchPct(live, regShown, 'от регистраций') };
   }
 
@@ -39232,6 +39240,12 @@
       var openIt = function () {
         var key = n.getAttribute('data-lstep');
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
+        /* Срез, которого нет в лестнице пути (подпись «не купили» под залом): список
+           тот же, ступень описывает сама подпись. */
+        if (!st && n.getAttribute('data-lfree')) {
+          st = { key: key, title: n.getAttribute('data-ltitle') || '',
+                 people: parseInt(n.getAttribute('data-lplate') || '0', 10) };
+        }
         if (!st) return;
         /* Плашка «по всему запуску» открывает список блока — тот самый, из которого
            посчитано её крупное число. Список записавшихся тут был бы пустым и снова
@@ -39255,9 +39269,11 @@
         }) : st;
         launchPeopleOpen(cur.slug, st2, cur.title, n, ot || '', !!ttl);
       };
-      n.addEventListener('click', openIt);
+      /* Подпись-ссылка внутри плашки: клик не должен открыть еще и список самой
+         плашки поверх. */
+      n.addEventListener('click', function (e) { if (n.getAttribute('data-lfree')) e.stopPropagation(); openIt(); });
       n.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openIt(); }
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-lsplit]'), function (n) {
@@ -40944,17 +40960,26 @@
     var kinds = SB_REG_KINDS.filter(function (k) { return g.by[k.k].n; }).map(function (k) {
       return tile(k.k, k.t, g.by[k.k].n, 'с контактом ' + g.by[k.k].c, '');
     }).join('');
-    var list = '';
-    if (open && g.list[open]) {
+    var intb = sbIntBlock(cc, open, tile);
+    var list = intb.list;
+    if (!list && open && g.list[open]) {
       var lbl = open === 'all' ? 'Все, кто пришел' : open === 'own' ? 'Взяли в работу' : open === 'free' ? 'Без менеджера'
         : (SB_REG_KINDS.filter(function (k) { return k.k === open; })[0] || {}).t;
       list = mgWhoCard([[lbl, '', 'reg_' + open]], {k: 'reg_' + open}, g.list[open], mgSpan(r.a, r.b))
         .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
     }
     var rest = g.total - own.length - free.length;
-    return '<div class="card sp12 sb-reg"><div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
-      '<div><div class="t">Сверка лидов <span class="sb-rdate">· ' + esc(mgSpan(r.a, r.b)) + '</span></div>' +
-      '<div class="s">новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру: в списке этап, кто ведет и история</div></div></div>' +
+    /* Кого показывает сверка — выбор в шапке, а не отдельный блок (Павел 24.11.2026: «чтобы я
+       мог его выбирать внутри страницы»): лиды отрезка или люди интенсива. */
+    var head = '<div class="sec-head pf-sec"><span class="ic">' + ic('leads', 14) + '</span>' +
+      '<div><div class="t">Сверка лидов <span class="sb-rdate">· ' +
+        esc(intb.on ? intb.title : mgSpan(r.a, r.b)) + '</span></div>' +
+      '<div class="s">' + (intb.on
+        ? 'все, кто зарегистрировался на интенсив, период сверки тут не действует. Нажмите на цифру: в списке этап, кто ведет и история'
+        : 'новые люди с любого входа и записавшиеся на эфир, каждый учтен один раз. Нажмите на цифру: в списке этап, кто ведет и история') +
+      '</div></div>' + intb.pick + '</div>';
+    if (intb.on) return '<div class="card sp12 sb-reg">' + head + intb.html + list + '</div>';
+    return '<div class="card sp12 sb-reg">' + head +
       '<div class="sb-rtop three">' +
         tile('all', 'Пришло', g.total, 'с контактом ' + g.contact + ', без контакта ' + (g.total - g.contact), 'big') +
         tile('own', 'Взяли в работу', own.length, 'есть ведущий или уже связались', 'big') +
@@ -40965,6 +40990,59 @@
         ' не в работе: без контакта, отказ, уже клиент или отмечены «не лид».</div>' : '') +
       (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
   }
+
+  /* Интенсив в «Сверке лидов» (Павел 24.11.2026: «это должно отображаться в лидах, чтобы я
+     мог просто отфильтровать», «посмотреть, кто у нас купил после интенсива»). Признаки
+     людей считает сервер теми же флагами, что плашки «Запусков» (`/launch/cards`), здесь
+     только выбор интенсива и фильтр. Отрезок сверки на интенсив не действует: люди
+     интенсива пришли в свои даты, и фильтр показывает их всех. В список идут те, кто есть
+     в лидах (сквозная): по ним видно этап, ведущего и историю. */
+  var SB_INT_STEPS = [
+    ['int_v', 'Были на эфире', 'узнанные зрители', function (c) { return c.viewed; }],
+    ['int_b', 'Купили', 'любая оплата после регистрации', function (c) { return c.bought; }],
+    ['int_n', 'Были и не купили', 'оплат нет, база для обзвона', function (c) { return c.viewed && !c.bought; }]
+  ];
+  function sbIntLoad() {
+    if (state._sbInt) return;
+    state._sbInt = 'wait';
+    api('/admin/api/marketing/launch/cards').then(function (r) {
+      state._sbInt = r && r.launches ? r : 'none';
+      if (state.page === 'sales') renderView();
+    }).catch(function () { state._sbInt = 'none'; });
+  }
+  function sbIntBlock(cc, open, tile) {
+    sbIntLoad();
+    var d = state._sbInt, none = { on: false, html: '', list: '', pick: '', title: '' };
+    if (!d || d === 'wait' || d === 'none' || !d.launches.length) return none;
+    var pick = '<span class="al-selwrap sb-rwho"><select class="al-sel" data-sbint aria-label="Кого показывать в сверке">' +
+      '<option value="">Лиды периода</option>' + d.launches.map(function (x) {
+        return '<option value="' + esc(x.slug) + '"' + (x.slug === state.sbIntSlug ? ' selected' : '') + '>' +
+          esc(x.title) + '</option>';
+      }).join('') + '</select></span>';
+    var lc = d.launches.filter(function (x) { return x.slug === state.sbIntSlug; })[0];
+    if (!lc) return Object.assign(none, { pick: pick });
+    if (cc._byId !== cc.leads) {
+      cc._idx = {};
+      (cc.leads || []).forEach(function (x) { cc._idx[x.i] = x; });
+      cc._byId = cc.leads;
+    }
+    var lists = {};
+    var tiles = SB_INT_STEPS.map(function (st) {
+      var out = [];
+      lc.cards.forEach(function (c) { var x = cc._idx[c.id]; if (x && st[3](c)) out.push(x); });
+      lists[st[0]] = out;
+      return tile(st[0], st[1], out.length, st[2], 'big' + (st[0] === 'int_b' ? ' cons' : ''));
+    }).join('');
+    var list = '';
+    if (lists[open]) {
+      var st = SB_INT_STEPS.filter(function (z) { return z[0] === open; })[0];
+      list = mgWhoCard([[st[1], '', 'reg_' + open]], {k: 'reg_' + open}, lists[open], lc.title)
+        .replace('<div class="mg-who">', '<div class="mg-who sb-regwho">');
+    }
+    return { on: true, pick: pick, title: lc.title, list: list,
+             html: '<div class="sb-rtop three sb-rint">' + tiles + '</div>' };
+  }
+
 
   // Цифры отрезка той же функцией, что лестница: вердикт шапки не спорит с ней.
   function sbLadderNums() {
@@ -41929,6 +42007,13 @@
       c.addEventListener('click', function () {
         if (c.closest('.sb-regwho')) state._sbReg = null;
         else if (c.closest('.mg-who')) state._mgQ = null; else state._sbQ = null;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('select[data-sbint]'), function (b) {
+      b.addEventListener('change', function () {
+        state.sbIntSlug = b.value;
+        state._sbReg = null;
         renderView();
       });
     });
