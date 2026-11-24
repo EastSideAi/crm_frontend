@@ -45095,9 +45095,37 @@
     }
     return '<div class="care-case"><span class="care-cd num">' + careDay(x.seen_on) + '</span>' +
       '<span class="care-cs">' + esc(x.symptom) +
-        (x.said ? '<span class="care-said">«' + esc(x.said) + '»</span>' : '') + '</span>' +
+        (x.said ? '<span class="care-said">«' + esc(x.said) + '»</span>' : '') +
+        (x.action ? '<span class="care-act"><b>Что сделать:</b> ' + esc(x.action) + '</span>' : '') + '</span>' +
       '<span class="care-cm">' + (x.resolved === 'no' ? '<span class="sev care-back">не решено</span>' : '') +
-      '<span class="care-src">' + esc(careCh(x)) + '</span>' + link + '</span>' + move + '</div>';
+      '<span class="care-src">' + esc(careCh(x)) + '</span>' + link +
+      '<button class="care-dis" data-cdis="' + x.id + '" title="Разбор ошибся: это не техническая проблема">не забота</button></span>' +
+      move + '</div>';
+  }
+
+  /* «Как решаем» — справочник будущего агента заботы (Вера 24.11.2026: «ты пишешь, как
+     решил бы, я говорю ок или не ок; если ок — подобные потом решаешь сам»). Текст
+     «Ответить: … Руками: … Починить: …» раскладываем по строкам. */
+  function carePlaybook(c) {
+    var editing = state.carePbEdit === c.id;
+    var head = '<div class="care-lab care-pbh">Как решаем' +
+      (c.playbook ? (c.playbook_ok ? '<span class="sev care-ok">согласовано</span>' : '<span class="sev care-wait">ждет твоего ок</span>') : '') +
+      '</div>';
+    if (editing) {
+      return head + '<div class="care-pbe"><textarea class="al-in care-pbt" rows="5" aria-label="Как решаем" data-pbt="' + c.id + '">' +
+        esc(c.playbook || '') + '</textarea>' +
+        '<div class="care-pba"><button class="bp sm" data-pbsave="' + c.id + '">Сохранить и согласовать</button>' +
+        '<button class="bp sm ghost" data-pbcancel="' + c.id + '">Отмена</button></div></div>';
+    }
+    var lines = (c.playbook || '').split(/\s(?=(?:Ответить|Руками|Починить):)/).map(function (ln) {
+      var m = ln.match(/^(Ответить|Руками|Починить):\s*(.*)$/);
+      return m ? '<div class="care-pbl"><b>' + m[1] + '</b><span>' + esc(m[2]) + '</span></div>' : '<div class="care-pbl"><span>' + esc(ln) + '</span></div>';
+    }).join('');
+    return head + (c.playbook ? '<div class="care-pb">' + lines + '</div>' : '<div class="care-txt care-mute">Еще не описали</div>') +
+      '<div class="care-pba">' +
+        (c.playbook && !c.playbook_ok ? '<button class="bp sm" data-pbok="' + c.id + '">Согласовать</button>' : '') +
+        '<button class="bp sm ghost" data-pbedit="' + c.id + '">' + (c.playbook ? 'Изменить' : 'Описать') + '</button>' +
+      '</div>';
   }
 
   function careDetail(c, d) {
@@ -45112,6 +45140,7 @@
     var today = careToday();
     return '<div class="care-det">' +
       '<div class="care-lab">Настоящая причина</div><div class="care-txt">' + (esc(c.root) || 'Еще не нашли') + '</div>' +
+      carePlaybook(c) +
       '<div class="care-lab">Починки</div>' +
       (c.fixes.length ? '<div class="care-fixes">' + c.fixes.map(function (f) {
         var aft = f.after ? '<span class="care-aft back">после нее вернулось · ' + f.after + '</span>'
@@ -45152,7 +45181,7 @@
         return '<div class="care-item' + (open ? ' open' : '') + '">' +
           '<button class="care-row" aria-expanded="' + open + '" data-copen="' + c.id + '">' +
             '<span class="care-main"><span class="care-t">' + esc(c.title) + '</span>' +
-              '<span class="care-s">' + esc(c.seen) + '</span></span>' +
+              '<span class="care-s">' + (c.area ? '<b class="care-ar">' + esc(c.area) + '</b> · ' : '') + esc(c.seen) + '</span></span>' +
             careBars(c, d.weeks_from) +
             '<span class="care-n"><b class="num">' + c.total + '</b><span>за 12 нед.</span></span>' +
             '<span class="care-v">' + careVerdict(c) + '</span>' +
@@ -45231,6 +45260,32 @@
         if (!s.value) return;
         careSend('/admin/api/care/cases/' + cid, 'PATCH', { cause_id: +s.value },
                  'Случай отнесен к «' + s.options[s.selectedIndex].text + '»').catch(function () {});
+      });
+    });
+    each('[data-cdis]', function (b) {
+      b.addEventListener('click', function () {
+        careSend('/admin/api/care/cases/' + b.getAttribute('data-cdis') + '/dismiss', 'POST', {},
+                 'Убрал. Разбор запомнит, что такое не забота').catch(function () {});
+      });
+    });
+    each('[data-pbedit]', function (b) {
+      b.addEventListener('click', function () { state.carePbEdit = +b.getAttribute('data-pbedit'); careRender(); });
+    });
+    each('[data-pbcancel]', function (b) {
+      b.addEventListener('click', function () { state.carePbEdit = null; careRender(); });
+    });
+    each('[data-pbok]', function (b) {
+      b.addEventListener('click', function () {
+        careSend('/admin/api/care/causes/' + b.getAttribute('data-pbok'), 'PATCH', { playbook_ok: true },
+                 'Согласовано: такие случаи дальше решаю сам').catch(function () {});
+      });
+    });
+    each('[data-pbsave]', function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-pbsave'), t = view.querySelector('[data-pbt="' + id + '"]');
+        if ((t.value || '').trim().length < 10) { bad(t); return showToast('Опиши, как решаем'); }
+        careSend('/admin/api/care/causes/' + id, 'PATCH', { playbook: t.value.trim(), playbook_ok: true },
+                 'Сохранил и согласовал').then(function () { state.carePbEdit = null; }).catch(function () {});
       });
     });
     each('[data-cnewb]', function (b) {
@@ -49782,6 +49837,7 @@
     vk:       { label: 'ВКонтакте', icon: 'vk' },
     vk_page:  { label: 'ВК страница', icon: 'vk' },
     max:      { label: 'Макс',     icon: 'max' },
+    max_page: { label: 'Макс школы', icon: 'max' },
     whatsapp: { label: 'WhatsApp', icon: 'wa' },
     instagram: { label: 'Instagram', icon: 'inst' },
   };
@@ -51326,11 +51382,13 @@
        webinbox), ответа оттуда пока нет — бот вернет «ответьте со страницы». */
     vk_page:  { label: 'ВК страница', icon: 'vk', c: '#0057B8' },
     max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
+    /* Личный макс школы (+7 924 …), тоже читается браузером на сервере. */
+    max_page: { label: 'Макс школы', icon: 'max', c: '#5A3FD9' },
     instagram:{ label: 'Instagram', icon: 'inst', c: '#E1306C' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'vk_page', 'max', 'instagram', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'vk_page', 'max', 'max_page', 'instagram', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
@@ -51893,7 +51951,8 @@
   /* единый бейдж статуса диалога (список + точечное обновление при тумблере) */
   /* Личная страница ВК: переписку читает браузер на сервере, бот там не отвечает, а
      ответа из CRM пока нет (Вера 24.11.2026: сначала только чтение). */
-  function convReadOnly(c) { return c && c.channel === 'vk_page'; }
+  var CONV_RO = { vk_page: 'Личная страница ВК «Истсайд Команда»', max_page: 'Личный макс школы' };
+  function convReadOnly(c) { return !!(c && CONV_RO[c.channel]); }
   function inboxTag(c) {
     if (convReadOnly(c)) return '<span class="tg-tag mgr">' + ic('eye', 10) + 'читаем</span>';
     return c.handoff ? '<span class="tg-tag wait">' + ic('hand', 10) + 'просит менеджера</span>'
@@ -52685,7 +52744,7 @@
       (c.handoff ? '<div class="handoff-banner"><span>' + ic('hand', 14) + '</span><div><b>Клиент просит менеджера</b><span>напиши ответ ниже — бот сам замолчит в этом диалоге, и он перейдёт к тебе.</span></div></div>' : '') +
       '<div class="tg-thread" id="tg-thread">' + thread + '</div>' +
       (ro
-        ? '<div class="tg-hint mgr">' + ic('eye', 12) + '<span>Личная страница ВК «Истсайд Команда». Переписка подтягивается сама раз в 4 минуты, бот здесь не отвечает. <b>Ответить отсюда пока нельзя</b> — ответь со страницы.</span></div>'
+        ? '<div class="tg-hint mgr">' + ic('eye', 12) + '<span>' + CONV_RO[c.channel] + '. Переписка подтягивается сама раз в 4 минуты, бот здесь не отвечает. <b>Ответить отсюда пока нельзя</b> — ответь из самого аккаунта.</span></div>'
         : '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
         (aiOn
           ? '<span>Бот отвечает сам. <b>Напишешь — он замолчит в этом диалоге</b>, пока не включишь снова.</span>'

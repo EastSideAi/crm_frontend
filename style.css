@@ -16465,6 +16465,21 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 /* Слова клиента под пересказом: по ним проверяют, верно ли случай отнесен к причине. */
 .care-said { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   margin-top: 4px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.care-act { display: block; margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.care-act b { font-weight: 600; }
+.care-dis { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); padding: 2px 0; }
+.care-dis:hover { color: var(--red-ink); }
+.care-ar { font-weight: 600; color: var(--ink); }
+.care-pbh { display: flex; align-items: center; gap: 8px; }
+.care-pbh .sev { text-transform: none; letter-spacing: 0; }
+.sev.care-ok { color: var(--green-ink); background: var(--green-soft); }
+.sev.care-wait { color: var(--amber-ink); background: var(--amber-soft); }
+.care-pb { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-width: 80ch; }
+.care-pbl { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 10px; font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+.care-pbl b { font-weight: 600; color: var(--ink-2); }
+.care-pba { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.care-pbe { display: flex; flex-direction: column; gap: 8px; max-width: 80ch; }
+.care-pbt { min-height: 120px; resize: vertical; line-height: 1.5; }
 .care-link { font-size: 12.5px; font-weight: 600; color: var(--blue); text-decoration: none; }
 .care-link:hover { text-decoration: underline; }
 .care-addfix { display: grid; grid-template-columns: 150px minmax(0, 1fr) 190px auto; gap: 8px; margin-top: 4px; align-items: end; }
