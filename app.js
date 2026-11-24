@@ -42609,8 +42609,10 @@
      рассрочки в карточке, но на 12.11.2026 график был у 9 клиентов из 64. Здесь каждый
      клиент в одном состоянии: просрочен взнос, не разобран, ждем взнос, долга нет.
      Состояние считает сервер (GET /admin/api/sales/debts, sales_money.debt_state).
-     Строка открывает карточку сразу в «Оплатах», стрелки карточки идут по списку. */
-  var DBT_CLS = { late: 'miss', todo: 'warn', wait: 'calm', done: 'ok' };
+     Строка открывает карточку сразу в «Оплатах», стрелки карточки идут по списку.
+     С 24.11.2026 база — список «Сопровождения», у клиента без графика виден остаток по
+     прайсу, без оплат в карточке — отдельное состояние «Нет оплат в карточке» (11096). */
+  var DBT_CLS = { late: 'miss', todo: 'warn', check: 'warn', wait: 'calm', done: 'ok' };
   function dbtFetch() {
     state._dbtAt = Date.now();
     api('/admin/api/sales/debts').then(function (r) {
@@ -42629,15 +42631,26 @@
           : 'до ' + fmtDay(r.next_due).slice(0, 5)) + '</small>'
       : r.state === 'done'
         ? '<small>' + (r.mark === 'none' ? 'отмечено, долга нет' : 'график закрыт') + '</small>'
-        : '<small>графика нет</small>';
+        // Без графика показываем остаток по прайсу тарифа (Павел 11096): это прикидка,
+        // поэтому так и подписано; точную сумму дает только график в карточке.
+        : r.est_left
+          ? '<b class="num">' + smRub(r.est_left) + '</b><small>по прайсу, графика нет</small>'
+          : r.est_left === 0
+            ? '<small>по прайсу оплачено</small>'
+            : '<small>' + (r.state === 'check' ? 'выяснить, платили ли' : 'тариф не стоит') + '</small>';
+    var paid = r.paid_rub
+      ? '<b class="num">' + smRub(r.paid_rub) + '</b>' + (r.last_paid ? '<small>последняя ' + fmtDay(r.last_paid).slice(0, 5) + '</small>' : '')
+      : r.ledger_rub
+        ? '<b class="num">' + smRub(r.ledger_rub) + '</b><small>только в ведомости</small>'
+        : '<small>оплат нет нигде</small>';
     return '<button class="dbt-r ' + r.state + '" data-dbtlead="' + esc(r.id) + '">' +
       '<span class="sb-pn"><b>' + esc(r.name) + '</b><small>' +
-        esc([r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет'].filter(Boolean).join(' · ')) +
+        esc([r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет',
+             r.support === false && 'не в Сопровождении'].filter(Boolean).join(' · ')) +
       '</small></span>' +
       '<span class="sb-po' + (r.owner ? ' calm' : ' none') + '" data-l="Ведет">' + esc(r.owner || 'никто') + '</span>' +
-      '<span class="dbt-v" data-l="Оплачено"><b class="num">' + smRub(r.paid_rub) + '</b>' +
-        (r.last_paid ? '<small>последняя ' + fmtDay(r.last_paid).slice(0, 5) + '</small>' : '<small>в карточке нет оплат</small>') + '</span>' +
-      '<span class="dbt-v" data-l="Следующий взнос">' + next + '</span>' +
+      '<span class="dbt-v" data-l="Оплачено">' + paid + '</span>' +
+      '<span class="dbt-v" data-l="Еще должны">' + next + '</span>' +
     '</button>';
   }
   function renderSalesDebts(view) {
@@ -42657,8 +42670,11 @@
     var v = st.late.count
       ? { cls: 'miss', t: 'Просрочено ' + st.late.count + ' ' + plural(st.late.count, 'взнос', 'взноса', 'взносов') + ' на ' + smRub(st.late.rub),
           s: 'семье пора напомнить или отметить оплату, если деньги пришли мимо кассы' }
+      : st.check && st.check.count
+        ? { cls: 'warn', t: 'Разобрать ' + st.check.count + ' ' + plural(st.check.count, 'клиента', 'клиентов', 'клиентов') + ' без оплат в карточке',
+            s: 'семья платила до CRM или оплату занесли не туда: внесите оплату в карточку или отметьте «долга нет»' }
       : st.todo.count
-        ? { cls: 'warn', t: 'Не разобрано ' + st.todo.count + ' ' + plural(st.todo.count, 'клиент', 'клиента', 'клиентов'),
+        ? { cls: 'warn', t: 'Без графика ' + st.todo.count + ' ' + plural(st.todo.count, 'клиент', 'клиента', 'клиентов') + ', по прайсу еще ' + smRub(st.todo.rub),
             s: 'у каждого внесите график рассрочки или отметьте «долга нет»' }
         : { cls: 'ok', t: 'Все клиенты разобраны', s: 'дебиторка ведомости собирается из графиков сама' };
     var head = '<div class="card pf-head sb-thead">' + sbTabs() +
@@ -42667,7 +42683,8 @@
     var stats = statBar(d.states.map(function (x) {
       return { label: x.label, value: String(x.count), lead: x.key === 'late' && x.count > 0,
                sub: x.key === 'late' || x.key === 'wait' ? 'на ' + smRub(x.rub)
-                 : x.key === 'todo' ? 'нет графика и отметки' : 'закрыт график или отметка' };
+                 : x.key === 'todo' ? 'по прайсу ' + smRub(x.rub)
+                 : x.key === 'check' ? 'выяснить, платили ли' : 'закрыт график или отметка' };
     }), 'compact');
     var rows = d.rows.filter(function (r) { return !f || r.state === f; });
     var body = rows.map(dbtRow).join('');
@@ -42677,7 +42694,7 @@
         '</span><div><div class="t">' + esc(fl) + ' · <span class="num">' + rows.length + '</span></div>' +
         '<div class="s">строка открывает карточку на «Оплатах», стрелками в карточке дальше по списку</div></div>' +
         (f ? '<button class="qchip dbt-all" data-dbtf="">Показать всех</button>' : '') + '</div>' +
-        (body ? '<div class="dbt-lh"><span>Клиент</span><span>Ведет</span><span>Оплачено</span><span>Следующий взнос</span></div>' +
+        (body ? '<div class="dbt-lh"><span>Клиент</span><span>Ведет</span><span>Оплачено</span><span>Еще должны</span></div>' +
           '<div class="dbt-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') +
       '</div></div>';
     sbTabsBind(view);
