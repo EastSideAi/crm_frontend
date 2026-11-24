@@ -42595,11 +42595,67 @@
     'сентябре', 'октябре', 'ноябре', 'декабре'];
   function spMonthIn(m) { return SP_MON_IN[parseInt(String(m).split('-')[1], 10) - 1] || ''; }
   function spState(p) {
-    if (p.ended) return { t: 'закрыт', cls: '' };
+    if (p.ended) return { t: 'прошел', cls: '' };
     if (p.started) return { t: 'идет сейчас', cls: 'now' };
     if (p.due_in < 0) return { t: 'план вносили до ' + p.due_label, cls: 'late' };
     if (p.due_in === 0) return { t: 'внести план сегодня', cls: 'soon' };
     return { t: 'внести план до ' + p.due_label, cls: p.due_in <= 2 ? 'soon' : '' };
+  }
+  // Цифра плитки периода раскрывается в строки, из которых сложилась (Павел 23.11.2026:
+  // «цифры кликабельные, от кого пришли, из чего складывались»). Раскрыта одна за раз.
+  function spDetOn(i, k) { var o = state._spDet; return o && o.i === i && o.k === k ? ' on' : ''; }
+  function spDetBtn(i, k, label, v) {
+    return '<button class="sp-det' + spDetOn(i, k) + '" data-spdet="' + i + ':' + k + '" title="Из чего сложилось">' +
+      esc(label) + ' <b class="num">' + smRub(v) + '</b></button>';
+  }
+  function spDetail(d) {
+    var o = state._spDet;
+    var p = o && d.parts[o.i];
+    if (!p) return '';
+    var lab = {};
+    d.products.forEach(function (g) { lab[g.key] = g.label; });
+    var money = function (rows) {
+      return rows.slice().reverse().map(function (r) {
+        return smLead(r.case_id,
+          '<span class="sm-d num">' + fmtDay(r.date).slice(0, 5) + '</span>' +
+          '<span class="sb-pn"><b>' + esc(r.client || 'Без клиента') + '</b><small>' +
+            esc(lab[r.product] || r.item || '') + '</small></span>' +
+          '<span class="sb-po calm" data-l="Канал">' + esc(r.ch || '—') + '</span>' +
+          '<span class="sb-po' + (r.seller && r.seller !== 'Не указан' ? ' calm' : ' none') + '" data-l="Продал">' + esc(r.seller || '—') + '</span>' +
+          '<span class="sm-v num">' + smRub(r.amount) + '</span>', 'sm-ln');
+      }).join('');
+    };
+    var head = '<div class="sm-lh"><span>Дата</span><span>Клиент</span><span>Канал</span><span>Продал</span><span>Сумма</span></div>';
+    var t, s, body, sum;
+    if (o.k === 'came') {
+      t = 'Пришло за ' + p.period_label; sum = p.period_fact;
+      s = 'строки ведомости за весь период, свежие сверху; нажми, откроется карточка клиента';
+      body = money(p.came || []);
+    } else if (o.k === 'pace') {
+      var f = p.forecast || {};
+      t = 'Темп новых денег'; sum = d.pace_sum;
+      s = 'за последние ' + d.pace_days + ' дней пришло ' + smRub(d.pace_sum) + ' новых денег (без доплат и школы), это ' +
+        smRub(Math.round(d.pace_sum / d.pace_days)) + ' в день; на ' + (f.days_left || 0) + ' ' +
+        plural(f.days_left || 0, 'оставшийся день', 'оставшихся дня', 'оставшихся дней') + ' периода выходит ' + smRub(f.pace || 0) + '. Вот из каких оплат';
+      body = money(d.pace_rows || []);
+    } else {
+      var rr = (p.forecast && p.forecast.receivables_rows) || [];
+      t = 'Взносы рассрочки по графикам'; sum = p.forecast ? p.forecast.receivables : 0;
+      s = 'кто и когда должен заплатить в этот период. Нет графика в карточке, значит семьи здесь не будет';
+      head = '<div class="sm-lh sp-rh"><span>Срок</span><span>Семья</span><span>За что</span><span>Сумма</span></div>';
+      body = rr.map(function (r) {
+        return smLead(r.case_id,
+          '<span class="sm-d num">' + (r.due_on ? fmtDay(r.due_on).slice(0, 5) : '—') + '</span>' +
+          '<span class="sb-pn"><b>' + esc(r.client) + '</b></span>' +
+          '<span class="sb-po calm" data-l="За что">' + esc(r.item || '') + '</span>' +
+          '<span class="sm-v num">' + smRub(r.amount) + '</span>', 'sm-ln sp-rl');
+      }).join('');
+    }
+    return '<div class="card sp12 sm-lines sp-detail" id="sp-detail"><div class="sec-head pf-sec"><span class="ic">' + ic('wallet', 14) +
+      '</span><div><div class="t">' + esc(t) + ' · <span class="num">' + smRub(sum || 0) + '</span></div>' +
+      '<div class="s">' + esc(s) + '</div></div>' +
+      '<button class="qchip sm-reset" data-spdet="close">Свернуть</button></div>' +
+      (body ? head + '<div class="sm-list">' + body + '</div>' : '<div class="empty">Здесь пусто.</div>') + '</div>';
   }
   function spParts(d) {
     var fundsBy = (d.funds.rows || []).filter(function (f) { return f.amount; });
@@ -42612,9 +42668,9 @@
         var gap = (p.period_plan || 0) - f.total;
         fore = '<div class="sp-fc"><div class="sp-fcv"><span>реально ждем</span><b class="num">' + smRub(f.total) + '</b></div>' +
           '<div class="sp-fcl">' +
-            (f.fact ? '<span>пришло <b class="num">' + smRub(f.fact) + '</b></span>' : '') +
-            '<span>взносы рассрочки по графикам <b class="num">' + smRub(f.receivables) + '</b></span>' +
-            '<span>новые деньги по темпу ' + d.pace_days + ' дней <b class="num">' + smRub(f.pace) + '</b></span>' +
+            (f.fact ? spDetBtn(i, 'came', 'пришло', f.fact) : '') +
+            spDetBtn(i, 'recv', 'взносы рассрочки по графикам', f.receivables) +
+            spDetBtn(i, 'pace', 'новые деньги по темпу ' + d.pace_days + ' дней', f.pace) +
             (f.school ? '<span>школа: ' + (f.school.renewals ? f.school.renewals + ' ' + plural(f.school.renewals, 'продление', 'продления', 'продлений') : 'продлений нет') +
               (f.school.invoices_rub ? ' и счета' : '') + ' <b class="num">' + smRub(f.school.expected) + '</b>' +
               '</span>' + (f.school.teachers ? '<span class="sp-cost">расход на преподавателей школы <b class="num">' + smRub(f.school.teachers) + '</b></span>' : '') : '') +
@@ -42624,7 +42680,8 @@
             : 'план перекрыт на <b class="num">' + smRub(-gap) + '</b>') + '</div>' : '') +
         '</div>';
       } else {
-        fore = '<div class="sp-fc"><div class="sp-fcv"><span>пришло</span><b class="num">' + smRub(p.fact) + '</b></div></div>';
+        fore = '<div class="sp-fc"><button class="sp-fcv sp-det' + spDetOn(i, 'came') + '" data-spdet="' + i + ':came" title="Из каких приходов">' +
+          '<span>пришло за период</span><b class="num">' + smRub(p.period_fact != null ? p.period_fact : p.fact) + '</b></button></div>';
       }
       var cut = p.period_from !== p.from || p.period_to !== p.to;
       return '<div class="sp-part ' + st.cls + '">' +
@@ -42649,7 +42706,7 @@
     }).join('');
     return spCard('sp-parts', 'cal', 'Периоды',
       'план периода собран из планов месяцев по дням; «реально ждем» — что уже пришло, взносы рассрочки по графикам, новые деньги в темпе последних ' + d.pace_days + ' дней и продления школы по ее расписанию. Не открытые в ведомости периоды идут по модели 10–20 и 21–9',
-      '<div class="sp-partgrid">' + tiles + '</div>');
+      '<div class="sp-partgrid">' + tiles + '</div>') + spDetail(d);
   }
 
   // Кто что внес к сроку ближайшего периода. Люди — подписи, права режет сервер.
@@ -42803,6 +42860,23 @@
   }
 
   function spBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spdet]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-spdet');
+        var o = state._spDet;
+        if (v === 'close') state._spDet = null;
+        else {
+          var i = +v.split(':')[0], k = v.split(':')[1];
+          state._spDet = o && o.i === i && o.k === k ? null : { i: i, k: k };
+        }
+        renderView();
+        var el = state._spDet && document.getElementById('sp-detail');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('#sp-detail [data-sblead]'), function (b) {
+      b.addEventListener('click', function () { openLeadTab(b.getAttribute('data-sblead')); });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-spmon]'), function (b) {
       b.addEventListener('click', function () {
         var p = pfMonth().split('-');
@@ -43105,9 +43179,15 @@
     if (n('free')) parts.push('свободных ' + n('free'));
     if (n('respond')) parts.push('не связались ' + n('respond'));
     if (n('no_contact')) parts.push('без телефона ' + n('no_contact'));
-    var norm = d.worked_norm || 50, done = d.worked || 0;
-    var worked = '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">сегодня обработал <b class="num">' + done +
-      '</b> из ' + norm + ' семей</span>';
+    var norm = d.worked_norm || 50, done = d.worked || 0, inShift = d.worked_shift;
+    /* Смену засчитывает объем: 50 семей за смену и 50 за день (Павел 23.11.2026).
+       Открыта смена — первым идет ее счет, день рядом. */
+    var worked = (inShift != null
+      ? '<span class="ms-wk' + (inShift >= norm ? ' ok' : '') + '">за смену <b class="num">' + inShift +
+        '</b> из ' + norm + '</span> · '
+      : '') +
+      '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">' + (inShift != null ? 'за день' : 'сегодня обработал') +
+      ' <b class="num">' + done + '</b> из ' + norm + ' семей</span>';
     var chips = '<div class="list-quick ms-spans">' + MS_SPANS.map(function (x) {
       return '<button class="qchip' + (x[0] === span ? ' on' : '') + '" data-msspan="' + x[0] + '">' + x[1] + '</button>';
     }).join('') + '</div>';
