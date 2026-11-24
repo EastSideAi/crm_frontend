@@ -41029,9 +41029,18 @@
     var lists = {};
     var tiles = SB_INT_STEPS.map(function (st) {
       var out = [];
-      lc.cards.forEach(function (c) { var x = cc._idx[c.id]; if (x && st[3](c)) out.push(x); });
+      var rub = 0;
+      /* Сумма оплат человека — справа в строке (Павел 24.11.2026: «кто купил и на какую
+         сумму»). Копия строки сквозной: свою `v` у лида сквозной трогать нельзя. */
+      lc.cards.forEach(function (c) {
+        var x = cc._idx[c.id];
+        if (!x || !st[3](c)) return;
+        rub += c.rub || 0;
+        out.push(c.rub ? Object.assign({}, x, { v: c.rub }) : x);
+      });
       lists[st[0]] = out;
-      return tile(st[0], st[1], out.length, st[2], 'big' + (st[0] === 'int_b' ? ' cons' : ''));
+      var sub = st[0] === 'int_b' && rub ? 'на ' + fmtMoney(rub) + ' ₽' : st[2];
+      return tile(st[0], st[1], out.length, sub, 'big' + (st[0] === 'int_b' ? ' cons' : ''));
     }).join('');
     var list = '';
     if (lists[open]) {
