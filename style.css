@@ -8181,6 +8181,7 @@ a.fin-rcp.off:hover { text-decoration: underline; }
   padding: 8px 12px; cursor: pointer; transition: background .12s, border-color .12s; }
 .pk-row:hover { background: var(--blue-tint); border-color: var(--blue); }
 .pk-row b { font: 600 13.5px 'Manrope', sans-serif; color: var(--ink); }
+.pk-row b .lno { margin-left: 6px; font-weight: 500; }
 .pk-row i { font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); font-style: normal; }
 /* Метки карточки в пикере: платил, клиент, кто ведет, пустая. Две одинаковые с виду
    строки — главная причина, по которой доход уезжает на дубль, поэтому различие дают
@@ -12744,6 +12745,12 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 /* Строка сводки, из которой можно провалиться в лист отдела и занести план. */
 .pl-go { cursor: pointer; transition: background .12s var(--ease); }
 .pl-go:hover { background: #FAFBFC; }
+.pl-caret { display: inline-flex; color: var(--ink-3); transition: transform .15s var(--ease); }
+.pl-row.open .pl-caret { transform: rotate(180deg); color: var(--ink-2); }
+/* План отдела, раскрытый прямо в экране мотивации — без ухода в Финансы. */
+.motiv-plan-wrap { padding: 2px 12px 14px; background: #FAFBFC;
+  border-bottom: 1px solid var(--line); }
+.motiv-plan-wrap .plm-card { border: 1px solid var(--line); border-radius: var(--r-lg); }
 
 /* Напоминания о плане: кто отвечает за отдел и в каком состоянии его задача.
    Своей карточки не изобретает — те же .pl-row, что в сводке выше, плюс поле
@@ -13545,6 +13552,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
   margin-top: 2px; }
 /* Закрытый месяц тише живого: по нему уже заплатили, трогать нечего. */
 .rw-shut .rw-total b { color: var(--ink-2); }
+
 
 /* Карточка сотрудника в разделе «Мотивация»: окно Павла поверх расчёта —
    график выплат 10/20 и список регулярных задач человека за месяц. */

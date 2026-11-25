@@ -26235,7 +26235,7 @@
     if (!words.length) return all;
     return all.filter(function (l) {
       var hay = pkWords((leadName(l) || '') + ' ' + (l.name || '') + ' ' +
-                        (l.contact || '') + ' ' + (l.email || ''));
+                        (l.contact || '') + ' ' + (l.email || '') + lnoHay(l));
       return words.every(function (w) {
         var stem = pkStem(w);
         return hay.some(function (h) { return h.indexOf(stem) === 0 || h.indexOf(w) >= 0; });
@@ -26300,17 +26300,31 @@
      контакту; выбор пишет meta.case_id, после чего имя дохода станет ссылкой в карточку.
      Прямой и ручной платёж приходит без клиента, и здесь его привязывают руками. */
   function finPickClient(oid, presetName) {
+    pickLead({
+      eyebrow: 'Доход', title: 'Привязать к клиенту',
+      sub: 'Выберите карточку того, кто оплатил.' +
+        (presetName ? ' В строке указан: ' + presetName : ''),
+      preset: presetName,
+      onPick: function (cid) {
+        finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
+          'Привязал к клиенту');
+      },
+    });
+  }
+  /* Окно выбора карточки: поиск по имени, контакту и номеру К-…, живые карточки
+     выше пустых, пометка «контакт как у другой карточки». Одно на все места, где
+     что-то привязывают к человеку (доход, диалог), чтобы выбирали одинаково. */
+  function pickLead(o) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML = '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
-      '<div class="al-head"><div><div class="al-eyebrow">Доход</div>' +
-        '<div class="al-title">Привязать к клиенту</div></div>' +
+      '<div class="al-head"><div><div class="al-eyebrow">' + esc(o.eyebrow) + '</div>' +
+        '<div class="al-title">' + esc(o.title) + '</div></div>' +
         '<button class="al-x" id="pk-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-      '<div class="al-sub">Выберите карточку того, кто оплатил.' +
-        (presetName ? ' В строке указан: ' + esc(presetName) : '') + '</div>' +
+      '<div class="al-sub">' + esc(o.sub) + '</div>' +
       '<div class="al-body">' +
-        '<input class="al-in" id="pk-q" placeholder="Поиск по имени или контакту" autocomplete="off">' +
+        '<input class="al-in" id="pk-q" placeholder="Имя, контакт или номер К-…" autocomplete="off">' +
         '<div class="pk-list" id="pk-list"><div class="empty">Загружаю клиентов…</div></div>' +
       '</div>' +
       '<div class="al-foot">' +
@@ -26331,11 +26345,7 @@
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
     var box = el('pk-list'), all = null, dup = {};
-    var pick = function (cid) {
-      finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
-        'Привязал к клиенту');
-      close();
-    };
+    var pick = function (cid) { o.onPick(cid); close(); };
     var draw = function (q) {
       if (!all) return;
       var list = pkFilter(all, q);
@@ -26344,7 +26354,7 @@
       box.innerHTML = list.slice(0, 60).map(function (l) {
         var c = (l.contact || l.email || '').trim();
         return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
-          '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
+          '<b>' + esc(leadName(l) || 'Без имени') + lnoTag(l) + '</b>' +
           (c ? '<i>' + esc(c) + '</i>' : '') +
           '<span class="pk-marks">' + pkMarks(l, dup) + '</span></button>';
       }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
@@ -26355,9 +26365,9 @@
     var have = function (leads) {
       all = leads || [];
       dup = pkDupes(all);
-      draw(presetName || '');
+      draw(o.preset || '');
       var q = el('pk-q');
-      if (q) { q.value = presetName || ''; q.focus(); q.select(); }
+      if (q) { q.value = o.preset || ''; q.focus(); q.select(); }
     };
     if (state.leads && state.leads.length) have(state.leads);
     else api('/admin/api/leads').then(function (r) { have((r && r.leads) || []); })
@@ -29884,18 +29894,21 @@
         : '<span class="pl-sum num muted">—</span>';
       var factCell = '<span class="pl-fact num' + (s.fact ? '' : ' muted') + '">' +
         (s.fact ? 'факт ' + finRub(s.fact) : 'факт —') + '</span>';
-      return '<div class="pl-row pl-go' + (ok ? '' : ' wait') +
+      var isOpen = state.motivPlanOpen === s.key;
+      return '<div class="pl-row pl-go' + (ok ? '' : ' wait') + (isOpen ? ' open' : '') +
           '" data-plsec="' + esc(s.key) + '">' +
         '<span class="pl-nm">' + esc(s.label) + '</span>' + badge +
         '<span class="pl-val">' + planCell + factCell + '</span>' +
-      '</div>';
+        '<span class="pl-caret">' + ic('chev', 14) + '</span>' +
+      '</div>' +
+      (isOpen ? '<div class="motiv-plan-wrap">' + finPlanBlock(s.key) + '</div>' : '');
     }).join('');
     view.innerHTML = motivSeg() + statBar(tiles) +
       '<div class="card listcard">' +
         '<div class="list-tools plm-head"><div>' +
           '<div class="t fe-t">Мотивация команды: план и факт</div>' +
           '<div class="s fe-s">сколько заложено на команду за месяц и сколько уже начислено. ' +
-            'нажми на группу, чтобы заполнить или поправить ее план.</div>' +
+            'нажми на группу — план раскроется прямо здесь, заполняй не уходя в Финансы.</div>' +
         '</div>' + finMonthNav() + '</div>' +
         '<div class="pl-list">' + rows + '</div>' +
         '<div class="fin-note">' + ic('alert', 13) +
@@ -29906,8 +29919,13 @@
         '</div>' +
       '</div>';
     Array.prototype.forEach.call(view.querySelectorAll('.pl-row[data-plsec]'), function (r) {
-      r.addEventListener('click', function () { finPlanGoSheet(r.getAttribute('data-plsec')); });
+      r.addEventListener('click', function () {
+        var k = r.getAttribute('data-plsec');
+        state.motivPlanOpen = (state.motivPlanOpen === k) ? null : k;
+        saveUi(); renderView();
+      });
     });
+    if (state.motivPlanOpen) finWirePlanBlock(view, state.motivPlanOpen);
     Array.prototype.forEach.call(view.querySelectorAll('[data-plm]'), function (b) {
       b.addEventListener('click', function () {
         var a = b.getAttribute('data-plm');
@@ -29950,6 +29968,77 @@
       if (state.page === 'motiv') renderView();
     });
   }
+  /* Тьюторы в экране Павла. Они не на зарплатной ведомости (reward_sheet) — платят
+     за каждую закрытую точку по ученику, поэтому в список штатных не попадают. Тянем
+     ту же ближайшую выплату, что видит Роман в «Выплаты» (/admin/api/tutor-payouts),
+     и показываем здесь на чтение: кто, за что и когда. Денег этот экран не трогает —
+     отметка «выплачено» остаётся у админа в разделе выплат. */
+  function motivTutLoad() {
+    if (state._motivTut != null || state._motivTutBusy) return;
+    state._motivTutBusy = true;
+    api('/admin/api/tutor-payouts').then(function (r) {
+      state._motivTut = r; state._motivTutBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function (e) {
+      state._motivTut = e.message === '403' ? 'noaccess' : 'none';
+      state._motivTutBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  /* Весь состав команды одним списком по группам. Три разных движка оплаты (штатные
+     reward_sheet, тьюторы case_points, подрядчики contractors) + люди без заведённой
+     оплаты. Ростер берём из /admin/api/team (все внутренние) + /admin/api/contractors
+     (нотариус, врач и прочие внешние), а суммы подкладываем из того источника, где они
+     реально есть. Где оплата в системе ещё не заведена — честный прочерк, это и есть
+     сигнал Павлу, что группа не настроена. */
+  var MOTIV_GROUPS = [
+    { key: 'tutors',    label: 'Тьюторы',           roles: ['tutor', 'senior_tutor', 'tutor_sales'] },
+    { key: 'admins',    label: 'Администраторы',    roles: ['admin', 'grant_admin'] },
+    { key: 'teachers',  label: 'Преподаватели',     roles: ['teacher'] },
+    { key: 'marketing', label: 'Маркетинг',         roles: ['marketer', 'marketing_lead', 'producer'] },
+    { key: 'product',   label: 'Продукт',           roles: ['product_lead'] },
+    { key: 'manage',    label: 'Управление и финансы', roles: ['head', 'super_admin', 'owner', 'manager', 'assistant', 'accountant'] },
+  ];
+  function motivTeamLoad() {
+    if ((Array.isArray(state._team) && state._team.length) || state._motivTeamBusy) return;
+    state._motivTeamBusy = true;
+    api('/admin/api/team').then(function (r) {
+      state._team = (r && r.users) || [];
+      state._motivTeamBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function () {
+      state._team = []; state._motivTeamBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  function motivContrLoad() {
+    if (state._motivContr != null || state._motivContrBusy) return;
+    state._motivContrBusy = true;
+    api('/admin/api/contractors').then(function (r) {
+      state._motivContr = (r && r.contractors) || [];
+      state._motivContrBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function () {
+      state._motivContr = []; state._motivContrBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  function motivDeptHead(label, n) {
+    return '<div class="rw-dept"><div class="rw-dept-t">' + esc(label) + '</div>' +
+      '<div class="rw-dept-s">' + n + ' ' + plural(n, 'человек', 'человека', 'человек') + '</div></div>';
+  }
+  function motivRosterRow(o) {
+    return '<div class="pl-row' + (o.clickId ? ' pl-go' : '') + '"' +
+        (o.clickId ? ' data-motivperson="' + o.clickId + '"' : '') + '>' +
+      '<span class="pl-nm">' + esc(o.name) +
+        (o.sub ? ' <span class="rw-role">' + esc(o.sub) + '</span>' : '') + '</span>' +
+      '<span class="pl-val">' +
+        '<span class="pl-sum num' + (o.planMuted ? ' muted' : '') + '">' + o.planText + '</span>' +
+        '<span class="pl-fact' + (o.factMuted ? ' muted' : '') + '">' + o.factText + '</span>' +
+      '</span>' + (o.clickId ? ic('go', 15) : '') +
+    '</div>';
+  }
+
   /* Ближайшая выплата-остаток: расчёт месяца закрывается в начале следующего,
      остаток и KPI платят 10-го. Отдаём ближайшее 10-е от сегодня. */
   function motivNextPay() {
@@ -29974,23 +30063,68 @@
         'загрузить людей — проверь сеть.</div></div>';
       motivSegBind(view); return;
     }
-    var d = state._motivRw, all = d.sheets || [];
-    var groups = (d.depts || []).map(function (g) {
-      var mine = all.filter(function (s) { return (s.dept || '') === g.key; });
-      if (!mine.length) return '';
-      return '<div class="rw-dept"><div class="rw-dept-t">' + esc(g.label) + '</div>' +
-          '<div class="rw-dept-s">' + mine.length + ' ' +
-            plural(mine.length, 'человек', 'человека', 'человек') + '</div></div>' +
-        mine.map(motivPersonRow).join('');
+    // Фоновые источники ростера: команда и подрядчики. Пока команда не пришла — скелет.
+    motivTutLoad(); motivContrLoad();
+    if (!Array.isArray(state._team)) {
+      view.innerHTML = motivSeg() + dashSkeleton(); motivTeamLoad(); motivSegBind(view); return;
+    }
+    var d = state._motivRw, sheets = d.sheets || [];
+    var rwById = {};
+    sheets.forEach(function (s) { rwById[s.person_id] = s; });
+    var tutFact = {};
+    if (state._motivTut && state._motivTut.tutors) {
+      state._motivTut.tutors.forEach(function (t) { tutFact[t.id] = t.total; });
+    }
+    var team = state._team.filter(function (u) { return u.active !== false; });
+
+    var sections = MOTIV_GROUPS.map(function (g) {
+      var people = team.filter(function (u) { return g.roles.indexOf(u.role) >= 0; });
+      if (!people.length) return '';
+      people.sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'ru'); });
+      var rows = people.map(function (u) {
+        var sh = rwById[u.id];
+        var roleLabel = (ROLES[u.role] && ROLES[u.role].label) || u.role;
+        if (sh) {
+          return motivRosterRow({ name: u.name, sub: sh.title || roleLabel, clickId: u.id,
+            planText: 'фикс ' + fmtMoney(sh.fund_rub),
+            factText: 'начислено ' + fmtMoney(sh.total_rub), factMuted: !sh.total_rub });
+        }
+        if (g.key === 'tutors') {
+          var f = tutFact[u.id] || 0;
+          return motivRosterRow({ name: u.name, sub: roleLabel,
+            planText: 'сдельно, за точки', planMuted: true,
+            factText: 'к выплате ' + fmtMoney(f), factMuted: !f });
+        }
+        if (u.role === 'owner') {
+          return motivRosterRow({ name: u.name, sub: roleLabel,
+            planText: '—', planMuted: true, factText: 'дивиденды отдельно', factMuted: true });
+        }
+        return motivRosterRow({ name: u.name, sub: roleLabel,
+          planText: '—', planMuted: true, factText: 'оплата не заведена', factMuted: true });
+      }).join('');
+      return motivDeptHead(g.label, people.length) + rows;
     }).join('');
+
+    var contrHtml = '';
+    if (Array.isArray(state._motivContr) && state._motivContr.length) {
+      var contr = state._motivContr.filter(function (c) { return c.active !== false; });
+      var crows = contr.map(function (c) {
+        return motivRosterRow({ name: c.full_name || c.name || 'Подрядчик',
+          sub: c.job || 'подрядчик',
+          planText: 'по актам', planMuted: true, factText: '—', factMuted: true });
+      }).join('');
+      contrHtml = motivDeptHead('Подрядчики', contr.length) + crows;
+    }
+
+    var body = sections + contrHtml;
     view.innerHTML = motivSeg() +
       '<div class="card listcard">' +
         '<div class="list-tools plm-head"><div>' +
           '<div class="t fe-t">Сотрудники</div>' +
-          '<div class="s fe-s">нажми на человека — фикс, что в него входит, KPI на период ' +
-            'и когда выплата. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
+          '<div class="s fe-s">весь состав по группам: заложено (фикс) и начислено за месяц. ' +
+            'штатного можно раскрыть. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
         '</div>' + finMonthNav() + '</div>' +
-        (groups || '<div class="empty">Ни одного расчётного листа пока нет.</div>') +
+        (body || '<div class="empty">Команда пока не загрузилась — проверь сеть.</div>') +
       '</div>';
     Array.prototype.forEach.call(view.querySelectorAll('[data-motivperson]'), function (r) {
       r.addEventListener('click', function () {
@@ -30006,18 +30140,6 @@
     });
     motivSegBind(view); pageAnim(view);
   }
-  function motivPersonRow(s) {
-    return '<div class="pl-row pl-go" data-motivperson="' + s.person_id + '">' +
-      '<span class="pl-nm">' + esc(s.name) +
-        (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</span>' +
-      '<span class="pl-val">' +
-        '<span class="pl-sum num">фикс ' + fmtMoney(s.fund_rub) + '</span>' +
-        '<span class="pl-fact num' + (s.total_rub ? '' : ' muted') + '">к выплате ' +
-          fmtMoney(s.total_rub) + '</span>' +
-      '</span>' + ic('go', 15) +
-    '</div>';
-  }
-
   function renderMotivPerson(view) {
     var id = state.motivPerson;
     if (!state._motivRw) { view.innerHTML = dashSkeleton(); motivRwLoad(); return; }
@@ -30267,7 +30389,9 @@
       api('/admin/api/fin/plan-lines?section=' + encodeURIComponent(section) + '&month=' + m)
         .then(function (r) {
           (FIN.planlines = FIN.planlines || {})[section] = r; FIN.err = '';
-          if (curSpace() === 'fin') renderAll();
+          // Тот же блок плана встроен в экран Павла (Мотивация), не только в Финансах —
+          // перерисовываем и его, иначе «загружаем план…» висит после загрузки.
+          if (curSpace() === 'fin' || state.page === 'motiv') renderAll();
         }).catch(function (e) { finFail(e, 'planlines'); }).then(done);
     });
   }
@@ -53285,8 +53409,17 @@
        преподаватели и тьюторы туда не ходят. Поэтому рядом с «Завести карточку» стоит
        вторая дверь — отметить руками. Показываем ее только тому, у кого есть модуль:
        выбирать придется из списка исполнителей. */
+    /* Карточка у человека бывает, а сшить переписку с ней нечем: заявка пришла с
+       сайта, а пишем мы ему с рабочей страницы ВК или из Макса школы. «Завести» дало
+       бы дубль, поэтому рядом — «Привязать» к той, что есть. После привязки ответы
+       наших в этом диалоге ставят карточке «Связались» сами (Павел 25.11.2026). */
+    var bindBtn = (!d.found && d.can_create)
+      ? '<button class="tg-cact" data-bindcard="' + esc(uid) + '" ' +
+        'title="Карточка уже есть — привязать к ней этот диалог">' + ic('clip', 14) +
+        '<span class="tg-cl">Привязать к карточке</span><span class="tg-cls">Привязать</span></button>'
+      : '';
     if (!d.found && can('contractors')) {
-      return (d.can_create
+      return bindBtn + (d.can_create
         ? '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
           'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
           '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>'
@@ -53302,7 +53435,7 @@
         '</button>';
     }
     if (d.can_create) {
-      return '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
+      return bindBtn + '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
         'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
         '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>';
     }
@@ -53395,6 +53528,29 @@
     var open = host.querySelector('[data-card]');
     if (open) open.addEventListener('click', function () {
       openLeadTab(open.getAttribute('data-card'));
+    });
+    var bind = host.querySelector('[data-bindcard]');
+    if (bind) bind.addEventListener('click', function () {
+      var d = state.convLead[uid] || {};
+      pickLead({
+        eyebrow: 'Диалог', title: 'Привязать к карточке',
+        sub: 'Выберите карточку этого человека. Переписка будет видна в ней, а ответы ' +
+          'наших отметят, что с ним связались.',
+        preset: d.name || '',
+        onPick: function (cid) {
+          apiSend('/admin/api/bot/conversations/' + uid + '/bind', 'POST', { session_id: cid },
+            function (r) {
+              state.convLead[uid] = null; convLeadLoad(uid);
+              if (r && r.id) { delete state.details[r.id]; }
+              showToast('Привязал к ' + (leadNo(r && r.id) || 'карточке'));
+            }, function (code, e) {
+              var other = e && e.body && e.body.detail && e.body.detail.id;
+              showToast(code === 409 && other
+                ? 'Этот диалог уже привязан к ' + (leadNo(other) || 'другой карточке')
+                : 'Не получилось привязать');
+            });
+        },
+      });
     });
     var add = host.querySelector('[data-newcard]');
     if (add) add.addEventListener('click', function () {
