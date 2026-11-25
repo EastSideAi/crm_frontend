@@ -29894,18 +29894,21 @@
         : '<span class="pl-sum num muted">—</span>';
       var factCell = '<span class="pl-fact num' + (s.fact ? '' : ' muted') + '">' +
         (s.fact ? 'факт ' + finRub(s.fact) : 'факт —') + '</span>';
-      return '<div class="pl-row pl-go' + (ok ? '' : ' wait') +
+      var isOpen = state.motivPlanOpen === s.key;
+      return '<div class="pl-row pl-go' + (ok ? '' : ' wait') + (isOpen ? ' open' : '') +
           '" data-plsec="' + esc(s.key) + '">' +
         '<span class="pl-nm">' + esc(s.label) + '</span>' + badge +
         '<span class="pl-val">' + planCell + factCell + '</span>' +
-      '</div>';
+        '<span class="pl-caret">' + ic('chev', 14) + '</span>' +
+      '</div>' +
+      (isOpen ? '<div class="motiv-plan-wrap">' + finPlanBlock(s.key) + '</div>' : '');
     }).join('');
     view.innerHTML = motivSeg() + statBar(tiles) +
       '<div class="card listcard">' +
         '<div class="list-tools plm-head"><div>' +
           '<div class="t fe-t">Мотивация команды: план и факт</div>' +
           '<div class="s fe-s">сколько заложено на команду за месяц и сколько уже начислено. ' +
-            'нажми на группу, чтобы заполнить или поправить ее план.</div>' +
+            'нажми на группу — план раскроется прямо здесь, заполняй не уходя в Финансы.</div>' +
         '</div>' + finMonthNav() + '</div>' +
         '<div class="pl-list">' + rows + '</div>' +
         '<div class="fin-note">' + ic('alert', 13) +
@@ -29916,8 +29919,13 @@
         '</div>' +
       '</div>';
     Array.prototype.forEach.call(view.querySelectorAll('.pl-row[data-plsec]'), function (r) {
-      r.addEventListener('click', function () { finPlanGoSheet(r.getAttribute('data-plsec')); });
+      r.addEventListener('click', function () {
+        var k = r.getAttribute('data-plsec');
+        state.motivPlanOpen = (state.motivPlanOpen === k) ? null : k;
+        saveUi(); renderView();
+      });
     });
+    if (state.motivPlanOpen) finWirePlanBlock(view, state.motivPlanOpen);
     Array.prototype.forEach.call(view.querySelectorAll('[data-plm]'), function (b) {
       b.addEventListener('click', function () {
         var a = b.getAttribute('data-plm');
@@ -30381,7 +30389,9 @@
       api('/admin/api/fin/plan-lines?section=' + encodeURIComponent(section) + '&month=' + m)
         .then(function (r) {
           (FIN.planlines = FIN.planlines || {})[section] = r; FIN.err = '';
-          if (curSpace() === 'fin') renderAll();
+          // Тот же блок плана встроен в экран Павла (Мотивация), не только в Финансах —
+          // перерисовываем и его, иначе «загружаем план…» висит после загрузки.
+          if (curSpace() === 'fin' || state.page === 'motiv') renderAll();
         }).catch(function (e) { finFail(e, 'planlines'); }).then(done);
     });
   }
