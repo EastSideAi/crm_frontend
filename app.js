@@ -24432,6 +24432,9 @@
            нуля, а не копией прошлого файла — с копией уезжали и ее ошибки. Смотреть
            может каждый, у кого есть ведомость; в общую папку кладет тот, кто правит. */
         '<button class="qchip" id="fp-sheet">' + ic('doc', 12) + 'В таблицу</button>' +
+        // Письмо Ларисе на выплаты периода собирается из реестра к выводу (Роман 25.11.2026).
+        (editable ? '<button class="qchip" id="fp-lm">' + ic('mail', 12) +
+          'Сообщение бухгалтеру</button>' : '') +
         (editable
           ? '<button class="qchip" id="fp-ext">' + ic('cal', 12) + 'Продлить</button>' +
             '<button class="qchip go" id="fp-close">' + ic('lock', 12) + 'Закрыть ведомость</button>'
@@ -24539,6 +24542,16 @@
         });
       });
       el('fp-ext').addEventListener('click', function () { finExtendForm(s.period); });
+      var lmBtn = el('fp-lm');
+      if (lmBtn) lmBtn.addEventListener('click', function () {
+        if (lmBtn.disabled) return;
+        lmBtn.disabled = true;
+        api('/admin/api/fin/register?id=' + encodeURIComponent(s.period.id)).then(function (r) {
+          lmOpen(r);
+        }).catch(function () {
+          showToast('Не удалось собрать сообщение', 'проверьте связь и попробуйте еще раз');
+        }).then(function () { lmBtn.disabled = false; });
+      });
       el('fp-close').addEventListener('click', function () { finCloseForm(s); });
     }
     var shBtn = el('fp-sheet');
@@ -27052,6 +27065,228 @@
     });
     pageAnim(view);
   }
+  /* ── Сообщение бухгалтеру (Роман 25.11.2026) ──────────────────────────────────
+     Письмо Ларисе на выплаты периода по шаблону «Справка: сообщение бухгалтеру» из
+     базы знаний финансов. Раньше его собирали руками из ведомости и переписывали по
+     нескольку раз. Строки берем из реестра к выводу, но КАК платить каждому, из
+     данных не следует: карточка исполнителя есть не у всех, кто идет платежкой, и
+     не все с карточкой идут в это письмо. Поэтому у человека выбор пути, и выбор
+     запоминается по имени в браузере: со второго периода письмо собирается само.
+     Какой сервис оплачен лично (вернуть Виталию), в ведомости не отмечено — галочка.
+     Подрядчики (фонд подрядчиков) в письмо не идут. Итог — черновик в поле, его
+     можно поправить перед копированием. */
+  var LM_KEY = 'es_fin_lm_v1';
+  var LM_ROUTES = [['bank', 'платежка'], ['card', 'карта Виталия'],
+                   ['acct', 'бухгалтеру'], ['ip', 'доход ИП Виталия'], ['skip', 'не писать']];
+  var LM_FUND_ROUTES = [['bank', 'платежка из фонда'], ['bill', 'по счету с ВТБ'],
+                        ['skip', 'не писать']];
+  function lmLoad() {
+    try { return JSON.parse(localStorage.getItem(LM_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function lmSave(v) {
+    try { localStorage.setItem(LM_KEY, JSON.stringify(v)); } catch (e) {}
+  }
+  function lmRub(v) {
+    var x = Math.round((Number(v) || 0) * 100) / 100;
+    var int = Math.floor(x), dec = Math.round((x - int) * 100);
+    return String(int).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') +
+      (dec ? ',' + (dec < 10 ? '0' : '') + dec : '') + ' руб';
+  }
+  // Люди периода: одна строка на человека, суммой всех его строк. Начисление с продаж
+  // попадает сюда, даже если стоит фактом: деньги человеку еще не ушли.
+  function lmPeople(list) {
+    var by = {}, out = [];
+    list.forEach(function (it) {
+      if (it.status !== 'план' && !it.accrual) return;
+      var key = it.cid || ('n:' + (it.person || it.receiver || ''));
+      if (!by[key]) {
+        by[key] = { key: key, name: it.person || it.receiver || '—', cid: it.cid,
+                    amount: 0, role: '', bill: false, ids: [] };
+        out.push(by[key]);
+      }
+      var p = by[key];
+      p.amount += Number(it.amount) || 0;
+      if (!p.role && it.role) p.role = it.role;
+      // «Мотивация» — вид выплаты, а не роль; роль в письме пишем, только если она есть.
+      if (!p.role && it.item && it.item !== 'Мотивация' && !it.accrual &&
+          it.item !== it.receiver) p.role = it.item;
+      if (it.by_bill) p.bill = true;
+      p.ids.push(it.id);
+    });
+    return out;
+  }
+  function lmDefault(p) {
+    if (/ванеев/i.test(p.name)) return 'ip';
+    if (/лариса/i.test(p.name)) return 'acct';
+    return p.cid ? 'bank' : 'card';
+  }
+  function lmOpen(R) {
+    if (document.querySelector('.al-ov')) return;
+    var mem = lmLoad();
+    mem.route = mem.route || {}; mem.fund = mem.fund || {}; mem.back = mem.back || {};
+    var rsg = R.rs_groups || [], funds = R.funds || [];
+    var teamItems = [], services = [];
+    rsg.forEach(function (g) {
+      if (g.id === 'funds_alloc') return;
+      g.items.forEach(function (it) {
+        if (it.service) { if (it.status === 'факт') services.push(it); }
+        else teamItems.push(it);
+      });
+    });
+    var team = lmPeople(teamItems);
+    var mkt = funds.filter(function (f) { return f.id === 'marketing'; })[0];
+    var mktPeople = lmPeople(mkt ? mkt.items : []);
+    var alloc = (rsg.filter(function (g) { return g.id === 'funds_alloc'; })[0] || {}).items || [];
+    var st = { bank: mem.bank || 'Сбербанк', route: {}, fund: {}, back: {} };
+    team.forEach(function (p) { st.route[p.key] = mem.route[p.name] || lmDefault(p); });
+    mktPeople.forEach(function (p) {
+      st.fund[p.key] = mem.fund[p.name] || (p.bill ? 'bill' : 'bank');
+    });
+    services.forEach(function (it) { st.back[it.id] = !!mem.back[it.receiver]; });
+
+    function sel(name, opts, val) {
+      return '<select class="al-in lm-sel" data-lm="' + esc(name) + '">' +
+        opts.map(function (o) {
+          return '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' +
+            esc(o[1]) + '</option>';
+        }).join('') + '</select>';
+    }
+    function row(p, kind, opts, val) {
+      return '<div class="lm-row"><span class="lm-nm">' + esc(p.name) +
+          (p.role ? '<i>' + esc(p.role) + '</i>' : '') + '</span>' +
+        '<span class="num lm-sum">' + finRub(p.amount) + '</span>' +
+        sel(kind + ':' + p.key, opts, val) + '</div>';
+    }
+
+    function text() {
+      var L = [], B = st.bank;
+      L.push('Здравствуйте, Лариса.', '');
+      L.push('Сделайте, пожалуйста, сегодня следующие выводы средств и платежки для выплаты мотивации команде.', '');
+      var bank = team.filter(function (p) { return st.route[p.key] === 'bank'; });
+      if (bank.length) {
+        var bs = bank.reduce(function (a, p) { return a + p.amount; }, 0);
+        L.push('Вывести с р/с ВТБ на ' + B + ' ' + lmRub(bs) + ' и сделать следующие платежки:');
+        bank.forEach(function (p, i) {
+          L.push((i + 1) + ') ' + p.name + (p.role ? ' (' + p.role + ')' : '') + ' = ' + lmRub(p.amount));
+        });
+        L.push('');
+      }
+      var sum = function (r) {
+        return team.filter(function (p) { return st.route[p.key] === r; })
+          .reduce(function (a, p) { return a + p.amount; }, 0);
+      };
+      var tch = sum('card'), acc = sum('acct');
+      if (tch || acc) {
+        var parts = [];
+        if (tch) parts.push(lmRub(tch) + ' (преподавателям)');
+        if (acc) parts.push(lmRub(acc) + ' (бухгалтеру Ларисе)');
+        L.push('С р/с ВТБ на личную карту Виталия: ' + parts.join(' + ') +
+          (parts.length > 1 ? ' = ' + lmRub(tch + acc) : '') + ', вывод на собственные нужды.', '');
+      }
+      var ip = sum('ip'), dv = Number(R.dividends) || 0;
+      if (ip || dv) {
+        L.push('Доход от предпринимательской деятельности = ' +
+          [ip ? lmRub(ip) + ' (Виталий)' : '', dv ? lmRub(dv) + ' (дивиденды)' : '']
+            .filter(Boolean).join(' + '), '');
+      }
+      var mb = mktPeople.filter(function (p) { return st.fund[p.key] === 'bank'; });
+      if (mb.length) {
+        var ms = mb.reduce(function (a, p) { return a + p.amount; }, 0);
+        L.push('Виталий, выведите, пожалуйста, с фонда маркетинга ' + lmRub(ms) + ' на р/с ' + B + '.');
+        L.push('Лариса, сделайте следующие платежки в ' + B + ':');
+        mb.forEach(function (p, i) {
+          L.push((i + 1) + ') ' + p.name + (p.role ? ' (' + p.role + ')' : '') + ' = ' + lmRub(p.amount));
+        });
+        L.push('');
+      }
+      // Платеж из фонда по счету уходит прямо с ВТБ, поэтому в копилку фонда
+      // переводим меньше на его сумму (так было в письме 24.11: 150 644,11 − 40 000).
+      var billOut = mktPeople.filter(function (p) { return st.fund[p.key] === 'bill'; })
+        .reduce(function (a, p) { return a + p.amount; }, 0);
+      var fl = alloc.map(function (a) {
+        var v = Number(a.amount) || 0;
+        if (/маркетинг/i.test(a.receiver)) v -= billOut;
+        return { name: a.receiver, v: v };
+      }).filter(function (f) { return f.v > 0.004; });
+      if (fl.length) {
+        L.push('Лариса, сделайте, пожалуйста, вывод средств на карту, чтобы Виталий сделал распределение:');
+        fl.forEach(function (f) { L.push(f.name + ' = ' + lmRub(f.v)); });
+        L.push('');
+      }
+      services.forEach(function (it) {
+        if (st.back[it.id]) L.push('Оплата ' + it.receiver + ' ' + lmRub(it.amount) + ', вернуть Виталию');
+      });
+      return L.join('\n').replace(/\n+$/, '');
+    }
+
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';
+    ov.innerHTML =
+      '<div class="al-card lm-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head"><div><div class="al-eyebrow">Выплаты периода</div>' +
+          '<div class="al-title">Сообщение бухгалтеру</div></div>' +
+          '<button class="al-x" id="lm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">По шаблону из базы знаний. Выберите, как платить каждому, — ' +
+          'выбор запомнится на следующие периоды. Текст внизу можно поправить перед копированием.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Банк для платежек</span>' +
+            sel('bank', [['Сбербанк', 'Сбербанк'], ['Альфа-Банк', 'Альфа-Банк']], st.bank) + '</label>' +
+          (team.length ? '<div class="lm-h">С расчетного счета</div>' +
+            team.map(function (p) { return row(p, 'r', LM_ROUTES, st.route[p.key]); }).join('') : '') +
+          (mktPeople.length ? '<div class="lm-h">Из фонда маркетинга</div>' +
+            mktPeople.map(function (p) { return row(p, 'f', LM_FUND_ROUTES, st.fund[p.key]); }).join('') : '') +
+          (services.length ? '<div class="lm-h">Сервисы, оплаченные в периоде</div>' +
+            services.map(function (it) {
+              return '<label class="lm-row lm-chk"><input type="checkbox" data-lmb="' + esc(it.id) + '"' +
+                (st.back[it.id] ? ' checked' : '') + '><span class="lm-nm">' + esc(it.receiver) +
+                '<i>вернуть Виталию, если платил лично</i></span>' +
+                '<span class="num lm-sum">' + finRub(it.amount) + '</span></label>';
+            }).join('') : '') +
+          '<div class="lm-h">Текст сообщения</div>' +
+          '<textarea class="al-in al-ta lm-ta" id="lm-ta" rows="14"></textarea>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="lm-cancel">Закрыть</button>' +
+          '<button class="bp al-save" id="lm-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var ta = el('lm-ta'), edited = false;
+    function redraw() { if (!edited) ta.value = text(); }
+    function remember() {
+      mem.bank = st.bank;
+      team.forEach(function (p) { mem.route[p.name] = st.route[p.key]; });
+      mktPeople.forEach(function (p) { mem.fund[p.name] = st.fund[p.key]; });
+      services.forEach(function (it) { mem.back[it.receiver] = st.back[it.id]; });
+      lmSave(mem);
+    }
+    redraw();
+    ta.addEventListener('input', function () { edited = true; });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-lm]'), function (s) {
+      s.addEventListener('change', function () {
+        var k = s.getAttribute('data-lm');
+        if (k === 'bank') st.bank = s.value;
+        else if (k.indexOf('r:') === 0) st.route[k.slice(2)] = s.value;
+        else if (k.indexOf('f:') === 0) st.fund[k.slice(2)] = s.value;
+        // Правка выбора пересобирает текст заново: ручные правки в поле при этом
+        // теряются, поэтому сначала выбор, потом правка текста.
+        edited = false; remember(); redraw();
+      });
+    });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-lmb]'), function (c) {
+      c.addEventListener('change', function () {
+        st.back[c.getAttribute('data-lmb')] = c.checked;
+        edited = false; remember(); redraw();
+      });
+    });
+    function close() { ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180); }
+    el('lm-x').addEventListener('click', close);
+    el('lm-cancel').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    el('lm-copy').addEventListener('click', function () {
+      remember(); copyText(ta.value, el('lm-copy'));
+    });
+  }
+
   /* Галочки сверки живут в сессии браузера (на период), а не на сервере: это рабочая
      пометка одного человека на время сверки. Любой сбой доступа к хранилищу глушим —
      экран должен работать и в приватном окне, где sessionStorage кидает исключение. */

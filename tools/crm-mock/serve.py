@@ -279,6 +279,53 @@ def leads():
     _LEADS = out
     return out
 
+def _ri(i, who, amount, status="план", cid=None, person=None, item="Мотивация", role="",
+        bill=False, service=False, accrual=False):
+    return {"id": "o%d" % i, "date": "2026-11-20", "status": status, "receiver": who,
+            "item": item, "amount": amount, "dest": "ВТБ, р/с", "comment": "", "has_doc": False,
+            "cid": cid, "person": person or who, "role": role, "by_bill": bill,
+            "service": service, "accrual": accrual}
+
+
+FIN_PERIODS = {"periods": [{"id": "p1", "name": "12.11–24.11", "status": "открыт", "open": True,
+                            "starts_on": "2026-11-12", "ends_on": "2026-11-24"}], "open_id": "p1"}
+FIN_PERIOD = {
+    "period": dict(FIN_PERIODS["periods"][0], open=True), "closed_at": None,
+    "cascade": {"income": 608430, "income_gross": 610000, "shortterm": 0, "base": 608430,
+                "allocations": 300000, "direct": 150000, "profit": 158430, "flex": 74102.77,
+                "dividends": 84327.23},
+    "plan_cascade": None, "rules": [], "offerings": [], "funds": [], "accounts": [],
+    "direct": [], "cash": None, "metrics": None, "distribution": None, "warnings": [],
+    "plan_left": {"count": 0, "amount": 0},
+}
+FIN_REGISTER = {
+    "period": FIN_PERIODS["periods"][0], "rs": 300000, "to_pay": 150000, "paid": 29000,
+    "after": 150000, "over": False, "dividends": 84327.23,
+    "rs_groups": [
+        {"id": "управление", "label": "Управление", "to_pay": 50000, "paid": 0, "items": [
+            _ri(1, "Тестов Владимир", 25000),
+            _ri(2, "Проджектова Анна", 25000, cid="c1", person="Проджектова Анна Ивановна")]},
+        {"id": "продажи", "label": "Отдел продаж", "to_pay": 0, "paid": 2080, "items": [
+            _ri(3, "Анна Эванс", 2080, status="факт", cid="c1", person="Проджектова Анна Ивановна",
+                item="Клиент Икс", accrual=True)]},
+        {"id": "администрирование", "label": "Администрирование", "to_pay": 20000, "paid": 0, "items": [
+            _ri(4, "Учителева Ольга", 3000), _ri(5, "Лариса бухгалтер", 5000),
+            _ri(6, "Админова Мария", 15000, cid="c2", person="Админова Мария Петровна")]},
+        {"id": "сервисы", "label": "Сервисы и подписки", "to_pay": 0, "paid": 23982.1, "items": [
+            _ri(7, "Railway", 23482.10, status="факт", service=True),
+            _ri(8, "Селектел", 500, status="факт", service=True)]},
+        {"id": "funds_alloc", "label": "Отчисления в фонды", "to_pay": 300000, "paid": 0, "items": [
+            {"id": "alloc:contractors", "receiver": "Фонд подрядчиков", "amount": 121686, "status": "план",
+             "item": "отчисление в фонд", "dest": "на карту собственника"},
+            {"id": "alloc:marketing", "receiver": "Фонд маркетинга", "amount": 150644.11, "status": "план",
+             "item": "отчисление в фонд", "dest": "на карту собственника"}]},
+    ],
+    "funds": [{"id": "marketing", "name": "Фонд маркетинга", "added": 150644.11, "spent": 92500, "items": [
+        _ri(9, "СММ Екатерина", 22500, cid="c3", person="Смм Екатерина"),
+        _ri(10, "Ипшница Ольга", 40000, bill=True),
+        _ri(11, "Монтажер Анна", 12500)]}],
+}
+
 RC_ARCHIVE = {"items": [
     {"id": "a1", "contractor_id": "c1", "contractor": "Тестова Вера Ивановна", "person": "Вера Тестова",
      "inn": "111111111111", "dept": "Отдел продукта", "title": "Тестова октябрь", "period": "",
@@ -302,7 +349,7 @@ RC_ARCHIVE = {"items": [
 ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": "super_admin",
       "caps": ["dash", "clients", "team", "tasks", "tasks_all", "finance", "marketing",
                "planfact", "finmodel", "zaezd_review", "academy", "academy_review", "care",
-               "contractors"]}
+               "contractors", "finmodel", "finmodel_edit"]}
 
 # «Забота» (раздел care): причины и случаи, обезличенные из разбора 23.11.2026, id
 # диалогов выдуманные. Собирается заново, если поменялся сид причин в бэкенде.
@@ -431,6 +478,13 @@ class H(SimpleHTTPRequestHandler):
             return self._json(REFUNDS)
         if p == "/admin/api/sales/debts":
             return self._json(DEBTS)
+        # Реестр к выводу и сообщение бухгалтеру: выдуманные люди и суммы.
+        if p == "/admin/api/fin/periods":
+            return self._json(FIN_PERIODS)
+        if p == "/admin/api/fin/period":
+            return self._json(FIN_PERIOD)
+        if p == "/admin/api/fin/register":
+            return self._json(FIN_REGISTER)
         # Архив старых чеков (12003): выдуманные люди, у одного нет карточки исполнителя.
         if p == "/admin/api/contractor-receipts/archive":
             return self._json(RC_ARCHIVE)
