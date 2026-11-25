@@ -30108,9 +30108,10 @@
         '<div class="mp-earn-row"><span class="mp-earn-k">Продал сам</span>' +
           '<span class="mp-earn-v">до 3,2% с каждой оплаты клиента</span></div>' +
         '<div class="mp-earn-row"><span class="mp-earn-k">Привёл семью</span>' +
-          '<span class="mp-earn-v">партнёрский процент с её оплат</span></div>' +
+          '<span class="mp-earn-v">5% с её покупок от 150 000 ₽ (грант и поездки)</span></div>' +
         '<button class="bp ghost mp-earn-cta" data-motivearn="1">Подключить и получить ссылку</button>' +
-        '<div class="s mp-earn-note">Партнёрский процент закрепим точнее — пока без фиксированной цифры.</div>' +
+        '<div class="s mp-earn-note">Заведёшь партнёрский кабинет — своя ссылка и готовые материалы ' +
+          'для рилсов внутри. Приведённых и доход система считает сама.</div>' +
       '</div></div>';
 
     view.innerHTML = back +
@@ -30126,7 +30127,8 @@
       '</div>';
     var eb = view.querySelector('[data-motivearn]');
     if (eb) eb.addEventListener('click', function () {
-      showToast('Партнёрскую ссылку подключим — закрепим процент, и кнопка станет рабочей.');
+      window.open('https://t.me/eastsideai_bot?start=partner', '_blank', 'noopener');
+      showToast('Открываю регистрацию партнёра в Telegram — там заведёшь кабинет и получишь ссылку.');
     });
     motivPersonBack(view); pageAnim(view);
   }
