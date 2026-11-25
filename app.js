@@ -45936,6 +45936,40 @@
       move + '</div>';
   }
 
+  /* Лента «Обращения» — первый экран раздела (Вера 25.11.2026: «там будут сообщения с
+     указанием, кто написал, что написал и в какой канал, а потом уже проблемы укрупнены»).
+     Строка = одно обращение: кто и куда, его слова, к чему разбор отнес, что предложил и
+     что в итоге сделали. */
+  function careWhen(x) {
+    var t = x.created_at ? new Date(x.created_at) : null;
+    return careDay(x.seen_on) + (t ? ' · ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) : '');
+  }
+  function careStatus(x) {
+    if (x.dismissed || x.decision === 'not_care') return '<span class="sev">не забота</span>';
+    if (x.decision === 'ok') return '<span class="sev care-ok">ответ ушел</span>';
+    if (x.decision === 'changed') return '<span class="sev care-ok">ответили своим</span>';
+    if (x.reply) return '<span class="sev care-wait">ждет решения</span>';
+    return '';
+  }
+  function careFeedRow(x) {
+    var reply = x.final_reply || x.reply;
+    var replyLab = x.decision === 'changed' ? 'Ответили своим' : x.decision === 'ok' ? 'Ответ ушел' : 'Ответил бы';
+    var where = x.cause_title ? (x.area ? '<b class="care-ar">' + esc(x.area) + '</b> · ' : '') + esc(x.cause_title)
+                              : '<span class="care-mute">не разобрано</span>';
+    return '<div class="care-fd' + (x.dismissed ? ' off' : '') + '">' +
+      '<div class="care-fh"><span class="care-who">' + esc(x.who || (x.dialog_id ? 'Без имени' : 'Из аккаунта школы')) + '</span>' +
+        '<span class="care-chan">' + esc(careCh(x)) + '</span>' +
+        '<span class="care-when num">' + careWhen(x) + '</span>' + careStatus(x) + '</div>' +
+      '<div class="care-q">' + (x.said ? '«' + esc(x.said) + '»' : esc(x.symptom)) + '</div>' +
+      '<div class="care-fm">' + where + (x.said ? '<span class="care-sym"> — ' + esc(x.symptom) + '</span>' : '') + '</div>' +
+      (x.action ? '<div class="care-act"><b>Что сделать:</b> ' + esc(x.action) + '</div>' : '') +
+      (reply ? '<div class="care-act"><b>' + replyLab + ':</b> ' + esc(reply) + '</div>' : '') +
+      '<div class="care-fa">' +
+        (x.dialog_id ? '<a class="care-link" href="#dialog/' + encodeURIComponent(x.dialog_id) + '">открыть диалог</a>' : '') +
+        (x.dismissed ? '' : '<button class="care-dis" data-cdis="' + x.id + '" title="Разбор ошибся: это не техническая проблема">не забота</button>') +
+      '</div></div>';
+  }
+
   /* «Как решаем» — справочник будущего агента заботы (Вера 24.11.2026: «ты пишешь, как
      решил бы, я говорю ок или не ок; если ок — подобные потом решаешь сам»). Текст
      «Ответить: … Руками: … Починить: …» раскладываем по строкам. */
@@ -46002,13 +46036,23 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить раздел. Проверь интернет и обнови страницу.</div></div>';
       return;
     }
-    var d = state._care, tab = state.careTab === 'unsorted' ? 'unsorted' : 'causes';
+    var d = state._care, tab = state.careTab === 'unsorted' || state.careTab === 'causes' ? state.careTab : 'feed';
+    var fd = careCases('all');
     var tabs = '<div class="care-tabs" role="tablist">' +
+      '<button role="tab" aria-selected="' + (tab === 'feed') + '" class="qchip' + (tab === 'feed' ? ' on' : '') + '" data-ctab="feed">Обращения' +
+        (Array.isArray(fd) ? ' <span class="qn">' + fd.filter(function (x) { return !x.dismissed; }).length + '</span>' : '') + '</button>' +
       '<button role="tab" aria-selected="' + (tab === 'causes') + '" class="qchip' + (tab === 'causes' ? ' on' : '') + '" data-ctab="causes">Причины <span class="qn">' + d.causes.length + '</span></button>' +
       '<button role="tab" aria-selected="' + (tab === 'unsorted') + '" class="qchip' + (tab === 'unsorted' ? ' on' : '') + (d.unsorted ? ' hot' : '') + '" data-ctab="unsorted">Неразобранное <span class="qn">' + d.unsorted + '</span></button>' +
       '</div>';
     var body;
-    if (tab === 'causes') {
+    if (tab === 'feed') {
+      body = '<div class="card care-feed">' +
+        (fd === 'loading' ? '<div class="shim care-shim"></div><div class="shim care-shim"></div>' :
+         fd === 'none' ? '<div class="empty">Не удалось загрузить обращения</div>' :
+         fd.length ? fd.map(careFeedRow).join('') :
+         '<div class="empty">За 90 дней технических обращений нет.</div>') + '</div>' +
+        '<div class="care-foot">Обращения за 90 дней, новые сверху. «Не забота» остается в ленте серой: по ней видно, где разбор ошибся.</div>';
+    } else if (tab === 'causes') {
       body = '<div class="card care-list">' + d.causes.map(function (c) {
         var open = state.careOpen === c.id;
         return '<div class="care-item' + (open ? ' open' : '') + '">' +
