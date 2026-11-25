@@ -263,6 +263,7 @@ def leads():
         klass = [11, 10, 11, 9, 8, None, None, None, 10, 11, 9, 8][i % 12]
         out.append({
             "id": "demo-%02d" % i,
+            "no": 1001 + i,              # короткий номер карточки К-1001
             "name": name,
             "school_class": klass,
             "stage": stage_of(i),

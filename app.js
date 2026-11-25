@@ -717,6 +717,25 @@
   /* Имени нет — подписываем тем, что человек успел сделать: заявку без имени менеджер
      откроет и разберет, а пустой заход трогать незачем. Голое «Без имени» на обоих
      не отличало заявку от случайного посетителя. */
+  /* Короткий номер карточки К-1001 (Павел 25.11.2026: «всем присвоить ID, чтобы
+     верифицировать и исключить задвоения»). Выдает сервер (sessions.card_no) по порядку
+     прихода, навсегда; тут только подпись и поиск по id из загруженных лидов. */
+  var LNO = { src: null, idx: {} };
+  function leadNo(x) {
+    if (x && typeof x === 'object') return x.no ? 'К-' + x.no : '';
+    if (!x || !state.leads) return '';
+    if (LNO.src !== state.leads) {
+      LNO.idx = {}; LNO.src = state.leads;
+      state.leads.forEach(function (l) { if (l.no) LNO.idx[l.id] = l.no; });
+    }
+    return LNO.idx[x] ? 'К-' + LNO.idx[x] : '';
+  }
+  function lnoTag(x) {
+    var n = leadNo(x);
+    return n ? '<span class="lno num">' + n + '</span>' : '';
+  }
+  // «к-1234», «k1234», «1234» в поиске — все про номер карточки
+  function lnoHay(l) { return l && l.no ? ' к-' + l.no + ' к' + l.no + ' k-' + l.no + ' k' + l.no + ' #' + l.no : ''; }
   function leadName(l) {
     if (l.name) return l.name;
     // Ник — тоже имя: «Заход без анкеты» при живом @nick читалось как «мы про него
@@ -1183,7 +1202,7 @@
       arr = arr.filter(function (l) {
         var dirs = Array.isArray(l.directions) ? l.directions.join(' ') : (l.directions || '');
         var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' + ((l.booking || {}).contact || '') + ' ' +
-          (l.crm.note || '') + ' ' + dirs + ' ' + (l.grade || '')).toLowerCase();
+          (l.crm.note || '') + ' ' + dirs + ' ' + (l.grade || '') + lnoHay(l)).toLowerCase();
         return hay.indexOf(state.q) !== -1;
       });
     }
@@ -30099,8 +30118,9 @@
       '</div></div>';
     }
 
-    /* Напоминание, что сверху фикса можно добрать: свои продажи и партнёрка. Партнёрский
-       процент не закреплён (ждёт Виталия) — жёсткую цифру не ставим, см. partner-program. */
+    /* Напоминание, что сверху фикса можно добрать: свои продажи и партнёрка. Процент 5%
+       закреплён (оферта 27.10), см. partner-program. Раскрыт поток кабинета по просьбе
+       Павла 25.11: рилсы → своя ссылка → приводишь и сам же продаёшь. */
     var earn = '<div class="card sp12">' +
       '<div class="sec-head"><div><div class="t">Можно зарабатывать больше</div>' +
         '<div class="s">фикс и KPI — не потолок, сверху можно добрать</div></div></div>' +
@@ -30108,9 +30128,18 @@
         '<div class="mp-earn-row"><span class="mp-earn-k">Продал сам</span>' +
           '<span class="mp-earn-v">до 3,2% с каждой оплаты клиента</span></div>' +
         '<div class="mp-earn-row"><span class="mp-earn-k">Привёл семью</span>' +
-          '<span class="mp-earn-v">партнёрский процент с её оплат</span></div>' +
+          '<span class="mp-earn-v">5% с её покупок от 150 000 ₽ (грант и поездки)</span></div>' +
+        '<div class="mp-earn-how"><div class="mp-earn-how-h">Как это работает</div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">1</span>' +
+            '<span>Заводишь свой партнёрский кабинет — получаешь личную ссылку и готовые материалы для рилсов внутри</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">2</span>' +
+            '<span>Снимаешь рилсы, выкладываешь в свои соцсети и ставишь под ними свою ссылку</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">3</span>' +
+            '<span>Кто перешёл по ссылке — закрепляется за тобой, можешь сам ему продавать</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">4</span>' +
+            '<span>Купил — процент твой. Приведённых и доход система считает сама</span></div>' +
+        '</div>' +
         '<button class="bp ghost mp-earn-cta" data-motivearn="1">Подключить и получить ссылку</button>' +
-        '<div class="s mp-earn-note">Партнёрский процент закрепим точнее — пока без фиксированной цифры.</div>' +
       '</div></div>';
 
     view.innerHTML = back +
@@ -30126,7 +30155,8 @@
       '</div>';
     var eb = view.querySelector('[data-motivearn]');
     if (eb) eb.addEventListener('click', function () {
-      showToast('Партнёрскую ссылку подключим — закрепим процент, и кнопка станет рабочей.');
+      window.open('https://t.me/eastsideai_bot?start=partner', '_blank', 'noopener');
+      showToast('Открываю регистрацию партнёра в Telegram — там заведёшь кабинет и получишь ссылку.');
     });
     motivPersonBack(view); pageAnim(view);
   }
@@ -40711,7 +40741,7 @@
       return tf === 'no' ? !t.first : !!t.first;
     });
     var body = shown.slice(0, 300).map(function (p) {
-      var sub = [p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
+      var sub = [leadNo(p.i), p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
       var mark = p.v ? fmtMoney(Math.round(p.v)) + ' ₽' : '';
       if (p.n > 1 && MG_WHO_N[q.k]) mark = (mark ? mark + ' · ' : '') + p.n + ' ' + (q.k === 'invN' ? 'счета' : 'платежа');
       var on = p.i && state._mgOpen === p.i;
@@ -41448,16 +41478,19 @@
   function sbRegCalc(cc, a, b) {
     var out = {total: 0, contact: 0, by: {}, list: {}};
     SB_REG_KINDS.forEach(function (x) { out.by[x.k] = {n: 0, c: 0}; out.list[x.k] = []; });
-    out.list.all = [];
+    out.list.all = []; out.nl = 0;
     (cc.leads || []).forEach(function (l) {
       // склеенный дубль не лид: человек один, и это главная карточка (поле mg сервера)
-      if (l.nl === 'family' || l.mg) return;
+      if (l.mg) return;
       // ra — все записи на эфиры [дата, слаг, смотрел]; без него (старый ответ сервера) только интенсивы
       var all = l.ra ? l.ra.map(function (r) { return [r[0], r[2], r[1]]; })
         : (l.rg || (l.reg ? [[l.reg, l.w ? 1 : 0]] : [])).map(function (r) { return [r[0], r[1], 'intensive']; });
       var regs = all.filter(function (r) { return r[0] >= a && r[0] <= b; });
       var fresh = l.d >= a && l.d <= b;
       if (!fresh && !regs.length) return;
+      /* Отмеченный «кто это» (уже клиент, семья, спам...) в «Пришло» не идет (Павел 25.11.2026:
+         «не убирается лид, когда ставлю, что уже клиент»). Число таких — строкой под плитками. */
+      if (l.nl) { if (l.nl !== 'family') out.nl++; return; }
       var k = regs.length ? 'efir' : (SB_REG_DOOR[l.k] || 'other');
       var has = !!(l.c || l.ac);
       var what = regs.some(function (r) { return String(r[2] || '').indexOf('intensive') === 0; }) ? 'интенсив' : 'эфир';
@@ -41557,7 +41590,9 @@
           'big' + (free.length ? ' warn' : '')) +
       '</div>' +
       (rest > 0 ? '<div class="sb-rnote">Еще ' + rest + ' ' + plural(rest, 'человек', 'человека', 'человек') +
-        ' не в работе: без контакта, отказ, уже клиент или отмечены «не лид».</div>' : '') +
+        ' не в работе: без контакта, отказ или уже клиент.</div>' : '') +
+      (g.nl ? '<div class="sb-rnote">Не считаем: ' + g.nl + ' ' + plural(g.nl, 'человек', 'человека', 'человек') +
+        ' с отметкой «кто это» (уже клиент, вакансия, спам).</div>' : '') +
       (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
   }
 
@@ -41866,6 +41901,7 @@
       var reason = v.why === 'lead' ? null : v.why;
       var done = function () {
         close();
+        delete MG_HIST[id];   // раскрытая история перечитается с новой отметкой
         state._sb = null; state._mkCross = null; state._pot = null;
         if (after) after(); else renderView();
         showToast(reason ? 'Убрали из лидов: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1]
@@ -43032,7 +43068,7 @@
         : '<small>оплат нет нигде</small>';
     return '<button class="dbt-r ' + r.state + '" data-dbtlead="' + esc(r.id) + '">' +
       '<span class="sb-pn"><b>' + esc(r.name) + '</b><small>' +
-        esc([r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет',
+        esc([leadNo(r.id), r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет',
              r.support === false && 'не в Сопровождении'].filter(Boolean).join(' · ')) +
       '</small></span>' +
       '<span class="sb-po' + (r.owner ? ' calm' : ' none') + '" data-l="Ведет">' + esc(r.owner || 'никто') + '</span>' +
@@ -43888,6 +43924,7 @@
   function msFreshRow(p, cc, canMark) {
     var st = MS_FRESH[p.state] || MS_FRESH.out;
     var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
+    if (leadNo(p.id)) meta.unshift(leadNo(p.id));
     if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
     var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
     // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
@@ -48190,7 +48227,7 @@
     var real = realStages(sts);
     var mine = real.filter(function (st) { return stageIn(st, t.id); }).length;
     var rows = '';
-    rows += '<div class="po-tdr"><span>Этапов ведем мы</span>' +
+    rows += '<div class="po-tdr"><span>' + esc(((p.stages_head || {}).count) || 'Этапов ведем мы') + '</span>' +
       '<b class="num">' + mine + ' из ' + real.length + '</b></div>';
     if (t.ends) {
       rows += '<div class="po-tdr"><span>Работа заканчивается</span><b>' + esc(t.ends) + '</b></div>';
@@ -48537,9 +48574,14 @@
       : cnt < real.length
         ? cnt + ' из ' + real.length + ' этапов: ' + (real.length - cnt) + ' только в тарифе «' + who + '»'
         : 'все ' + cnt + ' ' + plural(cnt, 'этап', 'этапа', 'этапов') + ', последние ' + tail.length + ' есть только здесь';
+    /* Подписи выше написаны под поступление (там младшие тарифы отрезают хвост).
+       У других направлений этапы режутся иначе, и направление пишет свои слова
+       в stages_head портала, а счет остается за кодом. */
+    var sh = p.stages_head || {};
+    if (sh.sub && sh.sub[mode]) sub = sh.sub[mode];
     var head = '<div class="card po-card po-stghead">' +
       '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
-        '<div><div class="t">Этапы поступления</div>' +
+        '<div><div class="t">' + esc(sh.title || 'Этапы поступления') + '</div>' +
         '<div class="s">' + esc(sub) + '</div></div></div>' +
       '<div class="po-payseg"><div class="dperiod">' + segs + '</div></div>' + portalStagesLede(p, mode, sts) + '</div>';
 
@@ -48547,6 +48589,8 @@
   }
   /* якорь экрана: одно предложение, которое диагност произносит вслух */
   function portalStagesLede(p, mode, sts) {
+    var own = (p.stages_head || {}).lede;
+    if (own && own[mode]) return '<div class="po-lede">' + esc(own[mode]) + '</div>';
     if (mode === 'all') {
       return '<div class="po-lede">Слева направо тариф не добавляет этапов — он забирает у семьи работу и добавляет вузы в подачу.</div>';
     }
@@ -50754,7 +50798,7 @@
     if (state.q) {
       arr = arr.filter(function (l) {
         var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' + (l.contact || '') + ' ' +
-          (l.crm.note || '')).toLowerCase();
+          (l.crm.note || '') + lnoHay(l)).toLowerCase();
         return hay.indexOf(state.q) !== -1;
       });
     }
@@ -50828,7 +50872,7 @@
                   : ic('globe', 13) + '<span class="pr-cl">Платформа</span>') + '</span>' +
             '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' + esc(leadName(l)) + '</div>' +
               // Ник уже стоит в заголовке, если имени нет, — второй раз его не пишем.
-              '<div class="t-sub">' + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
+              '<div class="t-sub">' + lnoTag(l) + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
                 : l.contact ? 'имени не назвал' : 'контакта нет') + '</div></div>' +
             '<div class="pr-why hidem">' + esc(prWhy(l)) + '</div>' +
             '<div class="pr-age num' + (age >= PR_QUIET_DAYS ? ' cold' : '') + '">' +
@@ -51077,7 +51121,7 @@
              один — куда он идет, а заметка целиком все равно не влезала и обрывалась
              на полуслове. Не проставлено — так и пишем: это повод зайти и поставить,
              пока оно пустое, семья видит общий пакет документов. */
-          '<div class="t-sub">' + (tutorCol()
+          '<div class="t-sub">' + lnoTag(l) + (tutorCol()
             ? (leadTrack(l) ? esc(trackName(leadTrack(l))) : '<i class="t-sub-none">направление не проставлено</i>')
             : (profileBits.join(' · ') || FUNNEL[l.status]) + (l.crm.note ? ' · ' + esc(l.crm.note) : '')) +
           '</div></div>' +
@@ -55183,7 +55227,10 @@
       (lnch && lnch.call_at
         ? '<span title="Консультация с тьютором состоялась">консультация ' + fmtWhen(lnch.call_at) + '</span>' : ''),
       (pos !== -1 ? '<span>' + (pos + 1) + ' из ' + list.length + '</span>' : ''),
-      '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
+      (leadNo((d && d.no) ? d : lead) || leadNo(id)
+        ? '<button class="m-no num" id="m-no" title="Номер карточки. Нажми, чтобы скопировать">' +
+          esc(leadNo((d && d.no) ? d : lead) || leadNo(id)) + '</button>'
+        : '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>'),
     ].filter(Boolean).join('<span class="dot-sep"></span>') +
       '<button class="m-copylink" id="m-link" title="Скопировать ссылку на эту карточку — команда откроет её одним кликом">' +
       ic('copy', 12) + 'Ссылка на клиента</button>';
@@ -55267,6 +55314,8 @@
     }
     var lnk = el('m-link');
     if (lnk) lnk.addEventListener('click', function () { copyText(leadUrl(id), lnk); });
+    var mno = el('m-no');
+    if (mno) mno.addEventListener('click', function () { copyText(mno.textContent, mno); });
     var mp = el('m-prev'), mn = el('m-next');
     if (mp) mp.addEventListener('click', function () { drawerStep(-1); });
     if (mn) mn.addEventListener('click', function () { drawerStep(1); });
@@ -56585,6 +56634,19 @@
       '</div></div>';
   }
 
+  /* Предоплата с лендинга (Павел 25.11.2026): ученик внес часть, открыты курсы,
+     тариф целиком откроет доплата из его кабинета. Срок прошел — строка красная:
+     это повод позвонить, доступ сам не закрывается. */
+  function pjDebt(b) {
+    var due = b.due_at ? new Date(b.due_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
+    var sum = (b.amount || 0).toLocaleString('ru-RU') + ' ₽';
+    return '<div class="pj-debt' + (b.late ? ' late' : '') + '">' +
+      '<b>' + (b.late ? 'Доплата просрочена' : 'Внесена предоплата') + '</b>' +
+      '<span>Осталось доплатить <b class="num">' + esc(sum) + '</b>' + (due ? (b.late ? ', срок был ' : ' до ') + esc(due) : '') +
+      ', тогда откроется «' + esc(b.tier_title || '') + '». Доплата идет из кабинета ученика по цене эфира.' +
+      (b.late ? ' Позвоните и узнайте, что мешает.' : '') + '</span></div>';
+  }
+
   function buildProjectSection(id) {
     var r = PJ[id];
     if (!r) { loadProject(id); return skeletonSection('projects'); }
@@ -56624,6 +56686,7 @@
           (on ? '<button type="button" class="pd-sw on" id="pj-sw">' +
             '<span class="pd-sw-l">Открыт</span>' +
             '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button>' : '') + '</div>' +
+          (on && p && p.balance ? pjDebt(p.balance) : '') +
           picker +
           (on && p && p.granted_by ? '<div class="det-sw-by">открыл ' + esc(p.granted_by) + ' · ' + esc(fmtWhen(p.granted_at)) + '</div>' : '')) +
       '</div>';
@@ -57304,6 +57367,16 @@
         '<span class="ql-l">Первый ответ</span>' +
         '<span class="own-sp ' + ownSev(m) + '">за ' + fmtMins(m) + '</span>' +
         '<span class="own-when">' + fmtWhen(crm.first_touch_at) + '</span>' +
+      '</div>';
+    } else if (crm.touch || crm.status === 'client') {
+      /* Кнопку «Связался» не нажали, но следы есть: звонок, переписка, консультация или
+         оплата (считает сервер, поле touch). Павел 25.11.2026: «уже оплатили, а якобы не
+         связались, нужно чтобы автоматически менялось». Скорости ответа тут нет: время
+         следа это не время первого ответа. */
+      right = '<div class="own-t">' +
+        '<span class="ql-l">Связались</span>' +
+        (crm.touch ? '<span class="own-when">' + esc(crm.touch.how) + ' · ' + fmtWhen(crm.touch.at) + '</span>'
+          : '<span class="own-when">уже клиент</span>') +
       '</div>';
     } else {
       var waited = base && base.created_at
@@ -62874,6 +62947,64 @@
       '</div></div>';
   }
 
+  /* «За что ближайшая выплата» — разбивка суммы из героя по точкам: Павел 25.11,
+     «у тьюторов нет понимания, когда за какую точку выплата». Берём закрытые точки и
+     консультации, попавшие в окно ближайшей выплаты (те же поля, что считает сервер
+     в payout.amount), и показываем построчно: ученик, точка, сумма. Итог — число с
+     сервера, вторую копию правила 10/20 не заводим. */
+  function pbDueBreakdown(box) {
+    var pay = box.payout || {};
+    if (!pay.date) return '';
+    var from = (pay.from || '').slice(0, 10), to = (pay.to || '').slice(0, 10);
+    var inWin = function (iso) {
+      var d = (iso || '').slice(0, 10);
+      return !!d && !!from && !!to && d >= from && d <= to;
+    };
+    var items = [];
+    (box.students || []).forEach(function (st) {
+      (st.points || []).forEach(function (p, i) {
+        if (p.closedAt && inWin(p.closedAt)) {
+          items.push({ who: st.name, what: 'Точка ' + (i + 1) + '. ' + p.title,
+                       amount: p.amount, when: p.closedAt });
+        }
+      });
+      var c = st.consultation;
+      if (c && !c.paid && inWin(c.heldOn)) {
+        items.push({ who: st.name, what: 'Консультация по подбору вузов',
+                     amount: c.amount, when: c.heldOn });
+      }
+    });
+    items.sort(function (a, b) { return (a.when || '') < (b.when || '') ? -1 : 1; });
+    var date = pay.date ? fmtDay(pay.date) : '';
+    var rule = 'Выплаты два раза в месяц, 10 и 20 числа. Закрыл точку — она сразу встаёт ' +
+      'в ближайшую из них.';
+    if (!items.length) {
+      return '<div class="card pb-due-card"><div class="pb-due-h">' +
+        '<div class="t">В ближайшую выплату ' + esc(date) + '</div>' +
+        '<div class="s">' + rule + '</div></div>' +
+        '<div class="pb-due-empty">Пока сюда ничего не попало. Закрой точку по любому ученику — ' +
+          'и она появится здесь с суммой и датой.</div></div>';
+    }
+    var list = items.map(function (it) {
+      return '<div class="pb-due-row">' +
+        '<span class="pb-due-who">' + esc(it.who) + '</span>' +
+        '<span class="pb-due-what">' + esc(it.what) + '</span>' +
+        '<span class="pb-due-when">' + fmtDay(it.when) + '</span>' +
+        '<span class="pb-due-amt num">' + fmtMoney(it.amount) + ' ₽</span>' +
+      '</div>';
+    }).join('');
+    return '<div class="card pb-due-card">' +
+      '<div class="pb-due-h"><div>' +
+        '<div class="t">В ближайшую выплату ' + esc(date) +
+          '<span class="pb-due-n">' + items.length + ' ' +
+            plural(items.length, 'точка', 'точки', 'точек') + '</span></div>' +
+        '<div class="s">' + rule + '</div></div>' +
+        '<div class="pb-due-total"><b class="num">' + fmtMoney(pay.amount) + ' ₽</b>' +
+          '<small>к выплате</small></div>' +
+      '</div>' +
+      '<div class="pb-due-rows">' + list + '</div></div>';
+  }
+
   function renderPointsBoard(view) {
     if (isSalesManager()) return renderManagerMot(view);
     var seg = pbSeg();
@@ -62905,7 +63036,7 @@
           ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
           : 'Учеников с заведенными точками пока нет.') + '</div></div>';
 
-    var top = seg === 'my' ? pbHero(box) : head;
+    var top = seg === 'my' ? (pbHero(box) + pbDueBreakdown(box)) : head;
     view.innerHTML = pbTabs() + top + pbTracks(box.students) + list;
     pbWire(view);
   }
