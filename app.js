@@ -717,6 +717,25 @@
   /* Имени нет — подписываем тем, что человек успел сделать: заявку без имени менеджер
      откроет и разберет, а пустой заход трогать незачем. Голое «Без имени» на обоих
      не отличало заявку от случайного посетителя. */
+  /* Короткий номер карточки К-1001 (Павел 25.11.2026: «всем присвоить ID, чтобы
+     верифицировать и исключить задвоения»). Выдает сервер (sessions.card_no) по порядку
+     прихода, навсегда; тут только подпись и поиск по id из загруженных лидов. */
+  var LNO = { src: null, idx: {} };
+  function leadNo(x) {
+    if (x && typeof x === 'object') return x.no ? 'К-' + x.no : '';
+    if (!x || !state.leads) return '';
+    if (LNO.src !== state.leads) {
+      LNO.idx = {}; LNO.src = state.leads;
+      state.leads.forEach(function (l) { if (l.no) LNO.idx[l.id] = l.no; });
+    }
+    return LNO.idx[x] ? 'К-' + LNO.idx[x] : '';
+  }
+  function lnoTag(x) {
+    var n = leadNo(x);
+    return n ? '<span class="lno num">' + n + '</span>' : '';
+  }
+  // «к-1234», «k1234», «1234» в поиске — все про номер карточки
+  function lnoHay(l) { return l && l.no ? ' к-' + l.no + ' к' + l.no + ' k-' + l.no + ' k' + l.no + ' #' + l.no : ''; }
   function leadName(l) {
     if (l.name) return l.name;
     // Ник — тоже имя: «Заход без анкеты» при живом @nick читалось как «мы про него
@@ -1183,7 +1202,7 @@
       arr = arr.filter(function (l) {
         var dirs = Array.isArray(l.directions) ? l.directions.join(' ') : (l.directions || '');
         var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' + ((l.booking || {}).contact || '') + ' ' +
-          (l.crm.note || '') + ' ' + dirs + ' ' + (l.grade || '')).toLowerCase();
+          (l.crm.note || '') + ' ' + dirs + ' ' + (l.grade || '') + lnoHay(l)).toLowerCase();
         return hay.indexOf(state.q) !== -1;
       });
     }
@@ -40602,7 +40621,7 @@
       return tf === 'no' ? !t.first : !!t.first;
     });
     var body = shown.slice(0, 300).map(function (p) {
-      var sub = [p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
+      var sub = [leadNo(p.i), p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
       var mark = p.v ? fmtMoney(Math.round(p.v)) + ' ₽' : '';
       if (p.n > 1 && MG_WHO_N[q.k]) mark = (mark ? mark + ' · ' : '') + p.n + ' ' + (q.k === 'invN' ? 'счета' : 'платежа');
       var on = p.i && state._mgOpen === p.i;
@@ -42929,7 +42948,7 @@
         : '<small>оплат нет нигде</small>';
     return '<button class="dbt-r ' + r.state + '" data-dbtlead="' + esc(r.id) + '">' +
       '<span class="sb-pn"><b>' + esc(r.name) + '</b><small>' +
-        esc([r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет',
+        esc([leadNo(r.id), r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет',
              r.support === false && 'не в Сопровождении'].filter(Boolean).join(' · ')) +
       '</small></span>' +
       '<span class="sb-po' + (r.owner ? ' calm' : ' none') + '" data-l="Ведет">' + esc(r.owner || 'никто') + '</span>' +
@@ -43785,6 +43804,7 @@
   function msFreshRow(p, cc, canMark) {
     var st = MS_FRESH[p.state] || MS_FRESH.out;
     var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
+    if (leadNo(p.id)) meta.unshift(leadNo(p.id));
     if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
     var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
     // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
@@ -50607,7 +50627,7 @@
     if (state.q) {
       arr = arr.filter(function (l) {
         var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' + (l.contact || '') + ' ' +
-          (l.crm.note || '')).toLowerCase();
+          (l.crm.note || '') + lnoHay(l)).toLowerCase();
         return hay.indexOf(state.q) !== -1;
       });
     }
@@ -50681,7 +50701,7 @@
                   : ic('globe', 13) + '<span class="pr-cl">Платформа</span>') + '</span>' +
             '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' + esc(leadName(l)) + '</div>' +
               // Ник уже стоит в заголовке, если имени нет, — второй раз его не пишем.
-              '<div class="t-sub">' + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
+              '<div class="t-sub">' + lnoTag(l) + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
                 : l.contact ? 'имени не назвал' : 'контакта нет') + '</div></div>' +
             '<div class="pr-why hidem">' + esc(prWhy(l)) + '</div>' +
             '<div class="pr-age num' + (age >= PR_QUIET_DAYS ? ' cold' : '') + '">' +
@@ -50930,7 +50950,7 @@
              один — куда он идет, а заметка целиком все равно не влезала и обрывалась
              на полуслове. Не проставлено — так и пишем: это повод зайти и поставить,
              пока оно пустое, семья видит общий пакет документов. */
-          '<div class="t-sub">' + (tutorCol()
+          '<div class="t-sub">' + lnoTag(l) + (tutorCol()
             ? (leadTrack(l) ? esc(trackName(leadTrack(l))) : '<i class="t-sub-none">направление не проставлено</i>')
             : (profileBits.join(' · ') || FUNNEL[l.status]) + (l.crm.note ? ' · ' + esc(l.crm.note) : '')) +
           '</div></div>' +
@@ -55036,7 +55056,10 @@
       (lnch && lnch.call_at
         ? '<span title="Консультация с тьютором состоялась">консультация ' + fmtWhen(lnch.call_at) + '</span>' : ''),
       (pos !== -1 ? '<span>' + (pos + 1) + ' из ' + list.length + '</span>' : ''),
-      '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
+      (leadNo((d && d.no) ? d : lead) || leadNo(id)
+        ? '<button class="m-no num" id="m-no" title="Номер карточки. Нажми, чтобы скопировать">' +
+          esc(leadNo((d && d.no) ? d : lead) || leadNo(id)) + '</button>'
+        : '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>'),
     ].filter(Boolean).join('<span class="dot-sep"></span>') +
       '<button class="m-copylink" id="m-link" title="Скопировать ссылку на эту карточку — команда откроет её одним кликом">' +
       ic('copy', 12) + 'Ссылка на клиента</button>';
@@ -55120,6 +55143,8 @@
     }
     var lnk = el('m-link');
     if (lnk) lnk.addEventListener('click', function () { copyText(leadUrl(id), lnk); });
+    var mno = el('m-no');
+    if (mno) mno.addEventListener('click', function () { copyText(mno.textContent, mno); });
     var mp = el('m-prev'), mn = el('m-next');
     if (mp) mp.addEventListener('click', function () { drawerStep(-1); });
     if (mn) mn.addEventListener('click', function () { drawerStep(1); });
