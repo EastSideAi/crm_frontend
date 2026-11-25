@@ -29967,29 +29967,58 @@
       if (state.page === 'motiv') renderView();
     });
   }
-  function motivTutGroup() {
-    var t = state._motivTut;
-    if (t == null) { motivTutLoad(); return ''; }
-    if (t === 'noaccess' || t === 'none' || !t.tutors || !t.tutors.length) return '';
-    var head = '<div class="rw-dept"><div class="rw-dept-t">Тьюторы</div>' +
-        '<div class="rw-dept-s">ближайшая выплата ' + fmtDay(t.day) +
-        ' · за закрытые точки по ученикам</div></div>';
-    var cards = t.tutors.map(function (tut) {
-      var rows = tut.rows.map(function (r) {
-        return '<div class="mt-trow">' +
-          '<span class="mt-tcl">' + esc(r.client) + '</span>' +
-          '<span class="mt-tpt">' + esc(r.title) + (r.result ? ' · ' + esc(r.result) : '') + '</span>' +
-          '<span class="mt-tdt">' + fmtDay(r.closedDay) + '</span>' +
-          '<span class="mt-tam num">' + fmtMoney(r.amount) + ' ₽</span></div>';
-      }).join('');
-      return '<div class="mt-tut"><div class="mt-tuth">' +
-          '<b>' + esc(tut.name) + '</b>' +
-          '<span class="mt-tutn">' + tut.rows.length + ' ' +
-            plural(tut.rows.length, 'начисление', 'начисления', 'начислений') + '</span>' +
-          '<b class="mt-tuta num">' + fmtMoney(tut.total) + ' ₽</b></div>' +
-        rows + '</div>';
-    }).join('');
-    return head + cards;
+  /* Весь состав команды одним списком по группам. Три разных движка оплаты (штатные
+     reward_sheet, тьюторы case_points, подрядчики contractors) + люди без заведённой
+     оплаты. Ростер берём из /admin/api/team (все внутренние) + /admin/api/contractors
+     (нотариус, врач и прочие внешние), а суммы подкладываем из того источника, где они
+     реально есть. Где оплата в системе ещё не заведена — честный прочерк, это и есть
+     сигнал Павлу, что группа не настроена. */
+  var MOTIV_GROUPS = [
+    { key: 'tutors',    label: 'Тьюторы',           roles: ['tutor', 'senior_tutor', 'tutor_sales'] },
+    { key: 'admins',    label: 'Администраторы',    roles: ['admin', 'grant_admin'] },
+    { key: 'teachers',  label: 'Преподаватели',     roles: ['teacher'] },
+    { key: 'marketing', label: 'Маркетинг',         roles: ['marketer', 'marketing_lead', 'producer'] },
+    { key: 'product',   label: 'Продукт',           roles: ['product_lead'] },
+    { key: 'manage',    label: 'Управление и финансы', roles: ['head', 'super_admin', 'owner', 'manager', 'assistant', 'accountant'] },
+  ];
+  function motivTeamLoad() {
+    if ((Array.isArray(state._team) && state._team.length) || state._motivTeamBusy) return;
+    state._motivTeamBusy = true;
+    api('/admin/api/team').then(function (r) {
+      state._team = (r && r.users) || [];
+      state._motivTeamBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function () {
+      state._team = []; state._motivTeamBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  function motivContrLoad() {
+    if (state._motivContr != null || state._motivContrBusy) return;
+    state._motivContrBusy = true;
+    api('/admin/api/contractors').then(function (r) {
+      state._motivContr = (r && r.contractors) || [];
+      state._motivContrBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function () {
+      state._motivContr = []; state._motivContrBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  function motivDeptHead(label, n) {
+    return '<div class="rw-dept"><div class="rw-dept-t">' + esc(label) + '</div>' +
+      '<div class="rw-dept-s">' + n + ' ' + plural(n, 'человек', 'человека', 'человек') + '</div></div>';
+  }
+  function motivRosterRow(o) {
+    return '<div class="pl-row' + (o.clickId ? ' pl-go' : '') + '"' +
+        (o.clickId ? ' data-motivperson="' + o.clickId + '"' : '') + '>' +
+      '<span class="pl-nm">' + esc(o.name) +
+        (o.sub ? ' <span class="rw-role">' + esc(o.sub) + '</span>' : '') + '</span>' +
+      '<span class="pl-val">' +
+        '<span class="pl-sum num' + (o.planMuted ? ' muted' : '') + '">' + o.planText + '</span>' +
+        '<span class="pl-fact' + (o.factMuted ? ' muted' : '') + '">' + o.factText + '</span>' +
+      '</span>' + (o.clickId ? ic('go', 15) : '') +
+    '</div>';
   }
 
   /* Ближайшая выплата-остаток: расчёт месяца закрывается в начале следующего,
@@ -30016,25 +30045,68 @@
         'загрузить людей — проверь сеть.</div></div>';
       motivSegBind(view); return;
     }
-    var d = state._motivRw, all = d.sheets || [];
-    var groups = (d.depts || []).map(function (g) {
-      var mine = all.filter(function (s) { return (s.dept || '') === g.key; });
-      if (!mine.length) return '';
-      return '<div class="rw-dept"><div class="rw-dept-t">' + esc(g.label) + '</div>' +
-          '<div class="rw-dept-s">' + mine.length + ' ' +
-            plural(mine.length, 'человек', 'человека', 'человек') + '</div></div>' +
-        mine.map(motivPersonRow).join('');
+    // Фоновые источники ростера: команда и подрядчики. Пока команда не пришла — скелет.
+    motivTutLoad(); motivContrLoad();
+    if (!Array.isArray(state._team)) {
+      view.innerHTML = motivSeg() + dashSkeleton(); motivTeamLoad(); motivSegBind(view); return;
+    }
+    var d = state._motivRw, sheets = d.sheets || [];
+    var rwById = {};
+    sheets.forEach(function (s) { rwById[s.person_id] = s; });
+    var tutFact = {};
+    if (state._motivTut && state._motivTut.tutors) {
+      state._motivTut.tutors.forEach(function (t) { tutFact[t.id] = t.total; });
+    }
+    var team = state._team.filter(function (u) { return u.active !== false; });
+
+    var sections = MOTIV_GROUPS.map(function (g) {
+      var people = team.filter(function (u) { return g.roles.indexOf(u.role) >= 0; });
+      if (!people.length) return '';
+      people.sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'ru'); });
+      var rows = people.map(function (u) {
+        var sh = rwById[u.id];
+        var roleLabel = (ROLES[u.role] && ROLES[u.role].label) || u.role;
+        if (sh) {
+          return motivRosterRow({ name: u.name, sub: sh.title || roleLabel, clickId: u.id,
+            planText: 'фикс ' + fmtMoney(sh.fund_rub),
+            factText: 'начислено ' + fmtMoney(sh.total_rub), factMuted: !sh.total_rub });
+        }
+        if (g.key === 'tutors') {
+          var f = tutFact[u.id] || 0;
+          return motivRosterRow({ name: u.name, sub: roleLabel,
+            planText: 'сдельно, за точки', planMuted: true,
+            factText: 'к выплате ' + fmtMoney(f), factMuted: !f });
+        }
+        if (u.role === 'owner') {
+          return motivRosterRow({ name: u.name, sub: roleLabel,
+            planText: '—', planMuted: true, factText: 'дивиденды отдельно', factMuted: true });
+        }
+        return motivRosterRow({ name: u.name, sub: roleLabel,
+          planText: '—', planMuted: true, factText: 'оплата не заведена', factMuted: true });
+      }).join('');
+      return motivDeptHead(g.label, people.length) + rows;
     }).join('');
-    var tutHtml = motivTutGroup();
-    var body = groups + tutHtml;
+
+    var contrHtml = '';
+    if (Array.isArray(state._motivContr) && state._motivContr.length) {
+      var contr = state._motivContr.filter(function (c) { return c.active !== false; });
+      var crows = contr.map(function (c) {
+        return motivRosterRow({ name: c.full_name || c.name || 'Подрядчик',
+          sub: c.job || 'подрядчик',
+          planText: 'по актам', planMuted: true, factText: '—', factMuted: true });
+      }).join('');
+      contrHtml = motivDeptHead('Подрядчики', contr.length) + crows;
+    }
+
+    var body = sections + contrHtml;
     view.innerHTML = motivSeg() +
       '<div class="card listcard">' +
         '<div class="list-tools plm-head"><div>' +
           '<div class="t fe-t">Сотрудники</div>' +
-          '<div class="s fe-s">штатные — фикс и KPI, нажми чтобы раскрыть. Тьюторы — за ' +
-            'закрытые точки по ученикам. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
+          '<div class="s fe-s">весь состав по группам: заложено (фикс) и начислено за месяц. ' +
+            'штатного можно раскрыть. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
         '</div>' + finMonthNav() + '</div>' +
-        (body || '<div class="empty">Ни одного расчётного листа пока нет.</div>') +
+        (body || '<div class="empty">Команда пока не загрузилась — проверь сеть.</div>') +
       '</div>';
     Array.prototype.forEach.call(view.querySelectorAll('[data-motivperson]'), function (r) {
       r.addEventListener('click', function () {
@@ -30050,18 +30122,6 @@
     });
     motivSegBind(view); pageAnim(view);
   }
-  function motivPersonRow(s) {
-    return '<div class="pl-row pl-go" data-motivperson="' + s.person_id + '">' +
-      '<span class="pl-nm">' + esc(s.name) +
-        (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</span>' +
-      '<span class="pl-val">' +
-        '<span class="pl-sum num">фикс ' + fmtMoney(s.fund_rub) + '</span>' +
-        '<span class="pl-fact num' + (s.total_rub ? '' : ' muted') + '">к выплате ' +
-          fmtMoney(s.total_rub) + '</span>' +
-      '</span>' + ic('go', 15) +
-    '</div>';
-  }
-
   function renderMotivPerson(view) {
     var id = state.motivPerson;
     if (!state._motivRw) { view.innerHTML = dashSkeleton(); motivRwLoad(); return; }
