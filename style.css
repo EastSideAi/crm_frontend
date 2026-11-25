@@ -16610,6 +16610,22 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .care-unsorted { padding: 18px 24px; }
 .care-newc { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; max-width: 520px; }
 .care-shim { height: 40px; margin: 10px 0; }
+/* Лента «Обращения»: человек и канал — заголовок, его слова — главное, разбор — тише. */
+.care-feed { padding: 4px 24px; }
+.care-fd { display: flex; flex-direction: column; gap: 6px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.care-fd:last-child { border-bottom: none; }
+.care-fd.off { opacity: .55; }
+.care-fh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.care-fh .sev { margin-left: auto; }
+.care-who { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.care-chan { font-size: 12px; font-weight: 600; color: var(--blue); background: var(--blue-tint); padding: 2px 8px; border-radius: 6px; }
+.care-when { font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.care-q { font-size: 14px; line-height: 1.55; color: var(--ink); max-width: 80ch; display: -webkit-box;
+  -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.care-fm { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); max-width: 90ch; }
+.care-sym { color: var(--ink-2); }
+.care-fd .care-act { margin-top: 0; max-width: 90ch; }
+.care-fa { display: flex; gap: 14px; align-items: center; margin-top: 2px; }
 .care-foot { font-size: 12.5px; color: var(--ink-3); margin: 12px 4px 0; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) { .care-bar i { animation: none; } }
 @media (max-width: 1180px) and (min-width: 761px) {
@@ -16623,6 +16639,8 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
   .care-n { grid-area: n; align-items: flex-end; }
   .care-s { -webkit-line-clamp: 2; }
   .care-det { padding: 4px 16px 18px; }
+  .care-feed { padding: 0 16px; }
+  .care-fh .sev { margin-left: 0; }
   .care-addfix { grid-template-columns: 1fr; gap: 8px; }
   .care-case { grid-template-columns: 44px minmax(0, 1fr); }
   .care-cm { grid-column: 2; white-space: normal; flex-wrap: wrap; }
