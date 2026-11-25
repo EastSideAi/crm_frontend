@@ -16702,10 +16702,6 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 /* Моя смена: разделитель между отрезком и срезом «Оставили заявку» (Павел 11262) */
 .ms-spans .ms-chipsep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); }
 
-/* «Кто это» чипами в раскрытой истории (Павел 25.11.2026) */
-.mg-mk.on { background: var(--ink); border-color: var(--ink); color: var(--card); }
-.mg-mk.more { color: var(--ink-2); }
-
 /* Проверка ссылок эфира: значок статуса, сломанная строка подсвечена */
 .lad-row.gf-flat.efl-row { grid-template-columns: minmax(0, 1fr) auto; height: auto; min-height: 52px; padding-top: 10px; padding-bottom: 10px; }
 .lad-row.efl-row .lad-nm small { white-space: normal; overflow-wrap: anywhere; }
