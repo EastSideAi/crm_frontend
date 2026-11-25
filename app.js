@@ -48198,7 +48198,7 @@
     var real = realStages(sts);
     var mine = real.filter(function (st) { return stageIn(st, t.id); }).length;
     var rows = '';
-    rows += '<div class="po-tdr"><span>Этапов ведем мы</span>' +
+    rows += '<div class="po-tdr"><span>' + esc(((p.stages_head || {}).count) || 'Этапов ведем мы') + '</span>' +
       '<b class="num">' + mine + ' из ' + real.length + '</b></div>';
     if (t.ends) {
       rows += '<div class="po-tdr"><span>Работа заканчивается</span><b>' + esc(t.ends) + '</b></div>';
@@ -48545,9 +48545,14 @@
       : cnt < real.length
         ? cnt + ' из ' + real.length + ' этапов: ' + (real.length - cnt) + ' только в тарифе «' + who + '»'
         : 'все ' + cnt + ' ' + plural(cnt, 'этап', 'этапа', 'этапов') + ', последние ' + tail.length + ' есть только здесь';
+    /* Подписи выше написаны под поступление (там младшие тарифы отрезают хвост).
+       У других направлений этапы режутся иначе, и направление пишет свои слова
+       в stages_head портала, а счет остается за кодом. */
+    var sh = p.stages_head || {};
+    if (sh.sub && sh.sub[mode]) sub = sh.sub[mode];
     var head = '<div class="card po-card po-stghead">' +
       '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
-        '<div><div class="t">Этапы поступления</div>' +
+        '<div><div class="t">' + esc(sh.title || 'Этапы поступления') + '</div>' +
         '<div class="s">' + esc(sub) + '</div></div></div>' +
       '<div class="po-payseg"><div class="dperiod">' + segs + '</div></div>' + portalStagesLede(p, mode, sts) + '</div>';
 
@@ -48555,6 +48560,8 @@
   }
   /* якорь экрана: одно предложение, которое диагност произносит вслух */
   function portalStagesLede(p, mode, sts) {
+    var own = (p.stages_head || {}).lede;
+    if (own && own[mode]) return '<div class="po-lede">' + esc(own[mode]) + '</div>';
     if (mode === 'all') {
       return '<div class="po-lede">Слева направо тариф не добавляет этапов — он забирает у семьи работу и добавляет вузы в подачу.</div>';
     }
