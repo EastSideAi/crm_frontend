@@ -30118,8 +30118,9 @@
       '</div></div>';
     }
 
-    /* Напоминание, что сверху фикса можно добрать: свои продажи и партнёрка. Партнёрский
-       процент не закреплён (ждёт Виталия) — жёсткую цифру не ставим, см. partner-program. */
+    /* Напоминание, что сверху фикса можно добрать: свои продажи и партнёрка. Процент 5%
+       закреплён (оферта 27.10), см. partner-program. Раскрыт поток кабинета по просьбе
+       Павла 25.11: рилсы → своя ссылка → приводишь и сам же продаёшь. */
     var earn = '<div class="card sp12">' +
       '<div class="sec-head"><div><div class="t">Можно зарабатывать больше</div>' +
         '<div class="s">фикс и KPI — не потолок, сверху можно добрать</div></div></div>' +
@@ -30128,9 +30129,17 @@
           '<span class="mp-earn-v">до 3,2% с каждой оплаты клиента</span></div>' +
         '<div class="mp-earn-row"><span class="mp-earn-k">Привёл семью</span>' +
           '<span class="mp-earn-v">5% с её покупок от 150 000 ₽ (грант и поездки)</span></div>' +
+        '<div class="mp-earn-how"><div class="mp-earn-how-h">Как это работает</div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">1</span>' +
+            '<span>Заводишь свой партнёрский кабинет — получаешь личную ссылку и готовые материалы для рилсов внутри</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">2</span>' +
+            '<span>Снимаешь рилсы, выкладываешь в свои соцсети и ставишь под ними свою ссылку</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">3</span>' +
+            '<span>Кто перешёл по ссылке — закрепляется за тобой, можешь сам ему продавать</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">4</span>' +
+            '<span>Купил — процент твой. Приведённых и доход система считает сама</span></div>' +
+        '</div>' +
         '<button class="bp ghost mp-earn-cta" data-motivearn="1">Подключить и получить ссылку</button>' +
-        '<div class="s mp-earn-note">Заведёшь партнёрский кабинет — своя ссылка и готовые материалы ' +
-          'для рилсов внутри. Приведённых и доход система считает сама.</div>' +
       '</div></div>';
 
     view.innerHTML = back +
