@@ -7423,6 +7423,15 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .rcp-item .trow.dc-grid { border-bottom: 0; }
 .rcp-item:last-child { border-bottom: 0; }
 .rcp-sub { color: var(--ink-3); font-size: 12.5px; }
+/* Архив чеков: номер чека сверху, что оказали под ним — в одну строку они не влезают. */
+.ra-main { align-items: flex-start; }
+.ra-grid .rcp-act { margin-left: 0; }
+.ra-grid .rcp-a { white-space: nowrap; text-decoration: none; }
+.ra-grid .dc-when { font-variant-numeric: tabular-nums; }
+.dc-wrap .trow.dc-grid.ra-grid {
+  grid-template-columns: minmax(0, 2.4fr) 124px 92px 96px 132px; }
+.ra-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ra-txt b, .ra-txt .rcp-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rcp-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 0 14px 12px 40px; }
 .rcp-why { font-size: 12px; color: var(--red-ink); }

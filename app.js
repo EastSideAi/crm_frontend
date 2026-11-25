@@ -4091,18 +4091,29 @@
       /* Вердикт отвечает на вопрос, ради которого сюда заходят: что висит без подписи.
          Неподписанный акт — это незакрытый расход и невозможная выплата. */
       var dcs = DC.items;
+      // Архив чеков: свой вердикт, документов он не ждет.
+      if (DC.kind === 'rarch') {
+        var ran = RA.items ? RA.items.length : 0;
+        html = '<div><h2>Документы</h2><div class="verdict"><span class="vspark">' +
+          ic('doc', 13) + '</span><span>' + (!RA.items ? 'Загружаю архив чеков…'
+            : !ran ? 'В архиве пусто.'
+            : 'Старые чеки с Google Диска за выплаты мимо CRM: <b>' + ran + '</b>. ' +
+              'Новые чеки живут у платежа, во вкладке «Чеки».') + '</span></div></div>';
+        dcs = null;
+      }
       var wait = dcs ? dcs.filter(function (d) {
         return d.kind === 'act' && (d.status === 'wait_both' || d.status === 'wait_co' ||
                                     d.status === 'wait_ct');
       }).length : 0;
       var phrase7;
-      if (!dcs) phrase7 = 'Загружаю документы…';
+      if (DC.kind === 'rarch') phrase7 = null;
+      else if (!dcs) phrase7 = 'Загружаю документы…';
       else if (!dcs.length) phrase7 = 'Документов пока нет. Акт появится здесь сам, как только вы сформируете его по принятому заданию.';
       else if (wait) phrase7 = 'Без подписи: <b>' + wait + ' ' +
         plural(wait, 'акт', 'акта', 'актов') +
         '</b>. Пока обе подписи не стоят, выплату провести нельзя.';
       else phrase7 = 'Все акты подписаны с обеих сторон.';
-      html = '<div><h2>Документы</h2>' +
+      if (phrase7 !== null) html = '<div><h2>Документы</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' + phrase7 + '</span></div></div>';
     }
     if (state.page === 'czservices') {
@@ -21139,7 +21150,7 @@
      нет вовсе, и счет для него единственная бумага, доказывающая расход. Без вкладки
      раздел по такому человеку выглядел бы пустым, хотя деньги ему уходили. */
   var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['invoice', 'Счета'],
-                  ['receipt', 'Чеки'], ['contract', 'Договоры'],
+                  ['receipt', 'Чеки'], ['rarch', 'Архив чеков'], ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
   // Чеки (этап 7) — отдельный источник: они привязаны к выплате, а не к человеку, и
   // живут своей ручкой. RCP держит их и сводку долгов для полосы вверху «Документов».
@@ -21150,6 +21161,66 @@
                 none: 'ct-draft', sent: 'ct-wait', live: 'ct-wait' };
   var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc',
                   invoice: 'coins' };
+
+  /* Архив чеков (Роман 25.11.2026, задача 12003): старые чеки с Google Диска за выплаты,
+     которые шли мимо CRM. Платежа у них нет, поэтому ни долга, ни сверки, ни кнопок —
+     только найти и посмотреть файл. Новые чеки сюда не попадают: они живут у платежа.
+     Человек без карточки исполнителя получает свою папку по подписи с Диска (p:<имя>). */
+  var RA = { items: null };
+
+  function raLoad() {
+    api('/admin/api/contractor-receipts/archive').then(function (r) {
+      RA.items = (r.items || []).map(function (i) {
+        i.contractor_id = i.contractor_id || ('p:' + (i.person || ''));
+        return i;
+      });
+      if (state.page === 'czdocs') renderAll();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      RA.items = RA.items || [];
+      if (state.page === 'czdocs') renderAll();
+    });
+  }
+
+  function raFiltered() {
+    var q = (DC.q || '').trim().toLowerCase();
+    var list = RA.items || [];
+    if (!q) return list;
+    return list.filter(function (i) {
+      return [i.contractor, i.person, i.inn, i.receipt_inn, i.receipt_no, i.title,
+              i.period, i.service, i.dept].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  function raFileUrl(id) {
+    return API + '/admin/api/contractor-receipts/archive/' + encodeURIComponent(id) +
+      '/file?k=' + encodeURIComponent(getKey());
+  }
+
+  function raRow(i) {
+    var head = i.receipt_no ? 'Чек № ' + i.receipt_no : (i.title || i.file_name || 'Чек');
+    // Под номером — что оказали; нет чека «Мой налог» на картинке — подпись с Диска.
+    var sub = i.service || (i.receipt_no ? i.title : (i.period || '')) || '';
+    var acts = '<button class="rcp-a p" data-ra-open="' + esc(i.id) + '">Открыть</button>' +
+      (i.fns_url ? '<a class="rcp-a" href="' + esc(i.fns_url) +
+        '" target="_blank" rel="noopener" title="Чек в базе ФНС">ФНС</a>' : '');
+    return '<div class="rcp-item">' +
+      '<div class="trow dc-grid ra-grid" data-ra-open="' + esc(i.id) + '">' +
+        '<span class="dc-main ra-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
+          '<span class="ra-txt"><b>' + esc(head) + '</b>' +
+          (sub ? '<span class="rcp-sub">' + esc(sub) + '</span>' : '') + '</span></span>' +
+        // В архиве колонке досталось меньше места: фамилия с инициалами, полное ФИО по наведению.
+        '<span class="dc-who" title="' + esc(i.contractor || '') + '">' +
+          esc(dcShort(i.contractor) || '—') +
+          (i.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
+          (i.inn || i.receipt_inn ? '<span class="dc-inn">' + esc(i.inn || i.receipt_inn) + '</span>' : '') +
+        '</span>' +
+        '<span class="dc-when">' + esc(i.date ? i.date.slice(8, 10) + '.' + i.date.slice(5, 7) +
+          '.' + i.date.slice(0, 4) : '—') + '</span>' +
+        '<span class="dc-sum">' + (i.amount ? '<b>' + ctMoney(i.amount) + ' ₽</b>' : '—') + '</span>' +
+        '<span class="dc-state"><span class="rcp-act">' + acts + '</span></span>' +
+      '</div></div>';
+  }
 
   function rcpLoad(cb) {
     api('/admin/api/contractor-receipts').then(function (r) {
@@ -21455,15 +21526,18 @@
 
   function renderCzDocs(view) {
     var isRcp = DC.kind === 'receipt';
+    var isArch = DC.kind === 'rarch';
     // Чеки грузим всегда: даже на других вкладках вверху нужна полоса «по кому долг».
     if (RCP.items === null) rcpLoad();
     if (isRcp) {
       if (RCP.items === null) { view.innerHTML = dashSkeleton(); return; }
+    } else if (isArch) {
+      if (RA.items === null) { view.innerHTML = dashSkeleton(); raLoad(); return; }
     } else if (DC.items === null) {
       view.innerHTML = dashSkeleton(); dcLoad(); return;
     }
 
-    var src = isRcp ? rcpFiltered() : DC.items;
+    var src = isRcp ? rcpFiltered() : isArch ? raFiltered() : DC.items;
     var people = dcPeople(src);
     var list = DC.who
       ? src.filter(function (i) { return i.contractor_id === DC.who; })
@@ -21478,7 +21552,7 @@
       // Здесь фильтр работает иначе, чем в «Заданиях»: по умолчанию видно ВСЕ, включая
       // документы убранных, — раздел хранит первичку для налоговой, и прятать из него
       // нечего. Кнопка сужает список до убранных, когда ищут конкретного человека.
-      (isRcp ? '' : '<button class="qchip q-arch' + (DC.archived ? ' on' : '') +
+      (isRcp || isArch ? '' : '<button class="qchip q-arch' + (DC.archived ? ' on' : '') +
         '" data-dcarch="1">' + ic('box', 12) + 'Убранные</button>');
 
     // Полоса долга по чекам — главный ответ раздела на «по кому не хватает чека».
@@ -21492,7 +21566,7 @@
           '<button class="dc-alert-go" id="dc-to-rcp">Показать</button></div>'
       : '';
 
-    var body = (!isRcp && DC.err)
+    var body = (!isRcp && !isArch && DC.err)
       ? '<div class="empty">' + esc(DC.err) + '</div>'
       : (!list.length
         ? '<div class="empty">' + (DC.who
@@ -21501,12 +21575,14 @@
             ? 'По запросу «' + esc(DC.q) + '» ничего не нашли.'
             : isRcp
             ? 'Чеков пока нет. Чек появляется здесь, как только по выплате проведут деньги, а исполнитель приложит его из «Мой налог».'
+            : isArch
+            ? 'В архиве пусто. Сюда перенесены старые чеки с Google Диска за выплаты, которые шли мимо CRM.'
             : DC.archived
             ? 'Здесь пусто. Тут лежат документы тех, кого убрали из работы — подписанное не удаляется.'
             : 'Документов пока нет. Акт появляется здесь сам, как только вы сформируете его по принятому заданию.') + '</div>'
-        : (isRcp ? list.map(rcpRow) : list.map(dcRow)).join(''));
+        : (isRcp ? list.map(rcpRow) : isArch ? list.map(raRow) : list.map(dcRow)).join(''));
 
-    var noun = isRcp
+    var noun = isRcp || isArch
       ? plural(list.length, 'чек', 'чека', 'чеков')
       : plural(list.length, 'документ', 'документа', 'документов');
 
@@ -21515,7 +21591,9 @@
     // правило, что в задачах на своих вкладках).
     var head = DC.who
       ? '<div class="dcf-head"><span class="dcf-h-nm">' + esc(DC.whoName) + '</span>' +
-          '<button class="dcf-h-a" id="dc-who-card">Карточка исполнителя</button>' +
+          // У человека из архива без карточки исполнителя вести некуда.
+          (DC.who.indexOf('p:') === 0 ? ''
+            : '<button class="dcf-h-a" id="dc-who-card">Карточка исполнителя</button>') +
           '<button class="dcf-h-a" id="dc-who-all">Ко всем документам</button></div>'
       : '';
 
@@ -21531,11 +21609,11 @@
             '<span class="list-count"><b>' + list.length + '</b> ' + noun + '</span>' +
           '</div>' +
           '<div class="list-quick">' + chips + '</div>' +
-          '<div class="trow dc-grid thead">' +
-            '<span class="th">' + (isRcp ? 'Выплата' : 'Документ') + '</span>' +
+          '<div class="trow dc-grid thead' + (isArch ? ' ra-grid' : '') + '">' +
+            '<span class="th">' + (isRcp ? 'Выплата' : isArch ? 'Чек' : 'Документ') + '</span>' +
             '<span class="th">Исполнитель</span>' +
             '<span class="th">Дата</span><span class="th">Сумма</span>' +
-            '<span class="th">' + (isRcp ? 'Чек' : 'Состояние') + '</span>' +
+            '<span class="th">' + (isRcp ? 'Чек' : isArch ? 'Файл' : 'Состояние') + '</span>' +
           '</div>' + body +
         '</div>' +
       '</div>';
@@ -21621,6 +21699,14 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-task]'), function (r) {
       r.addEventListener('click', function () { openCt(r.getAttribute('data-rcp-task')); });
+    });
+    // Архив: строка и кнопка открывают сам файл чека в новой вкладке. «В ФНС» — ссылка.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ra-open]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('a')) return;
+        e.stopPropagation();
+        window.open(raFileUrl(r.getAttribute('data-ra-open')), '_blank', 'noopener');
+      });
     });
     pageAnim(view);
   }

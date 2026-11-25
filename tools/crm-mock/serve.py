@@ -279,9 +279,30 @@ def leads():
     _LEADS = out
     return out
 
+RC_ARCHIVE = {"items": [
+    {"id": "a1", "contractor_id": "c1", "contractor": "Тестова Вера Ивановна", "person": "Вера Тестова",
+     "inn": "111111111111", "dept": "Отдел продукта", "title": "Тестова октябрь", "period": "",
+     "date": "2026-11-12", "amount": 45000, "receipt_no": "201abc1", "receipt_inn": "111111111111",
+     "service": "Технические услуги для сайта",
+     "fns_url": "https://lknpd.nalog.ru/api/v1/receipt/111111111111/201abc1/print",
+     "file_name": "Тестова октябрь.png", "file_mime": "image/png", "contractor_archived": False},
+    {"id": "a2", "contractor_id": "c1", "contractor": "Тестова Вера Ивановна", "person": "Вера Тестова",
+     "inn": "111111111111", "dept": "Отдел продукта", "title": "аванс сентябрь", "period": "",
+     "date": "2026-09-25", "amount": 22500, "receipt_no": "2009xyz", "receipt_inn": "111111111111",
+     "service": "Технические услуги для сайта",
+     "fns_url": "https://lknpd.nalog.ru/api/v1/receipt/111111111111/2009xyz/print",
+     "file_name": "аванс сентябрь.jpg", "file_mime": "image/jpeg", "contractor_archived": False},
+    {"id": "a3", "contractor_id": None, "contractor": "Анна", "person": "Анна",
+     "inn": None, "dept": "Отдел маркетинга", "title": "Анна за октябрь 26", "period": "",
+     "date": "2026-11-16", "amount": None, "receipt_no": None, "receipt_inn": None,
+     "service": "", "fns_url": None,
+     "file_name": "Анна за октябрь 26.jpg", "file_mime": "image/jpeg", "contractor_archived": False},
+], "count": 3}
+
 ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": "super_admin",
       "caps": ["dash", "clients", "team", "tasks", "tasks_all", "finance", "marketing",
-               "planfact", "finmodel", "zaezd_review", "academy", "academy_review", "care"]}
+               "planfact", "finmodel", "zaezd_review", "academy", "academy_review", "care",
+               "contractors"]}
 
 # «Забота» (раздел care): причины и случаи, обезличенные из разбора 23.11.2026, id
 # диалогов выдуманные. Собирается заново, если поменялся сид причин в бэкенде.
@@ -410,6 +431,9 @@ class H(SimpleHTTPRequestHandler):
             return self._json(REFUNDS)
         if p == "/admin/api/sales/debts":
             return self._json(DEBTS)
+        # Архив старых чеков (12003): выдуманные люди, у одного нет карточки исполнителя.
+        if p == "/admin/api/contractor-receipts/archive":
+            return self._json(RC_ARCHIVE)
         # Доска «Университеты» в карточке: вузы ученика и лента одного вуза.
         if p.startswith("/admin/api/leads/") and p.endswith("/applications"):
             lead_id = p.split("/")[4]
