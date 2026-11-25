@@ -3504,7 +3504,7 @@
         t.addEventListener('click', function () {
           state.mkTab = t.getAttribute('data-mktab');
           if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
-          if (state.mkTab === 'efir') state._mkEfir = null;   /* всегда свежие цифры */
+          if (state.mkTab === 'efir') { state._mkEfir = null; state._mkEfirLinks = null; }   /* всегда свежие цифры */
           if (state.mkTab === 'ads') state._mkAds = null;    /* всегда свежие цифры */
           if (!onMk) { setPage('marketing'); return; }
           saveUi(); renderTopbar(); renderView();
@@ -36950,11 +36950,23 @@
      690 ₽ сюда НЕ идёт, это продажа поступления (владелец, 31.10.2026: «оплатили
      сопровождение, сумма и количество человек»). Деньги собираем по трём дорогам:
      касса офферов, счета CRM и договоры из ведомости. */
+  /* Откуда пришли купившие (Ольга 25.11.2026): таргет, были в базе раньше этой
+     регистрации или новые из соцсетей. Сумма трех — число на плашке. */
+  var LAUNCH_CAME = { ads: 'таргет', base: 'был в базе', social: 'новый, из соцсетей' };
+  function launchCameSub(c) {
+    if (!c) return '';
+    return 'таргет ' + (c.ads || 0) + ' · база ' + (c.base || 0) + ' · соцсети ' + (c.social || 0);
+  }
+
   function launchSupportTile(pay, dc, base, hvost, ot) {
     if (!pay || !pay.product) return [];
     var pr = pay.product, cr = pay.crm || {}, ld = pay.ledger || {};
     var rub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
     var n = (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
+    /* Сервер считает плашку тем же запросом, что и список по клику: люди, а не
+       счета и строки ведомости, и одна оплата один раз (Ольга 24.11.2026: «я должна
+       всех видеть»). Старый счет по трем дорогам — только для старого бэкенда. */
+    if (pay.support) { rub = pay.support.rub || 0; n = pay.support.people || 0; }
     return [{
       /* Заголовок короткий, да ещё с мягким переносом внутри слова: колонка в самой
          плотной полосе уже «Сопровождения», и без переноса слово обрезалось на
@@ -36962,7 +36974,8 @@
       key: 'support', label: 'Сопро\u00ADвождение', step: 'support', stepFrom: ot,
       stepPlate: n,
       value: fmtMoney(rub) + ' \u20bd',
-      sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
+      sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек') +
+        (pay.support && pay.support.came ? '<br>' + launchCameSub(pay.support.came) : ''),
       pct: [launchPct(n, dc.booked, 'от записавшихся на консультацию'),
             launchPct(n, base, 'от регистраций' + (hvost ? ' ' + hvost : ''))],
     }];
@@ -37008,8 +37021,11 @@
         sub: plural(pay.invoiced || 0, 'человек', 'человека', 'человек') + ' · 690 рублей',
         pct: launchPct(pay.invoiced, base, 'от регистраций на повтор') },
       { key: 'paid', label: 'Оплачено', value: fmtMoney(pay.paid_rub || 0) + ' \u20bd',
+        step: pay.uch ? 'uch' : '', stepFrom: p.since, stepPlate: pay.uch ? pay.uch.people : 0,
+        stepTitle: 'Оплатили участие · повтор',
         sub: (pay.paid || 0) + ' из ' + (pay.invoiced || 0) + ' ' +
-          plural(pay.invoiced || 0, 'человека', 'человек', 'человек'),
+          plural(pay.invoiced || 0, 'человека', 'человек', 'человек') +
+          (pay.uch && pay.uch.people ? '<br>' + launchCameSub(pay.uch.came) : ''),
         pct: launchPct(pay.paid, base, 'от регистраций на повтор') },
       { key: 'channels', label: 'В закрытых каналах', value: inCh.total || 0,
         sub: ['tg', 'vk', 'max'].map(function (k) {
@@ -37429,6 +37445,20 @@
       'maxlength="120" placeholder="как есть" value="' + esc(fx.real_source || '') + '"></span>';
   }
 
+  /* Оплаты человека строками: сумма, дата, за что. И крупные, и мелкие — все, что
+     внесено. Строки, которые не входят в сумму «Сопровождения» (участие 690 ₽,
+     мелкие доплаты), видны приглушенно с пометкой (Ольга 24.11.2026). */
+  function lpPays(p) {
+    var ls = p.pays || [];
+    if (!ls.length) return '';
+    return ls.map(function (x) {
+      var day = x[1] ? String(x[1]).split('-').reverse().join('.') : 'дата не указана';
+      return '<small class="lp-pay' + (x[3] ? '' : ' off') + '"><b class="num">' +
+        fmtMoney(x[0]) + ' ₽</b> · ' + esc(day) + ' · ' + esc(x[2] || 'оплата') +
+        (x[3] ? '' : ' · не в сумме') + '</small>';
+    }).join('');
+  }
+
   function launchPeopleRow(p, edit) {
     var id = (p.session_id == null || p.session_id === '') ? '' : String(p.session_id);
     /* Откуда пришёл: метка ссылки — главное, канал связи — подпись. Метки нет —
@@ -37443,12 +37473,16 @@
     return '<div class="lp-tr' + (id ? ' go' : '') + off + '"' +
       (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
       '><span class="lp-nm">' + esc(p.name || 'Без имени') +
-        (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</span>' +
+        (p.note ? '<small>' + esc(p.note) + '</small>' : '') +
+        lpPays(p) + '</span>' +
       '<span class="lp-ct">' + lpCell(p.contact) + '</span>' +
       /* Название ссылки длиннее колонки и обрезается многоточием: полное отдаём
          подсказкой, иначе «Консультация · рассылка бота 12:…» ничего не говорит. */
       '<span class="lp-sr"' + (src ? ' title="' + esc(src) + '"' : '') + '>' +
-        lpCell(src) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
+        lpCell(src) + (sub ? '<small>' + esc(sub) + '</small>' : '') +
+        /* У купивших — откуда он для продаж: таргет, был в базе или новый */
+        (LAUNCH_CAME[p.came] ? '<small class="lp-came">' + LAUNCH_CAME[p.came] + '</small>' : '') +
+        '</span>' +
       '<span class="lp-dt">' + (p.registered_at ? esc(fmtWhen(p.registered_at)) : '<i class="lp-dash">—</i>') +
       '</span>' +
       /* Правка только у людей с карточкой регистрации: у зрителя без регистрации
@@ -37536,8 +37570,18 @@
        цифра на плашке — про одно и то же, иначе проверка ничего не доказывает. */
     /* .mk-modal-t — flex-контейнер, поэтому вся подпись идёт ОДНИМ элементом:
        иначе «·» и число разъезжались на ширину gap и читались как два заголовка. */
+    /* У «Сопровождения» рядом с числом людей — их сумма, сложенная из строк
+       списка: она обязана совпасть с суммой на плашке. */
+    /* У «Оплачено» — сумма строк участия: она равна рублям на той плашке. */
+    var supSum = p.step === 'support' || p.step === 'uch' ? p.rows.reduce(function (a, r) {
+      return a + (r.pays || []).reduce(function (b, x) {
+        var hit = p.step === 'support' ? x[3] : x[2] === 'участие в интенсиве';
+        return b + (hit ? (+x[0] || 0) : 0);
+      }, 0);
+    }, 0) : 0;
     var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
-        ' · <span class="num">' + fmtMoney(total) + '</span></span></div>' +
+        ' · <span class="num">' + fmtMoney(total) + '</span>' +
+        (supSum ? ' · <span class="num">' + fmtMoney(supSum) + ' ₽</span>' : '') + '</span></div>' +
       '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') +
         esc(p.kind === 'block' ? (p.from ? 'с ' + p.from.split('-').reverse().join('.')
                                           : 'весь запуск')
@@ -38095,7 +38139,7 @@
   }
 
   /* ── ДЕКОМПОЗИЦИЯ ЗАПУСКА ────────────────────────────────────────────────
-     Рабочий файл Олеси по интенсиву 24–25 октября, перенесенный в CRM один в
+     Рабочий файл Олеси по интенсиву 28–29 октября, перенесенный в CRM один в
      один: те же шаги воронки, те же формулы и те же округления до целых людей
      (Олеся 09.10.2026: «оставь точно как в файле»). Считать «правильнее» тут
      нельзя: по этой таблице команда договаривается, и расхождение с файлом
@@ -38693,6 +38737,10 @@
     var pr = pay.product || {}, cr = pay.crm || {}, ld = pay.ledger || {};
     var supN = (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
     var supRub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
+    /* Продажи и договоры — те же люди и деньги, что на плашке «Сопровождение»
+       «Запусков» и в списке за ней (Ольга 25.11.2026: «чтобы все цифры бились»).
+       Старый счет по трем дорогам — только для старого бэкенда. */
+    if (pay.support) { supN = pay.support.people || 0; supRub = pay.support.rub || 0; }
     var reg = minus(reach, ads.reg);
     var ext = minus(pay.paid, ads.ext), extRev = minus(pay.paid_rub, ads.extRev);
     var sales = minus(supN, ads.sales), contracts = minus(supRub, ads.contracts);
@@ -38772,7 +38820,7 @@
     var srcs = laSrcs();
     var src = srcs.some(function (s) { return s.id === state.laSrc; }) ? state.laSrc
       : srcs.some(function (s) { return s.id === 'total'; }) ? 'total' : srcs[0].id;
-    /* у месяца свои заголовок и лид: шапка про интенсив 24–25 октября над листом,
+    /* у месяца свои заголовок и лид: шапка про интенсив 28–29 октября над листом,
        где интенсива нет по определению, читается как ошибка экрана */
     var lch = laLaunchCur();
     var mon = src === 'month', head1 = mon ? (d.month || {}) : (lch.title ? lch : d);
@@ -39055,7 +39103,65 @@
           '<div class="lad-static links" style="border-top:1px solid var(--line)">' +
             rows(cur.cta_links, 'Кнопок по этому эфиру не заводили.') +
           '</div></div>' +
-      '</div></div>';
+      '</div>' + efirLinksCard(cur) + '</div>';
+  }
+
+  /* Проверка ссылок эфира без кликов (Влада 25.11.2026: «чтобы каждый раз не
+     переходить по ссылкам... понять, рабочая ссылка выложена или нет»). Статус
+     дает сторож воронок: он сам обходит ссылки раз в полчаса и в переходы не
+     пишется. Нажатия здесь только живые, без тестов Влады и агента. Сломанные
+     сервер ставит первыми — их и надо увидеть сразу. */
+  function fetchEfirLinks(slug) {
+    state._mkEfirLinks = state._mkEfirLinks || {};
+    state._mkEfirLinks[slug] = 'loading';
+    var done = function (r) {
+      state._mkEfirLinks[slug] = r && r.ok ? r : 'none';
+      if (state.page === 'marketing' && state.mkTab === 'efir') renderView();
+    };
+    api('/admin/api/marketing/efir/links?slug=' + encodeURIComponent(slug))
+      .then(done).catch(function () { done(null); });
+  }
+  var EFIR_LINK_STATE = {
+    ok: ['работает', 'var(--green-ink)', '✓'],
+    broken: ['не работает', 'var(--red-ink)', '✕'],
+    wait: ['еще не проверяли', 'var(--ink-3)', '·'],
+    off: ['выключена', 'var(--ink-3)', '–'],
+  };
+  function efirLinksCard(cur) {
+    var box = (state._mkEfirLinks || {})[cur.slug];
+    if (!box) { fetchEfirLinks(cur.slug); box = 'loading'; }
+    var body, sub;
+    if (box === 'loading') {
+      sub = 'загружаю';
+      body = '<div class="empty">Загружаю ссылки…</div>';
+    } else if (box === 'none') {
+      sub = 'не удалось загрузить';
+      body = '<div class="empty">Не удалось загрузить ссылки — обнови страницу.</div>';
+    } else if (!box.links.length) {
+      sub = 'у этого эфира ссылок не заводили';
+      body = '<div class="empty">Ссылок нет.</div>';
+    } else {
+      var n = box.links.length, bad = box.broken || 0;
+      sub = (bad ? bad + ' ' + plural(bad, 'ссылка не работает', 'ссылки не работают', 'ссылок не работают')
+                 : 'все ' + n + ' ' + plural(n, 'ссылка работает', 'ссылки работают', 'ссылок работают')) +
+            (box.checked_at ? ' · проверено ' + fmtWhen(box.checked_at) : '') +
+            ' · нажатия без наших тестов';
+      body = box.links.map(function (l) {
+        var st = EFIR_LINK_STATE[l.state] || EFIR_LINK_STATE.wait;
+        var note = l.state === 'broken'
+          ? 'не работает' + (l.broken_since ? ' с ' + fmtWhen(l.broken_since) : '') + (l.detail ? ': ' + l.detail : '')
+          : st[0] + ' · ведет в ' + String(l.where || '').replace(/^https?:\/\//, '');
+        var nums = l.clicks + ' ' + plural(l.clicks, 'нажатие', 'нажатия', 'нажатий') +
+          (l.regs ? ' · ' + l.regs + ' ' + plural(l.regs, 'запись', 'записи', 'записей') : '');
+        return '<div class="lad-row gf-flat efl-row' + (l.state === 'broken' ? ' efl-bad' : '') + '">' +
+          '<div class="lad-nm"><span class="efl-ic" style="color:' + st[1] + '">' + st[2] + '</span>' +
+            esc(l.title) + '<small>go.истсайд.рф/' + esc(l.code) + ' · ' + esc(note) + '</small></div>' +
+          '<div class="lad-n num efl-n">' + esc(nums) + '</div></div>';
+      }).join('');
+    }
+    return '<div class="card" style="overflow:hidden;margin-top:14px"><div class="sec-head pad">' +
+      '<div><div class="t">Проверка ссылок</div><div class="s">' + esc(sub) + '</div></div></div>' +
+      '<div class="lad-static links" style="border-top:1px solid var(--line)">' + body + '</div></div>';
   }
 
   function renderMkEfir(view) {
@@ -39259,7 +39365,7 @@
               ' на ' + fmtMoney(m.wait_sum) + ' ₽' : 'сколько человек нажало каждую') +
           '</div></div></div>' +
           '<div class="lad-static" style="border-top:1px solid var(--line)">' + ctaRows + '</div></div>' +
-      '</div></div>';
+      '</div>' + efirLinksCard(cur) + '</div>';
 
     efirBindClicks(view, cur);
   }
@@ -39581,11 +39687,15 @@
             pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
           pct: launchPct(pay.invoiced, regShown, 'от регистраций') },
         { key: 'paid', label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
+          /* По клику — те, кто оплатил участие, с суммами и датами (Ольга 25.11.2026) */
+          step: pay.uch ? 'uch' : '', stepPlate: pay.uch ? pay.uch.people : 0,
+          stepTitle: 'Оплатили участие',
           sub: (pay.paid + ' из ' + (pay.invoiced || 0) + ' ' +
                 plural(pay.invoiced || 0, 'человека', 'человек', 'человек')) +
             (prod.paid_rub
               ? ' · участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
-              : ''),
+              : '') +
+            (pay.uch && pay.uch.people ? '<br>' + launchCameSub(pay.uch.came) : ''),
           /* Доля считается по ЛЮДЯМ, хотя на плитке рубли: «3 450 ₽ — это 1% от
              рублей» ничего не значит, а «заплатил 1% записавшихся» значит. */
           pct: launchPct(pay.paid, regShown, 'от регистраций') },
@@ -39703,7 +39813,8 @@
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
         /* Срез, которого нет в лестнице пути (подпись «не купили» под залом): список
            тот же, ступень описывает сама подпись. */
-        if (!st && n.getAttribute('data-lfree')) {
+        /* …и плашка «Оплачено»: оплатившие участие — список за ней, а не ступень. */
+        if (!st && (n.getAttribute('data-lfree') || n.getAttribute('data-ltitle'))) {
           st = { key: key, title: n.getAttribute('data-ltitle') || '',
                  people: parseInt(n.getAttribute('data-lplate') || '0', 10) };
         }
@@ -45869,6 +45980,40 @@
       move + '</div>';
   }
 
+  /* Лента «Обращения» — первый экран раздела (Вера 25.11.2026: «там будут сообщения с
+     указанием, кто написал, что написал и в какой канал, а потом уже проблемы укрупнены»).
+     Строка = одно обращение: кто и куда, его слова, к чему разбор отнес, что предложил и
+     что в итоге сделали. */
+  function careWhen(x) {
+    var t = x.created_at ? new Date(x.created_at) : null;
+    return careDay(x.seen_on) + (t ? ' · ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) : '');
+  }
+  function careStatus(x) {
+    if (x.dismissed || x.decision === 'not_care') return '<span class="sev">не забота</span>';
+    if (x.decision === 'ok') return '<span class="sev care-ok">ответ ушел</span>';
+    if (x.decision === 'changed') return '<span class="sev care-ok">ответили своим</span>';
+    if (x.reply) return '<span class="sev care-wait">ждет решения</span>';
+    return '';
+  }
+  function careFeedRow(x) {
+    var reply = x.final_reply || x.reply;
+    var replyLab = x.decision === 'changed' ? 'Ответили своим' : x.decision === 'ok' ? 'Ответ ушел' : 'Ответил бы';
+    var where = x.cause_title ? (x.area ? '<b class="care-ar">' + esc(x.area) + '</b> · ' : '') + esc(x.cause_title)
+                              : '<span class="care-mute">не разобрано</span>';
+    return '<div class="care-fd' + (x.dismissed ? ' off' : '') + '">' +
+      '<div class="care-fh"><span class="care-who">' + esc(x.who || (x.dialog_id ? 'Без имени' : 'Из аккаунта школы')) + '</span>' +
+        '<span class="care-chan">' + esc(careCh(x)) + '</span>' +
+        '<span class="care-when num">' + careWhen(x) + '</span>' + careStatus(x) + '</div>' +
+      '<div class="care-q">' + (x.said ? '«' + esc(x.said) + '»' : esc(x.symptom)) + '</div>' +
+      '<div class="care-fm">' + where + (x.said ? '<span class="care-sym"> — ' + esc(x.symptom) + '</span>' : '') + '</div>' +
+      (x.action ? '<div class="care-act"><b>Что сделать:</b> ' + esc(x.action) + '</div>' : '') +
+      (reply ? '<div class="care-act"><b>' + replyLab + ':</b> ' + esc(reply) + '</div>' : '') +
+      '<div class="care-fa">' +
+        (x.dialog_id ? '<a class="care-link" href="#dialog/' + encodeURIComponent(x.dialog_id) + '">открыть диалог</a>' : '') +
+        (x.dismissed ? '' : '<button class="care-dis" data-cdis="' + x.id + '" title="Разбор ошибся: это не техническая проблема">не забота</button>') +
+      '</div></div>';
+  }
+
   /* «Как решаем» — справочник будущего агента заботы (Вера 24.11.2026: «ты пишешь, как
      решил бы, я говорю ок или не ок; если ок — подобные потом решаешь сам»). Текст
      «Ответить: … Руками: … Починить: …» раскладываем по строкам. */
@@ -45935,13 +46080,23 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить раздел. Проверь интернет и обнови страницу.</div></div>';
       return;
     }
-    var d = state._care, tab = state.careTab === 'unsorted' ? 'unsorted' : 'causes';
+    var d = state._care, tab = state.careTab === 'unsorted' || state.careTab === 'causes' ? state.careTab : 'feed';
+    var fd = careCases('all');
     var tabs = '<div class="care-tabs" role="tablist">' +
+      '<button role="tab" aria-selected="' + (tab === 'feed') + '" class="qchip' + (tab === 'feed' ? ' on' : '') + '" data-ctab="feed">Обращения' +
+        (Array.isArray(fd) ? ' <span class="qn">' + fd.filter(function (x) { return !x.dismissed; }).length + '</span>' : '') + '</button>' +
       '<button role="tab" aria-selected="' + (tab === 'causes') + '" class="qchip' + (tab === 'causes' ? ' on' : '') + '" data-ctab="causes">Причины <span class="qn">' + d.causes.length + '</span></button>' +
       '<button role="tab" aria-selected="' + (tab === 'unsorted') + '" class="qchip' + (tab === 'unsorted' ? ' on' : '') + (d.unsorted ? ' hot' : '') + '" data-ctab="unsorted">Неразобранное <span class="qn">' + d.unsorted + '</span></button>' +
       '</div>';
     var body;
-    if (tab === 'causes') {
+    if (tab === 'feed') {
+      body = '<div class="card care-feed">' +
+        (fd === 'loading' ? '<div class="shim care-shim"></div><div class="shim care-shim"></div>' :
+         fd === 'none' ? '<div class="empty">Не удалось загрузить обращения</div>' :
+         fd.length ? fd.map(careFeedRow).join('') :
+         '<div class="empty">За 90 дней технических обращений нет.</div>') + '</div>' +
+        '<div class="care-foot">Обращения за 90 дней, новые сверху. «Не забота» остается в ленте серой: по ней видно, где разбор ошибся.</div>';
+    } else if (tab === 'causes') {
       body = '<div class="card care-list">' + d.causes.map(function (c) {
         var open = state.careOpen === c.id;
         return '<div class="care-item' + (open ? ' open' : '') + '">' +
@@ -64331,7 +64486,7 @@
         state.mkTab = s;
         // те же сбросы кэша, что и у вкладки: иначе экран покажет цифры прошлой
         if (s === 'launch') state._mkLaunch = null;
-        if (s === 'efir') state._mkEfir = null;
+        if (s === 'efir') { state._mkEfir = null; state._mkEfirLinks = null; }
         return true;
       },
     },
