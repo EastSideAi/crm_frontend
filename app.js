@@ -40550,47 +40550,7 @@
     }).join('');
     return '<div class="mg-hist">' +
       (state.page === 'sales' ? '<div class="mg-hcall"><span>Звонил со своего телефона? Отметь исход</span>' + dialMarks(id) + '</div>' : '') +
-      (state.page === 'sales' ? mgWhoMarks(id, h) : '') +
-      '<ol class="mg-hl">' + items + '</ol>' + open + '</div>';
-  }
-  /* «Кто это» в один клик прямо в истории (Павел 25.11.2026: «это наш клиент, сделай так,
-     чтобы я мог помечать прямо здесь»). Частые причины чипами, остальные за «еще» в том же
-     окне sbMkOpen; выбранное подсвечено (поле nl истории, пусто = лид). */
-  var MG_MK_QUICK = ['', 'client', 'family', 'dupe', 'spam'];
-  function mgWhoMarks(id, h) {
-    if (!canMarkLead()) return '';
-    var cur = h.nl || '';
-    var name = function (k) { return k ? (SB_MK.filter(function (x) { return x[0] === k; })[0] || [k, k])[1] : 'Лид'; };
-    var chips = MG_MK_QUICK.map(function (k) {
-      return '<button type="button" class="dl-b mg-mk' + (cur === k ? ' on' : '') + '" data-mgmk="' + esc(k || 'lead') +
-        '" data-dlid="' + esc(id) + '" aria-pressed="' + (cur === k) + '">' + esc(name(k)) + '</button>';
-    });
-    if (cur && MG_MK_QUICK.indexOf(cur) < 0)
-      chips.push('<span class="dl-b mg-mk on" aria-current="true">' + esc(name(cur)) + '</span>');
-    chips.push('<button type="button" class="dl-b mg-mk more" data-sbmk="' + esc(id) + '" data-sbmkn="' +
-      esc(h.name || '') + '">еще…</button>');
-    return '<div class="mg-hcall"><span>Кто это</span><span class="dl-mk" role="group" aria-label="Кто это">' +
-      chips.join('') + '</span></div>';
-  }
-  function mgWhoBindMarks(root) {
-    Array.prototype.forEach.call(root.querySelectorAll('[data-mgmk]'), function (b) {
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var k = b.getAttribute('data-mgmk'), id = b.getAttribute('data-dlid');
-        var reason = k === 'lead' ? null : k;
-        Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = true; });
-        apiSend('/admin/api/rnp/leads/' + encodeURIComponent(id) + '/not-lead', 'POST', { reason: reason }, function () {
-          if (MG_HIST[id] && typeof MG_HIST[id] === 'object') MG_HIST[id].nl = reason || '';
-          state._sb = null; state._mkCross = null; state._pot = null;
-          showToast(reason ? 'Отметил: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1] + ', из лидов убран'
-            : 'Оставил лидом');
-          renderView();
-        }, function () {
-          showToast('Не сохранилось, проверь интернет');
-          Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = false; });
-        });
-      });
-    });
+      '<ol class="mg-hl">' + items + '</ol>' + open + (state.page === 'sales' ? ' ' + sbMkBtn(id, h.name || '', true) : '') + '</div>';
   }
   function mgHistLoad(id) {
     if (MG_HIST[id] && MG_HIST[id] !== 'err') return;
@@ -40603,7 +40563,6 @@
   }
   // Общая привязка списка людей под лестницей: «Управление» и «Продажи» рисуют его одним кодом.
   function mgWhoBind(view) {
-    mgWhoBindMarks(view);
     view.querySelectorAll('[data-mghist]').forEach(function (b) {
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-mghist');
@@ -41378,16 +41337,19 @@
   function sbRegCalc(cc, a, b) {
     var out = {total: 0, contact: 0, by: {}, list: {}};
     SB_REG_KINDS.forEach(function (x) { out.by[x.k] = {n: 0, c: 0}; out.list[x.k] = []; });
-    out.list.all = [];
+    out.list.all = []; out.nl = 0;
     (cc.leads || []).forEach(function (l) {
       // склеенный дубль не лид: человек один, и это главная карточка (поле mg сервера)
-      if (l.nl === 'family' || l.mg) return;
+      if (l.mg) return;
       // ra — все записи на эфиры [дата, слаг, смотрел]; без него (старый ответ сервера) только интенсивы
       var all = l.ra ? l.ra.map(function (r) { return [r[0], r[2], r[1]]; })
         : (l.rg || (l.reg ? [[l.reg, l.w ? 1 : 0]] : [])).map(function (r) { return [r[0], r[1], 'intensive']; });
       var regs = all.filter(function (r) { return r[0] >= a && r[0] <= b; });
       var fresh = l.d >= a && l.d <= b;
       if (!fresh && !regs.length) return;
+      /* Отмеченный «кто это» (уже клиент, семья, спам...) в «Пришло» не идет (Павел 25.11.2026:
+         «не убирается лид, когда ставлю, что уже клиент»). Число таких — строкой под плитками. */
+      if (l.nl) { if (l.nl !== 'family') out.nl++; return; }
       var k = regs.length ? 'efir' : (SB_REG_DOOR[l.k] || 'other');
       var has = !!(l.c || l.ac);
       var what = regs.some(function (r) { return String(r[2] || '').indexOf('intensive') === 0; }) ? 'интенсив' : 'эфир';
@@ -41487,7 +41449,9 @@
           'big' + (free.length ? ' warn' : '')) +
       '</div>' +
       (rest > 0 ? '<div class="sb-rnote">Еще ' + rest + ' ' + plural(rest, 'человек', 'человека', 'человек') +
-        ' не в работе: без контакта, отказ, уже клиент или отмечены «не лид».</div>' : '') +
+        ' не в работе: без контакта, отказ или уже клиент.</div>' : '') +
+      (g.nl ? '<div class="sb-rnote">' + g.nl + ' ' + plural(g.nl, 'человек отмечен', 'человека отмечены', 'человек отмечены') +
+        ' «кто это» (уже клиент, вакансия, спам) и в счет не идут.</div>' : '') +
       (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
   }
 
