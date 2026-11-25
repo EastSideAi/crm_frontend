@@ -349,7 +349,7 @@ RC_ARCHIVE = {"items": [
 ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": "super_admin",
       "caps": ["dash", "clients", "team", "tasks", "tasks_all", "finance", "marketing",
                "planfact", "finmodel", "zaezd_review", "academy", "academy_review", "care",
-               "contractors", "finmodel", "finmodel_edit"]}
+               "inbox", "contractors", "finmodel_edit"]}
 
 # «Забота» (раздел care): причины и случаи, обезличенные из разбора 23.11.2026, id
 # диалогов выдуманные. Собирается заново, если поменялся сид причин в бэкенде.
@@ -415,6 +415,17 @@ REFUNDS = {"refunded_rub": 117990, "states": [
      "started": None, "deadline": None, "steps_done": 0, "refunded_rub": 5000, "refunded_at": None,
      "step": None, "ledger": "21.05–10.06", "paid_from": "фонд безопасности", "note": ""}]}
 
+
+BOT_CONV = {"user_id": 501, "channel": "vk_page", "name": "Мама Тестова", "username": None,
+            "full_name": "Мама Тестова", "ai_enabled": False, "handoff_requested": False,
+            "handoff_reason": None, "taken_by": None, "last_text": "Спасибо, подумаем",
+            "last_role": "user", "last_at": "2026-11-25T12:10:00+00:00", "unread": 0, "msgs": 2}
+BOT_MSGS = [
+    {"id": 1, "role": "assistant", "sender": "manager", "text": "Добрый день, это EastSide, вы оставляли заявку",
+     "at": "2026-11-25T12:00:00+00:00"},
+    {"id": 2, "role": "user", "sender": None, "text": "Спасибо, подумаем", "at": "2026-11-25T12:10:00+00:00"},
+]
+BOT_BOUND: list = []
 
 class H(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
@@ -496,6 +507,17 @@ class H(SimpleHTTPRequestHandler):
         if p.startswith("/admin/api/applications/") and p.endswith("/events"):
             aid = p.split("/")[4]
             return self._json({"ok": True, "events": _AP_EV.get(int(aid), [])})
+        # «Диалоги»: выдуманная переписка с рабочей страницы ВК без карточки — на ней
+        # видно «Привязать к карточке» (Павел 25.11.2026, касание по переписке).
+        if p == "/admin/api/bot/conversations":
+            return self._json({"conversations": [BOT_CONV]})
+        if p == "/admin/api/bot/conversations/501/messages":
+            return self._json({**BOT_CONV, "contractor": None, "messages": BOT_MSGS})
+        if p == "/admin/api/bot/conversations/501/lead":
+            if BOT_BOUND:
+                return self._json({"found": True, "session_id": BOT_BOUND[0], "match": "id",
+                                   "lead_name": "Тестовый Ученик", "status": "new"})
+            return self._json({"found": False, "can_create": True, "name": BOT_CONV["name"]})
         if p == "/admin/api/docs/kinds":
             return self._json({"ok": True, "kinds": [], "tracks": TRACKS})
         if p.startswith("/admin/api/") or p.startswith("/api/"):
@@ -518,6 +540,9 @@ class H(SimpleHTTPRequestHandler):
         except Exception:
             body = {}
         parts = p.split("/")
+        if p == "/admin/api/bot/conversations/501/bind":
+            BOT_BOUND[:] = [body.get("session_id")]
+            return self._json({"ok": True, "id": body.get("session_id")})
         if p.startswith("/admin/api/leads/") and p.endswith("/applications"):
             lead_id = parts[4]
             lst = apps_for(lead_id)
