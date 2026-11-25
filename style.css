@@ -13668,6 +13668,38 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .pb-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .pb-nav .pb-topm { flex: 1 1 auto; justify-content: center; }
 
+/* «За что ближайшая выплата» — разбивка суммы героя тьютора по точкам (Павел 25.11). */
+.pb-due-card { padding: 0; margin-top: 12px; overflow: hidden; }
+.pb-due-h { display: flex; align-items: flex-start; gap: 16px; padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--line); }
+.pb-due-h > div:first-child { min-width: 0; }
+.pb-due-h .t { font-size: 16px; font-weight: 700; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.pb-due-h .s { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; line-height: 1.5; max-width: 620px; }
+.pb-due-n { font-size: 11px; font-weight: 600; color: var(--ink-3); background: var(--fill);
+  border-radius: 999px; padding: 2px 9px; letter-spacing: 0; }
+.pb-due-total { margin-left: auto; text-align: right; white-space: nowrap; }
+.pb-due-total b { display: block; font-size: 20px; font-weight: 700; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; color: var(--green-ink); }
+.pb-due-total small { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.pb-due-rows { padding: 6px 24px 16px; }
+.pb-due-row { display: grid; grid-template-columns: minmax(110px, 1.1fr) minmax(140px, 1.6fr) auto auto;
+  align-items: baseline; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); }
+.pb-due-row:first-child { border-top: 0; }
+.pb-due-who { font-size: 13.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+.pb-due-what { font-size: 13.5px; color: var(--ink-2); min-width: 0; }
+.pb-due-when { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.pb-due-amt { font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pb-due-empty { padding: 16px 24px 20px; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+@media (max-width: 560px) {
+  .pb-due-h { flex-wrap: wrap; }
+  .pb-due-total { margin-left: 0; text-align: left; }
+  .pb-due-rows { padding-left: 16px; padding-right: 16px; }
+  .pb-due-row { grid-template-columns: 1fr auto; row-gap: 1px; }
+  .pb-due-what, .pb-due-when { grid-column: 1; }
+  .pb-due-amt { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+}
+
 /* «Моя мотивация» — герой экрана тьютора: круг + разбор + строка агента */
 .mh { display: grid; grid-template-columns: auto 1fr; gap: 26px; padding: 22px 24px; align-items: center; }
 .mh-ring { width: 172px; height: 172px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
