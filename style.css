@@ -8181,6 +8181,7 @@ a.fin-rcp.off:hover { text-decoration: underline; }
   padding: 8px 12px; cursor: pointer; transition: background .12s, border-color .12s; }
 .pk-row:hover { background: var(--blue-tint); border-color: var(--blue); }
 .pk-row b { font: 600 13.5px 'Manrope', sans-serif; color: var(--ink); }
+.pk-row b .lno { margin-left: 6px; font-weight: 500; }
 .pk-row i { font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); font-style: normal; }
 /* Метки карточки в пикере: платил, клиент, кто ведет, пустая. Две одинаковые с виду
    строки — главная причина, по которой доход уезжает на дубль, поэтому различие дают

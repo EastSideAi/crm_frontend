@@ -26235,7 +26235,7 @@
     if (!words.length) return all;
     return all.filter(function (l) {
       var hay = pkWords((leadName(l) || '') + ' ' + (l.name || '') + ' ' +
-                        (l.contact || '') + ' ' + (l.email || ''));
+                        (l.contact || '') + ' ' + (l.email || '') + lnoHay(l));
       return words.every(function (w) {
         var stem = pkStem(w);
         return hay.some(function (h) { return h.indexOf(stem) === 0 || h.indexOf(w) >= 0; });
@@ -26300,17 +26300,31 @@
      контакту; выбор пишет meta.case_id, после чего имя дохода станет ссылкой в карточку.
      Прямой и ручной платёж приходит без клиента, и здесь его привязывают руками. */
   function finPickClient(oid, presetName) {
+    pickLead({
+      eyebrow: 'Доход', title: 'Привязать к клиенту',
+      sub: 'Выберите карточку того, кто оплатил.' +
+        (presetName ? ' В строке указан: ' + presetName : ''),
+      preset: presetName,
+      onPick: function (cid) {
+        finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
+          'Привязал к клиенту');
+      },
+    });
+  }
+  /* Окно выбора карточки: поиск по имени, контакту и номеру К-…, живые карточки
+     выше пустых, пометка «контакт как у другой карточки». Одно на все места, где
+     что-то привязывают к человеку (доход, диалог), чтобы выбирали одинаково. */
+  function pickLead(o) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML = '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
-      '<div class="al-head"><div><div class="al-eyebrow">Доход</div>' +
-        '<div class="al-title">Привязать к клиенту</div></div>' +
+      '<div class="al-head"><div><div class="al-eyebrow">' + esc(o.eyebrow) + '</div>' +
+        '<div class="al-title">' + esc(o.title) + '</div></div>' +
         '<button class="al-x" id="pk-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-      '<div class="al-sub">Выберите карточку того, кто оплатил.' +
-        (presetName ? ' В строке указан: ' + esc(presetName) : '') + '</div>' +
+      '<div class="al-sub">' + esc(o.sub) + '</div>' +
       '<div class="al-body">' +
-        '<input class="al-in" id="pk-q" placeholder="Поиск по имени или контакту" autocomplete="off">' +
+        '<input class="al-in" id="pk-q" placeholder="Имя, контакт или номер К-…" autocomplete="off">' +
         '<div class="pk-list" id="pk-list"><div class="empty">Загружаю клиентов…</div></div>' +
       '</div>' +
       '<div class="al-foot">' +
@@ -26331,11 +26345,7 @@
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
     var box = el('pk-list'), all = null, dup = {};
-    var pick = function (cid) {
-      finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
-        'Привязал к клиенту');
-      close();
-    };
+    var pick = function (cid) { o.onPick(cid); close(); };
     var draw = function (q) {
       if (!all) return;
       var list = pkFilter(all, q);
@@ -26344,7 +26354,7 @@
       box.innerHTML = list.slice(0, 60).map(function (l) {
         var c = (l.contact || l.email || '').trim();
         return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
-          '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
+          '<b>' + esc(leadName(l) || 'Без имени') + lnoTag(l) + '</b>' +
           (c ? '<i>' + esc(c) + '</i>' : '') +
           '<span class="pk-marks">' + pkMarks(l, dup) + '</span></button>';
       }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
@@ -26355,9 +26365,9 @@
     var have = function (leads) {
       all = leads || [];
       dup = pkDupes(all);
-      draw(presetName || '');
+      draw(o.preset || '');
       var q = el('pk-q');
-      if (q) { q.value = presetName || ''; q.focus(); q.select(); }
+      if (q) { q.value = o.preset || ''; q.focus(); q.select(); }
     };
     if (state.leads && state.leads.length) have(state.leads);
     else api('/admin/api/leads').then(function (r) { have((r && r.leads) || []); })
@@ -53389,8 +53399,17 @@
        преподаватели и тьюторы туда не ходят. Поэтому рядом с «Завести карточку» стоит
        вторая дверь — отметить руками. Показываем ее только тому, у кого есть модуль:
        выбирать придется из списка исполнителей. */
+    /* Карточка у человека бывает, а сшить переписку с ней нечем: заявка пришла с
+       сайта, а пишем мы ему с рабочей страницы ВК или из Макса школы. «Завести» дало
+       бы дубль, поэтому рядом — «Привязать» к той, что есть. После привязки ответы
+       наших в этом диалоге ставят карточке «Связались» сами (Павел 25.11.2026). */
+    var bindBtn = (!d.found && d.can_create)
+      ? '<button class="tg-cact" data-bindcard="' + esc(uid) + '" ' +
+        'title="Карточка уже есть — привязать к ней этот диалог">' + ic('clip', 14) +
+        '<span class="tg-cl">Привязать к карточке</span><span class="tg-cls">Привязать</span></button>'
+      : '';
     if (!d.found && can('contractors')) {
-      return (d.can_create
+      return bindBtn + (d.can_create
         ? '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
           'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
           '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>'
@@ -53406,7 +53425,7 @@
         '</button>';
     }
     if (d.can_create) {
-      return '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
+      return bindBtn + '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
         'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
         '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>';
     }
@@ -53499,6 +53518,29 @@
     var open = host.querySelector('[data-card]');
     if (open) open.addEventListener('click', function () {
       openLeadTab(open.getAttribute('data-card'));
+    });
+    var bind = host.querySelector('[data-bindcard]');
+    if (bind) bind.addEventListener('click', function () {
+      var d = state.convLead[uid] || {};
+      pickLead({
+        eyebrow: 'Диалог', title: 'Привязать к карточке',
+        sub: 'Выберите карточку этого человека. Переписка будет видна в ней, а ответы ' +
+          'наших отметят, что с ним связались.',
+        preset: d.name || '',
+        onPick: function (cid) {
+          apiSend('/admin/api/bot/conversations/' + uid + '/bind', 'POST', { session_id: cid },
+            function (r) {
+              state.convLead[uid] = null; convLeadLoad(uid);
+              if (r && r.id) { delete state.details[r.id]; }
+              showToast('Привязал к ' + (leadNo(r && r.id) || 'карточке'));
+            }, function (code, e) {
+              var other = e && e.body && e.body.detail && e.body.detail.id;
+              showToast(code === 409 && other
+                ? 'Этот диалог уже привязан к ' + (leadNo(other) || 'другой карточке')
+                : 'Не получилось привязать');
+            });
+        },
+      });
     });
     var add = host.querySelector('[data-newcard]');
     if (add) add.addEventListener('click', function () {
