@@ -40550,7 +40550,47 @@
     }).join('');
     return '<div class="mg-hist">' +
       (state.page === 'sales' ? '<div class="mg-hcall"><span>Звонил со своего телефона? Отметь исход</span>' + dialMarks(id) + '</div>' : '') +
-      '<ol class="mg-hl">' + items + '</ol>' + open + (state.page === 'sales' ? ' ' + sbMkBtn(id, h.name || '', true) : '') + '</div>';
+      (state.page === 'sales' ? mgWhoMarks(id, h) : '') +
+      '<ol class="mg-hl">' + items + '</ol>' + open + '</div>';
+  }
+  /* «Кто это» в один клик прямо в истории (Павел 25.11.2026: «это наш клиент, сделай так,
+     чтобы я мог помечать прямо здесь»). Частые причины чипами, остальные за «еще» в том же
+     окне sbMkOpen; выбранное подсвечено (поле nl истории, пусто = лид). */
+  var MG_MK_QUICK = ['', 'client', 'family', 'dupe', 'spam'];
+  function mgWhoMarks(id, h) {
+    if (!canMarkLead()) return '';
+    var cur = h.nl || '';
+    var name = function (k) { return k ? (SB_MK.filter(function (x) { return x[0] === k; })[0] || [k, k])[1] : 'Лид'; };
+    var chips = MG_MK_QUICK.map(function (k) {
+      return '<button type="button" class="dl-b mg-mk' + (cur === k ? ' on' : '') + '" data-mgmk="' + esc(k || 'lead') +
+        '" data-dlid="' + esc(id) + '" aria-pressed="' + (cur === k) + '">' + esc(name(k)) + '</button>';
+    });
+    if (cur && MG_MK_QUICK.indexOf(cur) < 0)
+      chips.push('<span class="dl-b mg-mk on" aria-current="true">' + esc(name(cur)) + '</span>');
+    chips.push('<button type="button" class="dl-b mg-mk more" data-sbmk="' + esc(id) + '" data-sbmkn="' +
+      esc(h.name || '') + '">еще…</button>');
+    return '<div class="mg-hcall"><span>Кто это</span><span class="dl-mk" role="group" aria-label="Кто это">' +
+      chips.join('') + '</span></div>';
+  }
+  function mgWhoBindMarks(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('[data-mgmk]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var k = b.getAttribute('data-mgmk'), id = b.getAttribute('data-dlid');
+        var reason = k === 'lead' ? null : k;
+        Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = true; });
+        apiSend('/admin/api/rnp/leads/' + encodeURIComponent(id) + '/not-lead', 'POST', { reason: reason }, function () {
+          if (MG_HIST[id] && typeof MG_HIST[id] === 'object') MG_HIST[id].nl = reason || '';
+          state._sb = null; state._mkCross = null; state._pot = null;
+          showToast(reason ? 'Отметил: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1] + ', из лидов убран'
+            : 'Оставил лидом');
+          renderView();
+        }, function () {
+          showToast('Не сохранилось, проверь интернет');
+          Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = false; });
+        });
+      });
+    });
   }
   function mgHistLoad(id) {
     if (MG_HIST[id] && MG_HIST[id] !== 'err') return;
@@ -40563,6 +40603,7 @@
   }
   // Общая привязка списка людей под лестницей: «Управление» и «Продажи» рисуют его одним кодом.
   function mgWhoBind(view) {
+    mgWhoBindMarks(view);
     view.querySelectorAll('[data-mghist]').forEach(function (b) {
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-mghist');
@@ -41755,6 +41796,7 @@
       var reason = v.why === 'lead' ? null : v.why;
       var done = function () {
         close();
+        delete MG_HIST[id];   // раскрытая история перечитается с новой отметкой
         state._sb = null; state._mkCross = null; state._pot = null;
         if (after) after(); else renderView();
         showToast(reason ? 'Убрали из лидов: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1]
