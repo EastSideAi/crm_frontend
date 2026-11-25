@@ -10,7 +10,7 @@
    Файл собирается скриптом analitika/snapshot/build_crm.py — руками не правят,
    правки идут в страницу черновика и в engine.js. */
 window.CROSSCUT = (function () {
-  var TPL = "  <div class=\"fbar\">\n    <div class=\"fhead\">\n      <span class=\"flabel\">Период</span>\n      <span class=\"seg\" id=\"seg\" role=\"group\" aria-label=\"Быстрый период\">\n        <button type=\"button\" data-p=\"m30\" aria-pressed=\"false\">30 дней</button>\n        <button type=\"button\" data-p=\"cur\" aria-pressed=\"false\">Текущий месяц</button>\n        <button type=\"button\" data-p=\"prev\" aria-pressed=\"true\">Прошлый месяц</button>\n        <button type=\"button\" data-p=\"m6\" aria-pressed=\"false\">6 месяцев</button>\n        <button type=\"button\" data-p=\"all\" aria-pressed=\"false\">Весь период</button>\n      </span>\n      <span class=\"dates\">\n        <label><span>с</span><input type=\"date\" id=\"dFrom\"></label>\n        <label><span>по</span><input type=\"date\" id=\"dTo\"></label>\n        <span class=\"dhint\" id=\"dHint\"></span>\n      </span>\n    </div>\n    <div class=\"fhead fhead2\">\n      <span class=\"flabel\">Кого считаем</span>\n      <span class=\"seg\" id=\"scope\" role=\"group\" aria-label=\"Кого считаем\">\n        <button type=\"button\" data-s=\"all\" aria-pressed=\"true\">Вся компания</button>\n        <button type=\"button\" data-s=\"launch\" aria-pressed=\"false\">Интенсив 23–24 сентября</button>\n      </span>\n    </div>\n    <p class=\"fnote\" id=\"fnote\"></p>\n  </div>\n\n\n  <nav class=\"tabs\" id=\"tabs\" role=\"tablist\">\n    <button type=\"button\" role=\"tab\" id=\"tb-main\" aria-controls=\"tab-main\" data-t=\"main\" aria-selected=\"true\">Главная</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-itogi\" aria-controls=\"tab-itogi\" data-t=\"itogi\" aria-selected=\"false\">Итоги</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-src\" aria-controls=\"tab-src\" data-t=\"src\" aria-selected=\"false\">Источники</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-coh\" aria-controls=\"tab-coh\" data-t=\"coh\" aria-selected=\"false\">Когорты</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-prod\" aria-controls=\"tab-prod\" data-t=\"prod\" aria-selected=\"false\">Продукты</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-diag\" aria-controls=\"tab-diag\" data-t=\"diag\" aria-selected=\"false\">Диагностика</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-gap\" aria-controls=\"tab-gap\" data-t=\"gap\" aria-selected=\"false\">Чего тут нет</button>\n  </nav>\n\n  <div id=\"tab-main\" role=\"tabpanel\" aria-labelledby=\"tb-main\" tabindex=\"0\">\n    <div class=\"mainrow\">\n      <div class=\"mcol\">\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Выручка по дате поступления денег</h2>\n      <span class=\"hint\" id=\"revHint\"></span>\n    </div>\n    <p class=\"lede2\">Деньги приписаны дню, когда они пришли, а не когда выставили счет. Столбец — сумма за день.</p>\n    <div class=\"chart tall\" id=\"revChart\"></div>\n  </section>\n  <section class=\"sec\" id=\"invSec\">\n    <div class=\"sec-head\">\n      <h2>Счета и оплаты по дням</h2>\n      <span class=\"hint\">расстояние между линиями — деньги в неоплаченных счетах</span>\n    </div>\n    <svg class=\"lchart\" id=\"invLines\" aria-label=\"Счета и оплаты по дням\"></svg>\n    <div class=\"legend\">\n      <span><i class=\"i-inv\"></i>выставлено счетов</span>\n      <span><i class=\"i-pay\"></i>оплат пришло</span>\n    </div>\n  </section>\n      </div>\n\n      <div class=\"kwrap\">\n        <p class=\"howto\">Нажмите на плитку — откроется, <b>как цифра считается и как проверить ее руками</b>.</p>\n        <div class=\"kpis\" id=\"kpis\"></div>\n      </div>\n    </div>\n\n  <div class=\"lines\">\n    <section class=\"sec\">\n      <div class=\"sec-head\">\n        <h2>Средний чек по дням</h2>\n        <span class=\"hint\">точка — день, когда приходили деньги</span>\n      </div>\n      <p class=\"lede2\">Сумма дня, поделенная на число оплат этого дня. Один крупный счет сразу поднимает линию.</p>\n      <svg class=\"lchart\" id=\"checkLine\" aria-label=\"Средний чек по дням\"></svg>\n    </section>\n  </div>\n\n  </div>\n\n  <div id=\"tab-itogi\" role=\"tabpanel\" aria-labelledby=\"tb-itogi\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Лестница: от лида до оплаты</h2>\n      <span class=\"hint\" id=\"ladHint\"></span>\n    </div>\n    <div class=\"lad\" id=\"lad\"></div>\n    <p class=\"lede2\" id=\"ladNote\" hidden style=\"margin:14px 0 0\">Ступеней бесплатной диагностики в лестнице запуска нет: она идет в боте и по запуску не делится. Ее цифры смотрите на вкладке «Диагностика» — там они по всей базе.</p>\n    <p class=\"lede2\" id=\"ladGrew\" hidden style=\"margin:14px 0 0\">Ступень бывает больше предыдущей — это не ошибка счета. Люди приходят в разные месяцы: разбор мог пройти у человека, который оставил контакт в прошлом периоде, а оплата — по счету, выставленному раньше.</p>\n    <div class=\"flag bad\" id=\"ladWarn\" hidden></div>\n    <div class=\"flag\">\n      <span class=\"fl-l\">Чему в этой лестнице пока нельзя верить до конца</span>\n      <p style=\"margin:0\">Две ступени диагностики считаются <b>в боте</b>, а не в карточке человека: воронку включили в сентябре, и до нее людей там нет вовсе. Пока бот и CRM не склеены по человеку, эти ступени живут своей жизнью — один и тот же человек может быть в обеих и посчитаться дважды, а может не узнаться вообще. Чинится пунктом 3 плана работ.</p>\n    </div>\n  </section>\n\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Сколько проходит от первого касания до оплаты</h2>\n      <span class=\"hint\">оплаты выбранного периода</span>\n    </div>\n    <p class=\"lede2\">Это главный довод в пользу когорт: пока сделок мало, разброс огромный, и считать выручку месяцем оплаты — значит каждый месяц получать случайное число.</p>\n    <table class=\"tbl\" id=\"srok\"></table>\n  </section>\n\n  </div>\n\n  <div id=\"tab-src\" role=\"tabpanel\" aria-labelledby=\"tb-src\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Через какую дверь зашли люди</h2>\n      <span class=\"hint\">карточки с контактами за выбранный период</span>\n    </div>\n    <p class=\"lede2\">Дверь — это форма, через которую человек попал к нам: бот, лендинг интенсива, страница «Теплый прием». Колонка «с меткой» показывает, у скольких из них мы знаем еще и рекламный источник.</p>\n    <table class=\"tbl\" id=\"src\"></table>\n    <p class=\"lede2\" style=\"margin-top:14px\">Деньги в этой таблице привязаны к <b>людям, пришедшим за период</b>, а не к дате платежа: если человек пришел в сентябре, а заплатил в октябре, его деньги стоят в сентябрьской строке. Поэтому сумма здесь не совпадает с выручкой на главной — там деньги считаются по дню поступления.</p>\n  </section>\n\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Откуда человек пришел к двери</h2>\n      <span class=\"hint\">метка utm_source на ссылке</span>\n    </div>\n    <p class=\"lede2\">Это и есть ответ на вопрос «какой канал работает». Строка «без метки» — люди, пришедшие по голой ссылке: дверь мы знаем, а что их привело — нет.</p>\n    <table class=\"tbl\" id=\"utm\"></table>\n  </section>\n\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>По кампаниям</h2>\n      <span class=\"hint\">метка utm_campaign</span>\n    </div>\n    <p class=\"lede2\">Кампания — это затея целиком: интенсив, тест, рассылка по старой базе. Один запуск иногда записан разными словами — это видно прямо в таблице и чинится словарем меток.</p>\n    <table class=\"tbl\" id=\"camp\"></table>\n    <div class=\"flag\">\n      <span class=\"fl-l\">Что помнить про метки</span>\n      <p style=\"margin:0\">Метка ставится в момент перехода по ссылке и <b>задним числом не восстанавливается</b>. Ссылка без хвостика — человек навсегда останется «без метки». Второе: до карточки метка доезжает не всегда — при регистрации через бота она пока теряется, и в таблице это видно как большая строка «без метки».</p>\n    </div>\n  </section>\n\n  </div>\n\n  <div id=\"tab-coh\" role=\"tabpanel\" aria-labelledby=\"tb-coh\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Когорты: выручка приписана месяцу, когда человек пришел</h2>\n      <span class=\"hint\">а не месяцу, когда заплатил</span>\n    </div>\n    <p class=\"lede2\">Решение о сопровождении семья принимает неделями, иногда месяцами. Если считать выручку по месяцу оплаты, сентябрьская реклама выглядит провальной до тех пор, пока деньги не придут в ноябре, — и ее выключают зря.</p>\n    <table class=\"tbl\" id=\"coh\"></table>\n    <p class=\"lede2\" id=\"cohNote\" style=\"margin-top:14px\"></p>\n  </section>\n\n  </div>\n\n  <div id=\"tab-prod\" role=\"tabpanel\" aria-labelledby=\"tb-prod\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Деньги по продуктам</h2>\n      <span class=\"hint\">за выбранный период</span>\n    </div>\n    <table class=\"tbl\" id=\"prod\"></table>\n    <div class=\"flag\">\n      <span class=\"fl-l\">Разбивки по тарифам сопровождения сейчас нет, и вот почему</span>\n      <p style=\"margin:0\">Самые крупные счета — на сотни тысяч — выставлены <b>без выбора тарифа</b>: название написано руками в поле «назначение». Система видит сумму, но не видит, что именно купили. Пока счета выставляются текстом, ответить «что берут чаще, Стандарт или Премиум» невозможно. Чинится правилом в CRM: тариф выбирается из списка, иначе счет не выставляется.</p>\n    </div>\n  </section>\n\n  </div>\n\n  <div id=\"tab-diag\" role=\"tabpanel\" aria-labelledby=\"tb-diag\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Диагностика: бесплатная и у тьютора-диагноста</h2>\n      <span class=\"hint\">за выбранный период</span>\n    </div>\n    <p class=\"lede2\">Два разных продукта в одной лестнице: бесплатную человек проходит сам в боте, разбор ведет живой тьютор-диагност, и именно на разборе продается сопровождение.</p>\n    <div class=\"lad\" id=\"diag\"></div>\n  </section>\n\n  </div>\n\n  <div id=\"tab-gap\" role=\"tabpanel\" aria-labelledby=\"tb-gap\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Чего на этой странице нет</h2>\n      <span class=\"hint\">сверил с макетом Олеси и с Монитором</span>\n    </div>\n    <p class=\"lede2\">Эту страницу я сверил с двумя образцами: макетом экрана, который Олеся нарисовала в Миро, и Монитором, которым команда уже пользуется. Ниже все, что есть там и чего нет здесь, с причинами. Это граница черновика, а не список обещаний: чтобы никто не искал кнопку, которой нет.</p>\n    <table class=\"tbl\" id=\"gap\"></table>\n  </section>\n\n  <div class=\"note\">\n    <span class=\"fl-l\">Что это за экран и что с ним делать</span>\n    <p>Это черновик, собранный на <b>настоящих цифрах из боевой базы</b>. Ничего не придумано: где данных нет, стоит прочерк и причина. Когда мы договоримся, что экран показывает правду и показывает ее понятно, он переедет в CRM и начнет считаться сам, в реальном времени.</p>\n    <p>Методика расчета, паспорт каждой цифры и чек-лист подготовки запуска — в соседнем документе: <a href=\"https://истсайд.рф/аналитика-правила/\">истсайд.рф/аналитика-правила</a></p>\n  </div>\n\n  </div>\n\n";
+  var TPL = "  <div class=\"fbar\">\n    <div class=\"fhead\">\n      <span class=\"flabel\">Период</span>\n      <span class=\"seg\" id=\"seg\" role=\"group\" aria-label=\"Быстрый период\">\n        <button type=\"button\" data-p=\"m30\" aria-pressed=\"false\">30 дней</button>\n        <button type=\"button\" data-p=\"cur\" aria-pressed=\"false\">Текущий месяц</button>\n        <button type=\"button\" data-p=\"prev\" aria-pressed=\"true\">Прошлый месяц</button>\n        <button type=\"button\" data-p=\"m6\" aria-pressed=\"false\">6 месяцев</button>\n        <button type=\"button\" data-p=\"all\" aria-pressed=\"false\">Весь период</button>\n      </span>\n      <span class=\"dates\">\n        <label><span>с</span><input type=\"date\" id=\"dFrom\"></label>\n        <label><span>по</span><input type=\"date\" id=\"dTo\"></label>\n        <span class=\"dhint\" id=\"dHint\"></span>\n      </span>\n    </div>\n    <div class=\"fhead fhead2\">\n      <span class=\"flabel\">Кого считаем</span>\n      <span class=\"seg\" id=\"scope\" role=\"group\" aria-label=\"Кого считаем\">\n        <button type=\"button\" data-s=\"all\" aria-pressed=\"true\">Вся компания</button>\n        <button type=\"button\" data-s=\"launch\" aria-pressed=\"false\">Интенсив 23–24 сентября</button>\n      </span>\n    </div>\n    <p class=\"fnote\" id=\"fnote\"></p>\n  </div>\n\n\n  <nav class=\"tabs\" id=\"tabs\" role=\"tablist\">\n    <button type=\"button\" role=\"tab\" id=\"tb-main\" aria-controls=\"tab-main\" data-t=\"main\" aria-selected=\"true\">Главная</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-itogi\" aria-controls=\"tab-itogi\" data-t=\"itogi\" aria-selected=\"false\">Итоги</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-src\" aria-controls=\"tab-src\" data-t=\"src\" aria-selected=\"false\">Источники</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-coh\" aria-controls=\"tab-coh\" data-t=\"coh\" aria-selected=\"false\">Когорты</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-prod\" aria-controls=\"tab-prod\" data-t=\"prod\" aria-selected=\"false\">Продукты</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-diag\" aria-controls=\"tab-diag\" data-t=\"diag\" aria-selected=\"false\">Диагностика</button>\n    <button type=\"button\" role=\"tab\" id=\"tb-gap\" aria-controls=\"tab-gap\" data-t=\"gap\" aria-selected=\"false\">Чего тут нет</button>\n  </nav>\n\n  <div id=\"tab-main\" role=\"tabpanel\" aria-labelledby=\"tb-main\" tabindex=\"0\">\n    <div class=\"mainrow\">\n      <div class=\"mcol\">\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Выручка по дате поступления денег</h2>\n      <span class=\"hint\" id=\"revHint\"></span>\n    </div>\n    <p class=\"lede2\">Деньги приписаны дню, когда они пришли, а не когда выставили счет. Столбец — сумма за день.</p>\n    <div class=\"chart tall\" id=\"revChart\"></div>\n  </section>\n  <section class=\"sec\" id=\"invSec\">\n    <div class=\"sec-head\">\n      <h2>Счета и оплаты по дням</h2>\n      <span class=\"hint\">расстояние между линиями — деньги в неоплаченных счетах</span>\n    </div>\n    <svg class=\"lchart\" id=\"invLines\" aria-label=\"Счета и оплаты по дням\"></svg>\n    <div class=\"legend\">\n      <span><i class=\"i-inv\"></i>выставлено счетов</span>\n      <span><i class=\"i-pay\"></i>оплат пришло</span>\n    </div>\n  </section>\n      </div>\n\n      <div class=\"kwrap\">\n        <p class=\"howto\">Нажмите на плитку — откроется, <b>как цифра считается и как проверить ее руками</b>.</p>\n        <div class=\"kpis\" id=\"kpis\"></div>\n      </div>\n    </div>\n\n  <div class=\"lines\">\n    <section class=\"sec\">\n      <div class=\"sec-head\">\n        <h2>Средний чек по дням</h2>\n        <span class=\"hint\">точка — день, когда приходили деньги</span>\n      </div>\n      <p class=\"lede2\">Сумма дня, поделенная на число оплат этого дня. Один крупный счет сразу поднимает линию.</p>\n      <svg class=\"lchart\" id=\"checkLine\" aria-label=\"Средний чек по дням\"></svg>\n    </section>\n  </div>\n\n  </div>\n\n  <div id=\"tab-itogi\" role=\"tabpanel\" aria-labelledby=\"tb-itogi\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Лестница: от лида до оплаты</h2>\n      <span class=\"hint\" id=\"ladHint\"></span>\n    </div>\n    <div class=\"lad\" id=\"lad\"></div>\n    <p class=\"lede2\" id=\"ladNote\" hidden style=\"margin:14px 0 0\">Ступеней бесплатной диагностики в лестнице запуска нет: она идет в боте и по запуску не делится. Ее цифры смотрите на вкладке «Диагностика» — там они по всей базе.</p>\n    <p class=\"lede2\" id=\"ladGrew\" hidden style=\"margin:14px 0 0\">Ступень бывает больше предыдущей — это не ошибка счета. Люди приходят в разные месяцы: консультация могла пройти у человека, который оставил контакт в прошлом периоде, а оплата — по счету, выставленному раньше.</p>\n    <div class=\"flag bad\" id=\"ladWarn\" hidden></div>\n    <div class=\"flag\">\n      <span class=\"fl-l\">Чему в этой лестнице пока нельзя верить до конца</span>\n      <p style=\"margin:0\">Две ступени диагностики считаются <b>в боте</b>, а не в карточке человека: воронку включили в сентябре, и до нее людей там нет вовсе. Пока бот и CRM не склеены по человеку, эти ступени живут своей жизнью — один и тот же человек может быть в обеих и посчитаться дважды, а может не узнаться вообще. Чинится пунктом 3 плана работ.</p>\n    </div>\n  </section>\n\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Сколько проходит от первого касания до оплаты</h2>\n      <span class=\"hint\">оплаты выбранного периода</span>\n    </div>\n    <p class=\"lede2\">Это главный довод в пользу когорт: пока сделок мало, разброс огромный, и считать выручку месяцем оплаты — значит каждый месяц получать случайное число.</p>\n    <table class=\"tbl\" id=\"srok\"></table>\n  </section>\n\n  </div>\n\n  <div id=\"tab-src\" role=\"tabpanel\" aria-labelledby=\"tb-src\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Через какую дверь зашли люди</h2>\n      <span class=\"hint\">карточки с контактами за выбранный период</span>\n    </div>\n    <p class=\"lede2\">Дверь — это форма, через которую человек попал к нам: бот, лендинг интенсива, страница «Теплый прием». Колонка «с меткой» показывает, у скольких из них мы знаем еще и рекламный источник.</p>\n    <table class=\"tbl\" id=\"src\"></table>\n    <p class=\"lede2\" style=\"margin-top:14px\">Деньги в этой таблице привязаны к <b>людям, пришедшим за период</b>, а не к дате платежа: если человек пришел в сентябре, а заплатил в октябре, его деньги стоят в сентябрьской строке. Поэтому сумма здесь не совпадает с выручкой на главной — там деньги считаются по дню поступления.</p>\n  </section>\n\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Откуда человек пришел к двери</h2>\n      <span class=\"hint\">метка utm_source на ссылке</span>\n    </div>\n    <p class=\"lede2\">Это и есть ответ на вопрос «какой канал работает». Строка «без метки» — люди, пришедшие по голой ссылке: дверь мы знаем, а что их привело — нет.</p>\n    <table class=\"tbl\" id=\"utm\"></table>\n  </section>\n\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>По кампаниям</h2>\n      <span class=\"hint\">метка utm_campaign</span>\n    </div>\n    <p class=\"lede2\">Кампания — это затея целиком: интенсив, тест, рассылка по старой базе. Один запуск иногда записан разными словами — это видно прямо в таблице и чинится словарем меток.</p>\n    <table class=\"tbl\" id=\"camp\"></table>\n    <div class=\"flag\">\n      <span class=\"fl-l\">Что помнить про метки</span>\n      <p style=\"margin:0\">Метка ставится в момент перехода по ссылке и <b>задним числом не восстанавливается</b>. Ссылка без хвостика — человек навсегда останется «без метки». Второе: до карточки метка доезжает не всегда — при регистрации через бота она пока теряется, и в таблице это видно как большая строка «без метки».</p>\n    </div>\n  </section>\n\n  </div>\n\n  <div id=\"tab-coh\" role=\"tabpanel\" aria-labelledby=\"tb-coh\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Когорты: выручка приписана месяцу, когда человек пришел</h2>\n      <span class=\"hint\">а не месяцу, когда заплатил</span>\n    </div>\n    <p class=\"lede2\">Решение о сопровождении семья принимает неделями, иногда месяцами. Если считать выручку по месяцу оплаты, сентябрьская реклама выглядит провальной до тех пор, пока деньги не придут в ноябре, — и ее выключают зря.</p>\n    <table class=\"tbl\" id=\"coh\"></table>\n    <p class=\"lede2\" id=\"cohNote\" style=\"margin-top:14px\"></p>\n  </section>\n\n  </div>\n\n  <div id=\"tab-prod\" role=\"tabpanel\" aria-labelledby=\"tb-prod\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Деньги по продуктам</h2>\n      <span class=\"hint\">за выбранный период</span>\n    </div>\n    <table class=\"tbl\" id=\"prod\"></table>\n    <div class=\"flag\">\n      <span class=\"fl-l\">Разбивки по тарифам сопровождения сейчас нет, и вот почему</span>\n      <p style=\"margin:0\">Самые крупные счета — на сотни тысяч — выставлены <b>без выбора тарифа</b>: название написано руками в поле «назначение». Система видит сумму, но не видит, что именно купили. Пока счета выставляются текстом, ответить «что берут чаще, Стандарт или Премиум» невозможно. Чинится правилом в CRM: тариф выбирается из списка, иначе счет не выставляется.</p>\n    </div>\n  </section>\n\n  </div>\n\n  <div id=\"tab-diag\" role=\"tabpanel\" aria-labelledby=\"tb-diag\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Диагностика: бесплатная и у тьютора-диагноста</h2>\n      <span class=\"hint\">за выбранный период</span>\n    </div>\n    <p class=\"lede2\">Два разных продукта в одной лестнице: бесплатную человек проходит сам в боте, консультацию ведет живой тьютор-диагност, и именно на консультации продается сопровождение.</p>\n    <div class=\"lad\" id=\"diag\"></div>\n  </section>\n\n  </div>\n\n  <div id=\"tab-gap\" role=\"tabpanel\" aria-labelledby=\"tb-gap\" tabindex=\"0\" hidden>\n  <section class=\"sec\">\n    <div class=\"sec-head\">\n      <h2>Чего на этой странице нет</h2>\n      <span class=\"hint\">сверил с макетом Олеси и с Монитором</span>\n    </div>\n    <p class=\"lede2\">Эту страницу я сверил с двумя образцами: макетом экрана, который Олеся нарисовала в Миро, и Монитором, которым команда уже пользуется. Ниже все, что есть там и чего нет здесь, с причинами. Это граница черновика, а не список обещаний: чтобы никто не искал кнопку, которой нет.</p>\n    <table class=\"tbl\" id=\"gap\"></table>\n  </section>\n\n  <div class=\"note\">\n    <span class=\"fl-l\">Что это за экран и что с ним делать</span>\n    <p>Это черновик, собранный на <b>настоящих цифрах из боевой базы</b>. Ничего не придумано: где данных нет, стоит прочерк и причина. Когда мы договоримся, что экран показывает правду и показывает ее понятно, он переедет в CRM и начнет считаться сам, в реальном времени.</p>\n    <p>Методика расчета, паспорт каждой цифры и чек-лист подготовки запуска — в соседнем документе: <a href=\"https://истсайд.рф/аналитика-правила/\">истсайд.рф/аналитика-правила</a></p>\n  </div>\n\n  </div>\n\n";
 
   function build(ROOT, SNAP) {
     function $id(id) { return ROOT.querySelector('#' + id); }
@@ -153,8 +153,12 @@ window.CROSSCUT = (function () {
     var LAUNCH = {
       title: 'Интенсив 28–29 октября',
       from: '2026-10-01',
-      camps: {'intensiv-okt': 1, 'diag': 1}
+      camps: {'intensiv-okt': 1, 'intensiv-2829okt': 1, 'intensiv2': 1,
+              'intensiv_zak': 1, 'guide5': 1, 'guide5_insta': 1, 'diag': 1}
     };
+
+    /* Имя запуска приходит из «Запусков» вместе с его лестницей */
+    if (SNAP.launch && SNAP.launch.title) LAUNCH.title = SNAP.launch.title;
 
     var TODAY = SNAP.snap.slice(0, 10);
     var FIRST = SNAP.leads.length ? SNAP.leads[0].d : '2026-06-01';
@@ -185,12 +189,19 @@ window.CROSSCUT = (function () {
       var set = {};
       SNAP.leads.forEach(function(l){
         if (!l.g) return;
-        if (l.reg || (l.cp && LAUNCH.camps[l.cp])) set[l.g] = 1;
+        if (regInLaunch(l) || (l.cp && LAUNCH.camps[l.cp])) set[l.g] = 1;
       });
       return set;
     })();
+    /* Участник запуска — тот, кто записался на эфир С НАЧАЛА этого запуска. До
+       13.11.2026 годилась любая регистрация, и в октябрьский интенсив попадали люди
+       сентябрьского эфира (Ольга: цифры должны совпадать с «Запусками»). */
+    function regInLaunch(l){
+      var regs = l.rg || (l.reg ? [[l.reg, 0]] : []);
+      return regs.some(function(x){ return x[0] >= LAUNCH.from; });
+    }
     function inLaunch(l){
-      if (l.reg) return true;
+      if (regInLaunch(l)) return true;
       if (l.cp && LAUNCH.camps[l.cp]) return true;
       return !!(l.g && LAUNCH_PEOPLE[l.g]);
     }
@@ -202,7 +213,7 @@ window.CROSSCUT = (function () {
     /* Все числа одного периода считаются одним проходом: два счетчика на один
        вопрос однажды разойдутся, и экран начнет спорить сам с собой. */
     function agg(a, b){
-      var r = {leads: 0, visits: 0, regs: 0, watched: 0, signed: 0, meeting: 0, meetings: 0,
+      var r = {leads: 0, visits: 0, regs: 0, diagPlat: 0, watched: 0, signed: 0, meeting: 0, meetings: 0,
                invN: 0, invRub: 0, invCanceled: 0, invPaidN: 0,
                payN: 0, revenue: 0, payers: 0, withUtm: 0, withCamp: 0,
                revByDay: {}, invByDay: {}, payByDay: {}, payCntByDay: {}, doors: {}, utm: {}, camps: {},
@@ -215,7 +226,7 @@ window.CROSSCUT = (function () {
          списка нет вовсе — там у лида нет ни id, ни имени, и это сделано нарочно. */
       function who(key, l, item){
         if (!l.i) return;
-        var row = {i: l.i, nm: l.nm || '', k: l.k || '', s: l.s || ''};
+        var row = {i: l.i, g: l.g || null, nm: l.nm || '', k: l.k || '', s: l.s || ''};
         for (var q in item) row[q] = item[q];
         (r.who[key] || (r.who[key] = [])).push(row);
       }
@@ -224,24 +235,43 @@ window.CROSSCUT = (function () {
         var mine = inP(l.d, a, b);
         if (mine){
           r.visits++;
-          if (l.c){
+          /* «не новый лид» (Ольгина чистка перед РНП): карточка остается в базе,
+             но лидом не считается — это текущий клиент, дубль или спам */
+          if (l.c && !l.nl){
             r.leads++;
             var gk = l.g ? 'g' + l.g : 'x' + r.leads;
             if (!r.people[gk]){ r.people[gk] = 1; r.peopleN++; }
           }
-          if (l.c && l.s) r.withUtm++;
-          if (l.c && l.cp) r.withCamp++;
-          if (l.c){
+          if (l.c && !l.nl && l.s) r.withUtm++;
+          if (l.c && !l.nl && l.cp) r.withCamp++;
+          if (l.c && !l.nl){
             who('leads', l, {d: l.d});
             if (l.s) who('withUtm', l, {d: l.d});
           }
         }
-        if (inP(l.reg, a, b)){ r.regs++; if (l.w) r.watched++; who('regs', l, {d: l.reg}); }
-        if (inP(l.sb, a, b)) r.signed++;
+        /* Регистрации на любой интенсив: человек с сентябрьского эфира, записавшийся
+           на октябрьский, — это две регистрации в двух периодах. Старый срез без rg
+           отдает одну дату в reg. */
+        var regs = l.rg || (l.reg ? [[l.reg, l.w ? 1 : 0]] : []);
+        regs.forEach(function(x){
+          if (!inP(x[0], a, b)) return;
+          r.regs++; if (x[1]) r.watched++; who('regs', l, {d: x[0]});
+        });
+        if (inP(l.dg, a, b)){ r.diagPlat++; who('diagPlat', l, {d: l.dg}); }
+        /* Ольга 15.11.2026: «не нужно одного человека считать дважды». Записался и
+           встреча — люди, а не карточки: у человека с двумя карточками запись лежит в
+           обеих, и ступень выходила больше квалифицированных. Ключ тот же, что у
+           плательщиков, — склейка сквозной (l.g). */
+        var hk = l.g ? 'g' + l.g : 's' + (l.i || ('n' + (r._hn = (r._hn || 0) + 1)));
+        r._sg = r._sg || {}; r._mt = r._mt || {};
+        if (inP(l.sb, a, b) && !r._sg[hk]){ r._sg[hk] = 1; r.signed++; who('signed', l, {d: l.sb}); }
         var myCalls = (l.cl || []).filter(function(c){ return inP(c, a, b); }).length;
         if (myCalls){
-          r.meetings += myCalls; r.meeting++;
-          who('meeting', l, {d: (l.cl || []).filter(function(c){ return inP(c, a, b); }).pop(), n: myCalls});
+          r.meetings += myCalls;
+          if (!r._mt[hk]){
+            r._mt[hk] = 1; r.meeting++;
+            who('meeting', l, {d: (l.cl || []).filter(function(c){ return inP(c, a, b); }).pop(), n: myCalls});
+          }
         }
 
         /* Деньги приходят тремя дорогами: счета CRM (сопровождение, «Теплый прием»),
@@ -366,6 +396,14 @@ window.CROSSCUT = (function () {
       PRV = p[0] < FIRST && p[1] < FIRST ? null : agg(p[0], p[1]);
     }
 
+    /* Отсюда и ниже начинается экран. В CRM-сборке ровно перед этой строкой стоит
+       ранний выход `if (!ROOT) return {agg: agg, launch: LAUNCH};` — его вставляет
+       build_crm.py: раздел «Управление» зовет CROSSCUT.week и считает тем же agg, без
+       рисования. Здесь, на странице-черновике, такой return стоять не может — код
+       лежит на верхнем уровне скрипта, и браузер отказался бы разбирать всю страницу. */
+
+    if (!ROOT) return {agg: agg, launch: LAUNCH};
+
     /* ── Паспорта цифр: что считаем, откуда, как проверить руками ────────────── */
     var PASSPORTS = {
       revenue: {who:'revenue', t:'Выручка', what:'Деньги, которые реально пришли за выбранный период. Считается по дате поступления, а не по дате счета.', from:'Платежи по счетам CRM со статусом «оплачено».', how:'Открыть список оплат за тот же период и сложить суммы. Отдельно сверить с кабинетом ЮKassa — помня, что часть денег приходит переводом мимо кассы.'},
@@ -376,7 +414,7 @@ window.CROSSCUT = (function () {
       leads: {who:'leads', t:'Лидов', what:'Новые карточки людей, у которых есть хотя бы один контакт: телефон, почта или телеграм. Карточка без контактов — это визит, а не лид. Один человек может завести несколько карточек — экран их склеивает по телефону, почте и id мессенджера и подписывает, сколько это живых людей.', from:'Карточки платформы.', how:'Открыть список новых карточек за период и пересчитать. У каждой обязан быть контакт. Если у двух карточек один телефон — это один человек.'},
       withUtm: {who:'withUtm', t:'Лидов с рекламной меткой', what:'Сколько новых карточек пришло со ссылки с меткой — то есть мы знаем не только дверь, но и что человека к ней привело.', from:'Поле utm в карточке платформы.', how:'Открыть карточку и посмотреть источник. Метка ставится в момент перехода и задним числом не восстанавливается.'},
       diagDone: {t:'Завершили бесплатную диагностику', what:'Люди, дошедшие до результата в диагностике. Диагностика идет в боте отдельной воронкой.', from:'Шаги воронки диагностики в боте.', how:'Открыть воронку в разделе «Маркетинг»: число дошедших до последнего шага обязано совпасть.'},
-      meeting: {who:'meeting', t:'Прошли разбор у тьютора-диагноста', what:'Разборы, которые реально состоялись. «Записались» и «пришли» — разные цифры, и они не объединяются.', from:'Записи о состоявшихся встречах в карточках.', how:'У каждого разбора есть дата и расшифровка встречи. Открыть одну наугад — либо встреча есть, либо цифра врет.'},
+      meeting: {who:'meeting', t:'Прошли консультацию у тьютора-диагноста', what:'Консультации, которые реально состоялись. «Записались» и «пришли» — разные цифры, и они не объединяются.', from:'Записи о состоявшихся встречах в карточках.', how:'У каждой консультации есть дата и расшифровка встречи. Открыть одну наугад — либо встреча есть, либо цифра врет.'},
       perLead: {t:'Выручка на лида', what:'Вся выручка периода, поделенная на число лидов этого периода. Грубая мера: деньги часто приходят от людей, пришедших раньше.', from:'Выручка и лиды с этого же экрана.', how:'Поделить одно на другое. Честнее смотреть на когорты — там деньги привязаны к месяцу прихода человека.'},
       spend: {t:'Расход и окупаемость', what:'Сколько потратили на рекламу за период и сколько выручки на этот рубль пришло.', from:'Таблица расходов в CRM, раздел «Маркетинг». Заводится руками.', how:'Сверить с кабинетами рекламы и счетами подрядчиков. Пока расход не заведен, окупаемость не считается — ее не из чего считать.'},
       regs: {who:'regs', t:'Регистраций на интенсив', what:'Сколько человек записалось на эфир за период. Один человек считается один раз, даже если регистрировался дважды.', from:'Регистрации на событие в CRM.', how:'Список регистраций с датами. Служебные записи бота и прогоны робота в цифру не входят.'}
@@ -399,8 +437,63 @@ window.CROSSCUT = (function () {
         (prevVal === undefined ? '' : delta(nowVal, prevVal)) + '</button>';
     }
 
+    /* Ступень лестницы «Запусков» по ключу: в режиме запуска плитки денег, счетов,
+       разборов и регистраций берутся оттуда (Ольга 13.11.2026: «цифры старые, не с
+       запуска»). Сравнения с прошлым периодом у них нет: запуск считается целиком. */
+    /* Паспорта плиток запуска: людей поименно здесь не показываем, они на ступенях
+       «Запусков», и второй список разошелся бы с тем, что там проверено. */
+    (function(){
+      var how = 'Откройте вкладку «Запуски», этот интенсив, и нажмите на ту же ступень пути: там люди поименно.';
+      var from = 'Вкладка «Запуски», путь человека по запуску. Сквозная берет ступень оттуда как есть.';
+      PASSPORTS.lrev = {t: 'Выручка запуска', what: 'Деньги от людей, оплативших после интенсива, за весь запуск.', from: from, how: how};
+      PASSPORTS.lpay = {t: 'Оплатили', what: 'Сколько человек из запуска заплатили.', from: from, how: how};
+      PASSPORTS.linv = {t: 'Получили счет', what: 'Сколько человек получили счет по офферу запуска.', from: from, how: how};
+      PASSPORTS.lcall = {t: 'Провели консультацию', what: 'Сколько человек из запуска дошли до встречи с тьютором.', from: from, how: how};
+      PASSPORTS.lview = {t: 'Открыли эфир', what: 'Сколько человек открыли страницу эфира.', from: from, how: how};
+      PASSPORTS.ldiag = {t: 'Записались на диагностику', what: 'Заполнили анкету по ссылке запуска.', from: from, how: how};
+      PASSPORTS.ltutor = {t: 'Записались на консультацию', what: 'Заявки к тьютору за время запуска.', from: from, how: how};
+      PASSPORTS.lreach = {t: 'Охват запуска', what: 'Все люди запуска: оставили заявку на странице или получили ссылку на эфир в боте.', from: from, how: how};
+    })();
+
+    function lstep(key){
+      var LP = state.scope === 'launch' && SNAP.launch && SNAP.launch.path;
+      if (!LP) return null;
+      for (var i = 0; i < LP.length; i++) if (LP[i].key === key) return LP[i];
+      return null;
+    }
+    function lrub(st){
+      var m = st && st.note && st.note.replace(/\s/g, '').match(/(\d+)₽/);
+      return m ? +m[1] : null;
+    }
+
     function renderKpis(){
       var d = CUR, p = PRV, h = '';
+      /* Запуск: плитки целиком из «Запусков» (Ольга 13.11.2026: декомпозиция, запуски и
+         сквозная должны биться, выверены первые две). Свои плитки тут считали других
+         людей за другой отрезок и спорили с ними. */
+      var sPaid = lstep('paid');
+      if (sPaid){
+        var LW = 'за весь запуск, как в «Запусках»';
+        var lt = function(key, step, label, sub, extra){
+          var st = lstep(step);
+          if (!st) return '';
+          return kpiBtn(key, label, num(st.people || 0), sub || LW, undefined, 0, extra);
+        };
+        var r0 = lrub(sPaid), sReg = lstep('reg'), sBot = lstep('bot_only');
+        if (r0 != null) h += kpiBtn('lrev', 'Выручка', rub(r0),
+          'оплатили ' + (sPaid.people || 0) + ' человек · ' + LW, undefined, 0, 'hero');
+        h += lt('lreach', 'reach', 'Охват запуска',
+          [sReg ? 'с формы ' + sReg.people : '', sBot ? 'из бота ' + sBot.people : ''].filter(Boolean).join(' · '));
+        h += lt('lview', 'viewers', 'Открыли эфир');
+        h += lt('ldiag', 'plat_diag', 'Записались на диагностику');
+        h += lt('ltutor', 'tutor', 'Записались на консультацию');
+        h += lt('lcall', 'call_done', 'Провели консультацию');
+        h += lt('linv', 'invoiced', 'Получили счет');
+        h += lt('lpay', 'paid', 'Оплатили');
+        $id('kpis').innerHTML = h;
+        if (state.open) openDrawer(state.open, true);
+        return;
+      }
       h += kpiBtn('revenue', 'Выручка', rub(d.revenue), '', p ? p.revenue : undefined, d.revenue, 'hero');
       h += kpiBtn('payN', 'Оплат', num(d.payN), '', p ? p.payN : undefined, d.payN);
       h += kpiBtn('invN', 'Счетов выставлено', num(d.invN),
@@ -426,7 +519,7 @@ window.CROSSCUT = (function () {
                   p ? p.withUtm : undefined, d.withUtm);
       h += kpiBtn('diagDone', 'Завершили диагностику', d.diagDone ? num(d.diagDone) : '—', '',
                   p ? p.diagDone : undefined, d.diagDone);
-      h += kpiBtn('meeting', 'Разборов прошло', num(d.meetings),
+      h += kpiBtn('meeting', 'Консультаций прошло', num(d.meetings),
                   d.meetings && d.meetings !== d.meeting ? 'у ' + d.meeting + ' человек' : '',
                   p ? p.meetings : undefined, d.meetings);
       if (state.scope === 'launch')
@@ -577,20 +670,40 @@ window.CROSSCUT = (function () {
     function renderLadder(){
       var d = CUR, launch = state.scope === 'launch';
       $id('ladHint').textContent = periodWords();
+      /* Лестница запуска берется из «Запусков» целиком (Ольга 13.11.2026): те же шаги,
+         те же люди, та же чистка сотрудников. Свой пересчет здесь давал другие цифры
+         (644 регистрации против 220 с формы и 401 из бота). Считается нарастающим
+         итогом с начала запуска, период сверху на нее не влияет. */
+      var LP = SNAP.launch && SNAP.launch.path;
+      if (launch && LP && LP.length){
+        $id('ladHint').textContent = 'как во вкладке «Запуски», за весь запуск';
+        var mx = LP.reduce(function(m, p){ return Math.max(m, p.people || 0); }, 1);
+        $id('lad').innerHTML = LP.map(function(p){
+          var n = p.people || 0;
+          return '<div class="lad-row' + (n ? '' : ' dead') + (p.branch ? ' br' : '') + '">' +
+            '<div class="lad-t">' + esq(p.title) + (p.note ? '<span>' + esq(p.note) + '</span>' : '') + '</div>' +
+            '<div class="lad-n">' + (n ? num(n) : '—') +
+            (p.of_reg != null && p.of_reg <= 100 && p.key !== 'reg' ? '<em>' + p.of_reg + '% от регистраций</em>' : '') + '</div>' +
+            '<div class="lad-bar"><i style="width:' + Math.max(n ? 1.5 : 0, Math.round(n / mx * 100)) + '%"></i></div></div>';
+        }).join('');
+        ['ladNote', 'ladGrew', 'ladWarn'].forEach(function(id){ var e = $id(id); if (e) e.hidden = true; });
+        return;
+      }
       var steps = launch ? [
         {t: 'Зарегистрировались на интенсив', s: 'оставили заявку на эфир', n: d.regs},
         {t: 'Смотрели эфир', s: 'открыли трансляцию хотя бы раз', n: d.watched},
         {t: 'Оставили контакт', s: 'карточка с телефоном, почтой или телеграмом', n: d.leads},
-        {t: 'Записались к тьютору-диагносту', s: 'выбрали время разбора', n: d.signed},
-        {t: 'Разбор состоялся', s: 'встреча прошла', n: d.meeting},
+        {t: 'Записались к тьютору-диагносту', s: 'выбрали время консультации', n: d.signed},
+        {t: 'Консультация состоялась', s: 'встреча прошла', n: d.meeting},
         {t: 'Получили счет', s: 'счет выставлен', n: d.invN},
         {t: 'Оплатили', s: 'деньги пришли', n: d.payers}
       ] : [
         {t: 'Лиды', s: 'люди, оставившие контакт', n: d.leads},
         {t: 'Начали бесплатную диагностику', s: 'вошли в воронку теста в боте', n: d.diagStart},
         {t: 'Завершили диагностику', s: 'дошли до результата', n: d.diagDone},
-        {t: 'Записались к тьютору-диагносту', s: 'выбрали время разбора', n: d.signed},
-        {t: 'Разбор состоялся', s: 'встреча прошла', n: d.meeting},
+        {t: 'Прошли диагностику на платформе', s: 'анкета и оценка шансов на сайте', n: d.diagPlat},
+        {t: 'Записались к тьютору-диагносту', s: 'выбрали время консультации', n: d.signed},
+        {t: 'Консультация состоялась', s: 'встреча прошла', n: d.meeting},
         {t: 'Получили счет', s: 'счет выставлен', n: d.invN},
         {t: 'Оплатили', s: 'деньги пришли', n: d.payers}
       ];
@@ -643,13 +756,13 @@ window.CROSSCUT = (function () {
       var tot = {n: 0, utm: 0, signed: 0, meeting: 0, inv: 0, paid: 0, rub: 0};
       list.forEach(function(r){ ['n','utm','signed','meeting','inv','paid','rub'].forEach(function(k){ tot[k] += r[k]; }); });
       var head = '<thead><tr><th>Через какую дверь зашел</th><th class="r">Лидов</th><th class="r">С меткой</th>' +
-                 '<th class="r">Записались</th><th class="r">Разбор</th><th class="r">Счетов</th><th class="r">Оплат</th><th class="r">Выручка</th></tr></thead>';
+                 '<th class="r">Записались</th><th class="r">Консультаций</th><th class="r">Счетов</th><th class="r">Оплат</th><th class="r">Выручка</th></tr></thead>';
       function row(name, note, r, cls){
         return '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' +
           '<td data-l="Дверь">' + name + (note ? '<span class="sub">' + note + '</span>' : '') + '</td>' +
           cell('Лидов', num(r.n), 'r num') +
           cell('С меткой', r.utm ? num(r.utm) + '<span class="sub">' + Math.round(r.utm / r.n * 100) + '%</span>' : '—', 'r num') +
-          cell('Записались', r.signed || '—', 'r num') + cell('Разбор', r.meeting || '—', 'r num') +
+          cell('Записались', r.signed || '—', 'r num') + cell('Консультаций', r.meeting || '—', 'r num') +
           cell('Счетов', r.inv || '—', 'r num') + cell('Оплат', r.paid || '—', 'r num') +
           cell('Выручка', r.rub ? rub(r.rub) : '—', 'r num') + '</tr>';
       }
@@ -661,11 +774,11 @@ window.CROSSCUT = (function () {
       var u = sortedEntries(CUR.utm, 'n');
       var c = sortedEntries(CUR.camps, 'n');
       $id('utm').innerHTML =
-        '<thead><tr><th>Рекламная метка</th><th class="r">Лидов</th><th class="r">Записались</th><th class="r">Разбор</th><th class="r">Оплат</th><th class="r">Выручка</th></tr></thead><tbody>' +
+        '<thead><tr><th>Рекламная метка</th><th class="r">Лидов</th><th class="r">Записались</th><th class="r">Консультаций</th><th class="r">Оплат</th><th class="r">Выручка</th></tr></thead><tbody>' +
         (u.length ? u.map(function(r){
           return '<tr><td data-l="Метка">' + (r.key === '(без метки)' ? '<span class="muted">без метки</span>' : r.key) + '</td>' +
             cell('Лидов', num(r.n), 'r num') + cell('Записались', r.signed || '—', 'r num') +
-            cell('Разбор', r.meeting || '—', 'r num') + cell('Оплат', r.paid || '—', 'r num') +
+            cell('Консультаций', r.meeting || '—', 'r num') + cell('Оплат', r.paid || '—', 'r num') +
             cell('Выручка', r.rub ? rub(r.rub) : '—', 'r num') + '</tr>';
         }).join('') : '<tr><td colspan="6">За этот период лидов не было.</td></tr>') + '</tbody>';
 
@@ -695,12 +808,12 @@ window.CROSSCUT = (function () {
         var cv = r.leads ? (r.paid / r.leads * 100).toFixed(1).replace('.', ',') + '%' : '—';
         return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td data-l="Месяц прихода">' + name + '</td>' +
           cell('Лидов', r.leads || '—', 'r num') + cell('Записались', r.signed || '—', 'r num') +
-          cell('Разбор', r.meeting || '—', 'r num') + cell('Счетов', r.inv || '—', 'r num') +
+          cell('Консультаций', r.meeting || '—', 'r num') + cell('Счетов', r.inv || '—', 'r num') +
           cell('Заплатили', r.paid || '—', 'r num') + cell('Выручка', r.rub ? rub(r.rub) : '—', 'r num') +
           cell('В оплату', cv, 'r num') + '</tr>';
       }
       $id('coh').innerHTML =
-        '<thead><tr><th>Месяц прихода</th><th class="r">Лидов</th><th class="r">Записались</th><th class="r">Разбор</th>' +
+        '<thead><tr><th>Месяц прихода</th><th class="r">Лидов</th><th class="r">Записались</th><th class="r">Консультаций</th>' +
         '<th class="r">Счетов</th><th class="r">Заплатили</th><th class="r">Выручка</th><th class="r">В оплату</th></tr></thead><tbody>' +
         (ks.length ? ks.map(function(k){ return row(monthName(k), C.cohorts[k]); }).join('') + row('Итого', tot, 'total')
                    : '<tr><td colspan="8">За этот период лидов не было.</td></tr>') + '</tbody>';
@@ -735,8 +848,9 @@ window.CROSSCUT = (function () {
       var rowsD = [
         ['Начали бесплатную диагностику', 'вошли в воронку теста в боте', d.diagStart, 0],
         ['Завершили бесплатную диагностику', 'дошли до результата', d.diagDone, 0],
-        ['Записались на разбор к тьютору-диагносту', 'выбрали время', d.signed, 0],
-        ['Разбор состоялся', 'людей, у кого встреча прошла', d.meeting, 0],
+        ['Прошли диагностику на платформе', 'анкета и оценка шансов на сайте', d.diagPlat, 0],
+        ['Записались на консультацию к тьютору-диагносту', 'выбрали время', d.signed, 0],
+        ['Консультация состоялась', 'людей, у кого встреча прошла', d.meeting, 0],
         ['Дошли до счета', 'счет выставлен', d.invN, 0],
         ['Оплатили', 'деньги пришли', d.payers, d.revenue]
       ];
@@ -923,7 +1037,7 @@ window.CROSSCUT = (function () {
       ['Стоимость лида и окупаемость по каналам', 'частично', 'считается там, где заведен расход. Сейчас в CRM заведена одна строка — 5 000 ₽ на ВК за 11 сентября; остальные траты никто не вносил'],
       ['Выручка запуска: кто из участников интенсива купил', 'нет', 'людей экран склеивает по телефону, почте и мессенджеру, но у карточек со счетами контактов почти нет: из пятнадцати счетов телефон записан у шести, почты нет ни у одного. Склеивать не по чему. Чинится в CRM правилом «нет контакта — нет счета»'],
       ['Диагностика в разрезе источника', 'нет', 'бесплатная диагностика живет в боте и к карточке человека пока не склеена: в лестнице она стоит отдельной ступенью, а по метке не раскладывается'],
-      ['Вкладки «Отдел продаж», «Сегменты», «LTV» из макета', 'нет', 'у нас продает тьютор-диагност на разборе, а не отдел на обзвоне; подписок и повторных покупок нет, считать LTV не из чего'],
+      ['Вкладки «Отдел продаж», «Сегменты», «LTV» из макета', 'нет', 'у нас продает тьютор-диагност на консультации, а не отдел на обзвоне; подписок и повторных покупок нет, считать LTV не из чего'],
       ['Разбивка счетов по тарифам сопровождения', 'частично', 'три самых крупных счета выставлены без выбора тарифа — название вписано руками. Чинится правилом в CRM'],
       ['Живые цифры в реальном времени', 'нет', 'это снимок базы: он обновляется, когда я его переснимаю. Живым экран станет в CRM']
     ];
@@ -940,6 +1054,9 @@ window.CROSSCUT = (function () {
   }
 
   return {
+    /* Счет без экрана: РНП в разделе «Управление» берет те же цифры за свою неделю.
+       Вторую формулу не заводим — ступени РНП обязаны сходиться со сквозной. */
+    week: function (data, from, to) { return build(null, data).agg(from, to); },
     render: function (box, data) {
       box.innerHTML = '<div class="crosscut">' + TPL + '</div>';
       build(box.querySelector('.crosscut'), data);

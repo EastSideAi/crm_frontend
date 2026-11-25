@@ -213,6 +213,8 @@
 .crosscut .lad-bar i {display:block; height:100%; background:var(--blue); border-radius:4px; transition:width .6s var(--ease)}
 .crosscut .lad-row.dead .lad-n {color:var(--ink-3)}
 .crosscut .lad-row.dead .lad-bar i {background:var(--line-2)}
+.crosscut .lad-row.br {padding-left:18px}
+.crosscut .lad-row.br .lad-t {font-weight:500}
 
 
 /* таблица */
