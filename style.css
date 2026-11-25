@@ -13547,6 +13547,29 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 /* Закрытый месяц тише живого: по нему уже заплатили, трогать нечего. */
 .rw-shut .rw-total b { color: var(--ink-2); }
 
+/* Тьюторы в экране «Сотрудники»: карточка на чтение — кто, за что, когда.
+   Денег не трогает, отметки «выплачено» тут нет (она у админа в «Выплаты»). */
+.mt-tut { padding: 12px 4px; border-top: 1px solid var(--line); }
+.mt-tut:first-of-type { border-top: 0; }
+.mt-tuth { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; }
+.mt-tuth b:first-child { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.mt-tutn { font-size: 12.5px; color: var(--ink-3); }
+.mt-tuta { margin-left: auto; font-size: 15px; font-weight: 700;
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mt-trow { display: grid; grid-template-columns: minmax(96px, 1.1fr) 1.4fr auto auto;
+  align-items: baseline; gap: 12px; padding: 6px 0; font-size: 13px; }
+.mt-tcl { font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.mt-tpt { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-tdt { color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mt-tam { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 560px) {
+  .mt-trow { grid-template-columns: 1fr auto; row-gap: 2px; }
+  .mt-tpt { grid-column: 1; color: var(--ink-3); font-size: 12.5px; }
+  .mt-tdt { grid-column: 1; }
+  .mt-tam { grid-row: 1; grid-column: 2; }
+}
+
 /* Карточка сотрудника в разделе «Мотивация»: окно Павла поверх расчёта —
    график выплат 10/20 и список регулярных задач человека за месяц. */
 .mp-back { margin-bottom: 14px; }
