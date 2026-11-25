@@ -3504,7 +3504,7 @@
         t.addEventListener('click', function () {
           state.mkTab = t.getAttribute('data-mktab');
           if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
-          if (state.mkTab === 'efir') state._mkEfir = null;   /* всегда свежие цифры */
+          if (state.mkTab === 'efir') { state._mkEfir = null; state._mkEfirLinks = null; }   /* всегда свежие цифры */
           if (state.mkTab === 'ads') state._mkAds = null;    /* всегда свежие цифры */
           if (!onMk) { setPage('marketing'); return; }
           saveUi(); renderTopbar(); renderView();
@@ -38117,7 +38117,7 @@
   }
 
   /* ── ДЕКОМПОЗИЦИЯ ЗАПУСКА ────────────────────────────────────────────────
-     Рабочий файл Олеси по интенсиву 24–25 октября, перенесенный в CRM один в
+     Рабочий файл Олеси по интенсиву 28–29 октября, перенесенный в CRM один в
      один: те же шаги воронки, те же формулы и те же округления до целых людей
      (Олеся 09.10.2026: «оставь точно как в файле»). Считать «правильнее» тут
      нельзя: по этой таблице команда договаривается, и расхождение с файлом
@@ -38794,7 +38794,7 @@
     var srcs = laSrcs();
     var src = srcs.some(function (s) { return s.id === state.laSrc; }) ? state.laSrc
       : srcs.some(function (s) { return s.id === 'total'; }) ? 'total' : srcs[0].id;
-    /* у месяца свои заголовок и лид: шапка про интенсив 24–25 октября над листом,
+    /* у месяца свои заголовок и лид: шапка про интенсив 28–29 октября над листом,
        где интенсива нет по определению, читается как ошибка экрана */
     var lch = laLaunchCur();
     var mon = src === 'month', head1 = mon ? (d.month || {}) : (lch.title ? lch : d);
@@ -39077,7 +39077,65 @@
           '<div class="lad-static links" style="border-top:1px solid var(--line)">' +
             rows(cur.cta_links, 'Кнопок по этому эфиру не заводили.') +
           '</div></div>' +
-      '</div></div>';
+      '</div>' + efirLinksCard(cur) + '</div>';
+  }
+
+  /* Проверка ссылок эфира без кликов (Влада 25.11.2026: «чтобы каждый раз не
+     переходить по ссылкам... понять, рабочая ссылка выложена или нет»). Статус
+     дает сторож воронок: он сам обходит ссылки раз в полчаса и в переходы не
+     пишется. Нажатия здесь только живые, без тестов Влады и агента. Сломанные
+     сервер ставит первыми — их и надо увидеть сразу. */
+  function fetchEfirLinks(slug) {
+    state._mkEfirLinks = state._mkEfirLinks || {};
+    state._mkEfirLinks[slug] = 'loading';
+    var done = function (r) {
+      state._mkEfirLinks[slug] = r && r.ok ? r : 'none';
+      if (state.page === 'marketing' && state.mkTab === 'efir') renderView();
+    };
+    api('/admin/api/marketing/efir/links?slug=' + encodeURIComponent(slug))
+      .then(done).catch(function () { done(null); });
+  }
+  var EFIR_LINK_STATE = {
+    ok: ['работает', 'var(--green-ink)', '✓'],
+    broken: ['не работает', 'var(--red-ink)', '✕'],
+    wait: ['еще не проверяли', 'var(--ink-3)', '·'],
+    off: ['выключена', 'var(--ink-3)', '–'],
+  };
+  function efirLinksCard(cur) {
+    var box = (state._mkEfirLinks || {})[cur.slug];
+    if (!box) { fetchEfirLinks(cur.slug); box = 'loading'; }
+    var body, sub;
+    if (box === 'loading') {
+      sub = 'загружаю';
+      body = '<div class="empty">Загружаю ссылки…</div>';
+    } else if (box === 'none') {
+      sub = 'не удалось загрузить';
+      body = '<div class="empty">Не удалось загрузить ссылки — обнови страницу.</div>';
+    } else if (!box.links.length) {
+      sub = 'у этого эфира ссылок не заводили';
+      body = '<div class="empty">Ссылок нет.</div>';
+    } else {
+      var n = box.links.length, bad = box.broken || 0;
+      sub = (bad ? bad + ' ' + plural(bad, 'ссылка не работает', 'ссылки не работают', 'ссылок не работают')
+                 : 'все ' + n + ' ' + plural(n, 'ссылка работает', 'ссылки работают', 'ссылок работают')) +
+            (box.checked_at ? ' · проверено ' + fmtWhen(box.checked_at) : '') +
+            ' · нажатия без наших тестов';
+      body = box.links.map(function (l) {
+        var st = EFIR_LINK_STATE[l.state] || EFIR_LINK_STATE.wait;
+        var note = l.state === 'broken'
+          ? 'не работает' + (l.broken_since ? ' с ' + fmtWhen(l.broken_since) : '') + (l.detail ? ': ' + l.detail : '')
+          : st[0] + ' · ведет в ' + String(l.where || '').replace(/^https?:\/\//, '');
+        var nums = l.clicks + ' ' + plural(l.clicks, 'нажатие', 'нажатия', 'нажатий') +
+          (l.regs ? ' · ' + l.regs + ' ' + plural(l.regs, 'запись', 'записи', 'записей') : '');
+        return '<div class="lad-row gf-flat efl-row' + (l.state === 'broken' ? ' efl-bad' : '') + '">' +
+          '<div class="lad-nm"><span class="efl-ic" style="color:' + st[1] + '">' + st[2] + '</span>' +
+            esc(l.title) + '<small>go.истсайд.рф/' + esc(l.code) + ' · ' + esc(note) + '</small></div>' +
+          '<div class="lad-n num efl-n">' + esc(nums) + '</div></div>';
+      }).join('');
+    }
+    return '<div class="card" style="overflow:hidden;margin-top:14px"><div class="sec-head pad">' +
+      '<div><div class="t">Проверка ссылок</div><div class="s">' + esc(sub) + '</div></div></div>' +
+      '<div class="lad-static links" style="border-top:1px solid var(--line)">' + body + '</div></div>';
   }
 
   function renderMkEfir(view) {
@@ -39281,7 +39339,7 @@
               ' на ' + fmtMoney(m.wait_sum) + ' ₽' : 'сколько человек нажало каждую') +
           '</div></div></div>' +
           '<div class="lad-static" style="border-top:1px solid var(--line)">' + ctaRows + '</div></div>' +
-      '</div></div>';
+      '</div>' + efirLinksCard(cur) + '</div>';
 
     efirBindClicks(view, cur);
   }
@@ -64253,7 +64311,7 @@
         state.mkTab = s;
         // те же сбросы кэша, что и у вкладки: иначе экран покажет цифры прошлой
         if (s === 'launch') state._mkLaunch = null;
-        if (s === 'efir') state._mkEfir = null;
+        if (s === 'efir') { state._mkEfir = null; state._mkEfirLinks = null; }
         return true;
       },
     },
