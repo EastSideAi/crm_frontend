@@ -29950,6 +29950,48 @@
       if (state.page === 'motiv') renderView();
     });
   }
+  /* Тьюторы в экране Павла. Они не на зарплатной ведомости (reward_sheet) — платят
+     за каждую закрытую точку по ученику, поэтому в список штатных не попадают. Тянем
+     ту же ближайшую выплату, что видит Роман в «Выплаты» (/admin/api/tutor-payouts),
+     и показываем здесь на чтение: кто, за что и когда. Денег этот экран не трогает —
+     отметка «выплачено» остаётся у админа в разделе выплат. */
+  function motivTutLoad() {
+    if (state._motivTut != null || state._motivTutBusy) return;
+    state._motivTutBusy = true;
+    api('/admin/api/tutor-payouts').then(function (r) {
+      state._motivTut = r; state._motivTutBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function (e) {
+      state._motivTut = e.message === '403' ? 'noaccess' : 'none';
+      state._motivTutBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  function motivTutGroup() {
+    var t = state._motivTut;
+    if (t == null) { motivTutLoad(); return ''; }
+    if (t === 'noaccess' || t === 'none' || !t.tutors || !t.tutors.length) return '';
+    var head = '<div class="rw-dept"><div class="rw-dept-t">Тьюторы</div>' +
+        '<div class="rw-dept-s">ближайшая выплата ' + fmtDay(t.day) +
+        ' · за закрытые точки по ученикам</div></div>';
+    var cards = t.tutors.map(function (tut) {
+      var rows = tut.rows.map(function (r) {
+        return '<div class="mt-trow">' +
+          '<span class="mt-tcl">' + esc(r.client) + '</span>' +
+          '<span class="mt-tpt">' + esc(r.title) + (r.result ? ' · ' + esc(r.result) : '') + '</span>' +
+          '<span class="mt-tdt">' + fmtDay(r.closedDay) + '</span>' +
+          '<span class="mt-tam num">' + fmtMoney(r.amount) + ' ₽</span></div>';
+      }).join('');
+      return '<div class="mt-tut"><div class="mt-tuth">' +
+          '<b>' + esc(tut.name) + '</b>' +
+          '<span class="mt-tutn">' + tut.rows.length + ' ' +
+            plural(tut.rows.length, 'начисление', 'начисления', 'начислений') + '</span>' +
+          '<b class="mt-tuta num">' + fmtMoney(tut.total) + ' ₽</b></div>' +
+        rows + '</div>';
+    }).join('');
+    return head + cards;
+  }
+
   /* Ближайшая выплата-остаток: расчёт месяца закрывается в начале следующего,
      остаток и KPI платят 10-го. Отдаём ближайшее 10-е от сегодня. */
   function motivNextPay() {
@@ -29983,14 +30025,16 @@
             plural(mine.length, 'человек', 'человека', 'человек') + '</div></div>' +
         mine.map(motivPersonRow).join('');
     }).join('');
+    var tutHtml = motivTutGroup();
+    var body = groups + tutHtml;
     view.innerHTML = motivSeg() +
       '<div class="card listcard">' +
         '<div class="list-tools plm-head"><div>' +
           '<div class="t fe-t">Сотрудники</div>' +
-          '<div class="s fe-s">нажми на человека — фикс, что в него входит, KPI на период ' +
-            'и когда выплата. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
+          '<div class="s fe-s">штатные — фикс и KPI, нажми чтобы раскрыть. Тьюторы — за ' +
+            'закрытые точки по ученикам. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
         '</div>' + finMonthNav() + '</div>' +
-        (groups || '<div class="empty">Ни одного расчётного листа пока нет.</div>') +
+        (body || '<div class="empty">Ни одного расчётного листа пока нет.</div>') +
       '</div>';
     Array.prototype.forEach.call(view.querySelectorAll('[data-motivperson]'), function (r) {
       r.addEventListener('click', function () {
