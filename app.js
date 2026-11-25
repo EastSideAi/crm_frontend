@@ -56634,6 +56634,19 @@
       '</div></div>';
   }
 
+  /* Предоплата с лендинга (Павел 25.11.2026): ученик внес часть, открыты курсы,
+     тариф целиком откроет доплата из его кабинета. Срок прошел — строка красная:
+     это повод позвонить, доступ сам не закрывается. */
+  function pjDebt(b) {
+    var due = b.due_at ? new Date(b.due_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
+    var sum = (b.amount || 0).toLocaleString('ru-RU') + ' ₽';
+    return '<div class="pj-debt' + (b.late ? ' late' : '') + '">' +
+      '<b>' + (b.late ? 'Доплата просрочена' : 'Внесена предоплата') + '</b>' +
+      '<span>Осталось доплатить <b class="num">' + esc(sum) + '</b>' + (due ? (b.late ? ', срок был ' : ' до ') + esc(due) : '') +
+      ', тогда откроется «' + esc(b.tier_title || '') + '». Доплата идет из кабинета ученика по цене эфира.' +
+      (b.late ? ' Позвоните и узнайте, что мешает.' : '') + '</span></div>';
+  }
+
   function buildProjectSection(id) {
     var r = PJ[id];
     if (!r) { loadProject(id); return skeletonSection('projects'); }
@@ -56673,6 +56686,7 @@
           (on ? '<button type="button" class="pd-sw on" id="pj-sw">' +
             '<span class="pd-sw-l">Открыт</span>' +
             '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button>' : '') + '</div>' +
+          (on && p && p.balance ? pjDebt(p.balance) : '') +
           picker +
           (on && p && p.granted_by ? '<div class="det-sw-by">открыл ' + esc(p.granted_by) + ' · ' + esc(fmtWhen(p.granted_at)) + '</div>' : '')) +
       '</div>';
