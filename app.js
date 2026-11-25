@@ -57345,6 +57345,16 @@
         '<span class="own-sp ' + ownSev(m) + '">за ' + fmtMins(m) + '</span>' +
         '<span class="own-when">' + fmtWhen(crm.first_touch_at) + '</span>' +
       '</div>';
+    } else if (crm.touch || crm.status === 'client') {
+      /* Кнопку «Связался» не нажали, но следы есть: звонок, переписка, консультация или
+         оплата (считает сервер, поле touch). Павел 25.11.2026: «уже оплатили, а якобы не
+         связались, нужно чтобы автоматически менялось». Скорости ответа тут нет: время
+         следа это не время первого ответа. */
+      right = '<div class="own-t">' +
+        '<span class="ql-l">Связались</span>' +
+        (crm.touch ? '<span class="own-when">' + esc(crm.touch.how) + ' · ' + fmtWhen(crm.touch.at) + '</span>'
+          : '<span class="own-when">уже клиент</span>') +
+      '</div>';
     } else {
       var waited = base && base.created_at
         ? Math.max(0, Math.round((Date.now() - new Date(base.created_at).getTime()) / 60000))
