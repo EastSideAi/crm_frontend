@@ -12194,6 +12194,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .lp-nm .lp-pay { display: block; font-weight: 400; color: var(--ink); white-space: normal; overflow: visible; text-overflow: clip; }
 .lp-nm .lp-pay b { font-weight: 600; }
 .lp-nm .lp-pay.off { opacity: .55; }
+.lp-tr .lp-came { color: var(--ink); font-weight: 600; }
 .lp-dt { color: var(--ink-2); text-align: right; }
 /* прочерк вместо пустоты — но бледнее значения, чтобы не читался как данные */
 .lp-dash { color: var(--ink-3); font-style: normal; }

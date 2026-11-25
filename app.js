@@ -36948,6 +36948,14 @@
      690 ₽ сюда НЕ идёт, это продажа поступления (владелец, 31.10.2026: «оплатили
      сопровождение, сумма и количество человек»). Деньги собираем по трём дорогам:
      касса офферов, счета CRM и договоры из ведомости. */
+  /* Откуда пришли купившие (Ольга 25.11.2026): таргет, были в базе раньше этой
+     регистрации или новые из соцсетей. Сумма трех — число на плашке. */
+  var LAUNCH_CAME = { ads: 'таргет', base: 'был в базе', social: 'новый, из соцсетей' };
+  function launchCameSub(c) {
+    if (!c) return '';
+    return 'таргет ' + (c.ads || 0) + ' · база ' + (c.base || 0) + ' · соцсети ' + (c.social || 0);
+  }
+
   function launchSupportTile(pay, dc, base, hvost, ot) {
     if (!pay || !pay.product) return [];
     var pr = pay.product, cr = pay.crm || {}, ld = pay.ledger || {};
@@ -36964,7 +36972,8 @@
       key: 'support', label: 'Сопро\u00ADвождение', step: 'support', stepFrom: ot,
       stepPlate: n,
       value: fmtMoney(rub) + ' \u20bd',
-      sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек'),
+      sub: 'оплатили ' + n + ' ' + plural(n, 'человек', 'человека', 'человек') +
+        (pay.support && pay.support.came ? '<br>' + launchCameSub(pay.support.came) : ''),
       pct: [launchPct(n, dc.booked, 'от записавшихся на консультацию'),
             launchPct(n, base, 'от регистраций' + (hvost ? ' ' + hvost : ''))],
     }];
@@ -37010,8 +37019,11 @@
         sub: plural(pay.invoiced || 0, 'человек', 'человека', 'человек') + ' · 690 рублей',
         pct: launchPct(pay.invoiced, base, 'от регистраций на повтор') },
       { key: 'paid', label: 'Оплачено', value: fmtMoney(pay.paid_rub || 0) + ' \u20bd',
+        step: pay.uch ? 'uch' : '', stepFrom: p.since, stepPlate: pay.uch ? pay.uch.people : 0,
+        stepTitle: 'Оплатили участие · повтор',
         sub: (pay.paid || 0) + ' из ' + (pay.invoiced || 0) + ' ' +
-          plural(pay.invoiced || 0, 'человека', 'человек', 'человек'),
+          plural(pay.invoiced || 0, 'человека', 'человек', 'человек') +
+          (pay.uch && pay.uch.people ? '<br>' + launchCameSub(pay.uch.came) : ''),
         pct: launchPct(pay.paid, base, 'от регистраций на повтор') },
       { key: 'channels', label: 'В закрытых каналах', value: inCh.total || 0,
         sub: ['tg', 'vk', 'max'].map(function (k) {
@@ -37459,12 +37471,16 @@
     return '<div class="lp-tr' + (id ? ' go' : '') + off + '"' +
       (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
       '><span class="lp-nm">' + esc(p.name || 'Без имени') +
-        (p.note ? '<small>' + esc(p.note) + '</small>' : '') + lpPays(p) + '</span>' +
+        (p.note ? '<small>' + esc(p.note) + '</small>' : '') +
+        lpPays(p) + '</span>' +
       '<span class="lp-ct">' + lpCell(p.contact) + '</span>' +
       /* Название ссылки длиннее колонки и обрезается многоточием: полное отдаём
          подсказкой, иначе «Консультация · рассылка бота 12:…» ничего не говорит. */
       '<span class="lp-sr"' + (src ? ' title="' + esc(src) + '"' : '') + '>' +
-        lpCell(src) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
+        lpCell(src) + (sub ? '<small>' + esc(sub) + '</small>' : '') +
+        /* У купивших — откуда он для продаж: таргет, был в базе или новый */
+        (LAUNCH_CAME[p.came] ? '<small class="lp-came">' + LAUNCH_CAME[p.came] + '</small>' : '') +
+        '</span>' +
       '<span class="lp-dt">' + (p.registered_at ? esc(fmtWhen(p.registered_at)) : '<i class="lp-dash">—</i>') +
       '</span>' +
       /* Правка только у людей с карточкой регистрации: у зрителя без регистрации
@@ -37554,8 +37570,12 @@
        иначе «·» и число разъезжались на ширину gap и читались как два заголовка. */
     /* У «Сопровождения» рядом с числом людей — их сумма, сложенная из строк
        списка: она обязана совпасть с суммой на плашке. */
-    var supSum = p.step === 'support' ? p.rows.reduce(function (a, r) {
-      return a + (r.pays || []).reduce(function (b, x) { return b + (x[3] ? (+x[0] || 0) : 0); }, 0);
+    /* У «Оплачено» — сумма строк участия: она равна рублям на той плашке. */
+    var supSum = p.step === 'support' || p.step === 'uch' ? p.rows.reduce(function (a, r) {
+      return a + (r.pays || []).reduce(function (b, x) {
+        var hit = p.step === 'support' ? x[3] : x[2] === 'участие в интенсиве';
+        return b + (hit ? (+x[0] || 0) : 0);
+      }, 0);
     }, 0) : 0;
     var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
         ' · <span class="num">' + fmtMoney(total) + '</span>' +
@@ -38715,6 +38735,10 @@
     var pr = pay.product || {}, cr = pay.crm || {}, ld = pay.ledger || {};
     var supN = (pr.paid || 0) + (cr.paid || 0) + (ld.paid || 0);
     var supRub = (pr.paid_rub || 0) + (cr.paid_rub || 0) + (ld.paid_rub || 0);
+    /* Продажи и договоры — те же люди и деньги, что на плашке «Сопровождение»
+       «Запусков» и в списке за ней (Ольга 25.11.2026: «чтобы все цифры бились»).
+       Старый счет по трем дорогам — только для старого бэкенда. */
+    if (pay.support) { supN = pay.support.people || 0; supRub = pay.support.rub || 0; }
     var reg = minus(reach, ads.reg);
     var ext = minus(pay.paid, ads.ext), extRev = minus(pay.paid_rub, ads.extRev);
     var sales = minus(supN, ads.sales), contracts = minus(supRub, ads.contracts);
@@ -39661,11 +39685,15 @@
             pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
           pct: launchPct(pay.invoiced, regShown, 'от регистраций') },
         { key: 'paid', label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
+          /* По клику — те, кто оплатил участие, с суммами и датами (Ольга 25.11.2026) */
+          step: pay.uch ? 'uch' : '', stepPlate: pay.uch ? pay.uch.people : 0,
+          stepTitle: 'Оплатили участие',
           sub: (pay.paid + ' из ' + (pay.invoiced || 0) + ' ' +
                 plural(pay.invoiced || 0, 'человека', 'человек', 'человек')) +
             (prod.paid_rub
               ? ' · участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
-              : ''),
+              : '') +
+            (pay.uch && pay.uch.people ? '<br>' + launchCameSub(pay.uch.came) : ''),
           /* Доля считается по ЛЮДЯМ, хотя на плитке рубли: «3 450 ₽ — это 1% от
              рублей» ничего не значит, а «заплатил 1% записавшихся» значит. */
           pct: launchPct(pay.paid, regShown, 'от регистраций') },
@@ -39783,7 +39811,8 @@
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
         /* Срез, которого нет в лестнице пути (подпись «не купили» под залом): список
            тот же, ступень описывает сама подпись. */
-        if (!st && n.getAttribute('data-lfree')) {
+        /* …и плашка «Оплачено»: оплатившие участие — список за ней, а не ступень. */
+        if (!st && (n.getAttribute('data-lfree') || n.getAttribute('data-ltitle'))) {
           st = { key: key, title: n.getAttribute('data-ltitle') || '',
                  people: parseInt(n.getAttribute('data-lplate') || '0', 10) };
         }
