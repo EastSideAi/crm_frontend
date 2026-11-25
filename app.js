@@ -4091,18 +4091,29 @@
       /* Вердикт отвечает на вопрос, ради которого сюда заходят: что висит без подписи.
          Неподписанный акт — это незакрытый расход и невозможная выплата. */
       var dcs = DC.items;
+      // Архив чеков: свой вердикт, документов он не ждет.
+      if (DC.kind === 'rarch') {
+        var ran = RA.items ? RA.items.length : 0;
+        html = '<div><h2>Документы</h2><div class="verdict"><span class="vspark">' +
+          ic('doc', 13) + '</span><span>' + (!RA.items ? 'Загружаю архив чеков…'
+            : !ran ? 'В архиве пусто.'
+            : 'Старые чеки с Google Диска за выплаты мимо CRM: <b>' + ran + '</b>. ' +
+              'Новые чеки живут у платежа, во вкладке «Чеки».') + '</span></div></div>';
+        dcs = null;
+      }
       var wait = dcs ? dcs.filter(function (d) {
         return d.kind === 'act' && (d.status === 'wait_both' || d.status === 'wait_co' ||
                                     d.status === 'wait_ct');
       }).length : 0;
       var phrase7;
-      if (!dcs) phrase7 = 'Загружаю документы…';
+      if (DC.kind === 'rarch') phrase7 = null;
+      else if (!dcs) phrase7 = 'Загружаю документы…';
       else if (!dcs.length) phrase7 = 'Документов пока нет. Акт появится здесь сам, как только вы сформируете его по принятому заданию.';
       else if (wait) phrase7 = 'Без подписи: <b>' + wait + ' ' +
         plural(wait, 'акт', 'акта', 'актов') +
         '</b>. Пока обе подписи не стоят, выплату провести нельзя.';
       else phrase7 = 'Все акты подписаны с обеих сторон.';
-      html = '<div><h2>Документы</h2>' +
+      if (phrase7 !== null) html = '<div><h2>Документы</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' + phrase7 + '</span></div></div>';
     }
     if (state.page === 'czservices') {
@@ -21139,7 +21150,7 @@
      нет вовсе, и счет для него единственная бумага, доказывающая расход. Без вкладки
      раздел по такому человеку выглядел бы пустым, хотя деньги ему уходили. */
   var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['invoice', 'Счета'],
-                  ['receipt', 'Чеки'], ['contract', 'Договоры'],
+                  ['receipt', 'Чеки'], ['rarch', 'Архив чеков'], ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
   // Чеки (этап 7) — отдельный источник: они привязаны к выплате, а не к человеку, и
   // живут своей ручкой. RCP держит их и сводку долгов для полосы вверху «Документов».
@@ -21150,6 +21161,66 @@
                 none: 'ct-draft', sent: 'ct-wait', live: 'ct-wait' };
   var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc',
                   invoice: 'coins' };
+
+  /* Архив чеков (Роман 25.11.2026, задача 12003): старые чеки с Google Диска за выплаты,
+     которые шли мимо CRM. Платежа у них нет, поэтому ни долга, ни сверки, ни кнопок —
+     только найти и посмотреть файл. Новые чеки сюда не попадают: они живут у платежа.
+     Человек без карточки исполнителя получает свою папку по подписи с Диска (p:<имя>). */
+  var RA = { items: null };
+
+  function raLoad() {
+    api('/admin/api/contractor-receipts/archive').then(function (r) {
+      RA.items = (r.items || []).map(function (i) {
+        i.contractor_id = i.contractor_id || ('p:' + (i.person || ''));
+        return i;
+      });
+      if (state.page === 'czdocs') renderAll();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      RA.items = RA.items || [];
+      if (state.page === 'czdocs') renderAll();
+    });
+  }
+
+  function raFiltered() {
+    var q = (DC.q || '').trim().toLowerCase();
+    var list = RA.items || [];
+    if (!q) return list;
+    return list.filter(function (i) {
+      return [i.contractor, i.person, i.inn, i.receipt_inn, i.receipt_no, i.title,
+              i.period, i.service, i.dept].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  function raFileUrl(id) {
+    return API + '/admin/api/contractor-receipts/archive/' + encodeURIComponent(id) +
+      '/file?k=' + encodeURIComponent(getKey());
+  }
+
+  function raRow(i) {
+    var head = i.receipt_no ? 'Чек № ' + i.receipt_no : (i.title || i.file_name || 'Чек');
+    // Под номером — что оказали; нет чека «Мой налог» на картинке — подпись с Диска.
+    var sub = i.service || (i.receipt_no ? i.title : (i.period || '')) || '';
+    var acts = '<button class="rcp-a p" data-ra-open="' + esc(i.id) + '">Открыть</button>' +
+      (i.fns_url ? '<a class="rcp-a" href="' + esc(i.fns_url) +
+        '" target="_blank" rel="noopener" title="Чек в базе ФНС">ФНС</a>' : '');
+    return '<div class="rcp-item">' +
+      '<div class="trow dc-grid ra-grid" data-ra-open="' + esc(i.id) + '">' +
+        '<span class="dc-main ra-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
+          '<span class="ra-txt"><b>' + esc(head) + '</b>' +
+          (sub ? '<span class="rcp-sub">' + esc(sub) + '</span>' : '') + '</span></span>' +
+        // В архиве колонке досталось меньше места: фамилия с инициалами, полное ФИО по наведению.
+        '<span class="dc-who" title="' + esc(i.contractor || '') + '">' +
+          esc(dcShort(i.contractor) || '—') +
+          (i.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
+          (i.inn || i.receipt_inn ? '<span class="dc-inn">' + esc(i.inn || i.receipt_inn) + '</span>' : '') +
+        '</span>' +
+        '<span class="dc-when">' + esc(i.date ? i.date.slice(8, 10) + '.' + i.date.slice(5, 7) +
+          '.' + i.date.slice(0, 4) : '—') + '</span>' +
+        '<span class="dc-sum">' + (i.amount ? '<b>' + ctMoney(i.amount) + ' ₽</b>' : '—') + '</span>' +
+        '<span class="dc-state"><span class="rcp-act">' + acts + '</span></span>' +
+      '</div></div>';
+  }
 
   function rcpLoad(cb) {
     api('/admin/api/contractor-receipts').then(function (r) {
@@ -21455,15 +21526,18 @@
 
   function renderCzDocs(view) {
     var isRcp = DC.kind === 'receipt';
+    var isArch = DC.kind === 'rarch';
     // Чеки грузим всегда: даже на других вкладках вверху нужна полоса «по кому долг».
     if (RCP.items === null) rcpLoad();
     if (isRcp) {
       if (RCP.items === null) { view.innerHTML = dashSkeleton(); return; }
+    } else if (isArch) {
+      if (RA.items === null) { view.innerHTML = dashSkeleton(); raLoad(); return; }
     } else if (DC.items === null) {
       view.innerHTML = dashSkeleton(); dcLoad(); return;
     }
 
-    var src = isRcp ? rcpFiltered() : DC.items;
+    var src = isRcp ? rcpFiltered() : isArch ? raFiltered() : DC.items;
     var people = dcPeople(src);
     var list = DC.who
       ? src.filter(function (i) { return i.contractor_id === DC.who; })
@@ -21478,7 +21552,7 @@
       // Здесь фильтр работает иначе, чем в «Заданиях»: по умолчанию видно ВСЕ, включая
       // документы убранных, — раздел хранит первичку для налоговой, и прятать из него
       // нечего. Кнопка сужает список до убранных, когда ищут конкретного человека.
-      (isRcp ? '' : '<button class="qchip q-arch' + (DC.archived ? ' on' : '') +
+      (isRcp || isArch ? '' : '<button class="qchip q-arch' + (DC.archived ? ' on' : '') +
         '" data-dcarch="1">' + ic('box', 12) + 'Убранные</button>');
 
     // Полоса долга по чекам — главный ответ раздела на «по кому не хватает чека».
@@ -21492,7 +21566,7 @@
           '<button class="dc-alert-go" id="dc-to-rcp">Показать</button></div>'
       : '';
 
-    var body = (!isRcp && DC.err)
+    var body = (!isRcp && !isArch && DC.err)
       ? '<div class="empty">' + esc(DC.err) + '</div>'
       : (!list.length
         ? '<div class="empty">' + (DC.who
@@ -21501,12 +21575,14 @@
             ? 'По запросу «' + esc(DC.q) + '» ничего не нашли.'
             : isRcp
             ? 'Чеков пока нет. Чек появляется здесь, как только по выплате проведут деньги, а исполнитель приложит его из «Мой налог».'
+            : isArch
+            ? 'В архиве пусто. Сюда перенесены старые чеки с Google Диска за выплаты, которые шли мимо CRM.'
             : DC.archived
             ? 'Здесь пусто. Тут лежат документы тех, кого убрали из работы — подписанное не удаляется.'
             : 'Документов пока нет. Акт появляется здесь сам, как только вы сформируете его по принятому заданию.') + '</div>'
-        : (isRcp ? list.map(rcpRow) : list.map(dcRow)).join(''));
+        : (isRcp ? list.map(rcpRow) : isArch ? list.map(raRow) : list.map(dcRow)).join(''));
 
-    var noun = isRcp
+    var noun = isRcp || isArch
       ? plural(list.length, 'чек', 'чека', 'чеков')
       : plural(list.length, 'документ', 'документа', 'документов');
 
@@ -21515,7 +21591,9 @@
     // правило, что в задачах на своих вкладках).
     var head = DC.who
       ? '<div class="dcf-head"><span class="dcf-h-nm">' + esc(DC.whoName) + '</span>' +
-          '<button class="dcf-h-a" id="dc-who-card">Карточка исполнителя</button>' +
+          // У человека из архива без карточки исполнителя вести некуда.
+          (DC.who.indexOf('p:') === 0 ? ''
+            : '<button class="dcf-h-a" id="dc-who-card">Карточка исполнителя</button>') +
           '<button class="dcf-h-a" id="dc-who-all">Ко всем документам</button></div>'
       : '';
 
@@ -21531,11 +21609,11 @@
             '<span class="list-count"><b>' + list.length + '</b> ' + noun + '</span>' +
           '</div>' +
           '<div class="list-quick">' + chips + '</div>' +
-          '<div class="trow dc-grid thead">' +
-            '<span class="th">' + (isRcp ? 'Выплата' : 'Документ') + '</span>' +
+          '<div class="trow dc-grid thead' + (isArch ? ' ra-grid' : '') + '">' +
+            '<span class="th">' + (isRcp ? 'Выплата' : isArch ? 'Чек' : 'Документ') + '</span>' +
             '<span class="th">Исполнитель</span>' +
             '<span class="th">Дата</span><span class="th">Сумма</span>' +
-            '<span class="th">' + (isRcp ? 'Чек' : 'Состояние') + '</span>' +
+            '<span class="th">' + (isRcp ? 'Чек' : isArch ? 'Файл' : 'Состояние') + '</span>' +
           '</div>' + body +
         '</div>' +
       '</div>';
@@ -21621,6 +21699,14 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-task]'), function (r) {
       r.addEventListener('click', function () { openCt(r.getAttribute('data-rcp-task')); });
+    });
+    // Архив: строка и кнопка открывают сам файл чека в новой вкладке. «В ФНС» — ссылка.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ra-open]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('a')) return;
+        e.stopPropagation();
+        window.open(raFileUrl(r.getAttribute('data-ra-open')), '_blank', 'noopener');
+      });
     });
     pageAnim(view);
   }
@@ -24346,6 +24432,9 @@
            нуля, а не копией прошлого файла — с копией уезжали и ее ошибки. Смотреть
            может каждый, у кого есть ведомость; в общую папку кладет тот, кто правит. */
         '<button class="qchip" id="fp-sheet">' + ic('doc', 12) + 'В таблицу</button>' +
+        // Письмо Ларисе на выплаты периода собирается из реестра к выводу (Роман 25.11.2026).
+        (editable ? '<button class="qchip" id="fp-lm">' + ic('mail', 12) +
+          'Сообщение бухгалтеру</button>' : '') +
         (editable
           ? '<button class="qchip" id="fp-ext">' + ic('cal', 12) + 'Продлить</button>' +
             '<button class="qchip go" id="fp-close">' + ic('lock', 12) + 'Закрыть ведомость</button>'
@@ -24453,6 +24542,16 @@
         });
       });
       el('fp-ext').addEventListener('click', function () { finExtendForm(s.period); });
+      var lmBtn = el('fp-lm');
+      if (lmBtn) lmBtn.addEventListener('click', function () {
+        if (lmBtn.disabled) return;
+        lmBtn.disabled = true;
+        api('/admin/api/fin/register?id=' + encodeURIComponent(s.period.id)).then(function (r) {
+          lmOpen(r);
+        }).catch(function () {
+          showToast('Не удалось собрать сообщение', 'проверьте связь и попробуйте еще раз');
+        }).then(function () { lmBtn.disabled = false; });
+      });
       el('fp-close').addEventListener('click', function () { finCloseForm(s); });
     }
     var shBtn = el('fp-sheet');
@@ -26976,6 +27075,228 @@
     });
     pageAnim(view);
   }
+  /* ── Сообщение бухгалтеру (Роман 25.11.2026) ──────────────────────────────────
+     Письмо Ларисе на выплаты периода по шаблону «Справка: сообщение бухгалтеру» из
+     базы знаний финансов. Раньше его собирали руками из ведомости и переписывали по
+     нескольку раз. Строки берем из реестра к выводу, но КАК платить каждому, из
+     данных не следует: карточка исполнителя есть не у всех, кто идет платежкой, и
+     не все с карточкой идут в это письмо. Поэтому у человека выбор пути, и выбор
+     запоминается по имени в браузере: со второго периода письмо собирается само.
+     Какой сервис оплачен лично (вернуть Виталию), в ведомости не отмечено — галочка.
+     Подрядчики (фонд подрядчиков) в письмо не идут. Итог — черновик в поле, его
+     можно поправить перед копированием. */
+  var LM_KEY = 'es_fin_lm_v1';
+  var LM_ROUTES = [['bank', 'платежка'], ['card', 'карта Виталия'],
+                   ['acct', 'бухгалтеру'], ['ip', 'доход ИП Виталия'], ['skip', 'не писать']];
+  var LM_FUND_ROUTES = [['bank', 'платежка из фонда'], ['bill', 'по счету с ВТБ'],
+                        ['skip', 'не писать']];
+  function lmLoad() {
+    try { return JSON.parse(localStorage.getItem(LM_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function lmSave(v) {
+    try { localStorage.setItem(LM_KEY, JSON.stringify(v)); } catch (e) {}
+  }
+  function lmRub(v) {
+    var x = Math.round((Number(v) || 0) * 100) / 100;
+    var int = Math.floor(x), dec = Math.round((x - int) * 100);
+    return String(int).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') +
+      (dec ? ',' + (dec < 10 ? '0' : '') + dec : '') + ' руб';
+  }
+  // Люди периода: одна строка на человека, суммой всех его строк. Начисление с продаж
+  // попадает сюда, даже если стоит фактом: деньги человеку еще не ушли.
+  function lmPeople(list) {
+    var by = {}, out = [];
+    list.forEach(function (it) {
+      if (it.status !== 'план' && !it.accrual) return;
+      var key = it.cid || ('n:' + (it.person || it.receiver || ''));
+      if (!by[key]) {
+        by[key] = { key: key, name: it.person || it.receiver || '—', cid: it.cid,
+                    amount: 0, role: '', bill: false, ids: [] };
+        out.push(by[key]);
+      }
+      var p = by[key];
+      p.amount += Number(it.amount) || 0;
+      if (!p.role && it.role) p.role = it.role;
+      // «Мотивация» — вид выплаты, а не роль; роль в письме пишем, только если она есть.
+      if (!p.role && it.item && it.item !== 'Мотивация' && !it.accrual &&
+          it.item !== it.receiver) p.role = it.item;
+      if (it.by_bill) p.bill = true;
+      p.ids.push(it.id);
+    });
+    return out;
+  }
+  function lmDefault(p) {
+    if (/ванеев/i.test(p.name)) return 'ip';
+    if (/лариса/i.test(p.name)) return 'acct';
+    return p.cid ? 'bank' : 'card';
+  }
+  function lmOpen(R) {
+    if (document.querySelector('.al-ov')) return;
+    var mem = lmLoad();
+    mem.route = mem.route || {}; mem.fund = mem.fund || {}; mem.back = mem.back || {};
+    var rsg = R.rs_groups || [], funds = R.funds || [];
+    var teamItems = [], services = [];
+    rsg.forEach(function (g) {
+      if (g.id === 'funds_alloc') return;
+      g.items.forEach(function (it) {
+        if (it.service) { if (it.status === 'факт') services.push(it); }
+        else teamItems.push(it);
+      });
+    });
+    var team = lmPeople(teamItems);
+    var mkt = funds.filter(function (f) { return f.id === 'marketing'; })[0];
+    var mktPeople = lmPeople(mkt ? mkt.items : []);
+    var alloc = (rsg.filter(function (g) { return g.id === 'funds_alloc'; })[0] || {}).items || [];
+    var st = { bank: mem.bank || 'Сбербанк', route: {}, fund: {}, back: {} };
+    team.forEach(function (p) { st.route[p.key] = mem.route[p.name] || lmDefault(p); });
+    mktPeople.forEach(function (p) {
+      st.fund[p.key] = mem.fund[p.name] || (p.bill ? 'bill' : 'bank');
+    });
+    services.forEach(function (it) { st.back[it.id] = !!mem.back[it.receiver]; });
+
+    function sel(name, opts, val) {
+      return '<select class="al-in lm-sel" data-lm="' + esc(name) + '">' +
+        opts.map(function (o) {
+          return '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' +
+            esc(o[1]) + '</option>';
+        }).join('') + '</select>';
+    }
+    function row(p, kind, opts, val) {
+      return '<div class="lm-row"><span class="lm-nm">' + esc(p.name) +
+          (p.role ? '<i>' + esc(p.role) + '</i>' : '') + '</span>' +
+        '<span class="num lm-sum">' + finRub(p.amount) + '</span>' +
+        sel(kind + ':' + p.key, opts, val) + '</div>';
+    }
+
+    function text() {
+      var L = [], B = st.bank;
+      L.push('Здравствуйте, Лариса.', '');
+      L.push('Сделайте, пожалуйста, сегодня следующие выводы средств и платежки для выплаты мотивации команде.', '');
+      var bank = team.filter(function (p) { return st.route[p.key] === 'bank'; });
+      if (bank.length) {
+        var bs = bank.reduce(function (a, p) { return a + p.amount; }, 0);
+        L.push('Вывести с р/с ВТБ на ' + B + ' ' + lmRub(bs) + ' и сделать следующие платежки:');
+        bank.forEach(function (p, i) {
+          L.push((i + 1) + ') ' + p.name + (p.role ? ' (' + p.role + ')' : '') + ' = ' + lmRub(p.amount));
+        });
+        L.push('');
+      }
+      var sum = function (r) {
+        return team.filter(function (p) { return st.route[p.key] === r; })
+          .reduce(function (a, p) { return a + p.amount; }, 0);
+      };
+      var tch = sum('card'), acc = sum('acct');
+      if (tch || acc) {
+        var parts = [];
+        if (tch) parts.push(lmRub(tch) + ' (преподавателям)');
+        if (acc) parts.push(lmRub(acc) + ' (бухгалтеру Ларисе)');
+        L.push('С р/с ВТБ на личную карту Виталия: ' + parts.join(' + ') +
+          (parts.length > 1 ? ' = ' + lmRub(tch + acc) : '') + ', вывод на собственные нужды.', '');
+      }
+      var ip = sum('ip'), dv = Number(R.dividends) || 0;
+      if (ip || dv) {
+        L.push('Доход от предпринимательской деятельности = ' +
+          [ip ? lmRub(ip) + ' (Виталий)' : '', dv ? lmRub(dv) + ' (дивиденды)' : '']
+            .filter(Boolean).join(' + '), '');
+      }
+      var mb = mktPeople.filter(function (p) { return st.fund[p.key] === 'bank'; });
+      if (mb.length) {
+        var ms = mb.reduce(function (a, p) { return a + p.amount; }, 0);
+        L.push('Виталий, выведите, пожалуйста, с фонда маркетинга ' + lmRub(ms) + ' на р/с ' + B + '.');
+        L.push('Лариса, сделайте следующие платежки в ' + B + ':');
+        mb.forEach(function (p, i) {
+          L.push((i + 1) + ') ' + p.name + (p.role ? ' (' + p.role + ')' : '') + ' = ' + lmRub(p.amount));
+        });
+        L.push('');
+      }
+      // Платеж из фонда по счету уходит прямо с ВТБ, поэтому в копилку фонда
+      // переводим меньше на его сумму (так было в письме 24.11: 150 644,11 − 40 000).
+      var billOut = mktPeople.filter(function (p) { return st.fund[p.key] === 'bill'; })
+        .reduce(function (a, p) { return a + p.amount; }, 0);
+      var fl = alloc.map(function (a) {
+        var v = Number(a.amount) || 0;
+        if (/маркетинг/i.test(a.receiver)) v -= billOut;
+        return { name: a.receiver, v: v };
+      }).filter(function (f) { return f.v > 0.004; });
+      if (fl.length) {
+        L.push('Лариса, сделайте, пожалуйста, вывод средств на карту, чтобы Виталий сделал распределение:');
+        fl.forEach(function (f) { L.push(f.name + ' = ' + lmRub(f.v)); });
+        L.push('');
+      }
+      services.forEach(function (it) {
+        if (st.back[it.id]) L.push('Оплата ' + it.receiver + ' ' + lmRub(it.amount) + ', вернуть Виталию');
+      });
+      return L.join('\n').replace(/\n+$/, '');
+    }
+
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';
+    ov.innerHTML =
+      '<div class="al-card lm-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head"><div><div class="al-eyebrow">Выплаты периода</div>' +
+          '<div class="al-title">Сообщение бухгалтеру</div></div>' +
+          '<button class="al-x" id="lm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">По шаблону из базы знаний. Выберите, как платить каждому, — ' +
+          'выбор запомнится на следующие периоды. Текст внизу можно поправить перед копированием.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Банк для платежек</span>' +
+            sel('bank', [['Сбербанк', 'Сбербанк'], ['Альфа-Банк', 'Альфа-Банк']], st.bank) + '</label>' +
+          (team.length ? '<div class="lm-h">С расчетного счета</div>' +
+            team.map(function (p) { return row(p, 'r', LM_ROUTES, st.route[p.key]); }).join('') : '') +
+          (mktPeople.length ? '<div class="lm-h">Из фонда маркетинга</div>' +
+            mktPeople.map(function (p) { return row(p, 'f', LM_FUND_ROUTES, st.fund[p.key]); }).join('') : '') +
+          (services.length ? '<div class="lm-h">Сервисы, оплаченные в периоде</div>' +
+            services.map(function (it) {
+              return '<label class="lm-row lm-chk"><input type="checkbox" data-lmb="' + esc(it.id) + '"' +
+                (st.back[it.id] ? ' checked' : '') + '><span class="lm-nm">' + esc(it.receiver) +
+                '<i>вернуть Виталию, если платил лично</i></span>' +
+                '<span class="num lm-sum">' + finRub(it.amount) + '</span></label>';
+            }).join('') : '') +
+          '<div class="lm-h">Текст сообщения</div>' +
+          '<textarea class="al-in al-ta lm-ta" id="lm-ta" rows="14"></textarea>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="lm-cancel">Закрыть</button>' +
+          '<button class="bp al-save" id="lm-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var ta = el('lm-ta'), edited = false;
+    function redraw() { if (!edited) ta.value = text(); }
+    function remember() {
+      mem.bank = st.bank;
+      team.forEach(function (p) { mem.route[p.name] = st.route[p.key]; });
+      mktPeople.forEach(function (p) { mem.fund[p.name] = st.fund[p.key]; });
+      services.forEach(function (it) { mem.back[it.receiver] = st.back[it.id]; });
+      lmSave(mem);
+    }
+    redraw();
+    ta.addEventListener('input', function () { edited = true; });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-lm]'), function (s) {
+      s.addEventListener('change', function () {
+        var k = s.getAttribute('data-lm');
+        if (k === 'bank') st.bank = s.value;
+        else if (k.indexOf('r:') === 0) st.route[k.slice(2)] = s.value;
+        else if (k.indexOf('f:') === 0) st.fund[k.slice(2)] = s.value;
+        // Правка выбора пересобирает текст заново: ручные правки в поле при этом
+        // теряются, поэтому сначала выбор, потом правка текста.
+        edited = false; remember(); redraw();
+      });
+    });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-lmb]'), function (c) {
+      c.addEventListener('change', function () {
+        st.back[c.getAttribute('data-lmb')] = c.checked;
+        edited = false; remember(); redraw();
+      });
+    });
+    function close() { ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180); }
+    el('lm-x').addEventListener('click', close);
+    el('lm-cancel').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    el('lm-copy').addEventListener('click', function () {
+      remember(); copyText(ta.value, el('lm-copy'));
+    });
+  }
+
   /* Галочки сверки живут в сессии браузера (на период), а не на сервере: это рабочая
      пометка одного человека на время сверки. Любой сбой доступа к хранилищу глушим —
      экран должен работать и в приватном окне, где sessionStorage кидает исключение. */

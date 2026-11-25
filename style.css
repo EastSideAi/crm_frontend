@@ -7423,6 +7423,15 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .rcp-item .trow.dc-grid { border-bottom: 0; }
 .rcp-item:last-child { border-bottom: 0; }
 .rcp-sub { color: var(--ink-3); font-size: 12.5px; }
+/* Архив чеков: номер чека сверху, что оказали под ним — в одну строку они не влезают. */
+.ra-main { align-items: flex-start; }
+.ra-grid .rcp-act { margin-left: 0; }
+.ra-grid .rcp-a { white-space: nowrap; text-decoration: none; }
+.ra-grid .dc-when { font-variant-numeric: tabular-nums; }
+.dc-wrap .trow.dc-grid.ra-grid {
+  grid-template-columns: minmax(0, 2.4fr) 124px 92px 96px 132px; }
+.ra-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ra-txt b, .ra-txt .rcp-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rcp-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 0 14px 12px 40px; }
 .rcp-why { font-size: 12px; color: var(--red-ink); }
@@ -16745,3 +16754,22 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .pj-debt span { color: var(--ink-2); }
 .pj-debt span b { color: var(--ink); font-weight: 700; }
 .pj-debt.late { background: var(--red-soft); color: var(--red-ink); }
+
+/* ── сообщение бухгалтеру (реестр к выводу) ── */
+.lm-card { max-width: 620px; }
+.lm-h { margin: 18px 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  color: var(--ink-3); text-transform: uppercase; }
+.lm-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 200px; gap: 10px;
+  align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.lm-row.lm-chk { grid-template-columns: 20px minmax(0, 1fr) 110px; cursor: pointer; }
+.lm-nm { min-width: 0; font-weight: 600; font-size: 13.5px; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-nm i { display: block; font-style: normal; font-weight: 500; font-size: 12px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; }
+.lm-sum { text-align: right; font-variant-numeric: tabular-nums; font-size: 13.5px; }
+.lm-sel { height: 36px; padding: 0 8px 0 11px; font-size: 13px; line-height: 36px; }
+.lm-ta { font: 500 13px/1.5 'Manrope', sans-serif; min-height: 260px; resize: vertical; }
+@media (max-width: 640px) {
+  .lm-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .lm-row .lm-sel { grid-column: 1 / -1; }
+}
