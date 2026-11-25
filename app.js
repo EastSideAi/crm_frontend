@@ -62761,6 +62761,64 @@
       '</div></div>';
   }
 
+  /* «За что ближайшая выплата» — разбивка суммы из героя по точкам: Павел 25.11,
+     «у тьюторов нет понимания, когда за какую точку выплата». Берём закрытые точки и
+     консультации, попавшие в окно ближайшей выплаты (те же поля, что считает сервер
+     в payout.amount), и показываем построчно: ученик, точка, сумма. Итог — число с
+     сервера, вторую копию правила 10/20 не заводим. */
+  function pbDueBreakdown(box) {
+    var pay = box.payout || {};
+    if (!pay.date) return '';
+    var from = (pay.from || '').slice(0, 10), to = (pay.to || '').slice(0, 10);
+    var inWin = function (iso) {
+      var d = (iso || '').slice(0, 10);
+      return !!d && !!from && !!to && d >= from && d <= to;
+    };
+    var items = [];
+    (box.students || []).forEach(function (st) {
+      (st.points || []).forEach(function (p, i) {
+        if (p.closedAt && inWin(p.closedAt)) {
+          items.push({ who: st.name, what: 'Точка ' + (i + 1) + '. ' + p.title,
+                       amount: p.amount, when: p.closedAt });
+        }
+      });
+      var c = st.consultation;
+      if (c && !c.paid && inWin(c.heldOn)) {
+        items.push({ who: st.name, what: 'Консультация по подбору вузов',
+                     amount: c.amount, when: c.heldOn });
+      }
+    });
+    items.sort(function (a, b) { return (a.when || '') < (b.when || '') ? -1 : 1; });
+    var date = pay.date ? fmtDay(pay.date) : '';
+    var rule = 'Выплаты два раза в месяц, 10 и 20 числа. Закрыл точку — она сразу встаёт ' +
+      'в ближайшую из них.';
+    if (!items.length) {
+      return '<div class="card pb-due-card"><div class="pb-due-h">' +
+        '<div class="t">В ближайшую выплату ' + esc(date) + '</div>' +
+        '<div class="s">' + rule + '</div></div>' +
+        '<div class="pb-due-empty">Пока сюда ничего не попало. Закрой точку по любому ученику — ' +
+          'и она появится здесь с суммой и датой.</div></div>';
+    }
+    var list = items.map(function (it) {
+      return '<div class="pb-due-row">' +
+        '<span class="pb-due-who">' + esc(it.who) + '</span>' +
+        '<span class="pb-due-what">' + esc(it.what) + '</span>' +
+        '<span class="pb-due-when">' + fmtDay(it.when) + '</span>' +
+        '<span class="pb-due-amt num">' + fmtMoney(it.amount) + ' ₽</span>' +
+      '</div>';
+    }).join('');
+    return '<div class="card pb-due-card">' +
+      '<div class="pb-due-h"><div>' +
+        '<div class="t">В ближайшую выплату ' + esc(date) +
+          '<span class="pb-due-n">' + items.length + ' ' +
+            plural(items.length, 'точка', 'точки', 'точек') + '</span></div>' +
+        '<div class="s">' + rule + '</div></div>' +
+        '<div class="pb-due-total"><b class="num">' + fmtMoney(pay.amount) + ' ₽</b>' +
+          '<small>к выплате</small></div>' +
+      '</div>' +
+      '<div class="pb-due-rows">' + list + '</div></div>';
+  }
+
   function renderPointsBoard(view) {
     if (isSalesManager()) return renderManagerMot(view);
     var seg = pbSeg();
@@ -62792,7 +62850,7 @@
           ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
           : 'Учеников с заведенными точками пока нет.') + '</div></div>';
 
-    var top = seg === 'my' ? pbHero(box) : head;
+    var top = seg === 'my' ? (pbHero(box) + pbDueBreakdown(box)) : head;
     view.innerHTML = pbTabs() + top + pbTracks(box.students) + list;
     pbWire(view);
   }
