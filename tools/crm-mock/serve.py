@@ -298,8 +298,8 @@ def leads():
     return out
 
 def _ri(i, who, amount, status="план", cid=None, person=None, item="Мотивация", role="",
-        bill=False, service=False, accrual=False):
-    return {"id": "o%d" % i, "date": "2026-11-20", "status": status, "receiver": who,
+        bill=False, service=False, accrual=False, hold=None):
+    return {"hold": hold, "id": "o%d" % i, "date": "2026-11-20", "status": status, "receiver": who,
             "item": item, "amount": amount, "dest": "ВТБ, р/с", "comment": "", "has_doc": False,
             "cid": cid, "person": person or who, "role": role, "by_bill": bill,
             "service": service, "accrual": accrual}
@@ -328,7 +328,8 @@ FIN_REGISTER = {
                 item="Клиент Икс", accrual=True)]},
         {"id": "администрирование", "label": "Администрирование", "to_pay": 20000, "paid": 0, "items": [
             _ri(4, "Учителева Ольга", 3000), _ri(5, "Лариса бухгалтер", 5000),
-            _ri(6, "Админова Мария", 15000, cid="c2", person="Админова Мария Петровна")]},
+            _ri(6, "Админова Мария", 15000, cid="c2", person="Админова Мария Петровна",
+                hold="акт № 13 за ноябрь 2026 не подписан")]},
         {"id": "сервисы", "label": "Сервисы и подписки", "to_pay": 0, "paid": 23982.1, "items": [
             _ri(7, "Railway", 23482.10, status="факт", service=True),
             _ri(8, "Селектел", 500, status="факт", service=True)]},
@@ -339,7 +340,8 @@ FIN_REGISTER = {
              "item": "отчисление в фонд", "dest": "на карту собственника"}]},
     ],
     "funds": [{"id": "marketing", "name": "Фонд маркетинга", "added": 150644.11, "spent": 92500, "items": [
-        _ri(9, "СММ Екатерина", 22500, cid="c3", person="Смм Екатерина"),
+        _ri(9, "СММ Екатерина", 22500, cid="c3", person="Смм Екатерина",
+            hold="не заполнил анкету, акт не завести"),
         _ri(10, "Ипшница Ольга", 40000, bill=True),
         _ri(11, "Монтажер Анна", 12500)]}],
 }

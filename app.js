@@ -9659,6 +9659,14 @@
     });
     var who = view.querySelector('#sc-who');
     if (who) who.addEventListener('change', function () { state.schedWho = this.value || ''; renderView(); });
+    // Строка сводки окон: показать в сетке команды только этого человека, второй клик — всех
+    Array.prototype.forEach.call(view.querySelectorAll('[data-scwho]'), function (b) {
+      b.addEventListener('click', function () {
+        var nm = b.getAttribute('data-scwho');
+        state.schedScope = 'all';
+        state.schedWho = state.schedWho === nm ? '' : nm; renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
       b.addEventListener('click', function () {
         var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
@@ -10147,8 +10155,49 @@
         ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или консультацией. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
         : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
     view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
+      (!state.schedEdit ? schedConsultSum(d, lo, new Date(lo.getTime() + 7 * 86400000), today, 'week') : '') +
       flt + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
     schedWire(view, d);
+  }
+
+  /* Окна под консультации по людям (Павел 26.11.2026: «где мне как руководителю
+     проверять, кто какие слоты внес»). Только для руководителя (can_edit_all) и только
+     пул записи на консультацию (роль staff): сколько свободных окон осталось на
+     показанной неделе с сегодняшнего дня и сколько уже занято записями. У кого пусто —
+     сверху и красным: к нему клиента записать некуда. Неделя листается стрелками шапки. */
+  /* В «Календаре» та же сводка за месяц: выбрал человека — месяц показывает его окна
+     по дням (Павел 26.11.2026: «очень удобно в формате календаря смотреть по каждому»). */
+  function schedConsultSum(d, lo, hi, today, span) {
+    if (!d || !d.can_edit_all) return '';
+    var from = zoomYmd(new Date(Math.max(lo.getTime(), today.getTime())));
+    var to = zoomYmd(hi);
+    if (from >= to) return '';
+    var rows = {};
+    (d.people || []).forEach(function (p) {
+      if (p.role === 'staff' && p.taken) rows[p.person] = { name: p.person, free: 0, booked: 0 };
+    });
+    (d.slots || []).forEach(function (s) {
+      if (s.role !== 'staff' || s.date < from || s.date >= to) return;
+      var r = rows[s.person] || (rows[s.person] = { name: s.person, free: 0, booked: 0 });
+      if (s.booked) r.booked++; else if (!s.blocked) r.free++;
+    });
+    var list = Object.keys(rows).map(function (k) { return rows[k]; });
+    if (!list.length) return '';
+    list.sort(function (a, b) { return (a.free + a.booked > 0) - (b.free + b.booked > 0) || a.free - b.free || a.name.localeCompare(b.name, 'ru'); });
+    var empty = list.filter(function (r) { return !r.free && !r.booked; }).length;
+    return '<div class="sc-sum"><div class="sc-sum-h"><b>Окна под консультации</b><small>' +
+      (span === 'month' ? (from === zoomYmd(today) ? 'с сегодня до конца месяца' : 'на этот месяц')
+        : (from === zoomYmd(today) ? 'с сегодня до конца недели' : 'на эту неделю')) +
+      (empty ? ' · <em>' + empty + ' без окон</em>' : ' · у всех есть окна') + '</small></div>' +
+      '<div class="sc-sum-l">' + list.map(function (r) {
+        var none = !r.free && !r.booked;
+        return '<button type="button" class="sc-sum-r' + (none ? ' none' : '') + (state.schedWho === r.name ? ' on' : '') + '" data-scwho="' + esc(r.name) + '" title="Показать в сетке только его">' +
+          '<span class="sc-sum-n">' + esc(schedShort(r.name)) + '</span>' +
+          (none ? '<span class="sc-sum-v">окон нет</span>'
+            : '<span class="sc-sum-v"><b class="num">' + r.free + '</b> свободно' +
+              (r.booked ? ' · <b class="num">' + r.booked + '</b> записано' : '') + '</span>') +
+          '</button>';
+      }).join('') + '</div></div>';
   }
 
   /* Панель под сеткой: сколько часов набрано и куда их поставить.
@@ -11670,7 +11719,9 @@
         shown + more + '</div>';
     }
     var flt = '<div class="zw-fltrow">' + schedWhoSel(schedPeopleAll(data), schedMyName(data)) + schedRoleChips() + '</div>';
-    view.innerHTML = '<div class="card zw">' + head + flt +
+    var nextFirst = new Date(first.getFullYear(), first.getMonth() + 1, 1);
+    view.innerHTML = '<div class="card zw">' + head +
+      schedConsultSum(data, first, nextFirst, today, 'month') + flt +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
       '<div class="zw-foot">Клик по дню откроет сетку слотов на этот день. '
         + 'Зеленая цифра — сколько в этот день свободных окон, серая — сколько часов уже заняты учениками.</div></div>';
@@ -27111,7 +27162,7 @@
       var key = it.cid || ('n:' + (it.person || it.receiver || ''));
       if (!by[key]) {
         by[key] = { key: key, name: it.person || it.receiver || '—', cid: it.cid,
-                    amount: 0, role: '', bill: false, ids: [] };
+                    amount: 0, role: '', bill: false, hold: '', ids: [] };
         out.push(by[key]);
       }
       var p = by[key];
@@ -27121,6 +27172,9 @@
       if (!p.role && it.item && it.item !== 'Мотивация' && !it.accrual &&
           it.item !== it.receiver) p.role = it.item;
       if (it.by_bill) p.bill = true;
+      // Акт за прошлую выплату не подписан (или нет договора) — сервер называет
+      // причину, и по умолчанию человек в письмо не идет (Роман 26.11.2026).
+      if (!p.hold && it.hold) p.hold = it.hold;
       p.ids.push(it.id);
     });
     return out;
@@ -27148,10 +27202,13 @@
     var mktPeople = lmPeople(mkt ? mkt.items : []);
     var alloc = (rsg.filter(function (g) { return g.id === 'funds_alloc'; })[0] || {}).items || [];
     var st = { bank: mem.bank || 'Сбербанк', route: {}, fund: {}, back: {} };
-    team.forEach(function (p) { st.route[p.key] = mem.route[p.name] || lmDefault(p); });
-    mktPeople.forEach(function (p) {
-      st.fund[p.key] = mem.fund[p.name] || (p.bill ? 'bill' : 'bank');
+    team.forEach(function (p) {
+      st.route[p.key] = p.hold ? 'skip' : (mem.route[p.name] || lmDefault(p));
     });
+    mktPeople.forEach(function (p) {
+      st.fund[p.key] = p.hold ? 'skip' : (mem.fund[p.name] || (p.bill ? 'bill' : 'bank'));
+    });
+    var held = team.concat(mktPeople).filter(function (p) { return p.hold; }).length;
     services.forEach(function (it) { st.back[it.id] = !!mem.back[it.receiver]; });
 
     function sel(name, opts, val) {
@@ -27162,8 +27219,10 @@
         }).join('') + '</select>';
     }
     function row(p, kind, opts, val) {
-      return '<div class="lm-row"><span class="lm-nm">' + esc(p.name) +
-          (p.role ? '<i>' + esc(p.role) + '</i>' : '') + '</span>' +
+      return '<div class="lm-row' + (p.hold ? ' lm-hold' : '') + '"><span class="lm-nm">' +
+          esc(p.name) +
+          (p.hold ? '<i class="lm-why">не платим: ' + esc(p.hold) + '</i>'
+                  : (p.role ? '<i>' + esc(p.role) + '</i>' : '')) + '</span>' +
         '<span class="num lm-sum">' + finRub(p.amount) + '</span>' +
         sel(kind + ':' + p.key, opts, val) + '</div>';
     }
@@ -27239,6 +27298,9 @@
         '<div class="al-sub">По шаблону из базы знаний. Выберите, как платить каждому, — ' +
           'выбор запомнится на следующие периоды. Текст внизу можно поправить перед копированием.</div>' +
         '<div class="al-body">' +
+          (held ? '<div class="lm-note">' + held + ' ' + plural(held, 'человек', 'человека', 'человек') +
+            ' без подписанного акта или договора, в письмо они не идут. Подпишут, откройте окно ' +
+            'заново. Если платим все равно, выберите способ в строке.</div>' : '') +
           '<label class="al-f"><span class="al-l">Банк для платежек</span>' +
             sel('bank', [['Сбербанк', 'Сбербанк'], ['Альфа-Банк', 'Альфа-Банк']], st.bank) + '</label>' +
           (team.length ? '<div class="lm-h">С расчетного счета</div>' +
@@ -27264,8 +27326,10 @@
     function redraw() { if (!edited) ta.value = text(); }
     function remember() {
       mem.bank = st.bank;
-      team.forEach(function (p) { mem.route[p.name] = st.route[p.key]; });
-      mktPeople.forEach(function (p) { mem.fund[p.name] = st.fund[p.key]; });
+      // Удержание — состояние этого периода, а не привычка: в память браузера его не
+      // кладем, иначе после подписи акта человек так и остался бы «не писать».
+      team.forEach(function (p) { if (!p.hold) mem.route[p.name] = st.route[p.key]; });
+      mktPeople.forEach(function (p) { if (!p.hold) mem.fund[p.name] = st.fund[p.key]; });
       services.forEach(function (it) { mem.back[it.receiver] = st.back[it.id]; });
       lmSave(mem);
     }
@@ -37811,6 +37875,11 @@
       return '?' + ['step=' + encodeURIComponent(p.step), 'days=' + (p.days || 366),
                     'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
     }
+    if (p.kind === 'reanim') {
+      /* Месяц — тот же, что на плашке «Реанимация за месяц». */
+      return '?' + ['month=' + encodeURIComponent(p.month), 'step=' + encodeURIComponent(p.step),
+                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+    }
     if (p.kind === 'efir') {
       /* У эфира нет периода: он сам и есть период. */
       return '?' + ['slug=' + encodeURIComponent(p.slug),
@@ -37914,7 +37983,8 @@
     /* Сверяем не ступень, а полный ключ списка: у блоков ступени нет вовсе, и по
        пустой строке ответ на «Телеграм» лёг бы в открытый список «Тест». */
     var who = p.id;
-    var url = p.kind === 'efir' ? '/admin/api/marketing/efir/people'
+    var url = p.kind === 'reanim' ? '/admin/api/broadcasts/reanimation/people'
+            : p.kind === 'efir' ? '/admin/api/marketing/efir/people'
             : (p.kind === 'ads') ? '/admin/api/marketing/ads/people'
             : (p.kind === 'block') ? '/admin/api/marketing/launch/block'
                                    : '/admin/api/marketing/launch/people';
@@ -38102,7 +38172,7 @@
     /* Правка доступна только на ступенях пути: у блоков за строкой стоит человек из
        бота, у которого нет карточки регистрации. Считаем до сборки окна — от этого
        зависит и ширина окна, и набор колонок. */
-    var canEdit = p.kind !== 'block' && p.kind !== 'ads';
+    var canEdit = p.kind !== 'block' && p.kind !== 'ads' && p.kind !== 'reanim';
     var body;
     if (p.error) {
       body = '<div class="mk-logic-empty">' + esc(p.error) + '</div>';
@@ -38114,6 +38184,11 @@
         ? 'Здесь пока никого — людей в этой строке ещё нет.'
         : 'На этой ступени пока никого — людей здесь не появится, ' +
           'пока шаг не сработает хотя бы у одного человека.') + '</div>';
+    } else if (p.kind === 'reanim') {
+      body = '<div class="lp-tbl"><div class="lp-th">' +
+        ['Человек', 'Канал', 'Рассылка', 'Отправлена'].map(function (c) {
+          return '<span>' + c + '</span>';
+        }).join('') + '</div>' + p.rows.map(bcReRow).join('') + '</div>';
     } else {
       /* Заголовки колонок зависят от того, ОТКУДА люди. У зарегистрировавшихся есть
          телефон и дата регистрации, у людей из бота — только ник и дата входа.
@@ -38150,6 +38225,7 @@
     var per = p.kind === 'ads'
       ? (p.days && p.days < 366 ? 'за ' + p.days + ' ' + plural(p.days, 'день', 'дня', 'дней')
                                 : 'за все время')
+      : p.kind === 'reanim' ? 'за месяц'
       : (p.from || p.to)
       ? ('период ' + (p.from ? fmtDay(p.from) : '…') + ' — ' + (p.to ? fmtDay(p.to) : '…'))
       : 'весь запуск';
@@ -38181,6 +38257,8 @@
           /* У эфира часть зала безымянная: человек смотрит по открытой ссылке, не
              оставив ни имени, ни телефона. Говорим об этом прямо в шапке, иначе
              пустые строки читаются как сбой. */
+          : p.kind === 'reanim'
+            ? 'это те же люди, что посчитаны на плашке · каждый один раз, даже если получил несколько рассылок'
           : (p.kind === 'efir'
               /* «Дошли до бота» — список целиком именной: человек в боте известен.
                  Общая оговорка про безымянный зал тут сбивала бы с толку. */
@@ -44304,13 +44382,17 @@
      людей. Очереди считает сервер (routers/sales_shift.py) в порядке приоритета
      нулевого этапа. Звонок — наша звонилка в отдельном окне: одно окно на всю смену,
      каждый следующий номер подставляется в него же, линия не переподключается. */
-  var MS = { d: null, busy: false, at: 0, closing: false };
+  var MS = { d: null, busy: false, at: 0, closing: false, since: '' };
 
   function msLoad(force) {
     if (MS.busy || (MS.d && !force && Date.now() - MS.at < 60000)) return;
     MS.busy = true;
-    api('/admin/api/sales/my-day').then(function (r) {
-      MS.d = r; MS.busy = false; MS.at = Date.now();
+    // Свой период и «Все» сервер собирает по запросу: каждую минуту тянуть всю базу незачем
+    var since = msFreshSince();
+    api('/admin/api/sales/my-day' + (since ? '?since=' + encodeURIComponent(since) : '')).then(function (r) {
+      MS.d = r; MS.busy = false; MS.at = Date.now(); MS.since = since;
+      // пока шел запрос, человек выбрал другой отрезок — спросим под него
+      if (since !== msFreshSince()) return msLoad(true);
       if (state.page === 'myshift') renderView();
       // Сверка лидов первый раз после выкатки считается на сервере фоном: спросим еще раз.
       if (r && r.fresh === null) setTimeout(function () { if (state.page === 'myshift') msLoad(true); }, 20000);
@@ -44488,23 +44570,48 @@
     var st = MS_FRESH[p.state] || MS_FRESH.out;
     var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
     if (leadNo(p.id)) meta.unshift(leadNo(p.id));
-    if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
+    /* Нет ни телефона, ни диалога (Костя 26.11.2026: «что с ними делаем?»): откуда
+       пришел и чем еще достучаться — почта, ник, страница ВК, кабинет, анкета. */
+    var trace = '';
+    if (p.state === 'no_contact') {
+      var tr = (p.traces || []).map(function (t) {
+        return t.url ? '<a class="ms-tr" href="' + esc(t.url) + '" target="_blank" rel="noopener">' + esc(t.label) + '</a>'
+          : '<span class="ms-tr">' + esc(t.label) + '</span>';
+      });
+      // Отдельной строкой: в общей строке ссылки обрезались многоточием
+      trace = '<small class="ms-trs">' + (p.from ? 'откуда: ' + esc(p.from) + ' · ' : '') +
+        (p.chat ? 'отвечать в диалоге' : (tr.length ? 'есть: ' + tr.join(', ') : 'контакта нет нигде')) + '</small>';
+    }
     var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
     // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
     var heat = p.todo && p.heat_label ? '<span class="ms-heat h' + (p.heat || 0) + '">' + esc(p.heat_label) + '</span>' : '';
     var mk = canMark ? '<button type="button" class="ms-mk" data-sbmk="' + esc(p.id) + '" data-sbmkn="' + esc(p.name) +
       '" title="Не лид: не наша услуга, вакансия, спам, семья">кто это</button>' : '';
-    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small></div>' +
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small>' + trace + '</div>' +
       '<span class="sev ' + st[0] + '">' + st[1] + '</span>' + msActs(p, kind, cc) + '</div>';
   }
   /* Отрезок блока лидов (встреча продаж 20.11.2026: «прозвонить всех лидов ноября»).
      Сервер отдает месяц, но не меньше недели; режем здесь, по дате прихода в Москве. */
-  var MS_SPANS = [['2d', 'Сегодня и вчера'], ['7d', '7 дней'], ['month', 'Месяц']];
-  var MS_FRESH_MAX = 40;
+  /* «Все» и свой период (Павел 26.11.2026: «МОП должен выбирать период и всех лидов»,
+     регистрации интенсивов 23.09 и 28.10 в месяц не попадали). Их сервер отдает по
+     запросу since, остальные отрезки режем здесь из окна месяца. */
+  var MS_SPANS = [['2d', 'Сегодня и вчера'], ['7d', '7 дней'], ['month', 'Месяц'], ['all', 'Все'], ['custom', 'Период']];
+  var MS_FRESH_STEP = 100;
+  function msToday() { return new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10); }
   function msFreshFrom(span) {
     var t = new Date(Date.now() + 3 * 3600e3), day = 864e5;
+    if (span === 'all') return '';
+    if (span === 'custom') return state.msFreshA || t.toISOString().slice(0, 8) + '01';
     if (span === 'month') return t.toISOString().slice(0, 8) + '01';
     return new Date(t.getTime() - (span === '7d' ? 6 : 1) * day).toISOString().slice(0, 10);
+  }
+  function msFreshTo(span) { return span === 'custom' && state.msFreshB ? state.msFreshB : ''; }
+  // Что просить у сервера: пусто — окно месяца по умолчанию
+  function msFreshSince() {
+    var span = state.msFreshSpan || '2d';
+    if (span === 'all') return 'all';
+    var a = msFreshFrom(span), m = msToday().slice(0, 8) + '01';
+    return span === 'custom' && a < m ? a : '';
   }
   function msFresh(d, cc) {
     var all = d.fresh;
@@ -44512,8 +44619,12 @@
     var span = state.msFreshSpan || '2d';
     var title = 'Лиды: с кем связаться';
     if (all === null) return msSection('fresh', title, 'считаю, список появится через минуту', '', 'Считаю сверку лидов…');
-    var from = msFreshFrom(span);
-    var inSpan = all.filter(function (p) { return !p.date || p.date >= from; });
+    var from = msFreshFrom(span), to = msFreshTo(span);
+    var loading = msFreshSince() !== MS.since;
+    var inSpan = all.filter(function (p) { return !p.date || (p.date >= from && (!to || p.date <= to)); });
+    // «Интенсив»: все, кто регистрировался на интенсив или пришел по его ссылке
+    var nInt = inSpan.filter(function (p) { return p.intensive; }).length;
+    if (state.msFreshInt && nInt) inSpan = inSpan.filter(function (p) { return p.intensive; });
     // «Оставили заявку» (Павел 11262): только те, кто сам попросил консультацию
     var nApplied = inSpan.filter(function (p) { return p.applied; }).length;
     var onlyApplied = !!state.msFreshApplied && nApplied > 0;
@@ -44533,16 +44644,24 @@
       : '') +
       '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">' + (inShift != null ? 'за день' : 'сегодня обработал') +
       ' <b class="num">' + done + '</b> из ' + norm + ' семей</span>';
+    var range = span === 'custom'
+      ? '<span class="ms-range"><input type="date" class="al-in" id="ms-fa" value="' + esc(from) + '" max="' + msToday() + '" aria-label="С какого дня">' +
+        '<span>–</span><input type="date" class="al-in" id="ms-fb" value="' + esc(to || msToday()) + '" max="' + msToday() + '" aria-label="По какой день"></span>'
+      : '';
     var chips = '<div class="list-quick ms-spans">' + MS_SPANS.map(function (x) {
       return '<button class="qchip' + (x[0] === span ? ' on' : '') + '" data-msspan="' + x[0] + '">' + x[1] + '</button>';
-    }).join('') + (nApplied ? '<span class="ms-chipsep"></span><button class="qchip' + (onlyApplied ? ' on' : '') +
+    }).join('') + range + (nInt || state.msFreshInt ? '<span class="ms-chipsep"></span><button class="qchip' + (state.msFreshInt ? ' on' : '') +
+      '" data-msint="1" aria-pressed="' + !!state.msFreshInt + '">Интенсив<span class="qn num">' + nInt + '</span></button>' : '') + (nApplied ? '<span class="ms-chipsep"></span><button class="qchip' + (onlyApplied ? ' on' : '') +
       '" data-msapplied="1" aria-pressed="' + onlyApplied + '">' + ic('cal', 13) + 'Оставили заявку<span class="qn num">' + nApplied + '</span></button>' : '') + '</div>';
     var sub = worked + ' · ' + (f.length ? 'пришло ' + f.length + (parts.length ? ': ' + parts.join(', ') : ', все в работе') +
       '; сверху горячие, с кем еще не связались' : 'за этот отрезок новых не было');
-    var more = state.msFreshMore ? f : f.slice(0, MS_FRESH_MAX);
-    var rows = !f.length ? '<div class="empty">За этот отрезок новых лидов не было.</div>' :
+    var more = f.slice(0, state.msFreshShow || MS_FRESH_STEP);
+    var left = f.length - more.length;
+    var rows = loading ? '<div class="empty">Собираю лидов за весь период…</div>' :
+      !f.length ? '<div class="empty">За этот отрезок новых лидов не было.</div>' :
       more.map(function (p) { return msFreshRow(p, cc, d.can_mark); }).join('') +
-      (f.length > more.length ? '<button class="ms-more" data-msmore="1">Показать еще ' + (f.length - more.length) + '</button>' : '');
+      (left > 0 ? '<button class="ms-more" data-msmore="1">Показать еще ' + Math.min(left, MS_FRESH_STEP) +
+        (left > MS_FRESH_STEP ? ' из ' + left : '') + '</button>' : '');
     return msSection('fresh', title, sub, chips + rows, 'За этот отрезок новых лидов не было.');
   }
 
@@ -44791,16 +44910,39 @@
     dialBind(view, function () { MS.d = null; msLoad(true); shLoad(true); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-msapplied]'), function (b) {
       b.addEventListener('click', function () {
-        state.msFreshApplied = !state.msFreshApplied; state.msFreshMore = false; renderView();
+        state.msFreshApplied = !state.msFreshApplied; state.msFreshShow = 0; renderView();
       });
     });
+    var msIntB = view.querySelector('[data-msint]');
+    if (msIntB) msIntB.addEventListener('click', function () {
+      state.msFreshInt = !state.msFreshInt; state.msFreshShow = 0; renderView();
+    });
+    // Отрезок поменялся так, что нужен другой запрос (Все, период старше месяца) — спросим сервер
+    var msRefetch = function () {
+      state.msFreshShow = 0;
+      if (msFreshSince() !== MS.since) msLoad(true);
+      renderView();
+    };
     Array.prototype.forEach.call(view.querySelectorAll('[data-msspan]'), function (b) {
       b.addEventListener('click', function () {
-        state.msFreshSpan = b.getAttribute('data-msspan'); state.msFreshMore = false; renderView();
+        state.msFreshSpan = b.getAttribute('data-msspan'); msRefetch();
+      });
+    });
+    ['ms-fa', 'ms-fb'].forEach(function (id) {
+      var inp = el(id);
+      if (inp) inp.addEventListener('change', function () {
+        if (!this.value) return;
+        if (id === 'ms-fa') state.msFreshA = this.value; else state.msFreshB = this.value;
+        if (state.msFreshB && state.msFreshA && state.msFreshB < state.msFreshA) {
+          var t = state.msFreshA; state.msFreshA = state.msFreshB; state.msFreshB = t;
+        }
+        msRefetch();
       });
     });
     var msMoreB = view.querySelector('[data-msmore]');
-    if (msMoreB) msMoreB.addEventListener('click', function () { state.msFreshMore = true; renderView(); });
+    if (msMoreB) msMoreB.addEventListener('click', function () {
+      state.msFreshShow = (state.msFreshShow || MS_FRESH_STEP) + MS_FRESH_STEP; renderView();
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sbmk]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -45683,6 +45825,180 @@
     return '<a class="bc-chat" href="#dialog/' + encodeURIComponent(userId) + '">переписка</a>';
   }
 
+  /* ── Реанимация за месяц ─────────────────────────────────────────────────────
+     Руководитель маркетинга платит проджекту бонус за «реанимацию базы»: сколько
+     людей старой базы ожили после рассылок. Нужна одна цифра за календарный месяц и
+     поименный список за ней, чтобы проверять не на слово. Все считает сервер
+     (`/admin/api/broadcasts/reanimation`), здесь раскладка. Каждое число открывает
+     список ровно той же длины — то же окно, что у «Запусков» (launchPeopleModal). */
+  function bcReMonth() {
+    if (!state.bcReMonth) {
+      var d = new Date();
+      state.bcReMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    }
+    return state.bcReMonth;
+  }
+
+  function fetchBcRe() {
+    var m = bcReMonth();
+    if (state._bcReWait === m) return;
+    state._bcReWait = m;
+    api('/admin/api/broadcasts/reanimation?month=' + encodeURIComponent(m)).then(function (r) {
+      if (state._bcReWait === m) state._bcReWait = '';
+      if (bcReMonth() !== m) return;          /* пока считали, переключили месяц */
+      state._bcRe = r || 'none';
+      if (state.page === 'broadcasts') renderView();
+    }).catch(function (e) {
+      if (state._bcReWait === m) state._bcReWait = '';
+      if (e && e.message === '403') return;
+      if (bcReMonth() !== m) return;
+      state._bcRe = 'none';
+      if (state.page === 'broadcasts') renderView();
+    });
+  }
+
+  function bcReOpen(key, title, n, node) {
+    var d = state._bcRe || {};
+    state._lpPeople = {
+      kind: 'reanim', id: 'reanim:' + bcReMonth() + ':' + key,
+      step: key, month: bcReMonth(), value: '', slug: '',
+      title: title, ownTitle: true, plate: n || 0, launch: d.title || '',
+      from: '', to: '',
+      rows: [], total: null, loading: true, error: '', fresh: true,
+      back: node || null,
+    };
+    launchPeopleLoad(false);
+  }
+
+  /* Строка человека в списке: ступени с датами — под именем, канал и рассылка —
+     своими колонками. Даты сервер отдает по Москве, поэтому день берем из строки. */
+  var BC_RE_STEP = { click: 'нажал ссылку', reg: 'регистрация', came: 'эфир',
+                     booked: 'записался на диагностику', held: 'диагностика',
+                     paid: 'оплата' };
+  var BC_RE_CH = { telegram: 'Телеграм', 'telegram:study': 'Телеграм, второй бот',
+                   vk: 'ВКонтакте', max: 'MAX', email: 'Почта' };
+
+  function bcReRow(p) {
+    var st = p.steps || {};
+    var done = ['click', 'reg', 'came', 'booked', 'held', 'paid'].filter(function (k) {
+      return st[k];
+    }).map(function (k) {
+      /* Строкой на ступень, как строки оплат в списке «Запусков» (.lp-pay): в одну
+         строку под именем три ступени с датами обрезались многоточием. */
+      return '<span class="lp-pay"><b class="num">' + fmtDay(st[k]).slice(0, 5) + '</b> ' +
+        esc(BC_RE_STEP[k]) + '</span>';
+    });
+    var ch = (p.channels || []).map(function (c) {
+      return BC_RE_CH[c.channel] || c.channel;
+    }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ');
+    var who = p.name || ('id ' + (((p.channels || [])[0] || {}).channel_user_id || ''));
+    var id = p.session_id || '';
+    return '<div class="lp-tr' + (id ? ' go' : '') + '"' +
+      (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
+      '><span class="lp-nm">' + esc(who) +
+        (done.length ? done.join('') : '<small>получил рассылку, дальше пока ничего</small>') + '</span>' +
+      '<span class="lp-ct">' + lpCell(ch) + '</span>' +
+      '<span class="lp-sr"' + (p.run_title ? ' title="' + esc(p.run_title) + '"' : '') + '>' +
+        lpCell(p.run_title) + '</span>' +
+      '<span class="lp-dt">' + (p.sent_at ? esc(fmtDay(p.sent_at)) : '<i class="lp-dash">—</i>') + '</span>' +
+      '</div>';
+  }
+
+  function bcReCard() {
+    var d = state._bcRe;
+    if (!d) { fetchBcRe(); }
+    var now = new Date();
+    var isNow = bcReMonth() === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+    var nav = '<div class="brd-nav">' +
+      '<button class="icobtn sm brd-arrow prev" data-bcre-mon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + esc((d && d !== 'none' && d.title) || bcReMonth()) + '</span>' +
+      '<button class="icobtn sm brd-arrow" data-bcre-mon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+      (isNow ? '' : '<button class="qchip" data-bcre-mon="now">Сейчас</button>') +
+      '</div>';
+    var head = '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('spark', 14) + '</span>' +
+      '<div><div class="t">Реанимация за месяц</div>' +
+      '<div class="s">люди старой базы, которые после рассылки зарегистрировались или пришли на эфир, ' +
+      'записались на диагностику или оплатили</div></div>' + nav + '</div>';
+    var body;
+    if (!d) {
+      body = '<div class="loadwrap" style="padding:28px 0"><div class="loaddot"></div>' +
+             '<div class="loaddot"></div><div class="loaddot"></div></div>';
+    } else if (d === 'none') {
+      body = '<div class="empty">Не удалось посчитать — проверь сеть и обнови страницу.</div>';
+    } else if (d.ready === false) {
+      body = '<div class="empty">Журнал рассылок еще не завелся: бот с этой доработкой пока не выехал.</div>';
+    } else if (!(d.steps || []).length || !d.steps[0].n) {
+      body = '<div class="empty">В этом месяце рассылок по старой базе не было — оживать пока некому.</div>';
+    } else {
+      var got = d.steps[0].n, rv = d.revived || {}, g0 = d.steps[0];
+      /* Две плитки: ожили (якорь экрана) и сколько получили. Процент — подписью,
+         а не плиткой: он не людьми, его не откроешь списком. */
+      var stat = '<div style="padding:0 18px 14px"><div class="statbar bc-stat">' +
+        '<div class="stat' + (rv.n ? ' go' : '') + '"' +
+          (rv.n ? ' data-bcre="revived" role="button" tabindex="0" title="Показать этих людей поименно"' : '') + '>' +
+          '<div class="sl"><span class="sdot green"></span>' + esc(rv.label || 'Ожили') + '</div>' +
+          '<div class="sv num">' + (rv.n || 0) + '</div>' +
+          '<div class="sd"><span class="smut num">' + (got ? Math.round((rv.n || 0) / got * 100) : 0) +
+            '% от получивших</span></div>' +
+        '</div>' +
+        '<div class="stat go" data-bcre="got" role="button" tabindex="0" title="Показать всех, кто получил">' +
+          '<div class="sl">' + esc(g0.label) + '</div>' +
+          '<div class="sv num">' + got + '</div>' +
+          '<div class="sd"><span class="smut">' + esc(g0.hint) + '</span></div>' +
+        '</div></div></div>';
+      var lad = d.steps.slice(1).map(function (st) {
+        var w = got ? Math.round(st.n / got * 100) : 0;
+        var go = st.n > 0;
+        return '<div class="lad-row gf-flat' + (go ? ' lad-go' : '') + '"' +
+          (go ? ' data-bcre="' + st.key + '" role="button" tabindex="0"' : '') + '>' +
+          '<div class="lad-nm">' + esc(st.label) + '<small>' + esc(st.hint) + '</small></div>' +
+          '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, st.n ? 4 : 0) + '%"></div></div>' +
+          '<div class="lad-n num">' + st.n + '</div>' +
+          '<div class="lad-right"><span class="lad-conv num">' + w + '% от получивших</span></div>' +
+        '</div>';
+      }).join('');
+      body = stat + '<div class="bc-lad" style="border-top:1px solid var(--line)">' + lad + '</div>' +
+        /* Чего в цифре нет — словами, а не нулем: ноль читался бы как «никто». */
+        '<div class="brd-note">Ступени считаются по каждому человеку отдельно и не складываются: ' +
+        'можно оплатить, не регистрируясь на эфир. Не связать с человеком: зрителей эфира без ' +
+        'регистрации и переходы из мессенджера на сайт или в канал — журнал переходов не знает, ' +
+        'чей это клик. В цифрах их нет.</div>';
+    }
+    return '<div class="card sp12 bc-re" style="overflow:hidden">' + head + body + '</div>';
+  }
+
+  function bcReWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-bcre-mon]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-bcre-mon');
+        if (v === 'now') { state.bcReMonth = ''; }
+        else {
+          var p = bcReMonth().split('-');
+          var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + parseInt(v, 10), 1);
+          state.bcReMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+        }
+        state._bcRe = null;
+        renderView();
+      });
+    });
+    var d = state._bcRe;
+    if (!d || d === 'none' || !d.steps) return;
+    var by = {};
+    d.steps.forEach(function (st) { by[st.key] = st; });
+    if (d.revived) by.revived = d.revived;
+    Array.prototype.forEach.call(view.querySelectorAll('[data-bcre]'), function (node) {
+      var go = function (e) {
+        e.stopPropagation();
+        var st = by[node.getAttribute('data-bcre')];
+        if (st) bcReOpen(st.key, st.label, st.n, node);
+      };
+      node.addEventListener('click', go);
+      node.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(e); }
+      });
+    });
+  }
+
   function renderBroadcasts(view) {
     var q = bcQ();
     if (q.run) return renderBcRun(view, q);
@@ -45782,6 +46098,7 @@
     }
 
     view.innerHTML = '<div class="grid">' +
+      bcReCard() +
       sumCards +
       '<div class="card sp12" style="padding:22px 24px">' +
         '<div class="sec-head"><span class="ic">' + ic('search', 14) + '</span>' +
@@ -45810,6 +46127,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-run]'), function (row) {
       row.addEventListener('click', function () { bcOpen(parseInt(row.getAttribute('data-run'), 10)); });
     });
+    bcReWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('#bc-period button'), function (b) {
       b.addEventListener('click', function () {
         if (b.getAttribute('data-per') === 'custom') { openBcRange(b); return; }
@@ -57262,17 +57580,27 @@
     });
   }
 
+  // Ученик правит и удаляет свои сообщения в кабинете, а команда видит все:
+  // удаленное с пометкой, у измененного — прежние версии (Павел 26.11.2026).
+  function pjMsg(c) {
+    var me = c.by !== 'client';
+    var mark = c.deleted_at ? ' · <span class="pj-m-del">удалено учеником ' + esc(fmtWhen(c.deleted_at)) + '</span>'
+      : c.edited_at ? ' · <span class="pj-m-ed">изменено ' + esc(fmtWhen(c.edited_at)) + '</span>' : '';
+    var old = (c.history || []).map(function (h) {
+      return '<div class="pj-m-old">Было · ' + esc(fmtWhen(h.at)) + '<div>' + esc(h.text) + '</div></div>';
+    }).join('');
+    return '<div class="pj-m' + (me ? ' team' : '') + (c.deleted_at ? ' gone' : '') + '"><b>' +
+      esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) + '</b> · ' + esc(fmtWhen(c.at)) + mark +
+      old + '<div>' + esc(c.text) + '</div></div>';
+  }
+
   function pjStep(st, i, cur) {
     var files = (st.subs || []).map(function (f) {
       return f.kind === 'link'
         ? '<a class="pj-f" href="' + esc(f.src) + '" target="_blank" rel="noopener">' + ic('ext', 12) + esc(f.name) + '</a>'
         : '<a class="pj-f" href="#" data-pjdoc="' + f.doc_id + '">' + ic('doc', 12) + esc(f.name) + '</a>';
     }).join('');
-    var msgs = (st.comments || []).map(function (c) {
-      var me = c.by !== 'client';
-      return '<div class="pj-m' + (me ? ' team' : '') + '"><b>' + esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) +
-        '</b> · ' + esc(fmtWhen(c.at)) + '<div>' + esc(c.text) + '</div></div>';
-    }).join('');
+    var msgs = (st.comments || []).map(pjMsg).join('');
     // Кнопки решения — по смыслу шага: сдачу ученика принимают или возвращают,
     // шаг команды берут в работу и закрывают.
     // Тему закрывает поле «Тема проекта» выше, кнопки статуса ей не нужны.
@@ -57381,14 +57709,11 @@
     // Вопросы куратору вне шагов — у всех тарифов: у купившего только курсы нет плана
     // сопровождения, а значит и общих сообщений кабинета (Павел 24.11.2026).
     var qs = p.questions || [];
-    var waiting = qs.length && qs[qs.length - 1].by === 'client';
+    var alive = qs.filter(function (c) { return !c.deleted_at; });
+    var waiting = alive.length && alive[alive.length - 1].by === 'client';
     var ask = '<div class="m-sec"><div class="m-sec-h">Вопросы куратору</div>' +
       (waiting ? '<div class="m-csub" style="margin:0 0 10px;color:var(--amber-ink)">Ученик ждет ответа.</div>' : '') +
-      (qs.length ? '<div class="pj-ms">' + qs.map(function (c) {
-        var me = c.by !== 'client';
-        return '<div class="pj-m' + (me ? ' team' : '') + '"><b>' + esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) +
-          '</b> · ' + esc(fmtWhen(c.at)) + '<div>' + esc(c.text) + '</div></div>';
-      }).join('') + '</div>' : '<div class="m-csub" style="margin:0 0 10px">Ученик пока ничего не спрашивал. Его вопрос из раздела придет сюда и уведомлением.</div>') +
+      (qs.length ? '<div class="pj-ms">' + qs.map(pjMsg).join('') + '</div>' : '<div class="m-csub" style="margin:0 0 10px">Ученик пока ничего не спрашивал. Его вопрос из раздела придет сюда и уведомлением.</div>') +
       '<div class="pj-reply"><textarea class="al-in" rows="1" id="pj-ask-note" maxlength="4000" ' +
         'placeholder="Написать ученику"></textarea>' +
         '<div class="pj-acts"><button class="bp ghost sm" id="pj-ask-send">' + ic('send', 13) + 'Ответить</button></div></div></div>';
