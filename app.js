@@ -60966,13 +60966,16 @@
         '<div id="deal-box"></div></div>' +
       '<div class="m-sec" id="qi-sec"><div class="m-sec-h">Быстрый счёт' +
         '<span class="hr" id="qi-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
-        '<div class="m-csub" style="margin:0 0 10px">Для консультации или другой разовой суммы, не для сопровождения по договору. Ссылка живет до оплаты, клиенту уйдет только после кнопки «Отправить клиенту».</div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Для консультации, разовой суммы или тарифа проектной деятельности, не для сопровождения по договору. Клиенту уйдет только после кнопки «Отправить клиенту».</div>' +
         '<div id="qi-list"><div class="field-empty">Загружаю счета…</div></div>' +
         '<div class="qi-form">' +
+          '<label class="pay-selwrap" hidden id="qi-prodw"><select class="ord-sel" id="qi-prod" aria-label="Что оплачивает клиент">' +
+            '<option value="">Своя сумма: консультация или разовая услуга</option></select></label>' +
           '<div class="pay-grid qi-grid">' +
             '<input id="qi-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
             '<input id="qi-desc" placeholder="Назначение (Консультационное сопровождение)">' +
           '</div>' +
+          '<div class="m-csub qi-hint" id="qi-hint" hidden></div>' +
           '<input id="qi-contact" placeholder="Почта или телефон для чека" value="' + esc(qiContact) + '">' +
           '<button class="bp sm" id="qi-btn" style="justify-content:center">' + ic('plus', 13) + 'Выставить счёт</button>' +
         '</div></div>' +
@@ -62704,6 +62707,7 @@
        платёж-ссылка, как у общего скрипта агента. */
     var qiList = el('qi-list');
     if (qiList) {
+      var qiProducts = {};
       var QI_ST = {
         issued:   { label: 'выставлен',         sev: 'contacted' },
         sent:     { label: 'отправлен клиенту',  sev: 'call_scheduled' },
@@ -62732,7 +62736,7 @@
           if (v.url && v.status !== 'paid') act += '<button class="pay-rcpt" data-qicopy="' + esc(v.url) + '">' + ic('copy', 12) + 'ссылка</button>';
           if (v.status !== 'paid') act += '<button class="icobtn del" data-qicancel="' + v.id + '" title="Снять счёт">' + ic('x', 14) + '</button>';
           return '<div class="pay-row qi-row">' +
-            '<div class="doc-b"><div class="doc-n">' + esc(v.description) +
+            '<div class="doc-b"><div class="doc-n">' + esc((v.product && qiProducts[v.product] && qiProducts[v.product].title) || v.description) +
               ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
               '<div class="doc-m">' + meta + '</div></div>' +
             '<span class="pay-amt num">' + fmtMoney(v.amount) + ' ₽</span>' +
@@ -62762,24 +62766,61 @@
       loadQI();
       var qiRefresh = el('qi-refresh');
       if (qiRefresh) qiRefresh.addEventListener('click', loadQI);
+      /* Тариф проектной деятельности ссылкой из карточки (Павел 25.11.2026): менеджер
+         продал на звонке, выбирает тариф, цена по прайсу подставляется, но ее можно
+         поменять. Любая цена открывает тариф целиком, команде придет, кто сделал ссылку
+         и что цена не по прайсу. Для входа в кабинет нужна почта, телефон не подойдет. */
+      var qiProd = el('qi-prod');
+      var qiMode = function () {
+        var p = qiProducts[qiProd ? qiProd.value : ''];
+        var desc = el('qi-desc'), hint = el('qi-hint'), grid = qiList.parentNode.querySelector('.qi-grid');
+        desc.hidden = !!p;
+        grid.classList.toggle('one', !!p);
+        el('qi-contact').placeholder = p ? 'Почта клиента: на нее придет вход в кабинет' : 'Почта или телефон для чека';
+        if (p) {
+          el('qi-amt').value = String(p.amount);
+          hint.innerHTML = 'По прайсу ' + fmtMoney(p.amount) + ' ₽. Можно поставить свою цену: тариф все равно откроется целиком, а команде придет, что цена не по прайсу. Оплата закрепится за вами.';
+        }
+        hint.hidden = !p;
+      };
+      if (qiProd) {
+        api('/admin/api/invoice-products').then(function (r) {
+          (r.products || []).forEach(function (p) {
+            qiProducts[p.slug] = p;
+            var o = document.createElement('option');
+            o.value = p.slug; o.textContent = p.title + ' · ' + fmtMoney(p.amount) + ' ₽';
+            qiProd.appendChild(o);
+          });
+          if ((r.products || []).length) { el('qi-prodw').hidden = false; loadQI(); }
+        }).catch(function () { /* нет права или сети: остается обычный счет */ });
+        qiProd.addEventListener('change', function () {
+          if (!qiProd.value) el('qi-amt').value = '';
+          qiMode();
+        });
+      }
       var qiBtn = el('qi-btn');
       if (qiBtn) qiBtn.addEventListener('click', function () {
         var amt = parseInt((el('qi-amt').value || '').replace(/\D/g, ''), 10) || 0;
         if (!amt) { el('qi-amt').focus(); return; }
         var contact = (el('qi-contact').value || '').trim();
+        var prod = qiProd ? qiProd.value : '';
+        if (prod && contact.indexOf('@') < 0) { showToast('Для тарифа нужна почта клиента: на нее придет вход в кабинет'); el('qi-contact').focus(); return; }
         if (!contact) { showToast('Впишите почту или телефон клиента — он нужен для чека'); el('qi-contact').focus(); return; }
         qiBtn.disabled = true;
+        var body = { amount: String(amt), description: (el('qi-desc').value || '').trim(), contact: contact };
+        if (prod) { body.product = prod; delete body.description; }
         api('/admin/api/leads/' + id + '/invoice', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: String(amt), description: (el('qi-desc').value || '').trim(), contact: contact }),
+          body: JSON.stringify(body),
         }).then(function () {
           qiBtn.disabled = false;
           el('qi-amt').value = ''; el('qi-desc').value = '';
-          showToast('Счёт выставлен — теперь нажмите красную «Отправить клиенту»');
+          if (qiProd) { qiProd.value = ''; qiMode(); }
+          showToast(prod ? 'Ссылка готова: отправьте клиенту красной кнопкой или скопируйте' : 'Счёт выставлен — теперь нажмите красную «Отправить клиенту»');
           loadQI();
         }).catch(function (e) {
           qiBtn.disabled = false;
-          if (e.status === 422) showToast((e.body && e.body.detail) || 'Проверьте сумму и назначение');
+          if (e.status === 422 || e.status === 409) showToast((e.body && e.body.detail) || 'Проверьте сумму и назначение');
           else if (e.status === 502) showToast('ЮKassa не создала счёт — попробуйте ещё раз');
           else if (e.message !== '403') showToast('Счёт не выставился — проверьте сеть');
         });

@@ -1832,7 +1832,16 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Быстрый счёт (вкладка «Оплаты») ── */
 .qi-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.qi-grid { grid-template-columns: 130px 1fr; }
+/* .pay-grid ниже по файлу задает три колонки и перебивала эту: поле суммы растягивалось,
+   а назначение сжималось. Поэтому селектор с двумя классами. */
+.pay-grid.qi-grid { grid-template-columns: 130px 1fr; }
+.pay-grid.qi-grid.one { grid-template-columns: 160px; }
+/* Почта для чека лежит вне .pay-grid и оставалась голым системным полем */
+.qi-form > input { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--fill); border: 1px solid transparent; border-radius: 10px; padding: 11px 13px; }
+.qi-form > input:focus { background: #fff; border-color: #DCE7FF; }
+.qi-hint { margin: 0; }
+.qi-form [hidden] { display: none; }
 .qi-form input { width: 100%; }
 .qi-row .qi-acts { display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; }
 .qi-done { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
@@ -2378,10 +2387,10 @@ a { color: inherit; text-decoration: none; }
   background: var(--fill); border: 1px solid transparent; border-radius: 10px; padding: 11px 13px; min-width: 0; }
 .pay-grid input:focus { background: #fff; border-color: #DCE7FF; }
 .pay-form .bp { align-self: flex-start; }
-.pay-form .ord-sel { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
+.pay-form .ord-sel, .qi-form .ord-sel { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
   background: var(--fill); border: 1px solid transparent; border-radius: 10px; padding: 11px 13px;
   appearance: none; -webkit-appearance: none; cursor: pointer; }
-.pay-form .ord-sel:focus { background: #fff; border-color: #DCE7FF; }
+.pay-form .ord-sel:focus, .qi-form .ord-sel:focus { background: #fff; border-color: #DCE7FF; }
 /* Стрелка у селекта продукта — та же, что у остальных выпадашек (.al-selwrap).
    Без неё поле со снятой системной стрелкой читается как обычный ввод, и
    обязательный выбор пролистывают мимо. */
