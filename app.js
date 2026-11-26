@@ -27162,7 +27162,7 @@
       var key = it.cid || ('n:' + (it.person || it.receiver || ''));
       if (!by[key]) {
         by[key] = { key: key, name: it.person || it.receiver || '—', cid: it.cid,
-                    amount: 0, role: '', bill: false, ids: [] };
+                    amount: 0, role: '', bill: false, hold: '', ids: [] };
         out.push(by[key]);
       }
       var p = by[key];
@@ -27172,6 +27172,9 @@
       if (!p.role && it.item && it.item !== 'Мотивация' && !it.accrual &&
           it.item !== it.receiver) p.role = it.item;
       if (it.by_bill) p.bill = true;
+      // Акт за прошлую выплату не подписан (или нет договора) — сервер называет
+      // причину, и по умолчанию человек в письмо не идет (Роман 26.11.2026).
+      if (!p.hold && it.hold) p.hold = it.hold;
       p.ids.push(it.id);
     });
     return out;
@@ -27199,10 +27202,13 @@
     var mktPeople = lmPeople(mkt ? mkt.items : []);
     var alloc = (rsg.filter(function (g) { return g.id === 'funds_alloc'; })[0] || {}).items || [];
     var st = { bank: mem.bank || 'Сбербанк', route: {}, fund: {}, back: {} };
-    team.forEach(function (p) { st.route[p.key] = mem.route[p.name] || lmDefault(p); });
-    mktPeople.forEach(function (p) {
-      st.fund[p.key] = mem.fund[p.name] || (p.bill ? 'bill' : 'bank');
+    team.forEach(function (p) {
+      st.route[p.key] = p.hold ? 'skip' : (mem.route[p.name] || lmDefault(p));
     });
+    mktPeople.forEach(function (p) {
+      st.fund[p.key] = p.hold ? 'skip' : (mem.fund[p.name] || (p.bill ? 'bill' : 'bank'));
+    });
+    var held = team.concat(mktPeople).filter(function (p) { return p.hold; }).length;
     services.forEach(function (it) { st.back[it.id] = !!mem.back[it.receiver]; });
 
     function sel(name, opts, val) {
@@ -27213,8 +27219,10 @@
         }).join('') + '</select>';
     }
     function row(p, kind, opts, val) {
-      return '<div class="lm-row"><span class="lm-nm">' + esc(p.name) +
-          (p.role ? '<i>' + esc(p.role) + '</i>' : '') + '</span>' +
+      return '<div class="lm-row' + (p.hold ? ' lm-hold' : '') + '"><span class="lm-nm">' +
+          esc(p.name) +
+          (p.hold ? '<i class="lm-why">не платим: ' + esc(p.hold) + '</i>'
+                  : (p.role ? '<i>' + esc(p.role) + '</i>' : '')) + '</span>' +
         '<span class="num lm-sum">' + finRub(p.amount) + '</span>' +
         sel(kind + ':' + p.key, opts, val) + '</div>';
     }
@@ -27290,6 +27298,9 @@
         '<div class="al-sub">По шаблону из базы знаний. Выберите, как платить каждому, — ' +
           'выбор запомнится на следующие периоды. Текст внизу можно поправить перед копированием.</div>' +
         '<div class="al-body">' +
+          (held ? '<div class="lm-note">' + held + ' ' + plural(held, 'человек', 'человека', 'человек') +
+            ' без подписанного акта или договора, в письмо они не идут. Подпишут, откройте окно ' +
+            'заново. Если платим все равно, выберите способ в строке.</div>' : '') +
           '<label class="al-f"><span class="al-l">Банк для платежек</span>' +
             sel('bank', [['Сбербанк', 'Сбербанк'], ['Альфа-Банк', 'Альфа-Банк']], st.bank) + '</label>' +
           (team.length ? '<div class="lm-h">С расчетного счета</div>' +
@@ -27315,8 +27326,10 @@
     function redraw() { if (!edited) ta.value = text(); }
     function remember() {
       mem.bank = st.bank;
-      team.forEach(function (p) { mem.route[p.name] = st.route[p.key]; });
-      mktPeople.forEach(function (p) { mem.fund[p.name] = st.fund[p.key]; });
+      // Удержание — состояние этого периода, а не привычка: в память браузера его не
+      // кладем, иначе после подписи акта человек так и остался бы «не писать».
+      team.forEach(function (p) { if (!p.hold) mem.route[p.name] = st.route[p.key]; });
+      mktPeople.forEach(function (p) { if (!p.hold) mem.fund[p.name] = st.fund[p.key]; });
       services.forEach(function (it) { mem.back[it.receiver] = st.back[it.id]; });
       lmSave(mem);
     }

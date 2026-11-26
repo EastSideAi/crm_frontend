@@ -16818,6 +16818,12 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .lm-sum { text-align: right; font-variant-numeric: tabular-nums; font-size: 13.5px; }
 .lm-sel { height: 36px; padding: 0 8px 0 11px; font-size: 13px; line-height: 36px; }
 .lm-ta { font: 500 13px/1.5 'Manrope', sans-serif; min-height: 260px; resize: vertical; }
+/* Акт за прошлую выплату не подписан: строка тише, причина красным под именем. */
+.lm-hold .lm-nm { color: var(--ink-2); }
+.lm-hold .lm-sum { color: var(--ink-3); text-decoration: line-through; }
+.lm-nm i.lm-why { color: var(--red-ink); white-space: normal; margin-top: 2px; }
+.lm-note { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+  line-height: 1.45; color: var(--red-ink); background: var(--red-soft); }
 @media (max-width: 640px) {
   .lm-row { grid-template-columns: minmax(0, 1fr) auto; }
   .lm-row .lm-sel { grid-column: 1 / -1; }
