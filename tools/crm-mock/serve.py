@@ -64,10 +64,17 @@ STAGE_NAMES = ["Доступ", "Диагностика", "Подбор", "Док
 STAGE_KEYS = ["access", "diag", "pick", "docs", "folio", "letters", "study", "lang",
               "csca", "interview", "apply", "offer", "visa", "adapt", "meet", "settle"]
 
-def stage_of(i):
-    if i in (3, 9):           # плана нет — так и пишем, это не «первый этап»
+def stage_of(i, forced=None):
+    """forced — этап, поставленный руками (overrides.stage): он сильнее расчета.
+
+    Такой этап приезжает с меткой manual, и строка списка помечает его пунктиром.
+    Полоса этапов при этом остается расчетной, как на бэкенде.
+    """
+    if i in (3, 9) and not forced:   # плана нет — так и пишем, это не «первый этап»
         return None
     pos = [1, 3, 4, 0, 8, 11, 2, 4, 0, 0, 6, 13][i % 12]
+    if forced in STAGE_KEYS:
+        pos = STAGE_KEYS.index(forced)
     steps = []
     for n, (k, nm) in enumerate(zip(STAGE_KEYS, STAGE_NAMES)):
         if n < pos:
@@ -81,7 +88,7 @@ def stage_of(i):
         steps.append({"k": k, "n": nm, "s": st, "d": d, "t": t})
     return {"key": STAGE_KEYS[pos], "short": STAGE_NAMES[pos],
             "title": STAGE_NAMES[pos], "pos": pos + 1, "total": len(steps),
-            "steps": steps}
+            "manual": bool(forced in STAGE_KEYS), "steps": steps}
 
 # Пакет документов: что мы ждем от семьи. Считает его сервер
 # (doc_checklist.package_state) и отдает в карточке полем doc_plan — тут
@@ -275,7 +282,7 @@ def leads():
             "no": 1001 + i,              # короткий номер карточки К-1001
             "name": name,
             "school_class": klass,
-            "stage": stage_of(i),
+            "stage": stage_of(i, (ov or {}).get("stage")),
             "uni_deadline": ({"date": (date.today() + timedelta(days=_uni[0])).isoformat(),
                               "uni": _uni[1]} if _uni else None),
             "score": score,
@@ -662,6 +669,13 @@ class H(SimpleHTTPRequestHandler):
                         else:
                             ov[k2] = v2
                     l["crm"]["overrides"] = ov
+                    # Этап в строке считает сервер, и ручная отметка его подменяет:
+                    # без пересчета мок подтверждал бы правку, которой не видно.
+                    try:
+                        l["stage"] = stage_of(int(str(l["id"]).rsplit("-", 1)[-1]),
+                                              ov.get("stage"))
+                    except (TypeError, ValueError):
+                        pass
                 return self._json({"ok": True, "crm": l["crm"]})
         return self._json({"ok": True})
 

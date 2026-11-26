@@ -51655,10 +51655,16 @@
     }).join('') + '</div>' : '';
     /* Плана нет — ячейка все равно кнопка: собирают план на той же вкладке карточки,
        куда она и ведет. */
-    return '<div class="t-stage' + (has ? '' : ' none') + '" data-stop="1" data-stid="' + l.id + '"' +
-      ' role="button" tabindex="0" aria-label="' + (has
-        ? 'Поступление: ' + esc(st.short || 'этап') + ', этап ' + (st.pos || '?') + ' из ' + st.total
-        : 'Поступление: план не собран') + '">' + bar +
+    /* Этап, поставленный руками (overrides.stage), помечен пунктиром — как
+       расчетный дедлайн рядом. Человек должен видеть, что цифра не из плана:
+       иначе она спорит с задачами в карточке и читается как сбой. */
+    var man = !!st.manual;
+    var lbl = has
+      ? 'Поступление: ' + esc(st.short || 'этап') + ', этап ' + (st.pos || '?') + ' из ' + st.total
+        + (man ? '. Этап поставлен руками, снимается в карточке на «Поступлении»' : '')
+      : 'Поступление: план не собран';
+    return '<div class="t-stage' + (has ? '' : ' none') + (man ? ' man' : '') + '" data-stop="1" data-stid="' + l.id + '"' +
+      ' role="button" tabindex="0" title="' + lbl + '" aria-label="' + lbl + '">' + bar +
       '<div class="stlab">' + (has
         ? '<span class="stn">' + esc(st.short || '—') + '</span>' +
           (st.pos ? '<span class="stp num">' + st.pos + '/' + st.total + '</span>' : '')
@@ -55483,6 +55489,39 @@
       return (byStage[st.key] || []).length > 0;
     });
   }
+  /* Этап руками. Расчет по плану остается главным, но отметка нужна и тому, у кого
+     плана нет вовсе: на 20.11.2026 таких было 15 из 48 в «Сопровождении», и назвать
+     их этап было нечем. Поэтому список этапов берется из ответа сервера (st.steps),
+     а когда плана нет — из общего словаря ADMISSION_STAGES: ключи и порядок там те
+     же, что в client_views.BOARD_STAGES, и второго словаря этапов в системе нет. */
+  function stageSwitchHtml(id) {
+    var lead = findLead(id);
+    var st = (lead || {}).stage || null;
+    // сервер еще не умеет считать этап — молчим, как и колонка списка: отметка,
+    // которую никто не прочитает, хуже ее отсутствия
+    if (lead && !('stage' in lead)) return '';
+    var steps = (st && (st.steps || []).length)
+      ? st.steps.map(function (p) { return { k: p.k, n: p.n || p.k }; })
+      : ADMISSION_STAGES.map(function (p) { return { k: p.key, n: p.title }; });
+    var man = !!(st && st.manual);
+    var cur = man ? st.key : '';
+    var opts = '<option value=""' + (cur ? '' : ' selected') + '>считать по плану</option>' +
+      steps.map(function (p, i) {
+        return '<option value="' + esc(p.k) + '"' + (cur === p.k ? ' selected' : '') + '>' +
+          (i + 1) + '. ' + esc(p.n) + '</option>';
+      }).join('');
+    var hint = man
+      ? 'поставлен руками, в списке помечен пунктиром'
+      : (st
+        ? 'считается по плану: первый этап с незакрытой задачей семьи'
+        : 'плана еще нет, поэтому считать этап нечем — можно отметить руками');
+    return '<div class="rm-stage' + (man ? ' man' : '') + '">' +
+      '<span class="rm-stage__l">Этап сейчас</span>' +
+      '<select id="rm-stage-sel" aria-label="Этап ученика">' + opts + '</select>' +
+      '<span class="rm-stage__h">' + hint + '</span>' +
+    '</div>';
+  }
+
   function buildAdmissionSection(ctx) {
     var id = state.drawerId;
     // Когда семье выдали доступ в кабинет. Живет в overrides карточки рядом с
@@ -55497,6 +55536,14 @@
 
     var html = '<div class="m-ctitle">План поступления</div>' +
       '<div class="m-csub">Путь клиента по этапам: что делает он, что делаем мы. Раскрой задачу — увидишь присланное, примешь или вернешь, оставишь комментарий.</div>';
+
+    /* ЭТАП СЕЙЧАС (Мария 26.11.2026: «всем, кто поступает в этом году, поставь этап
+       документы»). Обычно этап считает сервер по плану — первый этап с незакрытой
+       задачей семьи. Но план собран не всем, и в собранном висят старые задачи,
+       поэтому расчет показывает не то место, где человек на самом деле. Здесь его
+       можно перебить: выбранный этап ложится в overrides.stage и держится, пока его
+       не вернут на «считать по плану». Полоса этапов остается расчетной. */
+    html += stageSwitchHtml(id);
 
     html += '<div class="rm-summary">' +
       '<div class="rm-sum-main">' +
@@ -61586,6 +61633,23 @@
       });
     });
 
+    /* Этап руками. Селект стоит НАД блоком задач и живет без плана: вешать его
+       внутри `if (rmHost)` нельзя — у клиента без плана .rm-flow нет вовсе, а
+       отметка нужна как раз таким. Пустое значение снимает ключ из overrides —
+       то же правило, что у срока. */
+    var stSel = host.querySelector('#rm-stage-sel');
+    if (stSel) stSel.addEventListener('change', function () {
+      var val = stSel.value || '';
+      stSel.disabled = true;
+      patch(id, { overrides: { stage: val } }, null, function () {
+        showToast(val ? 'Этап поставлен руками' : 'Этап снова считается по плану');
+        stSel.disabled = false;
+        // Этап считает сервер, и после правки его надо перечитать: своей копии
+        // расчета в браузере нет и быть не должно.
+        loadLeads(true, function () { renderModalContent(); });
+      });
+    });
+
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
     if (rmHost) {
@@ -64846,7 +64910,11 @@
   /* подпись набора лидов — чтобы не перерисовывать (и не пере-анимировать) графики, когда ничего не поменялось */
   function leadsSig() {
     return state.leads.map(function (l) {
-      return l.id + ':' + l.crm.status + ':' + (l.booking ? 1 : 0) + ':' + (l.score == null ? '' : l.score) + ':' + (l.crm.tasks || []).length;
+      // этап стоит в подписи намеренно: он виден колонкой в «Сопровождении», и без
+      // него минутный опрос считал список неизменившимся — поставленный руками этап
+      // не доезжал до строки, пока человек не обновит страницу
+      var st = l.stage || {};
+      return l.id + ':' + l.crm.status + ':' + (l.booking ? 1 : 0) + ':' + (l.score == null ? '' : l.score) + ':' + (l.crm.tasks || []).length + ':' + (st.key || '') + (st.manual ? 'm' : '');
     }).join('|');
   }
   function loadLeads(silent, cb) {

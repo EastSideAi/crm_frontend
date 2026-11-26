@@ -293,6 +293,10 @@ a { color: inherit; text-decoration: none; }
    но кнопка та же, и ведет она туда же, где план собирают. Полоски у него нет —
    рисовать пустой маршрут там, где маршрута еще не существует, значит врать. */
 .t-stage.none .stn { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+/* Этап поставлен руками: пунктир под названием, как у расчетного срока рядом.
+   Своего цвета нет намеренно — в строке и так плашка тьютора и синяя полоса. */
+.t-stage.man .stn { border-bottom: 1px dashed var(--line-2); padding-bottom: 1px; }
+.t-stage.man:hover .stn { border-bottom-color: currentColor; }
 .t-stage.unknown { font-size: 12px; color: var(--ink-3); cursor: default; }
 
 /* ════ контейнер списка «Клиенты» (тулбар + тело в одной карточке) ════ */
@@ -2632,6 +2636,18 @@ a { color: inherit; text-decoration: none; }
 .m-ni .cnt.warn { background: var(--blue-tint); color: var(--blue); }
 
 /* сводка по всему пути — стеклянная плашка с якорным числом */
+/* Этап сейчас: расчет по плану или отметка руками. Строка тихая — это настройка
+   над планом, а не его часть. */
+.rm-stage { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 2px 0 12px; }
+.rm-stage__l { font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); }
+.rm-stage select { font: inherit; font-size: 13px; color: var(--ink); background: #fff;
+  border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; cursor: pointer; }
+.rm-stage select:focus-visible { outline: none; border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-tint); }
+.rm-stage__h { font-size: 12px; color: var(--ink-3); }
+.rm-stage.man .rm-stage__h { color: var(--amber-ink, var(--ink-2)); }
+
 .rm-summary { display: flex; align-items: center; gap: 18px; margin-top: 2px; margin-bottom: 4px;
   padding: 15px 18px; border-radius: 16px; background: #fff;
   box-shadow: inset 0 0 0 1px rgba(17,21,31,.06), 0 14px 34px -26px rgba(21,32,59,.28); }
