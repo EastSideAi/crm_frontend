@@ -2715,10 +2715,6 @@
        «Продажах», вкладка «План периода». Экран живет по старой ссылке, а его данные
        (месячный план) по-прежнему читают «Продажи» и «Управление». */
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact', hidden: true },
-    /* «Кто поступил» (Вера 26.11.2026): разовая разметка клиентов на тарифе — уже
-       учится в Китае или нет и куда поступает. Пункта в меню нет, экран открывают
-       по ссылке #page/admitted: отметки ставит тот, кто знает семьи. */
-    { id: 'admitted', label: 'Кто поступил', icon: 'cap', cap: 'clients', hidden: true },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
        Отдельным пунктом под «Задачами» и открыт всем, у кого есть задачи
@@ -4459,7 +4455,6 @@
     else if (state.page === 'sales') renderSales(view);
     else if (state.page === 'myshift') renderMyShift(view);
     else if (state.page === 'planfact') renderPlanFact(view);
-    else if (state.page === 'admitted') renderAdmitted(view);
     else if (state.page === 'reward') renderReward(view);
     else if (state.page === 'manage') renderManage(view);
     else if (state.page === 'cmap') renderCmap(view);
@@ -9664,6 +9659,14 @@
     });
     var who = view.querySelector('#sc-who');
     if (who) who.addEventListener('change', function () { state.schedWho = this.value || ''; renderView(); });
+    // Строка сводки окон: показать в сетке команды только этого человека, второй клик — всех
+    Array.prototype.forEach.call(view.querySelectorAll('[data-scwho]'), function (b) {
+      b.addEventListener('click', function () {
+        var nm = b.getAttribute('data-scwho');
+        state.schedScope = 'all';
+        state.schedWho = state.schedWho === nm ? '' : nm; renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
       b.addEventListener('click', function () {
         var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
@@ -10152,8 +10155,49 @@
         ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или консультацией. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
         : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
     view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
+      (!state.schedEdit ? schedConsultSum(d, lo, new Date(lo.getTime() + 7 * 86400000), today, 'week') : '') +
       flt + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
     schedWire(view, d);
+  }
+
+  /* Окна под консультации по людям (Павел 26.11.2026: «где мне как руководителю
+     проверять, кто какие слоты внес»). Только для руководителя (can_edit_all) и только
+     пул записи на консультацию (роль staff): сколько свободных окон осталось на
+     показанной неделе с сегодняшнего дня и сколько уже занято записями. У кого пусто —
+     сверху и красным: к нему клиента записать некуда. Неделя листается стрелками шапки. */
+  /* В «Календаре» та же сводка за месяц: выбрал человека — месяц показывает его окна
+     по дням (Павел 26.11.2026: «очень удобно в формате календаря смотреть по каждому»). */
+  function schedConsultSum(d, lo, hi, today, span) {
+    if (!d || !d.can_edit_all) return '';
+    var from = zoomYmd(new Date(Math.max(lo.getTime(), today.getTime())));
+    var to = zoomYmd(hi);
+    if (from >= to) return '';
+    var rows = {};
+    (d.people || []).forEach(function (p) {
+      if (p.role === 'staff' && p.taken) rows[p.person] = { name: p.person, free: 0, booked: 0 };
+    });
+    (d.slots || []).forEach(function (s) {
+      if (s.role !== 'staff' || s.date < from || s.date >= to) return;
+      var r = rows[s.person] || (rows[s.person] = { name: s.person, free: 0, booked: 0 });
+      if (s.booked) r.booked++; else if (!s.blocked) r.free++;
+    });
+    var list = Object.keys(rows).map(function (k) { return rows[k]; });
+    if (!list.length) return '';
+    list.sort(function (a, b) { return (a.free + a.booked > 0) - (b.free + b.booked > 0) || a.free - b.free || a.name.localeCompare(b.name, 'ru'); });
+    var empty = list.filter(function (r) { return !r.free && !r.booked; }).length;
+    return '<div class="sc-sum"><div class="sc-sum-h"><b>Окна под консультации</b><small>' +
+      (span === 'month' ? (from === zoomYmd(today) ? 'с сегодня до конца месяца' : 'на этот месяц')
+        : (from === zoomYmd(today) ? 'с сегодня до конца недели' : 'на эту неделю')) +
+      (empty ? ' · <em>' + empty + ' без окон</em>' : ' · у всех есть окна') + '</small></div>' +
+      '<div class="sc-sum-l">' + list.map(function (r) {
+        var none = !r.free && !r.booked;
+        return '<button type="button" class="sc-sum-r' + (none ? ' none' : '') + (state.schedWho === r.name ? ' on' : '') + '" data-scwho="' + esc(r.name) + '" title="Показать в сетке только его">' +
+          '<span class="sc-sum-n">' + esc(schedShort(r.name)) + '</span>' +
+          (none ? '<span class="sc-sum-v">окон нет</span>'
+            : '<span class="sc-sum-v"><b class="num">' + r.free + '</b> свободно' +
+              (r.booked ? ' · <b class="num">' + r.booked + '</b> записано' : '') + '</span>') +
+          '</button>';
+      }).join('') + '</div></div>';
   }
 
   /* Панель под сеткой: сколько часов набрано и куда их поставить.
@@ -11675,7 +11719,9 @@
         shown + more + '</div>';
     }
     var flt = '<div class="zw-fltrow">' + schedWhoSel(schedPeopleAll(data), schedMyName(data)) + schedRoleChips() + '</div>';
-    view.innerHTML = '<div class="card zw">' + head + flt +
+    var nextFirst = new Date(first.getFullYear(), first.getMonth() + 1, 1);
+    view.innerHTML = '<div class="card zw">' + head +
+      schedConsultSum(data, first, nextFirst, today, 'month') + flt +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
       '<div class="zw-foot">Клик по дню откроет сетку слотов на этот день. '
         + 'Зеленая цифра — сколько в этот день свободных окон, серая — сколько часов уже заняты учениками.</div></div>';
@@ -36964,92 +37010,6 @@
     });
   }
 
-  /* ── Кто поступил ────────────────────────────────────────────────────────────
-     Рассылка мини-курсов не должна предлагать CSCA тому, кто уже учится в Китае,
-     а магистранту CSCA не нужен вовсе. В карточке этого не видно: этапы плана у всех
-     стоят на подготовке. Поэтому разметка руками: «Поступил / Не поступил» и для
-     непоступивших программа. Пишем в overrides карточки (admitted, track), трек —
-     тот же, что карточка уже несет, поэтому подробный трек («бакалавриат после
-     языкового года») не затираем, если категория совпала. */
-  function admProgram(track) {
-    track = track || '';
-    if (track.indexOf('bachelor') === 0) return 'bachelor';
-    if (track.indexOf('master') === 0) return 'master';
-    return '';
-  }
-
-  function fetchAdmitted() {
-    api('/admin/api/board').then(function (r) {
-      state._adm = ((r && r.clients) || []).filter(function (c) { return c.tariff; });
-      renderView();
-    }).catch(function () { state._adm = 'none'; renderView(); });
-  }
-
-  function admSeg(id, key, opts, cur) {
-    return '<div class="dperiod adm-seg">' + opts.map(function (o) {
-      return '<button data-adm="' + id + '" data-k="' + key + '" data-v="' + o[0] + '" class="' +
-        (cur === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
-    }).join('') + '</div>';
-  }
-
-  function renderAdmitted(view) {
-    if (!state._adm) { view.innerHTML = dashSkeleton(); fetchAdmitted(); return; }
-    if (state._adm === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить список — проверь сеть или доступ.</div></div>';
-      return;
-    }
-    var list = state._adm.slice().sort(function (a, b) {
-      return (a.name || '').localeCompare(b.name || '', 'ru');
-    });
-    var done = list.filter(function (c) {
-      return c.admitted === 'yes' || (c.admitted === 'no' && admProgram(c.program));
-    }).length;
-    var TAR = { std: 'Стандарт', plus: 'Плюс', prem: 'Премиум' };
-    var rows = list.map(function (c) {
-      var id = esc(c.session_id), prog = admProgram(c.program);
-      return '<div class="trow adm-row">' +
-        '<div class="t-cell"><a class="t-ttl adm-name" href="#lead/' + id + '">' + esc(c.name) + '</a>' +
-          '<div class="t-sub">' + esc(TAR[c.tariff] || c.tariff) + '</div></div>' +
-        '<div class="adm-acts">' +
-          admSeg(id, 'admitted', [['yes', 'Поступил'], ['no', 'Не поступил']], c.admitted) +
-          (c.admitted === 'no'
-            ? admSeg(id, 'program', [['bachelor', 'Бакалавриат'], ['master', 'Магистратура']], prog)
-            : '') +
-        '</div></div>';
-    }).join('');
-    view.innerHTML = '<div class="card sp5" style="overflow:hidden">' +
-      '<div class="sec-head" style="padding:20px 24px 16px">' +
-        '<span class="ic">' + ic('cap', 14) + '</span>' +
-        '<div><div class="t">Кто поступил</div>' +
-        '<div class="s">клиенты на тарифе · отметка сразу сохраняется в карточку</div></div>' +
-        '<span style="flex:1"></span>' +
-        '<div class="adm-count"><b class="num">' + done + '</b> из <span class="num">' + list.length + '</span> отмечено</div>' +
-      '</div>' + (rows || '<div class="empty">Клиентов на тарифе нет.</div>') + '</div>';
-    Array.prototype.forEach.call(view.querySelectorAll('[data-adm]'), function (b) {
-      b.addEventListener('click', function () {
-        var id = b.getAttribute('data-adm'), k = b.getAttribute('data-k'), v = b.getAttribute('data-v');
-        var c = state._adm.filter(function (x) { return x.session_id === id; })[0];
-        if (!c) return;
-        var ov = {}, prev = { admitted: c.admitted, program: c.program };
-        if (k === 'admitted') {
-          if (c.admitted === v) return;
-          ov.admitted = v; c.admitted = v;
-        } else {
-          if (admProgram(c.program) === v) return;
-          ov.track = v; c.program = v;
-        }
-        renderView();
-        api('/admin/api/leads/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ overrides: ov }) }).then(function () {
-          delete state.details[id];
-        }).catch(function () {
-          c.admitted = prev.admitted; c.program = prev.program; renderView();
-          showToast('Не сохранилось — проверь сеть и нажми еще раз');
-        });
-      });
-    });
-  }
-
   /* ── Воронка курса в записи ────────────────────────────────────────────────
      Курс продают со страницы, мимо бота, поэтому в воронках выше его не видно
      вовсе. Шаги до оплаты считает сама страница (routers/course.py), оплаты —
@@ -44597,13 +44557,24 @@
     var st = MS_FRESH[p.state] || MS_FRESH.out;
     var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
     if (leadNo(p.id)) meta.unshift(leadNo(p.id));
-    if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
+    /* Нет ни телефона, ни диалога (Костя 26.11.2026: «что с ними делаем?»): откуда
+       пришел и чем еще достучаться — почта, ник, страница ВК, кабинет, анкета. */
+    var trace = '';
+    if (p.state === 'no_contact') {
+      var tr = (p.traces || []).map(function (t) {
+        return t.url ? '<a class="ms-tr" href="' + esc(t.url) + '" target="_blank" rel="noopener">' + esc(t.label) + '</a>'
+          : '<span class="ms-tr">' + esc(t.label) + '</span>';
+      });
+      // Отдельной строкой: в общей строке ссылки обрезались многоточием
+      trace = '<small class="ms-trs">' + (p.from ? 'откуда: ' + esc(p.from) + ' · ' : '') +
+        (p.chat ? 'отвечать в диалоге' : (tr.length ? 'есть: ' + tr.join(', ') : 'контакта нет нигде')) + '</small>';
+    }
     var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
     // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
     var heat = p.todo && p.heat_label ? '<span class="ms-heat h' + (p.heat || 0) + '">' + esc(p.heat_label) + '</span>' : '';
     var mk = canMark ? '<button type="button" class="ms-mk" data-sbmk="' + esc(p.id) + '" data-sbmkn="' + esc(p.name) +
       '" title="Не лид: не наша услуга, вакансия, спам, семья">кто это</button>' : '';
-    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small></div>' +
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small>' + trace + '</div>' +
       '<span class="sev ' + st[0] + '">' + st[1] + '</span>' + msActs(p, kind, cc) + '</div>';
   }
   /* Отрезок блока лидов (встреча продаж 20.11.2026: «прозвонить всех лидов ноября»).
@@ -57549,17 +57520,27 @@
     });
   }
 
+  // Ученик правит и удаляет свои сообщения в кабинете, а команда видит все:
+  // удаленное с пометкой, у измененного — прежние версии (Павел 26.11.2026).
+  function pjMsg(c) {
+    var me = c.by !== 'client';
+    var mark = c.deleted_at ? ' · <span class="pj-m-del">удалено учеником ' + esc(fmtWhen(c.deleted_at)) + '</span>'
+      : c.edited_at ? ' · <span class="pj-m-ed">изменено ' + esc(fmtWhen(c.edited_at)) + '</span>' : '';
+    var old = (c.history || []).map(function (h) {
+      return '<div class="pj-m-old">Было · ' + esc(fmtWhen(h.at)) + '<div>' + esc(h.text) + '</div></div>';
+    }).join('');
+    return '<div class="pj-m' + (me ? ' team' : '') + (c.deleted_at ? ' gone' : '') + '"><b>' +
+      esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) + '</b> · ' + esc(fmtWhen(c.at)) + mark +
+      old + '<div>' + esc(c.text) + '</div></div>';
+  }
+
   function pjStep(st, i, cur) {
     var files = (st.subs || []).map(function (f) {
       return f.kind === 'link'
         ? '<a class="pj-f" href="' + esc(f.src) + '" target="_blank" rel="noopener">' + ic('ext', 12) + esc(f.name) + '</a>'
         : '<a class="pj-f" href="#" data-pjdoc="' + f.doc_id + '">' + ic('doc', 12) + esc(f.name) + '</a>';
     }).join('');
-    var msgs = (st.comments || []).map(function (c) {
-      var me = c.by !== 'client';
-      return '<div class="pj-m' + (me ? ' team' : '') + '"><b>' + esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) +
-        '</b> · ' + esc(fmtWhen(c.at)) + '<div>' + esc(c.text) + '</div></div>';
-    }).join('');
+    var msgs = (st.comments || []).map(pjMsg).join('');
     // Кнопки решения — по смыслу шага: сдачу ученика принимают или возвращают,
     // шаг команды берут в работу и закрывают.
     // Тему закрывает поле «Тема проекта» выше, кнопки статуса ей не нужны.
@@ -57668,14 +57649,11 @@
     // Вопросы куратору вне шагов — у всех тарифов: у купившего только курсы нет плана
     // сопровождения, а значит и общих сообщений кабинета (Павел 24.11.2026).
     var qs = p.questions || [];
-    var waiting = qs.length && qs[qs.length - 1].by === 'client';
+    var alive = qs.filter(function (c) { return !c.deleted_at; });
+    var waiting = alive.length && alive[alive.length - 1].by === 'client';
     var ask = '<div class="m-sec"><div class="m-sec-h">Вопросы куратору</div>' +
       (waiting ? '<div class="m-csub" style="margin:0 0 10px;color:var(--amber-ink)">Ученик ждет ответа.</div>' : '') +
-      (qs.length ? '<div class="pj-ms">' + qs.map(function (c) {
-        var me = c.by !== 'client';
-        return '<div class="pj-m' + (me ? ' team' : '') + '"><b>' + esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) +
-          '</b> · ' + esc(fmtWhen(c.at)) + '<div>' + esc(c.text) + '</div></div>';
-      }).join('') + '</div>' : '<div class="m-csub" style="margin:0 0 10px">Ученик пока ничего не спрашивал. Его вопрос из раздела придет сюда и уведомлением.</div>') +
+      (qs.length ? '<div class="pj-ms">' + qs.map(pjMsg).join('') + '</div>' : '<div class="m-csub" style="margin:0 0 10px">Ученик пока ничего не спрашивал. Его вопрос из раздела придет сюда и уведомлением.</div>') +
       '<div class="pj-reply"><textarea class="al-in" rows="1" id="pj-ask-note" maxlength="4000" ' +
         'placeholder="Написать ученику"></textarea>' +
         '<div class="pj-acts"><button class="bp ghost sm" id="pj-ask-send">' + ic('send', 13) + 'Ответить</button></div></div></div>';
