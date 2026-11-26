@@ -16757,6 +16757,8 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 
 /* Моя смена: разделитель между отрезком и срезом «Оставили заявку» (Павел 11262) */
 .ms-spans .ms-chipsep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); }
+.ms-spans .ms-range { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); }
+.ms-spans .ms-range .al-in { width: auto; height: 30px; padding: 0 10px; font-size: 13px; }
 
 /* Проверка ссылок эфира: значок статуса, сломанная строка подсвечена */
 .lad-row.gf-flat.efl-row { grid-template-columns: minmax(0, 1fr) auto; height: auto; min-height: 52px; padding-top: 10px; padding-bottom: 10px; }
