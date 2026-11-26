@@ -37811,6 +37811,11 @@
       return '?' + ['step=' + encodeURIComponent(p.step), 'days=' + (p.days || 366),
                     'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
     }
+    if (p.kind === 'reanim') {
+      /* Месяц — тот же, что на плашке «Реанимация за месяц». */
+      return '?' + ['month=' + encodeURIComponent(p.month), 'step=' + encodeURIComponent(p.step),
+                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+    }
     if (p.kind === 'efir') {
       /* У эфира нет периода: он сам и есть период. */
       return '?' + ['slug=' + encodeURIComponent(p.slug),
@@ -37914,7 +37919,8 @@
     /* Сверяем не ступень, а полный ключ списка: у блоков ступени нет вовсе, и по
        пустой строке ответ на «Телеграм» лёг бы в открытый список «Тест». */
     var who = p.id;
-    var url = p.kind === 'efir' ? '/admin/api/marketing/efir/people'
+    var url = p.kind === 'reanim' ? '/admin/api/broadcasts/reanimation/people'
+            : p.kind === 'efir' ? '/admin/api/marketing/efir/people'
             : (p.kind === 'ads') ? '/admin/api/marketing/ads/people'
             : (p.kind === 'block') ? '/admin/api/marketing/launch/block'
                                    : '/admin/api/marketing/launch/people';
@@ -38102,7 +38108,7 @@
     /* Правка доступна только на ступенях пути: у блоков за строкой стоит человек из
        бота, у которого нет карточки регистрации. Считаем до сборки окна — от этого
        зависит и ширина окна, и набор колонок. */
-    var canEdit = p.kind !== 'block' && p.kind !== 'ads';
+    var canEdit = p.kind !== 'block' && p.kind !== 'ads' && p.kind !== 'reanim';
     var body;
     if (p.error) {
       body = '<div class="mk-logic-empty">' + esc(p.error) + '</div>';
@@ -38114,6 +38120,11 @@
         ? 'Здесь пока никого — людей в этой строке ещё нет.'
         : 'На этой ступени пока никого — людей здесь не появится, ' +
           'пока шаг не сработает хотя бы у одного человека.') + '</div>';
+    } else if (p.kind === 'reanim') {
+      body = '<div class="lp-tbl"><div class="lp-th">' +
+        ['Человек', 'Канал', 'Рассылка', 'Отправлена'].map(function (c) {
+          return '<span>' + c + '</span>';
+        }).join('') + '</div>' + p.rows.map(bcReRow).join('') + '</div>';
     } else {
       /* Заголовки колонок зависят от того, ОТКУДА люди. У зарегистрировавшихся есть
          телефон и дата регистрации, у людей из бота — только ник и дата входа.
@@ -38150,6 +38161,7 @@
     var per = p.kind === 'ads'
       ? (p.days && p.days < 366 ? 'за ' + p.days + ' ' + plural(p.days, 'день', 'дня', 'дней')
                                 : 'за все время')
+      : p.kind === 'reanim' ? 'за месяц'
       : (p.from || p.to)
       ? ('период ' + (p.from ? fmtDay(p.from) : '…') + ' — ' + (p.to ? fmtDay(p.to) : '…'))
       : 'весь запуск';
@@ -38181,6 +38193,8 @@
           /* У эфира часть зала безымянная: человек смотрит по открытой ссылке, не
              оставив ни имени, ни телефона. Говорим об этом прямо в шапке, иначе
              пустые строки читаются как сбой. */
+          : p.kind === 'reanim'
+            ? 'это те же люди, что посчитаны на плашке · каждый один раз, даже если получил несколько рассылок'
           : (p.kind === 'efir'
               /* «Дошли до бота» — список целиком именной: человек в боте известен.
                  Общая оговорка про безымянный зал тут сбивала бы с толку. */
@@ -45736,6 +45750,180 @@
     return '<a class="bc-chat" href="#dialog/' + encodeURIComponent(userId) + '">переписка</a>';
   }
 
+  /* ── Реанимация за месяц ─────────────────────────────────────────────────────
+     Руководитель маркетинга платит проджекту бонус за «реанимацию базы»: сколько
+     людей старой базы ожили после рассылок. Нужна одна цифра за календарный месяц и
+     поименный список за ней, чтобы проверять не на слово. Все считает сервер
+     (`/admin/api/broadcasts/reanimation`), здесь раскладка. Каждое число открывает
+     список ровно той же длины — то же окно, что у «Запусков» (launchPeopleModal). */
+  function bcReMonth() {
+    if (!state.bcReMonth) {
+      var d = new Date();
+      state.bcReMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    }
+    return state.bcReMonth;
+  }
+
+  function fetchBcRe() {
+    var m = bcReMonth();
+    if (state._bcReWait === m) return;
+    state._bcReWait = m;
+    api('/admin/api/broadcasts/reanimation?month=' + encodeURIComponent(m)).then(function (r) {
+      if (state._bcReWait === m) state._bcReWait = '';
+      if (bcReMonth() !== m) return;          /* пока считали, переключили месяц */
+      state._bcRe = r || 'none';
+      if (state.page === 'broadcasts') renderView();
+    }).catch(function (e) {
+      if (state._bcReWait === m) state._bcReWait = '';
+      if (e && e.message === '403') return;
+      if (bcReMonth() !== m) return;
+      state._bcRe = 'none';
+      if (state.page === 'broadcasts') renderView();
+    });
+  }
+
+  function bcReOpen(key, title, n, node) {
+    var d = state._bcRe || {};
+    state._lpPeople = {
+      kind: 'reanim', id: 'reanim:' + bcReMonth() + ':' + key,
+      step: key, month: bcReMonth(), value: '', slug: '',
+      title: title, ownTitle: true, plate: n || 0, launch: d.title || '',
+      from: '', to: '',
+      rows: [], total: null, loading: true, error: '', fresh: true,
+      back: node || null,
+    };
+    launchPeopleLoad(false);
+  }
+
+  /* Строка человека в списке: ступени с датами — под именем, канал и рассылка —
+     своими колонками. Даты сервер отдает по Москве, поэтому день берем из строки. */
+  var BC_RE_STEP = { click: 'нажал ссылку', reg: 'регистрация', came: 'эфир',
+                     booked: 'записался на диагностику', held: 'диагностика',
+                     paid: 'оплата' };
+  var BC_RE_CH = { telegram: 'Телеграм', 'telegram:study': 'Телеграм, второй бот',
+                   vk: 'ВКонтакте', max: 'MAX', email: 'Почта' };
+
+  function bcReRow(p) {
+    var st = p.steps || {};
+    var done = ['click', 'reg', 'came', 'booked', 'held', 'paid'].filter(function (k) {
+      return st[k];
+    }).map(function (k) {
+      /* Строкой на ступень, как строки оплат в списке «Запусков» (.lp-pay): в одну
+         строку под именем три ступени с датами обрезались многоточием. */
+      return '<span class="lp-pay"><b class="num">' + fmtDay(st[k]).slice(0, 5) + '</b> ' +
+        esc(BC_RE_STEP[k]) + '</span>';
+    });
+    var ch = (p.channels || []).map(function (c) {
+      return BC_RE_CH[c.channel] || c.channel;
+    }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ');
+    var who = p.name || ('id ' + (((p.channels || [])[0] || {}).channel_user_id || ''));
+    var id = p.session_id || '';
+    return '<div class="lp-tr' + (id ? ' go' : '') + '"' +
+      (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
+      '><span class="lp-nm">' + esc(who) +
+        (done.length ? done.join('') : '<small>получил рассылку, дальше пока ничего</small>') + '</span>' +
+      '<span class="lp-ct">' + lpCell(ch) + '</span>' +
+      '<span class="lp-sr"' + (p.run_title ? ' title="' + esc(p.run_title) + '"' : '') + '>' +
+        lpCell(p.run_title) + '</span>' +
+      '<span class="lp-dt">' + (p.sent_at ? esc(fmtDay(p.sent_at)) : '<i class="lp-dash">—</i>') + '</span>' +
+      '</div>';
+  }
+
+  function bcReCard() {
+    var d = state._bcRe;
+    if (!d) { fetchBcRe(); }
+    var now = new Date();
+    var isNow = bcReMonth() === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+    var nav = '<div class="brd-nav">' +
+      '<button class="icobtn sm brd-arrow prev" data-bcre-mon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + esc((d && d !== 'none' && d.title) || bcReMonth()) + '</span>' +
+      '<button class="icobtn sm brd-arrow" data-bcre-mon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+      (isNow ? '' : '<button class="qchip" data-bcre-mon="now">Сейчас</button>') +
+      '</div>';
+    var head = '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('spark', 14) + '</span>' +
+      '<div><div class="t">Реанимация за месяц</div>' +
+      '<div class="s">люди старой базы, которые после рассылки зарегистрировались или пришли на эфир, ' +
+      'записались на диагностику или оплатили</div></div>' + nav + '</div>';
+    var body;
+    if (!d) {
+      body = '<div class="loadwrap" style="padding:28px 0"><div class="loaddot"></div>' +
+             '<div class="loaddot"></div><div class="loaddot"></div></div>';
+    } else if (d === 'none') {
+      body = '<div class="empty">Не удалось посчитать — проверь сеть и обнови страницу.</div>';
+    } else if (d.ready === false) {
+      body = '<div class="empty">Журнал рассылок еще не завелся: бот с этой доработкой пока не выехал.</div>';
+    } else if (!(d.steps || []).length || !d.steps[0].n) {
+      body = '<div class="empty">В этом месяце рассылок по старой базе не было — оживать пока некому.</div>';
+    } else {
+      var got = d.steps[0].n, rv = d.revived || {}, g0 = d.steps[0];
+      /* Две плитки: ожили (якорь экрана) и сколько получили. Процент — подписью,
+         а не плиткой: он не людьми, его не откроешь списком. */
+      var stat = '<div style="padding:0 18px 14px"><div class="statbar bc-stat">' +
+        '<div class="stat' + (rv.n ? ' go' : '') + '"' +
+          (rv.n ? ' data-bcre="revived" role="button" tabindex="0" title="Показать этих людей поименно"' : '') + '>' +
+          '<div class="sl"><span class="sdot green"></span>' + esc(rv.label || 'Ожили') + '</div>' +
+          '<div class="sv num">' + (rv.n || 0) + '</div>' +
+          '<div class="sd"><span class="smut num">' + (got ? Math.round((rv.n || 0) / got * 100) : 0) +
+            '% от получивших</span></div>' +
+        '</div>' +
+        '<div class="stat go" data-bcre="got" role="button" tabindex="0" title="Показать всех, кто получил">' +
+          '<div class="sl">' + esc(g0.label) + '</div>' +
+          '<div class="sv num">' + got + '</div>' +
+          '<div class="sd"><span class="smut">' + esc(g0.hint) + '</span></div>' +
+        '</div></div></div>';
+      var lad = d.steps.slice(1).map(function (st) {
+        var w = got ? Math.round(st.n / got * 100) : 0;
+        var go = st.n > 0;
+        return '<div class="lad-row gf-flat' + (go ? ' lad-go' : '') + '"' +
+          (go ? ' data-bcre="' + st.key + '" role="button" tabindex="0"' : '') + '>' +
+          '<div class="lad-nm">' + esc(st.label) + '<small>' + esc(st.hint) + '</small></div>' +
+          '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, st.n ? 4 : 0) + '%"></div></div>' +
+          '<div class="lad-n num">' + st.n + '</div>' +
+          '<div class="lad-right"><span class="lad-conv num">' + w + '% от получивших</span></div>' +
+        '</div>';
+      }).join('');
+      body = stat + '<div class="bc-lad" style="border-top:1px solid var(--line)">' + lad + '</div>' +
+        /* Чего в цифре нет — словами, а не нулем: ноль читался бы как «никто». */
+        '<div class="brd-note">Ступени считаются по каждому человеку отдельно и не складываются: ' +
+        'можно оплатить, не регистрируясь на эфир. Не связать с человеком: зрителей эфира без ' +
+        'регистрации и переходы из мессенджера на сайт или в канал — журнал переходов не знает, ' +
+        'чей это клик. В цифрах их нет.</div>';
+    }
+    return '<div class="card sp12 bc-re" style="overflow:hidden">' + head + body + '</div>';
+  }
+
+  function bcReWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-bcre-mon]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-bcre-mon');
+        if (v === 'now') { state.bcReMonth = ''; }
+        else {
+          var p = bcReMonth().split('-');
+          var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + parseInt(v, 10), 1);
+          state.bcReMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+        }
+        state._bcRe = null;
+        renderView();
+      });
+    });
+    var d = state._bcRe;
+    if (!d || d === 'none' || !d.steps) return;
+    var by = {};
+    d.steps.forEach(function (st) { by[st.key] = st; });
+    if (d.revived) by.revived = d.revived;
+    Array.prototype.forEach.call(view.querySelectorAll('[data-bcre]'), function (node) {
+      var go = function (e) {
+        e.stopPropagation();
+        var st = by[node.getAttribute('data-bcre')];
+        if (st) bcReOpen(st.key, st.label, st.n, node);
+      };
+      node.addEventListener('click', go);
+      node.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(e); }
+      });
+    });
+  }
+
   function renderBroadcasts(view) {
     var q = bcQ();
     if (q.run) return renderBcRun(view, q);
@@ -45835,6 +46023,7 @@
     }
 
     view.innerHTML = '<div class="grid">' +
+      bcReCard() +
       sumCards +
       '<div class="card sp12" style="padding:22px 24px">' +
         '<div class="sec-head"><span class="ic">' + ic('search', 14) + '</span>' +
@@ -45863,6 +46052,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-run]'), function (row) {
       row.addEventListener('click', function () { bcOpen(parseInt(row.getAttribute('data-run'), 10)); });
     });
+    bcReWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('#bc-period button'), function (b) {
       b.addEventListener('click', function () {
         if (b.getAttribute('data-per') === 'custom') { openBcRange(b); return; }
