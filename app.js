@@ -44648,13 +44648,24 @@
     var st = MS_FRESH[p.state] || MS_FRESH.out;
     var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
     if (leadNo(p.id)) meta.unshift(leadNo(p.id));
-    if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
+    /* Нет ни телефона, ни диалога (Костя 26.11.2026: «что с ними делаем?»): откуда
+       пришел и чем еще достучаться — почта, ник, страница ВК, кабинет, анкета. */
+    var trace = '';
+    if (p.state === 'no_contact') {
+      var tr = (p.traces || []).map(function (t) {
+        return t.url ? '<a class="ms-tr" href="' + esc(t.url) + '" target="_blank" rel="noopener">' + esc(t.label) + '</a>'
+          : '<span class="ms-tr">' + esc(t.label) + '</span>';
+      });
+      // Отдельной строкой: в общей строке ссылки обрезались многоточием
+      trace = '<small class="ms-trs">' + (p.from ? 'откуда: ' + esc(p.from) + ' · ' : '') +
+        (p.chat ? 'отвечать в диалоге' : (tr.length ? 'есть: ' + tr.join(', ') : 'контакта нет нигде')) + '</small>';
+    }
     var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
     // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
     var heat = p.todo && p.heat_label ? '<span class="ms-heat h' + (p.heat || 0) + '">' + esc(p.heat_label) + '</span>' : '';
     var mk = canMark ? '<button type="button" class="ms-mk" data-sbmk="' + esc(p.id) + '" data-sbmkn="' + esc(p.name) +
       '" title="Не лид: не наша услуга, вакансия, спам, семья">кто это</button>' : '';
-    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small></div>' +
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small>' + trace + '</div>' +
       '<span class="sev ' + st[0] + '">' + st[1] + '</span>' + msActs(p, kind, cc) + '</div>';
   }
   /* Отрезок блока лидов (встреча продаж 20.11.2026: «прозвонить всех лидов ноября»).
