@@ -293,6 +293,10 @@ a { color: inherit; text-decoration: none; }
    но кнопка та же, и ведет она туда же, где план собирают. Полоски у него нет —
    рисовать пустой маршрут там, где маршрута еще не существует, значит врать. */
 .t-stage.none .stn { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+/* Этап поставлен руками: пунктир под названием, как у расчетного срока рядом.
+   Своего цвета нет намеренно — в строке и так плашка тьютора и синяя полоса. */
+.t-stage.man .stn { border-bottom: 1px dashed var(--line-2); padding-bottom: 1px; }
+.t-stage.man:hover .stn { border-bottom-color: currentColor; }
 .t-stage.unknown { font-size: 12px; color: var(--ink-3); cursor: default; }
 
 /* ════ контейнер списка «Клиенты» (тулбар + тело в одной карточке) ════ */
@@ -2632,6 +2636,18 @@ a { color: inherit; text-decoration: none; }
 .m-ni .cnt.warn { background: var(--blue-tint); color: var(--blue); }
 
 /* сводка по всему пути — стеклянная плашка с якорным числом */
+/* Этап сейчас: расчет по плану или отметка руками. Строка тихая — это настройка
+   над планом, а не его часть. */
+.rm-stage { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 2px 0 12px; }
+.rm-stage__l { font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); }
+.rm-stage select { font: inherit; font-size: 13px; color: var(--ink); background: #fff;
+  border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; cursor: pointer; }
+.rm-stage select:focus-visible { outline: none; border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-tint); }
+.rm-stage__h { font-size: 12px; color: var(--ink-3); }
+.rm-stage.man .rm-stage__h { color: var(--amber-ink, var(--ink-2)); }
+
 .rm-summary { display: flex; align-items: center; gap: 18px; margin-top: 2px; margin-bottom: 4px;
   padding: 15px 18px; border-radius: 16px; background: #fff;
   box-shadow: inset 0 0 0 1px rgba(17,21,31,.06), 0 14px 34px -26px rgba(21,32,59,.28); }
@@ -10212,26 +10228,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .ap-step:hover { color: var(--blue); border-color: var(--blue); }
 .ap-step.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 
-.ap-pack { display: flex; align-items: center; gap: 10px; margin-top: 14px;
-  font-size: 12.5px; color: var(--ink-2); }
-.ap-pack b { color: var(--ink); font-weight: 700; }
-.ap-bar { flex: 1 1 auto; height: 5px; border-radius: var(--r-pill); background: var(--fill); overflow: hidden; }
-.ap-bar i { display: block; height: 100%; background: var(--blue); transition: width .9s cubic-bezier(.22,1,.36,1); }
-
-.ap-reqs { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
-.ap-req { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
-  padding: 9px 12px; border: 0; border-bottom: 1px solid var(--line); background: #fff;
-  cursor: pointer; font: inherit; transition: background .12s cubic-bezier(.22,1,.36,1); }
-.ap-req:last-child { border-bottom: 0; }
-.ap-req:hover { background: #FBFBFC; }
-.ap-req__t { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--ink); }
-.ap-req__t i { font-style: normal; color: var(--ink-3); }
-.ap-req__s { flex: 0 0 auto; font-size: 11.5px; font-weight: 600; padding: 4px 9px;
-  border-radius: var(--r-pill); background: var(--fill); color: var(--ink-3); }
-.ap-req__s.ok { background: var(--green-soft); color: var(--green-ink); }
-.ap-req__s.go { background: var(--blue-tint); color: var(--blue); }
-.ap-req__s.no { background: var(--red-soft); color: var(--red-ink); }
-
 .ap-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .ap-grid label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--ink-3); }
@@ -10250,6 +10246,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .ap-cred span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-2); }
 .ap-empty { padding: 18px; border: 1px dashed var(--line-2); border-radius: var(--r-lg);
   font-size: 13px; color: var(--ink-2); }
+/* «Попробовать еще раз» внутри пустого состояния: действие, а не ссылка наружу. */
+.ap-empty .lnk { border: 0; background: 0; padding: 0; font: inherit; color: var(--blue);
+  font-weight: 600; cursor: pointer; }
+.ap-empty .lnk:hover { text-decoration: underline; }
 .ap-new { margin-top: 14px; }
 
 @media (max-width: 720px) {
@@ -10330,7 +10330,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .uv-st.st-submitted { background: var(--blue-tint); color: var(--blue); }
 .uv-st.st-offer { background: var(--green-soft); color: var(--green-ink); }
 .uv-st.st-rejected { background: var(--red-soft); color: var(--red-ink); }
-.uv-pack { font-size: 11px; font-weight: 600; color: var(--ink-3); }
 /* «видит семья» у вуза без уровня: заявки, заведенные до 23.11.2026, утверждены
    миграцией, и полоса «Не разложены» без этой метки врала бы про них. */
 .uv-seen { font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: var(--r-pill);
@@ -16818,6 +16817,12 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .lm-sum { text-align: right; font-variant-numeric: tabular-nums; font-size: 13.5px; }
 .lm-sel { height: 36px; padding: 0 8px 0 11px; font-size: 13px; line-height: 36px; }
 .lm-ta { font: 500 13px/1.5 'Manrope', sans-serif; min-height: 260px; resize: vertical; }
+/* Акт за прошлую выплату не подписан: строка тише, причина красным под именем. */
+.lm-hold .lm-nm { color: var(--ink-2); }
+.lm-hold .lm-sum { color: var(--ink-3); text-decoration: line-through; }
+.lm-nm i.lm-why { color: var(--red-ink); white-space: normal; margin-top: 2px; }
+.lm-note { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+  line-height: 1.45; color: var(--red-ink); background: var(--red-soft); }
 @media (max-width: 640px) {
   .lm-row { grid-template-columns: minmax(0, 1fr) auto; }
   .lm-row .lm-sel { grid-column: 1 / -1; }

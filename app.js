@@ -27162,7 +27162,7 @@
       var key = it.cid || ('n:' + (it.person || it.receiver || ''));
       if (!by[key]) {
         by[key] = { key: key, name: it.person || it.receiver || '—', cid: it.cid,
-                    amount: 0, role: '', bill: false, ids: [] };
+                    amount: 0, role: '', bill: false, hold: '', ids: [] };
         out.push(by[key]);
       }
       var p = by[key];
@@ -27172,6 +27172,9 @@
       if (!p.role && it.item && it.item !== 'Мотивация' && !it.accrual &&
           it.item !== it.receiver) p.role = it.item;
       if (it.by_bill) p.bill = true;
+      // Акт за прошлую выплату не подписан (или нет договора) — сервер называет
+      // причину, и по умолчанию человек в письмо не идет (Роман 26.11.2026).
+      if (!p.hold && it.hold) p.hold = it.hold;
       p.ids.push(it.id);
     });
     return out;
@@ -27199,10 +27202,13 @@
     var mktPeople = lmPeople(mkt ? mkt.items : []);
     var alloc = (rsg.filter(function (g) { return g.id === 'funds_alloc'; })[0] || {}).items || [];
     var st = { bank: mem.bank || 'Сбербанк', route: {}, fund: {}, back: {} };
-    team.forEach(function (p) { st.route[p.key] = mem.route[p.name] || lmDefault(p); });
-    mktPeople.forEach(function (p) {
-      st.fund[p.key] = mem.fund[p.name] || (p.bill ? 'bill' : 'bank');
+    team.forEach(function (p) {
+      st.route[p.key] = p.hold ? 'skip' : (mem.route[p.name] || lmDefault(p));
     });
+    mktPeople.forEach(function (p) {
+      st.fund[p.key] = p.hold ? 'skip' : (mem.fund[p.name] || (p.bill ? 'bill' : 'bank'));
+    });
+    var held = team.concat(mktPeople).filter(function (p) { return p.hold; }).length;
     services.forEach(function (it) { st.back[it.id] = !!mem.back[it.receiver]; });
 
     function sel(name, opts, val) {
@@ -27213,8 +27219,10 @@
         }).join('') + '</select>';
     }
     function row(p, kind, opts, val) {
-      return '<div class="lm-row"><span class="lm-nm">' + esc(p.name) +
-          (p.role ? '<i>' + esc(p.role) + '</i>' : '') + '</span>' +
+      return '<div class="lm-row' + (p.hold ? ' lm-hold' : '') + '"><span class="lm-nm">' +
+          esc(p.name) +
+          (p.hold ? '<i class="lm-why">не платим: ' + esc(p.hold) + '</i>'
+                  : (p.role ? '<i>' + esc(p.role) + '</i>' : '')) + '</span>' +
         '<span class="num lm-sum">' + finRub(p.amount) + '</span>' +
         sel(kind + ':' + p.key, opts, val) + '</div>';
     }
@@ -27290,6 +27298,9 @@
         '<div class="al-sub">По шаблону из базы знаний. Выберите, как платить каждому, — ' +
           'выбор запомнится на следующие периоды. Текст внизу можно поправить перед копированием.</div>' +
         '<div class="al-body">' +
+          (held ? '<div class="lm-note">' + held + ' ' + plural(held, 'человек', 'человека', 'человек') +
+            ' без подписанного акта или договора, в письмо они не идут. Подпишут, откройте окно ' +
+            'заново. Если платим все равно, выберите способ в строке.</div>' : '') +
           '<label class="al-f"><span class="al-l">Банк для платежек</span>' +
             sel('bank', [['Сбербанк', 'Сбербанк'], ['Альфа-Банк', 'Альфа-Банк']], st.bank) + '</label>' +
           (team.length ? '<div class="lm-h">С расчетного счета</div>' +
@@ -27315,8 +27326,10 @@
     function redraw() { if (!edited) ta.value = text(); }
     function remember() {
       mem.bank = st.bank;
-      team.forEach(function (p) { mem.route[p.name] = st.route[p.key]; });
-      mktPeople.forEach(function (p) { mem.fund[p.name] = st.fund[p.key]; });
+      // Удержание — состояние этого периода, а не привычка: в память браузера его не
+      // кладем, иначе после подписи акта человек так и остался бы «не писать».
+      team.forEach(function (p) { if (!p.hold) mem.route[p.name] = st.route[p.key]; });
+      mktPeople.forEach(function (p) { if (!p.hold) mem.fund[p.name] = st.fund[p.key]; });
       services.forEach(function (it) { mem.back[it.receiver] = st.back[it.id]; });
       lmSave(mem);
     }
@@ -52018,10 +52031,16 @@
     }).join('') + '</div>' : '';
     /* Плана нет — ячейка все равно кнопка: собирают план на той же вкладке карточки,
        куда она и ведет. */
-    return '<div class="t-stage' + (has ? '' : ' none') + '" data-stop="1" data-stid="' + l.id + '"' +
-      ' role="button" tabindex="0" aria-label="' + (has
-        ? 'Поступление: ' + esc(st.short || 'этап') + ', этап ' + (st.pos || '?') + ' из ' + st.total
-        : 'Поступление: план не собран') + '">' + bar +
+    /* Этап, поставленный руками (overrides.stage), помечен пунктиром — как
+       расчетный дедлайн рядом. Человек должен видеть, что цифра не из плана:
+       иначе она спорит с задачами в карточке и читается как сбой. */
+    var man = !!st.manual;
+    var lbl = has
+      ? 'Поступление: ' + esc(st.short || 'этап') + ', этап ' + (st.pos || '?') + ' из ' + st.total
+        + (man ? '. Этап поставлен руками, снимается в карточке на «Поступлении»' : '')
+      : 'Поступление: план не собран';
+    return '<div class="t-stage' + (has ? '' : ' none') + (man ? ' man' : '') + '" data-stop="1" data-stid="' + l.id + '"' +
+      ' role="button" tabindex="0" title="' + lbl + '" aria-label="' + lbl + '">' + bar +
       '<div class="stlab">' + (has
         ? '<span class="stn">' + esc(st.short || '—') + '</span>' +
           (st.pos ? '<span class="stp num">' + st.pos + '/' + st.total + '</span>' : '')
@@ -55846,6 +55865,39 @@
       return (byStage[st.key] || []).length > 0;
     });
   }
+  /* Этап руками. Расчет по плану остается главным, но отметка нужна и тому, у кого
+     плана нет вовсе: на 20.11.2026 таких было 15 из 48 в «Сопровождении», и назвать
+     их этап было нечем. Поэтому список этапов берется из ответа сервера (st.steps),
+     а когда плана нет — из общего словаря ADMISSION_STAGES: ключи и порядок там те
+     же, что в client_views.BOARD_STAGES, и второго словаря этапов в системе нет. */
+  function stageSwitchHtml(id) {
+    var lead = findLead(id);
+    var st = (lead || {}).stage || null;
+    // сервер еще не умеет считать этап — молчим, как и колонка списка: отметка,
+    // которую никто не прочитает, хуже ее отсутствия
+    if (lead && !('stage' in lead)) return '';
+    var steps = (st && (st.steps || []).length)
+      ? st.steps.map(function (p) { return { k: p.k, n: p.n || p.k }; })
+      : ADMISSION_STAGES.map(function (p) { return { k: p.key, n: p.title }; });
+    var man = !!(st && st.manual);
+    var cur = man ? st.key : '';
+    var opts = '<option value=""' + (cur ? '' : ' selected') + '>считать по плану</option>' +
+      steps.map(function (p, i) {
+        return '<option value="' + esc(p.k) + '"' + (cur === p.k ? ' selected' : '') + '>' +
+          (i + 1) + '. ' + esc(p.n) + '</option>';
+      }).join('');
+    var hint = man
+      ? 'поставлен руками, в списке помечен пунктиром'
+      : (st
+        ? 'считается по плану: первый этап с незакрытой задачей семьи'
+        : 'плана еще нет, поэтому считать этап нечем — можно отметить руками');
+    return '<div class="rm-stage' + (man ? ' man' : '') + '">' +
+      '<span class="rm-stage__l">Этап сейчас</span>' +
+      '<select id="rm-stage-sel" aria-label="Этап ученика">' + opts + '</select>' +
+      '<span class="rm-stage__h">' + hint + '</span>' +
+    '</div>';
+  }
+
   function buildAdmissionSection(ctx) {
     var id = state.drawerId;
     // Когда семье выдали доступ в кабинет. Живет в overrides карточки рядом с
@@ -55860,6 +55912,14 @@
 
     var html = '<div class="m-ctitle">План поступления</div>' +
       '<div class="m-csub">Путь клиента по этапам: что делает он, что делаем мы. Раскрой задачу — увидишь присланное, примешь или вернешь, оставишь комментарий.</div>';
+
+    /* ЭТАП СЕЙЧАС (Мария 26.11.2026: «всем, кто поступает в этом году, поставь этап
+       документы»). Обычно этап считает сервер по плану — первый этап с незакрытой
+       задачей семьи. Но план собран не всем, и в собранном висят старые задачи,
+       поэтому расчет показывает не то место, где человек на самом деле. Здесь его
+       можно перебить: выбранный этап ложится в overrides.stage и держится, пока его
+       не вернут на «считать по плану». Полоса этапов остается расчетной. */
+    html += stageSwitchHtml(id);
 
     html += '<div class="rm-summary">' +
       '<div class="rm-sum-main">' +
@@ -60275,12 +60335,13 @@
     { k: 'offer',      t: 'приглашение' },
     { k: 'rejected',   t: 'отказ' },
   ];
-  // Состояние документа по кругу: клик по строке ведет его от «ждем» до «собрано».
-  // Отдельных кнопок нет намеренно — в пакете десяток строк, и три кнопки на каждой
-  // превращают экран в панель управления вместо чек-листа.
-  var AP_NEXT = { todo: 'doing', doing: 'done', done: 'rejected', rejected: 'todo' };
-  var AP_REQ = { todo: ['ждем', ''], doing: ['в работе', 'go'],
-                 done: ['собрано', 'ok'], rejected: ['поправить', 'no'] };
+  /* Чек-листа документов в карточке вуза НЕТ (Мария 26.11.2026: «все документы
+     отсюда убери, им это вообще не надо, только захламляет»). Пакет семьи живет в
+     разделе «Документы»: он один на ученика и собирается по направлению, а здесь
+     тот же список висел отдельно у КАЖДОГО вуза — пять вузов, пять загранпаспортов.
+     Две правды про одни и те же бумаги расходятся на первой же отметке. Сам чек-лист
+     в базе и в ручках бэкенда остался, экран его не показывает — ни тут, ни в
+     кабинете семьи (platform_frontend, экран «Подача»). */
 
   function loadApps(id, force) {
     if (APPS_BUSY[id]) return;
@@ -60291,6 +60352,10 @@
       if (state.drawerId === id && state.modalSection === 'apply') renderModalContent();
     }).catch(function (e) {
       APPS_BUSY[id] = false;
+      // Запрос не доехал — это НЕ «вузов нет». Раньше сюда ложился пустой список, и
+      // доска до перезагрузки страницы показывала «Вузов нет» у ученика, которому
+      // тьютор завел семь (Мария 26.11.2026, Кудакаева: в логах бэкенда за час ни
+      // одного запроса за списком — браузер показывал свою же старую пустоту).
       if (e.message !== '403') { APPS[id] = { applications: [], failed: true }; if (state.drawerId === id) renderModalContent(); }
     });
   }
@@ -60351,11 +60416,10 @@
     }).catch(function () { AP_EV_BUSY[appId] = false; AP_EV[appId] = []; });
   }
 
-  /* Карточка на доске: только то, что решает, куда ее двигать. Пакет и портал
+  /* Карточка на доске: только то, что решает, куда ее двигать. Сроки и портал
      живут в раскрытой карточке под доской — в колонке шириной 240px они
      превращаются в нечитаемую стопку. */
   function apBoardCard(a, open) {
-    var done = (a.progress && a.progress.done) || 0, total = (a.progress && a.progress.total) || 0;
     var sub = [a.programName, a.intake].filter(Boolean).join(' · ');
     return '<article class="uv-card' + (open ? ' on' : '') + (a.isMain ? ' main' : '') + '"' +
         ' draggable="true" data-uvcard="' + a.id + '" data-tier="' + esc(a.tier || '') + '"' +
@@ -60373,7 +60437,6 @@
            вранье полосы, поэтому у такой карточки стоит метка. */
         (!a.tier && a.approved ? '<span class="uv-seen">видит семья</span>' : '') +
         '<span class="uv-st st-' + esc(a.status) + '">' + esc(apStatusTitle(a.status)) + '</span>' +
-        (total ? '<span class="uv-pack">' + done + '/' + total + '</span>' : '') +
         apDeadline(a) +
       '</div></article>';
   }
@@ -60385,13 +60448,6 @@
     var steps = AP_STATUS.map(function (s) {
       return '<button class="ap-step' + (s.k === a.status ? ' on' : '') + '" data-apst="' + a.id + '" data-st="' + s.k + '">' + s.t + '</button>';
     }).join('');
-    var reqs = (a.requirements || []).map(function (r) {
-      var st = AP_REQ[r.state] || AP_REQ.todo;
-      return '<button class="ap-req" data-apreq="' + a.id + '" data-key="' + esc(r.key) + '" data-state="' + esc(r.state || 'todo') + '">' +
-        '<span class="ap-req__t">' + esc(r.title || r.key) + (r.required ? '' : ' <i>по запросу вуза</i>') + '</span>' +
-        '<span class="ap-req__s ' + st[1] + '">' + st[0] + '</span></button>';
-    }).join('');
-    var done = (a.progress && a.progress.done) || 0, total = (a.progress && a.progress.total) || 0;
     // Уровень кнопками, а не только перетаскиванием: с телефона карточку мышью не
     // возьмешь, а список вузов разбирают и в дороге.
     var seg = AP_TIERS.map(function (t) {
@@ -60419,11 +60475,16 @@
           ' aria-pressed="' + (a.isMain ? 'true' : 'false') + '">' + ic('flag', 13) +
           (a.isMain ? 'Главный вуз' : 'Сделать главным') + '</button>' : '') + '</div>' +
       '<div class="ap-steps">' + steps + '</div>' +
-      '<div class="ap-pack"><span>Пакет</span><b>' + done + ' из ' + total + '</b>' +
-        '<span class="ap-bar"><i style="width:' + (total ? Math.round(done / total * 100) : 0) + '%"></i></span></div>' +
-      '<div class="ap-reqs">' + reqs + '</div>' +
       '<div class="ap-grid">' +
-        '<label>Дедлайн<input type="date" data-apfield="deadline" data-apid="' + a.id + '" value="' + esc(a.deadline || '') + '"></label>' +
+        /* Окно подачи двумя полями подряд (Мария 26.11.2026: «начало подачи и
+           дедлайн, до какого числа подача»): вуз открывает прием с одного числа и
+           закрывает другим, и «рано» — такая же ошибка, как «поздно». Названы парой
+           («с» и «до»), а не «Начало» и «Дедлайн»: рядом они читаются как одно окно.
+           В колонку «Дедлайн» «Сопровождения» идет только вторая дата. */
+        '<label>Подача с<input type="date" data-apfield="opens_at" data-apid="' + a.id + '" value="' + esc(a.opensAt || '') + '"></label>' +
+        '<label>Подача до<input type="date" data-apfield="deadline" data-apid="' + a.id + '"' +
+          ' title="Крайний срок. Эта дата идет в колонку «Дедлайн» в «Сопровождении»"' +
+          ' value="' + esc(a.deadline || '') + '"></label>' +
         '<label>Номер заявки<input data-apfield="app_number" data-apid="' + a.id + '" value="' + esc(a.appNumber || '') + '" placeholder="как на портале"></label>' +
         '<label>Портал<input data-apfield="portal_url" data-apid="' + a.id + '" value="' + esc(a.portalUrl || '') + '" placeholder="ссылка на кабинет вуза"></label>' +
         '<label>Логин<input data-apfield="portal_login" data-apid="' + a.id + '" value="' + esc(a.portalLogin || '') + '" placeholder="логин семьи"></label>' +
@@ -60437,7 +60498,7 @@
       '</div>' +
       '<div class="ap-shown" data-apshown="' + a.id + '"></div>' +
       '<details class="m-fold uv-logf"><summary><span class="pm-t">Что происходило</span>' +
-        '<span class="pm-h">переносы, статусы, пакет</span>' + ic('go', 13) + '</summary>' +
+        '<span class="pm-h">переносы, статусы, сроки</span>' + ic('go', 13) + '</summary>' +
         '<div class="m-fold__body uv-log">' + log + '</div></details>' +
     '</div>';
   }
@@ -60473,7 +60534,10 @@
     return '<div class="m-ctitle">Университеты</div>' +
       '<div class="m-csub">Три уровня: мечта (А), реальный (Б), запасной (С). Карточка таскается мышью между колонками, ' +
         'флаг отмечает главный вуз. В кабинете семья видит только те, что разложены по уровням.</div>' +
-      (list.length
+      (box.failed
+        ? '<div class="ap-empty">Список вузов не загрузился — похоже, отвалилась сеть. ' +
+            '<button class="lnk" id="ap-again">Попробовать еще раз</button></div>'
+        : list.length
         ? (hold.length
             ? '<div class="uv-hold" data-uvdrop="">' +
                 '<div class="uv-hold__h"><b>Не разложены</b><span>' + hold.length + '</span>' +
@@ -60488,12 +60552,13 @@
           (open ? apOpenCard(open, vault, AP_EV[open.id]) : '')
         : '<div class="ap-empty">Вузов нет. Заведите первый, когда семья выбрала, куда целимся.</div>') +
       '<details class="m-fold ap-new"><summary><span class="pm-t">Добавить вуз</span>' +
-        '<span class="pm-h">вуз, программа, дедлайн</span>' + ic('go', 13) + '</summary>' +
+        '<span class="pm-h">вуз, программа, сроки подачи</span>' + ic('go', 13) + '</summary>' +
         '<div class="m-fold__body"><div class="ap-grid">' +
           '<label>Вуз<input id="ap-n-uni" placeholder="Shanghai University"></label>' +
           '<label>Программа<input id="ap-n-prog" placeholder="Civil Engineering"></label>' +
           '<label>Набор<input id="ap-n-intake" placeholder="2027 осень"></label>' +
-          '<label>Дедлайн<input id="ap-n-dl" type="date"></label>' +
+          '<label>Подача с<input id="ap-n-opens" type="date"></label>' +
+          '<label>Подача до<input id="ap-n-dl" type="date"></label>' +
           '<label>Портал<input id="ap-n-url" placeholder="ссылка на кабинет вуза"></label>' +
           '<label>Логин<input id="ap-n-login" placeholder="логин семьи"></label>' +
         '</div>' +
@@ -60610,18 +60675,6 @@
       });
     });
 
-    Array.prototype.forEach.call(host.querySelectorAll('[data-apreq]'), function (b) {
-      b.addEventListener('click', function () {
-        var next = AP_NEXT[b.getAttribute('data-state')] || 'doing';
-        delete AP_EV[b.getAttribute('data-apreq')];
-        api('/admin/api/applications/' + b.getAttribute('data-apreq') + '/requirements', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ op: 'set', key: b.getAttribute('data-key'), state: next }),
-        }).then(function () { loadApps(id, true); })
-          .catch(function () { showToast('Не отметилось'); });
-      });
-    });
-
     Array.prototype.forEach.call(host.querySelectorAll('[data-apfield]'), function (inp) {
       inp.addEventListener('change', function () {
         var body = {};
@@ -60675,6 +60728,9 @@
       });
     });
 
+    var again = el('ap-again');
+    if (again) again.addEventListener('click', function () { loadApps(id, true); });
+
     var add = el('ap-n-add');
     if (add) {
       add.addEventListener('click', function () {
@@ -60687,6 +60743,7 @@
             uni_name: uni,
             program_name: (el('ap-n-prog').value || '').trim() || null,
             intake: (el('ap-n-intake').value || '').trim() || null,
+            opens_at: el('ap-n-opens').value || null,
             deadline: el('ap-n-dl').value || null,
             portal_url: (el('ap-n-url').value || '').trim() || null,
             portal_login: (el('ap-n-login').value || '').trim() || null,
@@ -61956,6 +62013,23 @@
           b.disabled = false; b.style.opacity = '';
           if (e.message !== '403') showToast('Не получилось открыть, попробуйте еще раз');
         });
+      });
+    });
+
+    /* Этап руками. Селект стоит НАД блоком задач и живет без плана: вешать его
+       внутри `if (rmHost)` нельзя — у клиента без плана .rm-flow нет вовсе, а
+       отметка нужна как раз таким. Пустое значение снимает ключ из overrides —
+       то же правило, что у срока. */
+    var stSel = host.querySelector('#rm-stage-sel');
+    if (stSel) stSel.addEventListener('change', function () {
+      var val = stSel.value || '';
+      stSel.disabled = true;
+      patch(id, { overrides: { stage: val } }, null, function () {
+        showToast(val ? 'Этап поставлен руками' : 'Этап снова считается по плану');
+        stSel.disabled = false;
+        // Этап считает сервер, и после правки его надо перечитать: своей копии
+        // расчета в браузере нет и быть не должно.
+        loadLeads(true, function () { renderModalContent(); });
       });
     });
 
@@ -65219,7 +65293,11 @@
   /* подпись набора лидов — чтобы не перерисовывать (и не пере-анимировать) графики, когда ничего не поменялось */
   function leadsSig() {
     return state.leads.map(function (l) {
-      return l.id + ':' + l.crm.status + ':' + (l.booking ? 1 : 0) + ':' + (l.score == null ? '' : l.score) + ':' + (l.crm.tasks || []).length;
+      // этап стоит в подписи намеренно: он виден колонкой в «Сопровождении», и без
+      // него минутный опрос считал список неизменившимся — поставленный руками этап
+      // не доезжал до строки, пока человек не обновит страницу
+      var st = l.stage || {};
+      return l.id + ':' + l.crm.status + ':' + (l.booking ? 1 : 0) + ':' + (l.score == null ? '' : l.score) + ':' + (l.crm.tasks || []).length + ':' + (st.key || '') + (st.manual ? 'm' : '');
     }).join('|');
   }
   function loadLeads(silent, cb) {

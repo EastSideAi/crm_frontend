@@ -64,10 +64,17 @@ STAGE_NAMES = ["Доступ", "Диагностика", "Подбор", "Док
 STAGE_KEYS = ["access", "diag", "pick", "docs", "folio", "letters", "study", "lang",
               "csca", "interview", "apply", "offer", "visa", "adapt", "meet", "settle"]
 
-def stage_of(i):
-    if i in (3, 9):           # плана нет — так и пишем, это не «первый этап»
+def stage_of(i, forced=None):
+    """forced — этап, поставленный руками (overrides.stage): он сильнее расчета.
+
+    Такой этап приезжает с меткой manual, и строка списка помечает его пунктиром.
+    Полоса этапов при этом остается расчетной, как на бэкенде.
+    """
+    if i in (3, 9) and not forced:   # плана нет — так и пишем, это не «первый этап»
         return None
     pos = [1, 3, 4, 0, 8, 11, 2, 4, 0, 0, 6, 13][i % 12]
+    if forced in STAGE_KEYS:
+        pos = STAGE_KEYS.index(forced)
     steps = []
     for n, (k, nm) in enumerate(zip(STAGE_KEYS, STAGE_NAMES)):
         if n < pos:
@@ -81,7 +88,7 @@ def stage_of(i):
         steps.append({"k": k, "n": nm, "s": st, "d": d, "t": t})
     return {"key": STAGE_KEYS[pos], "short": STAGE_NAMES[pos],
             "title": STAGE_NAMES[pos], "pos": pos + 1, "total": len(steps),
-            "steps": steps}
+            "manual": bool(forced in STAGE_KEYS), "steps": steps}
 
 # Пакет документов: что мы ждем от семьи. Считает его сервер
 # (doc_checklist.package_state) и отдает в карточке полем doc_plan — тут
@@ -154,11 +161,11 @@ AP_REQS = [("passport", "Загранпаспорт", True), ("transcript", "Т�
            ("letter", "Мотивационное письмо", False)]
 AP_SEED = [
     ("Harbin Institute of Technology", "Computer Science", "2027 осень", 24, "collecting", "a", True),
-    ("Shanghai Jiao Tong University", "Civil Engineering", "2027 осень", 38, "draft", "a", False),
+    ("Shanghai Jiao Tong University", "Civil Engineering", "2027 осень", 38, "collecting", "a", False),
     ("Zhejiang University", "Software Engineering", "2027 осень", 12, "check", "b", False),
     ("Jilin University", "International Economics", "2027 осень", 61, "ready", "b", False),
     ("Dalian University of Technology", "Mechanical Engineering", "2027 осень", 90, "submitted", "c", False),
-    ("Shandong University", None, None, None, "draft", None, False),
+    ("Shandong University", None, None, None, "collecting", None, False),
     # Заявка «как до 23.11.2026»: уровня нет, но утверждена миграцией — семья ее
     # видит. Нужна в моке, чтобы метку «видит семья» было видно глазами.
     ("Sichuan University", "Chinese Language", "2027 весна", 45, "collecting", "legacy", False),
@@ -181,8 +188,13 @@ def apps_for(lead_id):
         legacy = tier == "legacy"
         if legacy:
             tier = None
+        # Окно подачи: у части вузов прием уже идет (начало в прошлом), у части
+        # откроется позже, у одного не заполнено вовсе — все три случая должны быть
+        # видны глазами на одном экране.
+        opens = None if dl is None or n == 3 else dl - (70 if n % 2 == 0 else 110)
         out.append({
             "id": aid, "uniName": uni, "programName": prog, "intake": intake,
+            "opensAt": (date.today() + timedelta(days=opens)).isoformat() if opens is not None else None,
             "deadline": (date.today() + timedelta(days=dl)).isoformat() if dl is not None else None,
             "status": st, "appNumber": "", "portalUrl": "", "portalLogin": "",
             "hasSecret": n == 0, "requirements": reqs,
@@ -270,7 +282,7 @@ def leads():
             "no": 1001 + i,              # короткий номер карточки К-1001
             "name": name,
             "school_class": klass,
-            "stage": stage_of(i),
+            "stage": stage_of(i, (ov or {}).get("stage")),
             "uni_deadline": ({"date": (date.today() + timedelta(days=_uni[0])).isoformat(),
                               "uni": _uni[1]} if _uni else None),
             "score": score,
@@ -286,8 +298,8 @@ def leads():
     return out
 
 def _ri(i, who, amount, status="план", cid=None, person=None, item="Мотивация", role="",
-        bill=False, service=False, accrual=False):
-    return {"id": "o%d" % i, "date": "2026-11-20", "status": status, "receiver": who,
+        bill=False, service=False, accrual=False, hold=None):
+    return {"hold": hold, "id": "o%d" % i, "date": "2026-11-20", "status": status, "receiver": who,
             "item": item, "amount": amount, "dest": "ВТБ, р/с", "comment": "", "has_doc": False,
             "cid": cid, "person": person or who, "role": role, "by_bill": bill,
             "service": service, "accrual": accrual}
@@ -316,7 +328,8 @@ FIN_REGISTER = {
                 item="Клиент Икс", accrual=True)]},
         {"id": "администрирование", "label": "Администрирование", "to_pay": 20000, "paid": 0, "items": [
             _ri(4, "Учителева Ольга", 3000), _ri(5, "Лариса бухгалтер", 5000),
-            _ri(6, "Админова Мария", 15000, cid="c2", person="Админова Мария Петровна")]},
+            _ri(6, "Админова Мария", 15000, cid="c2", person="Админова Мария Петровна",
+                hold="акт № 13 за ноябрь 2026 не подписан")]},
         {"id": "сервисы", "label": "Сервисы и подписки", "to_pay": 0, "paid": 23982.1, "items": [
             _ri(7, "Railway", 23482.10, status="факт", service=True),
             _ri(8, "Селектел", 500, status="факт", service=True)]},
@@ -327,7 +340,8 @@ FIN_REGISTER = {
              "item": "отчисление в фонд", "dest": "на карту собственника"}]},
     ],
     "funds": [{"id": "marketing", "name": "Фонд маркетинга", "added": 150644.11, "spent": 92500, "items": [
-        _ri(9, "СММ Екатерина", 22500, cid="c3", person="Смм Екатерина"),
+        _ri(9, "СММ Екатерина", 22500, cid="c3", person="Смм Екатерина",
+            hold="не заполнил анкету, акт не завести"),
         _ri(10, "Ипшница Ольга", 40000, bill=True),
         _ri(11, "Монтажер Анна", 12500)]}],
 }
@@ -558,6 +572,7 @@ class H(SimpleHTTPRequestHandler):
                     for k, ti, rq in AP_REQS]
             a = {"id": aid, "uniName": body.get("uni_name") or "Без названия",
                  "programName": body.get("program_name"), "intake": body.get("intake"),
+                 "opensAt": body.get("opens_at"),
                  "deadline": body.get("deadline"), "status": "draft", "appNumber": "",
                  "portalUrl": body.get("portal_url") or "", "portalLogin": body.get("portal_login") or "",
                  "hasSecret": False, "requirements": reqs,
@@ -623,6 +638,22 @@ class H(SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(size) or b"{}")
         except Exception:
             body = {}
+        # Правка полей карточки вуза (сроки, портал, номер заявки). До 26.11.2026 мок
+        # на нее отвечал «ok» и ничего не менял: поле в браузере возвращалось старым
+        # следующим же ответом сервера, и это читалось как поломка экрана.
+        if "/admin/api/applications/" in path:
+            _, a = app_by_id(lead_id)
+            if a is not None:
+                for k, api_k in (("opens_at", "opensAt"), ("deadline", "deadline"),
+                                 ("uni_name", "uniName"), ("program_name", "programName"),
+                                 ("intake", "intake"), ("app_number", "appNumber"),
+                                 ("portal_url", "portalUrl"), ("portal_login", "portalLogin"),
+                                 ("notes", "notes")):
+                    if k in body:
+                        a[api_k] = body[k]
+                        ap_log(a["id"], "field", "Изменили " + k + ": " + str(body[k] or "пусто"), True)
+                return self._json({"ok": True, **a})
+            return self._json({"ok": True})
         for l in leads():
             if l["id"] == lead_id:
                 for k in ("status", "note", "tasks", "comms"):
@@ -640,6 +671,13 @@ class H(SimpleHTTPRequestHandler):
                         else:
                             ov[k2] = v2
                     l["crm"]["overrides"] = ov
+                    # Этап в строке считает сервер, и ручная отметка его подменяет:
+                    # без пересчета мок подтверждал бы правку, которой не видно.
+                    try:
+                        l["stage"] = stage_of(int(str(l["id"]).rsplit("-", 1)[-1]),
+                                              ov.get("stage"))
+                    except (TypeError, ValueError):
+                        pass
                 return self._json({"ok": True, "crm": l["crm"]})
         return self._json({"ok": True})
 
