@@ -2715,10 +2715,6 @@
        «Продажах», вкладка «План периода». Экран живет по старой ссылке, а его данные
        (месячный план) по-прежнему читают «Продажи» и «Управление». */
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact', hidden: true },
-    /* «Кто поступил» (Вера 26.11.2026): разовая разметка клиентов на тарифе — уже
-       учится в Китае или нет и куда поступает. Пункта в меню нет, экран открывают
-       по ссылке #page/admitted: отметки ставит тот, кто знает семьи. */
-    { id: 'admitted', label: 'Кто поступил', icon: 'cap', cap: 'clients', hidden: true },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
        Отдельным пунктом под «Задачами» и открыт всем, у кого есть задачи
@@ -4459,7 +4455,6 @@
     else if (state.page === 'sales') renderSales(view);
     else if (state.page === 'myshift') renderMyShift(view);
     else if (state.page === 'planfact') renderPlanFact(view);
-    else if (state.page === 'admitted') renderAdmitted(view);
     else if (state.page === 'reward') renderReward(view);
     else if (state.page === 'manage') renderManage(view);
     else if (state.page === 'cmap') renderCmap(view);
@@ -36960,92 +36955,6 @@
         state._mf = null;
         fetchMiniFunnel();
         renderView();
-      });
-    });
-  }
-
-  /* ── Кто поступил ────────────────────────────────────────────────────────────
-     Рассылка мини-курсов не должна предлагать CSCA тому, кто уже учится в Китае,
-     а магистранту CSCA не нужен вовсе. В карточке этого не видно: этапы плана у всех
-     стоят на подготовке. Поэтому разметка руками: «Поступил / Не поступил» и для
-     непоступивших программа. Пишем в overrides карточки (admitted, track), трек —
-     тот же, что карточка уже несет, поэтому подробный трек («бакалавриат после
-     языкового года») не затираем, если категория совпала. */
-  function admProgram(track) {
-    track = track || '';
-    if (track.indexOf('bachelor') === 0) return 'bachelor';
-    if (track.indexOf('master') === 0) return 'master';
-    return '';
-  }
-
-  function fetchAdmitted() {
-    api('/admin/api/board').then(function (r) {
-      state._adm = ((r && r.clients) || []).filter(function (c) { return c.tariff; });
-      renderView();
-    }).catch(function () { state._adm = 'none'; renderView(); });
-  }
-
-  function admSeg(id, key, opts, cur) {
-    return '<div class="dperiod adm-seg">' + opts.map(function (o) {
-      return '<button data-adm="' + id + '" data-k="' + key + '" data-v="' + o[0] + '" class="' +
-        (cur === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
-    }).join('') + '</div>';
-  }
-
-  function renderAdmitted(view) {
-    if (!state._adm) { view.innerHTML = dashSkeleton(); fetchAdmitted(); return; }
-    if (state._adm === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить список — проверь сеть или доступ.</div></div>';
-      return;
-    }
-    var list = state._adm.slice().sort(function (a, b) {
-      return (a.name || '').localeCompare(b.name || '', 'ru');
-    });
-    var done = list.filter(function (c) {
-      return c.admitted === 'yes' || (c.admitted === 'no' && admProgram(c.program));
-    }).length;
-    var TAR = { std: 'Стандарт', plus: 'Плюс', prem: 'Премиум' };
-    var rows = list.map(function (c) {
-      var id = esc(c.session_id), prog = admProgram(c.program);
-      return '<div class="trow adm-row">' +
-        '<div class="t-cell"><a class="t-ttl adm-name" href="#lead/' + id + '">' + esc(c.name) + '</a>' +
-          '<div class="t-sub">' + esc(TAR[c.tariff] || c.tariff) + '</div></div>' +
-        '<div class="adm-acts">' +
-          admSeg(id, 'admitted', [['yes', 'Поступил'], ['no', 'Не поступил']], c.admitted) +
-          (c.admitted === 'no'
-            ? admSeg(id, 'program', [['bachelor', 'Бакалавриат'], ['master', 'Магистратура']], prog)
-            : '') +
-        '</div></div>';
-    }).join('');
-    view.innerHTML = '<div class="card sp5" style="overflow:hidden">' +
-      '<div class="sec-head" style="padding:20px 24px 16px">' +
-        '<span class="ic">' + ic('cap', 14) + '</span>' +
-        '<div><div class="t">Кто поступил</div>' +
-        '<div class="s">клиенты на тарифе · отметка сразу сохраняется в карточку</div></div>' +
-        '<span style="flex:1"></span>' +
-        '<div class="adm-count"><b class="num">' + done + '</b> из <span class="num">' + list.length + '</span> отмечено</div>' +
-      '</div>' + (rows || '<div class="empty">Клиентов на тарифе нет.</div>') + '</div>';
-    Array.prototype.forEach.call(view.querySelectorAll('[data-adm]'), function (b) {
-      b.addEventListener('click', function () {
-        var id = b.getAttribute('data-adm'), k = b.getAttribute('data-k'), v = b.getAttribute('data-v');
-        var c = state._adm.filter(function (x) { return x.session_id === id; })[0];
-        if (!c) return;
-        var ov = {}, prev = { admitted: c.admitted, program: c.program };
-        if (k === 'admitted') {
-          if (c.admitted === v) return;
-          ov.admitted = v; c.admitted = v;
-        } else {
-          if (admProgram(c.program) === v) return;
-          ov.track = v; c.program = v;
-        }
-        renderView();
-        api('/admin/api/leads/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ overrides: ov }) }).then(function () {
-          delete state.details[id];
-        }).catch(function () {
-          c.admitted = prev.admitted; c.program = prev.program; renderView();
-          showToast('Не сохранилось — проверь сеть и нажми еще раз');
-        });
       });
     });
   }
