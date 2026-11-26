@@ -780,6 +780,11 @@ a { color: inherit; text-decoration: none; }
 .t-dl.late { color: var(--red-ink); }
 .t-dl.soon { color: var(--amber-ink); }
 .t-dl.none { font-weight: 500; color: var(--ink-3); }
+/* Расчетная дата (ближайшая подача по вузам) — тем же тоном, что ручная: срок
+   настоящий, и гасить его было бы враньем. Отличает ее пунктир под числом —
+   «посчитано, правится у вуза», — и подсказка с названием вуза. */
+.t-dl.auto .num { border-bottom: 1px dashed var(--line-2); padding-bottom: 1px; }
+.t-dl.auto:hover .num { border-bottom-color: currentColor; }
 .t-dl .dlset i { font-style: normal; }
 /* Прочерк может молчать, а «поставить» — это призыв, и на --ink-3 он не читался. */
 .t-dl .dlset .d1 { color: var(--ink-2); }
@@ -832,6 +837,12 @@ a { color: inherit; text-decoration: none; }
 .cf-grid { grid-template-columns: minmax(0,1.4fr) 74px 92px 106px 84px 116px; }
 .cf-grid .num { text-align: right; }
 .cf-grid .th:not(:first-child) { text-align: right; }
+.mf-grid { grid-template-columns: minmax(0,1.4fr) repeat(4, 96px); }
+.mf-grid .num { text-align: right; }
+.mf-grid .th:not(:first-child) { text-align: right; }
+.mf-sub { padding: 18px 24px 8px; border-top: 1px solid var(--line); font-size: 12px; font-weight: 700;
+  color: var(--ink-3); }
+#mf-prod button { padding: 7px 13px; }
 .cf-note { padding: 14px 24px 16px; border-top: 1px solid var(--line); font-size: 12.5px;
   line-height: 1.45; color: var(--ink-2); }
 
@@ -4550,6 +4561,21 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
 .sc-add { border: 1px dashed var(--line-2); background: none; color: var(--ink-3); border-radius: 7px; padding: 2px 8px; cursor: pointer; line-height: 0; }
 .sc-add:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-tint); }
 
+/* Сводка окон под консультации для руководителя (Павел 26.11.2026) */
+.sc-sum { margin-bottom: 12px; padding: 12px 14px; border-radius: 12px; background: var(--fill); }
+.sc-sum-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.sc-sum-h b { font: 600 13.5px 'Manrope', sans-serif; color: var(--ink); }
+.sc-sum-h small { font-size: 12px; color: var(--ink-3); }
+.sc-sum-h em { font-style: normal; color: var(--red-ink); font-weight: 600; }
+.sc-sum-l { display: flex; flex-wrap: wrap; gap: 6px; }
+.sc-sum-r { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
+.sc-sum-r:hover { border-color: var(--blue); }
+.sc-sum-r.on { border-color: var(--blue); background: var(--blue-tint); }
+.sc-sum-n { font: 600 13px 'Manrope', sans-serif; color: var(--ink); }
+.sc-sum-v { font-size: 12px; color: var(--ink-2); }
+.sc-sum-v b { color: var(--ink); font-weight: 600; }
+.sc-sum-r.none { border-color: var(--red-soft); background: var(--red-soft); }
+.sc-sum-r.none .sc-sum-v { color: var(--red-ink); font-weight: 600; }
 .sc-claim { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--fill); font-size: 13px; color: var(--ink-2); }
 .sc-claim svg { color: var(--ink-3); flex: none; }
 .sc-claimsel { min-width: 260px; margin-left: auto; }
@@ -12637,6 +12663,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      пол-экрана, и он ломался на три строки. */
   .bc-head { flex-direction: column; align-items: flex-start; gap: 10px; }
   .bc-find { flex-direction: column; }
+  /* «Реанимация за месяц»: переключатель месяца уходит под заголовок во всю ширину,
+     иначе на 390px он сжимал подпись до слова в строку. */
+  .bc-re .sec-head { flex-wrap: wrap; }
+  .bc-re .brd-nav { width: 100%; margin-left: 0; justify-content: space-between; }
   .bc-find .bp { width: 100%; }
   .bc-found { margin: 14px -18px -18px; }
   .bc-filters { padding: 0 16px 12px; }
@@ -16750,7 +16780,12 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .pj-c .bp{justify-self:start}
 
 /* Моя смена: разделитель между отрезком и срезом «Оставили заявку» (Павел 11262) */
+.ms-nm small.ms-trs { white-space: normal; overflow: visible; margin-top: 2px; }
+.ms-row a.ms-tr { color: var(--blue); text-decoration: none; }
+.ms-row a.ms-tr:hover { text-decoration: underline; }
 .ms-spans .ms-chipsep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); }
+.ms-spans .ms-range { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); }
+.ms-spans .ms-range .al-in { width: auto; height: 30px; padding: 0 10px; font-size: 13px; }
 
 /* Проверка ссылок эфира: значок статуса, сломанная строка подсвечена */
 .lad-row.gf-flat.efl-row { grid-template-columns: minmax(0, 1fr) auto; height: auto; min-height: 52px; padding-top: 10px; padding-bottom: 10px; }
@@ -16786,4 +16821,25 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 @media (max-width: 640px) {
   .lm-row { grid-template-columns: minmax(0, 1fr) auto; }
   .lm-row .lm-sel { grid-column: 1 / -1; }
+}
+
+/* Строка задачи — ссылка #task/<id>, чтобы открывать ее в новой вкладке.
+   :where — без веса: вид задает класс строки (.trow, .tsk-step, .kb-card). */
+:where(a.tk-link) { display: block; color: inherit; text-decoration: none; }
+
+/* «Кто поступил» — разметка клиентов на тарифе (app.js renderAdmitted) */
+.adm-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; height: auto;
+  min-height: 58px; padding-top: 8px; padding-bottom: 8px; cursor: default; }
+.adm-row .t-cell { flex: 1 1 220px; min-width: 0; }
+.adm-name { color: var(--ink); text-decoration: none; }
+.adm-name:hover { color: var(--blue); }
+.adm-acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.adm-count { font: 500 13px 'Manrope', sans-serif; color: var(--ink-2); white-space: nowrap; }
+.adm-count b { color: var(--ink); font-weight: 700; }
+@media (max-width: 720px) {
+  .adm-row { padding: 12px 14px; gap: 10px; }
+  .adm-row .t-cell { flex-basis: 100%; }
+  .adm-acts { width: 100%; }
+  .adm-seg { flex: 1 1 100%; }
+  .adm-seg button { flex: 1; padding-left: 8px; padding-right: 8px; }
 }
