@@ -780,6 +780,11 @@ a { color: inherit; text-decoration: none; }
 .t-dl.late { color: var(--red-ink); }
 .t-dl.soon { color: var(--amber-ink); }
 .t-dl.none { font-weight: 500; color: var(--ink-3); }
+/* Расчетная дата (ближайшая подача по вузам) — тем же тоном, что ручная: срок
+   настоящий, и гасить его было бы враньем. Отличает ее пунктир под числом —
+   «посчитано, правится у вуза», — и подсказка с названием вуза. */
+.t-dl.auto .num { border-bottom: 1px dashed var(--line-2); padding-bottom: 1px; }
+.t-dl.auto:hover .num { border-bottom-color: currentColor; }
 .t-dl .dlset i { font-style: normal; }
 /* Прочерк может молчать, а «поставить» — это призыв, и на --ink-3 он не читался. */
 .t-dl .dlset .d1 { color: var(--ink-2); }
