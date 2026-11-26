@@ -9664,6 +9664,14 @@
     });
     var who = view.querySelector('#sc-who');
     if (who) who.addEventListener('change', function () { state.schedWho = this.value || ''; renderView(); });
+    // Строка сводки окон: показать в сетке команды только этого человека, второй клик — всех
+    Array.prototype.forEach.call(view.querySelectorAll('[data-scwho]'), function (b) {
+      b.addEventListener('click', function () {
+        var nm = b.getAttribute('data-scwho');
+        state.schedScope = 'all';
+        state.schedWho = state.schedWho === nm ? '' : nm; renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
       b.addEventListener('click', function () {
         var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
@@ -10152,8 +10160,46 @@
         ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или консультацией. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
         : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
     view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
+      (!state.schedEdit ? schedConsultSum(d, lo, today) : '') +
       flt + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
     schedWire(view, d);
+  }
+
+  /* Окна под консультации по людям (Павел 26.11.2026: «где мне как руководителю
+     проверять, кто какие слоты внес»). Только для руководителя (can_edit_all) и только
+     пул записи на консультацию (роль staff): сколько свободных окон осталось на
+     показанной неделе с сегодняшнего дня и сколько уже занято записями. У кого пусто —
+     сверху и красным: к нему клиента записать некуда. Неделя листается стрелками шапки. */
+  function schedConsultSum(d, lo, today) {
+    if (!d || !d.can_edit_all) return '';
+    var from = zoomYmd(new Date(Math.max(lo.getTime(), today.getTime())));
+    var to = zoomYmd(new Date(lo.getTime() + 7 * 86400000));
+    if (from >= to) return '';
+    var rows = {};
+    (d.people || []).forEach(function (p) {
+      if (p.role === 'staff' && p.taken) rows[p.person] = { name: p.person, free: 0, booked: 0 };
+    });
+    (d.slots || []).forEach(function (s) {
+      if (s.role !== 'staff' || s.date < from || s.date >= to) return;
+      var r = rows[s.person] || (rows[s.person] = { name: s.person, free: 0, booked: 0 });
+      if (s.booked) r.booked++; else if (!s.blocked) r.free++;
+    });
+    var list = Object.keys(rows).map(function (k) { return rows[k]; });
+    if (!list.length) return '';
+    list.sort(function (a, b) { return (a.free + a.booked > 0) - (b.free + b.booked > 0) || a.free - b.free || a.name.localeCompare(b.name, 'ru'); });
+    var empty = list.filter(function (r) { return !r.free && !r.booked; }).length;
+    return '<div class="sc-sum"><div class="sc-sum-h"><b>Окна под консультации</b><small>' +
+      (from === zoomYmd(today) ? 'с сегодня до конца недели' : 'на эту неделю') +
+      (empty ? ' · <em>' + empty + ' без окон</em>' : ' · у всех есть окна') + '</small></div>' +
+      '<div class="sc-sum-l">' + list.map(function (r) {
+        var none = !r.free && !r.booked;
+        return '<button type="button" class="sc-sum-r' + (none ? ' none' : '') + (state.schedWho === r.name ? ' on' : '') + '" data-scwho="' + esc(r.name) + '" title="Показать в сетке только его">' +
+          '<span class="sc-sum-n">' + esc(schedShort(r.name)) + '</span>' +
+          (none ? '<span class="sc-sum-v">окон нет</span>'
+            : '<span class="sc-sum-v"><b class="num">' + r.free + '</b> свободно' +
+              (r.booked ? ' · <b class="num">' + r.booked + '</b> записано' : '') + '</span>') +
+          '</button>';
+      }).join('') + '</div></div>';
   }
 
   /* Панель под сеткой: сколько часов набрано и куда их поставить.
