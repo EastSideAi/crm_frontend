@@ -30476,15 +30476,15 @@
         }
         if (g.key === 'tutors') {
           var f = tutFact[u.id] || 0;
-          return motivRosterRow({ name: u.name, sub: roleLabel,
+          return motivRosterRow({ name: u.name, sub: roleLabel, clickId: u.id,
             planText: 'сдельно, за точки', planMuted: true,
             factText: 'к выплате ' + fmtMoney(f), factMuted: !f });
         }
         if (u.role === 'owner') {
-          return motivRosterRow({ name: u.name, sub: roleLabel,
+          return motivRosterRow({ name: u.name, sub: roleLabel, clickId: u.id,
             planText: '—', planMuted: true, factText: 'дивиденды отдельно', factMuted: true });
         }
-        return motivRosterRow({ name: u.name, sub: roleLabel,
+        return motivRosterRow({ name: u.name, sub: roleLabel, clickId: u.id,
           planText: '—', planMuted: true, factText: 'оплата не заведена', factMuted: true });
       }).join('');
       return motivDeptHead(g.label, people.length) + rows;
@@ -30535,12 +30535,7 @@
       return x.person_id === id;
     })[0];
     var back = '<button class="qchip mp-back" data-motivback="1">← К сотрудникам</button>';
-    if (!s) {
-      view.innerHTML = back + '<div class="card"><div class="empty">У этого человека нет ' +
-        'расчётного листа в «Вознаграждении». Деньги тьюторов считаются по вехам, ' +
-        'продавцов — процентом и сменами, это отдельные окна.</div></div>';
-      motivPersonBack(view); return;
-    }
+    if (!s) return renderMotivPersonOther(view, id);
     motivTasksLoad(id);
     var tk = (state._motivTasks || {})[id];
     var rows = s.rows || [];
@@ -30625,10 +30620,27 @@
       '</div></div>';
     }
 
-    /* Напоминание, что сверху фикса можно добрать: свои продажи и партнёрка. Процент 5%
-       закреплён (оферта 27.10), см. partner-program. Раскрыт поток кабинета по просьбе
-       Павла 25.11: рилсы → своя ссылка → приводишь и сам же продаёшь. */
-    var earn = '<div class="card sp12">' +
+    var earn = motivEarnHtml();
+
+    view.innerHTML = back +
+      '<div class="card sp12"><div class="sec-head rw-head"><div>' +
+        '<div class="t">' + esc(s.name) +
+          (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</div>' +
+        '<div class="s">расчёт за ' + esc(pfMonthTitle(state._motivRw.period)) + '</div></div></div></div>' +
+      ring + statBar(tiles) + whenPay + kpi + tasks + earn +
+      '<div class="fin-note">' + ic('alert', 13) +
+        'Это те же деньги, что у Романа в расчётном листе — показаны в твоём окне. ' +
+        'Пока только просмотр: выставлять фикс и назначать KPI отсюда подключу отдельным ' +
+        'шагом, когда сверимся с Романом, куда это писать.' +
+      '</div>';
+    motivWireEarn(view);
+    motivPersonBack(view); pageAnim(view);
+  }
+  /* Блок «Можно зарабатывать больше» — общий для карточки штатного и тьютора: партнёрка
+     одинаково доступна всем. Процент 5% закреплён (оферта 27.10), поток кабинета раскрыт
+     по просьбе Павла 25.11: рилсы → своя ссылка → приводишь и сам же продаёшь. */
+  function motivEarnHtml() {
+    return '<div class="card sp12">' +
       '<div class="sec-head"><div><div class="t">Можно зарабатывать больше</div>' +
         '<div class="s">фикс и KPI — не потолок, сверху можно добрать</div></div></div>' +
       '<div class="mp-earn">' +
@@ -30648,23 +30660,69 @@
         '</div>' +
         '<button class="bp ghost mp-earn-cta" data-motivearn="1">Подключить и получить ссылку</button>' +
       '</div></div>';
-
-    view.innerHTML = back +
-      '<div class="card sp12"><div class="sec-head rw-head"><div>' +
-        '<div class="t">' + esc(s.name) +
-          (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</div>' +
-        '<div class="s">расчёт за ' + esc(pfMonthTitle(state._motivRw.period)) + '</div></div></div></div>' +
-      ring + statBar(tiles) + whenPay + kpi + tasks + earn +
-      '<div class="fin-note">' + ic('alert', 13) +
-        'Это те же деньги, что у Романа в расчётном листе — показаны в твоём окне. ' +
-        'Пока только просмотр: выставлять фикс и назначать KPI отсюда подключу отдельным ' +
-        'шагом, когда сверимся с Романом, куда это писать.' +
-      '</div>';
+  }
+  function motivWireEarn(view) {
     var eb = view.querySelector('[data-motivearn]');
     if (eb) eb.addEventListener('click', function () {
       window.open('https://t.me/eastsideai_bot?start=partner', '_blank', 'noopener');
       showToast('Открываю регистрацию партнёра в Telegram — там заведёшь кабинет и получишь ссылку.');
     });
+  }
+  /* Карточка не-штатного (тьютор, админ и пр.): у него нет расчётного листа. Тьютору
+     показываем за что и когда ближайшая выплата (точки по ученикам, считаются сами),
+     остальным — что схема оплаты ещё не заведена. Партнёрский блок общий. */
+  function renderMotivPersonOther(view, id) {
+    var back = '<button class="qchip mp-back" data-motivback="1">← К сотрудникам</button>';
+    var u = (Array.isArray(state._team) ? state._team : []).filter(function (x) { return x.id === id; })[0];
+    var roleLabel = u ? ((ROLES[u.role] && ROLES[u.role].label) || u.role) : '';
+    var name = u ? u.name : 'Сотрудник';
+    var isTutor = u && ['tutor', 'senior_tutor', 'tutor_sales'].indexOf(u.role) >= 0;
+    if (isTutor && state._motivTut == null) {
+      view.innerHTML = back + '<div class="card"><div class="empty">Собираем выплату…</div></div>';
+      motivTutLoad(); motivPersonBack(view); return;
+    }
+    var tut = (isTutor && state._motivTut && state._motivTut.tutors)
+      ? state._motivTut.tutors.filter(function (t) { return t.id === id; })[0] : null;
+
+    var head = '<div class="card sp12"><div class="sec-head rw-head"><div>' +
+      '<div class="t">' + esc(name) +
+        (roleLabel ? ' <span class="rw-role">' + esc(roleLabel) + '</span>' : '') + '</div>' +
+      '<div class="s">' + (isTutor ? 'оплата за закрытые точки по ученикам'
+        : 'мотивация сотрудника') + '</div></div></div></div>';
+
+    var bodyCard;
+    if (isTutor) {
+      var total = tut ? tut.total : 0;
+      var cnt = tut ? tut.rows.length : 0;
+      var day = (state._motivTut && state._motivTut.day) ? fmtDay(state._motivTut.day) : '—';
+      var tiles = [
+        { label: 'К выплате', value: fmtMoney(total) + ' ₽', sub: 'в ближайшую', lead: true },
+        { label: 'Начислений', value: String(cnt), sub: 'закрытых точек' },
+        { label: 'Выплата', value: day, sub: 'ближайшая дата' },
+      ];
+      var rows = (tut && tut.rows.length)
+        ? '<div class="mp-pay">' + tut.rows.map(function (r) {
+            return '<div class="mp-pay-row"><span class="mp-pd">' + esc(r.client) + '</span>' +
+              '<span class="mp-pt">' + esc(r.title) + (r.result ? ' · ' + esc(r.result) : '') + '</span>' +
+              '<span class="num">' + fmtMoney(r.amount) + ' ₽</span></div>';
+          }).join('') + '</div>'
+        : '<div class="empty">В ближайшую выплату пока ни одной закрытой точки. ' +
+          'Закроет точку по ученику — она появится здесь и пойдёт в выплату.</div>';
+      bodyCard = statBar(tiles) +
+        '<div class="card sp12"><div class="sec-head"><div><div class="t">За что выплата</div>' +
+          '<div class="s">закрытые точки по ученикам, считаются автоматически</div></div></div>' +
+          rows + '</div>';
+    } else {
+      bodyCard = '<div class="card sp12"><div class="sec-head"><div><div class="t">Оплата</div></div></div>' +
+        '<div class="empty">У этого человека в системе пока не заведена схема оплаты — ' +
+        'фикс и KPI ставятся в расчётном листе. Подключим отдельным шагом.</div></div>';
+    }
+
+    view.innerHTML = back + head + bodyCard + motivEarnHtml() +
+      '<div class="fin-note">' + ic('alert', 13) +
+        'Пока только просмотр. Деньги считает система, руками тут ничего не вводится.' +
+      '</div>';
+    motivWireEarn(view);
     motivPersonBack(view); pageAnim(view);
   }
   function motivPersonBack(view) {
