@@ -15880,6 +15880,11 @@ video.cs-media { background: #000; }
 .pj-m.team { background: var(--blue-tint); }
 .pj-m b { color: var(--ink-2); font-weight: 600; }
 .pj-m div { margin-top: 3px; font-size: 13px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
+.pj-m.gone > div:last-child { color: var(--ink-3); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--ink-3) 50%, transparent); }
+.pj-m-del { color: var(--red-ink); font-weight: 500; }
+.pj-m-ed { color: var(--ink-3); font-style: italic; }
+.pj-m .pj-m-old { margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--line-2); font-size: 11px; color: var(--ink-3); }
+.pj-m .pj-m-old div { margin-top: 2px; font-size: 12px; color: var(--ink-3); }
 .pj-reply { margin-top: 10px; }
 .pj-reply .al-in { width: 100%; resize: vertical; }
 .pj-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
