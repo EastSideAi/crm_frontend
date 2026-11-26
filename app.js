@@ -9127,12 +9127,12 @@
     // недели задача и где нашлось слово). Последними: кусок текста занимает
     // свою строку, и все, что после него, уехало бы на третью.
     if (opts.extra) meta = meta.concat(opts.extra);
-    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" data-tid="' + t.id + '">' +
+    return '<a class="trow dy-row tk-link' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" href="#task/' + t.id + '" data-tid="' + t.id + '">' +
       '<div class="dy-t">' + quick + '<div class="dy-main"><span class="dy-ttl">' + impMark(t) +
         (opts.mark ? fndMark(t.title, opts.mark) : esc(t.title)) + '</span>' +
         (meta.length ? '<div class="dy-meta">' + meta.join('') + '</div>' : '') + '</div></div>' +
       '<div class="dy-r">' + right + '</div>' +
-    '</div>';
+    '</a>';
   }
   function dyBand(title, items, cls, opts) {
     if (!items.length) return '';
@@ -12338,14 +12338,14 @@
     // важность — тем же значком, что в строке дня и недели.
     var chip = t.status === 'return' ? '<span class="sev mini st-return">вернули</span>'
       : t.status === 'block' ? '<span class="sev mini st-block">заблокирована</span>' : '';
-    return '<div class="kb-card tb-card' + (t.overdue ? ' over' : '') + '" draggable="true" data-id="' + t.id + '">' +
+    return '<a class="kb-card tb-card tk-link' + (t.overdue ? ' over' : '') + '" href="#task/' + t.id + '" draggable="true" data-id="' + t.id + '">' +
       '<div class="tb-title">' + impMark(t) + esc(t.title) + '</div>' +
       (t.client_name ? '<div class="tb-cl">' + esc(t.client_name) + '</div>' : '') +
       (gave && t.assignee_name ? '<div class="tb-asg">' + dyAv(t.assignee_name) + '<span>' + esc(t.assignee_name) + '</span></div>' : '') +
       (gave === 'dept' && !state.boardGoal && t.parent_title ? '<div class="tb-goal">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></div>' : '') +
       '<div class="kb-meta">' + chip +
         (t.status === 'done' ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
-      '</div></div>';
+      '</div></a>';
   }
   function renderMyBoard(view) {
     if (state.myboard === null) { view.innerHTML = dashSkeleton(); loadMyBoard(); return; }
@@ -12535,10 +12535,10 @@
       var own = isOwnTask(t);
       var right = (t.due_at ? '<span class="tsk-due wk-aim">' + ic('cal', 11) + esc(dayLabel(t.due_at)) + '</span>' : '') +
         (own ? '<button class="qchip wk-pull" data-pull="' + t.id + '">' + ic('go', 12) + 'В неделю</button>' : '');
-      return '<div class="trow dy-row later" data-tid="' + t.id + '">' +
+      return '<a class="trow dy-row later tk-link" href="#task/' + t.id + '" data-tid="' + t.id + '">' +
         '<div class="dy-t"><span class="tsk-chk" style="cursor:default;opacity:.35"></span><span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
           (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : (t.parent_title ? '<span class="dy-cl">' + esc(t.parent_title) + '</span>' : '')) + '</div>' +
-        '<div class="dy-r">' + right + '</div></div>';
+        '<div class="dy-r">' + right + '</div></a>';
     }).join('');
     return '<div class="card dy-card dy-later' + (state.laterOpen ? ' open' : '') + '">' +
       '<button class="dy-h dy-later-h" id="dy-later"><span class="t">Потом</span>' +
@@ -16358,11 +16358,11 @@
                 ? '<div class="tsk-steps">' + steps.map(function (s) {
                     var sst = TASK_ST[s.status] || TASK_ST.wait;
                     var sdue = dueLabel(s);
-                    return '<button class="tsk-step" data-step="' + s.id + '">' +
+                    return '<a class="tsk-step tk-link" href="#task/' + s.id + '" data-step="' + s.id + '">' +
                       '<span class="tsk-step-t">' + esc(s.title) + '</span>' +
                       '<span class="tsk-step-m">' + esc(s.assignee_name || 'не назначена') +
                         ' · <i class="' + sdue.cls + '">' + esc(sdue.text) + '</i></span>' +
-                      '<span class="sev ' + sst.cls + '">' + sst.label + '</span></button>';
+                      '<span class="sev ' + sst.cls + '">' + sst.label + '</span></a>';
                   }).join('') + '</div>'
                 : '<div class="tsk-nosteps">Шагов нет. Большую задачу лучше разложить на шаги — тогда видно движение, а не только срок.</div>') +
               (t.status === 'cancel' ? '' :
@@ -36845,6 +36845,120 @@
     });
   }
 
+  /* ── Воронка мини-курсов ────────────────────────────────────────────────
+     Тренажеры DET, HSK, CSCA и бесплатный урок китайского: от входа до денег.
+     Считает сервер (routers/minicourse_funnel.py): люди, а не клики, когорта по дате
+     входа, действующие клиенты команды не считаются. Сделано после разбора 26.11.2026,
+     перед запуском трафика: видно, на каком шаге режется путь и какой источник
+     приводит покупателей (Вера). */
+  function mfDays() { var d = state.mkDays; return d ? d : 365; }
+
+  function fetchMiniFunnel() {
+    var days = mfDays(), prod = state.mfProd || 'det';
+    state._mfLoad = prod + ':' + days;
+    api('/admin/api/minicourse/funnel?product=' + prod + '&days=' + days).then(function (r) {
+      if (state._mfLoad !== prod + ':' + days) return;   // пока ждали, переключили
+      state._mf = r;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') {
+        state._mf = 'none';
+        if (state.page === 'marketing') renderView();
+      }
+    });
+  }
+
+  function mfLadder(steps) {
+    var first = steps.length ? steps[0].n : 0;
+    var worst = -1, worstConv = 101;
+    steps.forEach(function (s, i) {
+      if (!i || !steps[i - 1].n) return;
+      var c = Math.round(s.n / steps[i - 1].n * 100);
+      if (c < worstConv) { worstConv = c; worst = i; }
+    });
+    return steps.map(function (s, i) {
+      var w = first ? Math.min(100, Math.round(s.n / first * 100)) : 0;
+      var prev = i ? steps[i - 1].n : 0;
+      var conv = i ? (prev ? Math.round(s.n / prev * 100) : 0) : 100;
+      var lost = i ? Math.max(0, prev - s.n) : 0;
+      /* Шаги не строго вложены: тренажер открывают и без бесплатной недели (открыла
+         команда), поэтому шаг бывает больше предыдущего. Процент выше 100 не пишем. */
+      var right = !i ? '<span class="lad-conv num">все</span>'
+        : (conv > 100 || !prev) ? '<span class="lad-conv num">' + Math.round(s.n / first * 100) + '% от входа</span>'
+        : '<span class="lad-conv num">' + conv + '% с шага</span>' +
+          '<span class="lad-drop' + (lost ? '' : ' zero') + ' num">' + (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>';
+      return '<div class="lad-row' + (i === worst ? ' worst' : '') + '">' +
+        '<div class="lad-nm">' + esc(s.title) + '</div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, s.n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + s.n + '</div><div class="lad-right">' + right + '</div></div>';
+    }).join('');
+  }
+
+  /* Четыре столбца таблиц: вход, середина пути, покупка тренажера, покупка дальше.
+     У продукта может не быть части шагов — тогда столбец просто не рисуем. */
+  function mfCols(steps) {
+    var has = {}; steps.forEach(function (s) { has[s.key] = s.title; });
+    var keys = [steps[0].key, has.open ? 'open' : 'finish', 'paid', 'more'].filter(function (k, i, a) {
+      return has[k] && a.indexOf(k) === i;
+    });
+    var short = { enter: 'Вошли', finish: 'Сдали', open: 'Открыли', paid: 'Оплатили', more: 'Купили еще' };
+    return keys.map(function (k) { return [k, short[k] || has[k], has[k]]; });
+  }
+
+  function mfTable(rows, cols, first, label) {
+    if (!rows.length) return '';
+    var head = '<div class="trow mf-grid thead"><span class="th">' + first + '</span>' +
+      cols.map(function (c) { return '<span class="th" title="' + esc(c[2]) + '">' + c[1] + '</span>'; }).join('') + '</div>';
+    return head + rows.map(function (r) {
+      return '<div class="trow mf-grid"><div class="t-cell"><div class="t-ttl">' + esc(label(r)) + '</div></div>' +
+        cols.map(function (c) { return '<div class="num">' + (r[c[0]] || 0) + '</div>'; }).join('') + '</div>';
+    }).join('');
+  }
+
+  function mfWeek(w) {
+    var d = new Date(w + 'T00:00:00');
+    return 'с ' + d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
+  }
+
+  function miniFunnelCard() {
+    var d = state._mf, prod = state.mfProd || 'det';
+    var prods = (d && d !== 'none' && d.products) ||
+      [{ key: 'det', title: 'Тренажер DET' }, { key: 'hsk', title: 'Тренажер HSK' },
+       { key: 'csca', title: 'Тренажер CSCA' }, { key: 'magnet', title: 'Китайский с носителем' }];
+    var head = '<div class="sec-head" style="padding:20px 24px 16px;flex-wrap:wrap;row-gap:12px">' +
+      '<span class="ic">' + ic('funnel', 14) + '</span>' +
+      '<div><div class="t">Мини-курсы: от входа до денег</div>' +
+      '<div class="s">люди по дате входа, без действующих клиентов</div></div>' +
+      '<span style="flex:1"></span><div class="dperiod" id="mf-prod">' + prods.map(function (p) {
+        return '<button data-mfp="' + p.key + '" class="' + (prod === p.key ? 'on' : '') + '">' +
+          esc(p.title.replace('Тренажер ', '')) + '</button>';
+      }).join('') + '</div></div>';
+    if (!d) return '<div class="card" style="margin-bottom:18px">' + head + '<div class="empty">Считаю…</div></div>';
+    if (d === 'none') return '<div class="card" style="margin-bottom:18px">' + head +
+      '<div class="empty">Не удалось загрузить воронку — проверь сеть или доступ.</div></div>';
+    var steps = d.steps || [];
+    if (!d.people) return '<div class="card" style="margin-bottom:18px">' + head +
+      '<div class="empty">За этот период в «' + esc(d.title) + '» новых людей не было.</div></div>';
+    var cols = mfCols(steps);
+    var src = mfTable(d.sources || [], cols, 'Источник', function (r) { return r.source; });
+    var wk = mfTable((d.weeks || []).slice(0, 8), cols, 'Неделя входа', function (r) { return mfWeek(r.week); });
+    return '<div class="card sp5" style="overflow:hidden;margin-bottom:18px">' + head +
+      '<div class="lad-static" style="border-top:1px solid var(--line)">' + mfLadder(steps) + '</div>' +
+      '<div class="mf-sub">Откуда пришли</div>' + src +
+      '<div class="mf-sub">По неделям входа</div>' + wk + '</div>';
+  }
+
+  function mfWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mfp]'), function (b) {
+      b.addEventListener('click', function () {
+        state.mfProd = b.getAttribute('data-mfp');
+        state._mf = null;
+        fetchMiniFunnel();
+        renderView();
+      });
+    });
+  }
+
   /* ── Воронка курса в записи ────────────────────────────────────────────────
      Курс продают со страницы, мимо бота, поэтому в воронках выше его не видно
      вовсе. Шаги до оплаты считает сама страница (routers/course.py), оплаты —
@@ -40507,16 +40621,19 @@
     if (state.mkTab === 'ads') { renderMkAds(view); return; }
     if (state.mkTab === 'plan') { renderMkPlan(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
+    if (state._mfLoad !== (state.mfProd || 'det') + ':' + mfDays()) { state._mf = null; fetchMiniFunnel(); }
     /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
        права стирать другой: раньше пустой ответ маркетинга гасил весь экран. */
     if (!state._mk) {
-      view.innerHTML = courseFunnelCard() + dashSkeleton();
+      view.innerHTML = miniFunnelCard() + courseFunnelCard() + dashSkeleton();
+      mfWire(view);
       fetchMk();
       return;
     }
     if (state._mk === 'none') {
-      view.innerHTML = courseFunnelCard() +
+      view.innerHTML = miniFunnelCard() + courseFunnelCard() +
         '<div class="card"><div class="empty">Не удалось загрузить воронки бота — проверь сеть или доступ.</div></div>';
+      mfWire(view);
       return;
     }
     var d = state._mk;
@@ -40539,12 +40656,13 @@
         '<div class="mk-st num" title="вошло · дошли до менеджера">' + entered + ' · ' + ho + '</div></div>';
     }).join('');
 
-    view.innerHTML = courseFunnelCard() +
+    view.innerHTML = miniFunnelCard() + courseFunnelCard() +
       '<div class="card" style="padding:22px 24px"><div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Воронки</div><div class="s">создавай воронку и ссылки здесь; шаги диалога меняет только агент песочницы</div></div>' +
         '<span style="flex:1"></span><button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
         '<div class="mk-list">' + (frows || '<div class="empty">Воронок пока нет — жми «+ Воронка».</div>') + '</div></div>';
 
+    mfWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-stats]'), function (row) {
       row.addEventListener('click', function () {
         state._mkStats = row.getAttribute('data-stats');
@@ -65146,6 +65264,17 @@
     var want = screenHash();
     try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) {}
   }
+  /* Строка задачи — настоящая ссылка #task/<id> (Виталий 26.11.2026: «правой
+     кнопкой открыть задачу в новом окне»). Браузерное меню, Ctrl/Cmd-клик и
+     колесико открывают ее в новой вкладке; обычный клик остается обработчику
+     строки, поэтому переход по ссылке здесь гасим, иначе карточка открылась бы
+     дважды (клик + hashchange). Клик по кнопке внутри строки не трогаем. */
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a.tk-link');
+    if (!a || e.target.closest('button, input, select, textarea, label, a') !== a) return;
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) { e.stopPropagation(); return; }
+    e.preventDefault();
+  }, true);
   window.addEventListener('hashchange', function () {
     if (!state.loaded) return;
     var id = hashLeadId();

@@ -832,6 +832,12 @@ a { color: inherit; text-decoration: none; }
 .cf-grid { grid-template-columns: minmax(0,1.4fr) 74px 92px 106px 84px 116px; }
 .cf-grid .num { text-align: right; }
 .cf-grid .th:not(:first-child) { text-align: right; }
+.mf-grid { grid-template-columns: minmax(0,1.4fr) repeat(4, 96px); }
+.mf-grid .num { text-align: right; }
+.mf-grid .th:not(:first-child) { text-align: right; }
+.mf-sub { padding: 18px 24px 8px; border-top: 1px solid var(--line); font-size: 12px; font-weight: 700;
+  color: var(--ink-3); }
+#mf-prod button { padding: 7px 13px; }
 .cf-note { padding: 14px 24px 16px; border-top: 1px solid var(--line); font-size: 12.5px;
   line-height: 1.45; color: var(--ink-2); }
 
@@ -16782,3 +16788,7 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
   .lm-row { grid-template-columns: minmax(0, 1fr) auto; }
   .lm-row .lm-sel { grid-column: 1 / -1; }
 }
+
+/* Строка задачи — ссылка #task/<id>, чтобы открывать ее в новой вкладке.
+   :where — без веса: вид задает класс строки (.trow, .tsk-step, .kb-card). */
+:where(a.tk-link) { display: block; color: inherit; text-decoration: none; }
