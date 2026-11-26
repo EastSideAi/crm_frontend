@@ -9659,6 +9659,14 @@
     });
     var who = view.querySelector('#sc-who');
     if (who) who.addEventListener('change', function () { state.schedWho = this.value || ''; renderView(); });
+    // Строка сводки окон: показать в сетке команды только этого человека, второй клик — всех
+    Array.prototype.forEach.call(view.querySelectorAll('[data-scwho]'), function (b) {
+      b.addEventListener('click', function () {
+        var nm = b.getAttribute('data-scwho');
+        state.schedScope = 'all';
+        state.schedWho = state.schedWho === nm ? '' : nm; renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-srole]'), function (b) {
       b.addEventListener('click', function () {
         var r = b.getAttribute('data-srole'), h = state.schedHide || (state.schedHide = {});
@@ -10147,8 +10155,49 @@
         ? '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или консультацией. Темно-синее — планерка команды. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>'
         : '<div class="zw-hint">Здесь только ваше: планерки с вашим участием, ваши занятые часы и встречи, на которые вас позвали. Чужие свободные часы — в «Вся команда».</div>');
     view.innerHTML = '<div class="card zw sc">' + head + schedHow() +
+      (!state.schedEdit ? schedConsultSum(d, lo, new Date(lo.getTime() + 7 * 86400000), today, 'week') : '') +
       flt + claim + schedTzRow(d) + body + schedPickBar(d) + hint + '</div>';
     schedWire(view, d);
+  }
+
+  /* Окна под консультации по людям (Павел 26.11.2026: «где мне как руководителю
+     проверять, кто какие слоты внес»). Только для руководителя (can_edit_all) и только
+     пул записи на консультацию (роль staff): сколько свободных окон осталось на
+     показанной неделе с сегодняшнего дня и сколько уже занято записями. У кого пусто —
+     сверху и красным: к нему клиента записать некуда. Неделя листается стрелками шапки. */
+  /* В «Календаре» та же сводка за месяц: выбрал человека — месяц показывает его окна
+     по дням (Павел 26.11.2026: «очень удобно в формате календаря смотреть по каждому»). */
+  function schedConsultSum(d, lo, hi, today, span) {
+    if (!d || !d.can_edit_all) return '';
+    var from = zoomYmd(new Date(Math.max(lo.getTime(), today.getTime())));
+    var to = zoomYmd(hi);
+    if (from >= to) return '';
+    var rows = {};
+    (d.people || []).forEach(function (p) {
+      if (p.role === 'staff' && p.taken) rows[p.person] = { name: p.person, free: 0, booked: 0 };
+    });
+    (d.slots || []).forEach(function (s) {
+      if (s.role !== 'staff' || s.date < from || s.date >= to) return;
+      var r = rows[s.person] || (rows[s.person] = { name: s.person, free: 0, booked: 0 });
+      if (s.booked) r.booked++; else if (!s.blocked) r.free++;
+    });
+    var list = Object.keys(rows).map(function (k) { return rows[k]; });
+    if (!list.length) return '';
+    list.sort(function (a, b) { return (a.free + a.booked > 0) - (b.free + b.booked > 0) || a.free - b.free || a.name.localeCompare(b.name, 'ru'); });
+    var empty = list.filter(function (r) { return !r.free && !r.booked; }).length;
+    return '<div class="sc-sum"><div class="sc-sum-h"><b>Окна под консультации</b><small>' +
+      (span === 'month' ? (from === zoomYmd(today) ? 'с сегодня до конца месяца' : 'на этот месяц')
+        : (from === zoomYmd(today) ? 'с сегодня до конца недели' : 'на эту неделю')) +
+      (empty ? ' · <em>' + empty + ' без окон</em>' : ' · у всех есть окна') + '</small></div>' +
+      '<div class="sc-sum-l">' + list.map(function (r) {
+        var none = !r.free && !r.booked;
+        return '<button type="button" class="sc-sum-r' + (none ? ' none' : '') + (state.schedWho === r.name ? ' on' : '') + '" data-scwho="' + esc(r.name) + '" title="Показать в сетке только его">' +
+          '<span class="sc-sum-n">' + esc(schedShort(r.name)) + '</span>' +
+          (none ? '<span class="sc-sum-v">окон нет</span>'
+            : '<span class="sc-sum-v"><b class="num">' + r.free + '</b> свободно' +
+              (r.booked ? ' · <b class="num">' + r.booked + '</b> записано' : '') + '</span>') +
+          '</button>';
+      }).join('') + '</div></div>';
   }
 
   /* Панель под сеткой: сколько часов набрано и куда их поставить.
@@ -11670,7 +11719,9 @@
         shown + more + '</div>';
     }
     var flt = '<div class="zw-fltrow">' + schedWhoSel(schedPeopleAll(data), schedMyName(data)) + schedRoleChips() + '</div>';
-    view.innerHTML = '<div class="card zw">' + head + flt +
+    var nextFirst = new Date(first.getFullYear(), first.getMonth() + 1, 1);
+    view.innerHTML = '<div class="card zw">' + head +
+      schedConsultSum(data, first, nextFirst, today, 'month') + flt +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
       '<div class="zw-foot">Клик по дню откроет сетку слотов на этот день. '
         + 'Зеленая цифра — сколько в этот день свободных окон, серая — сколько часов уже заняты учениками.</div></div>';
@@ -44506,13 +44557,24 @@
     var st = MS_FRESH[p.state] || MS_FRESH.out;
     var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
     if (leadNo(p.id)) meta.unshift(leadNo(p.id));
-    if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
+    /* Нет ни телефона, ни диалога (Костя 26.11.2026: «что с ними делаем?»): откуда
+       пришел и чем еще достучаться — почта, ник, страница ВК, кабинет, анкета. */
+    var trace = '';
+    if (p.state === 'no_contact') {
+      var tr = (p.traces || []).map(function (t) {
+        return t.url ? '<a class="ms-tr" href="' + esc(t.url) + '" target="_blank" rel="noopener">' + esc(t.label) + '</a>'
+          : '<span class="ms-tr">' + esc(t.label) + '</span>';
+      });
+      // Отдельной строкой: в общей строке ссылки обрезались многоточием
+      trace = '<small class="ms-trs">' + (p.from ? 'откуда: ' + esc(p.from) + ' · ' : '') +
+        (p.chat ? 'отвечать в диалоге' : (tr.length ? 'есть: ' + tr.join(', ') : 'контакта нет нигде')) + '</small>';
+    }
     var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
     // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
     var heat = p.todo && p.heat_label ? '<span class="ms-heat h' + (p.heat || 0) + '">' + esc(p.heat_label) + '</span>' : '';
     var mk = canMark ? '<button type="button" class="ms-mk" data-sbmk="' + esc(p.id) + '" data-sbmkn="' + esc(p.name) +
       '" title="Не лид: не наша услуга, вакансия, спам, семья">кто это</button>' : '';
-    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small></div>' +
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small>' + trace + '</div>' +
       '<span class="sev ' + st[0] + '">' + st[1] + '</span>' + msActs(p, kind, cc) + '</div>';
   }
   /* Отрезок блока лидов (встреча продаж 20.11.2026: «прозвонить всех лидов ноября»).
