@@ -9127,12 +9127,12 @@
     // недели задача и где нашлось слово). Последними: кусок текста занимает
     // свою строку, и все, что после него, уехало бы на третью.
     if (opts.extra) meta = meta.concat(opts.extra);
-    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" data-tid="' + t.id + '">' +
+    return '<a class="trow dy-row tk-link' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" href="#task/' + t.id + '" data-tid="' + t.id + '">' +
       '<div class="dy-t">' + quick + '<div class="dy-main"><span class="dy-ttl">' + impMark(t) +
         (opts.mark ? fndMark(t.title, opts.mark) : esc(t.title)) + '</span>' +
         (meta.length ? '<div class="dy-meta">' + meta.join('') + '</div>' : '') + '</div></div>' +
       '<div class="dy-r">' + right + '</div>' +
-    '</div>';
+    '</a>';
   }
   function dyBand(title, items, cls, opts) {
     if (!items.length) return '';
@@ -12338,14 +12338,14 @@
     // важность — тем же значком, что в строке дня и недели.
     var chip = t.status === 'return' ? '<span class="sev mini st-return">вернули</span>'
       : t.status === 'block' ? '<span class="sev mini st-block">заблокирована</span>' : '';
-    return '<div class="kb-card tb-card' + (t.overdue ? ' over' : '') + '" draggable="true" data-id="' + t.id + '">' +
+    return '<a class="kb-card tb-card tk-link' + (t.overdue ? ' over' : '') + '" href="#task/' + t.id + '" draggable="true" data-id="' + t.id + '">' +
       '<div class="tb-title">' + impMark(t) + esc(t.title) + '</div>' +
       (t.client_name ? '<div class="tb-cl">' + esc(t.client_name) + '</div>' : '') +
       (gave && t.assignee_name ? '<div class="tb-asg">' + dyAv(t.assignee_name) + '<span>' + esc(t.assignee_name) + '</span></div>' : '') +
       (gave === 'dept' && !state.boardGoal && t.parent_title ? '<div class="tb-goal">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></div>' : '') +
       '<div class="kb-meta">' + chip +
         (t.status === 'done' ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
-      '</div></div>';
+      '</div></a>';
   }
   function renderMyBoard(view) {
     if (state.myboard === null) { view.innerHTML = dashSkeleton(); loadMyBoard(); return; }
@@ -12535,10 +12535,10 @@
       var own = isOwnTask(t);
       var right = (t.due_at ? '<span class="tsk-due wk-aim">' + ic('cal', 11) + esc(dayLabel(t.due_at)) + '</span>' : '') +
         (own ? '<button class="qchip wk-pull" data-pull="' + t.id + '">' + ic('go', 12) + 'В неделю</button>' : '');
-      return '<div class="trow dy-row later" data-tid="' + t.id + '">' +
+      return '<a class="trow dy-row later tk-link" href="#task/' + t.id + '" data-tid="' + t.id + '">' +
         '<div class="dy-t"><span class="tsk-chk" style="cursor:default;opacity:.35"></span><span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
           (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : (t.parent_title ? '<span class="dy-cl">' + esc(t.parent_title) + '</span>' : '')) + '</div>' +
-        '<div class="dy-r">' + right + '</div></div>';
+        '<div class="dy-r">' + right + '</div></a>';
     }).join('');
     return '<div class="card dy-card dy-later' + (state.laterOpen ? ' open' : '') + '">' +
       '<button class="dy-h dy-later-h" id="dy-later"><span class="t">Потом</span>' +
@@ -16358,11 +16358,11 @@
                 ? '<div class="tsk-steps">' + steps.map(function (s) {
                     var sst = TASK_ST[s.status] || TASK_ST.wait;
                     var sdue = dueLabel(s);
-                    return '<button class="tsk-step" data-step="' + s.id + '">' +
+                    return '<a class="tsk-step tk-link" href="#task/' + s.id + '" data-step="' + s.id + '">' +
                       '<span class="tsk-step-t">' + esc(s.title) + '</span>' +
                       '<span class="tsk-step-m">' + esc(s.assignee_name || 'не назначена') +
                         ' · <i class="' + sdue.cls + '">' + esc(sdue.text) + '</i></span>' +
-                      '<span class="sev ' + sst.cls + '">' + sst.label + '</span></button>';
+                      '<span class="sev ' + sst.cls + '">' + sst.label + '</span></a>';
                   }).join('') + '</div>'
                 : '<div class="tsk-nosteps">Шагов нет. Большую задачу лучше разложить на шаги — тогда видно движение, а не только срок.</div>') +
               (t.status === 'cancel' ? '' :
@@ -65105,6 +65105,17 @@
     var want = screenHash();
     try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) {}
   }
+  /* Строка задачи — настоящая ссылка #task/<id> (Виталий 26.11.2026: «правой
+     кнопкой открыть задачу в новом окне»). Браузерное меню, Ctrl/Cmd-клик и
+     колесико открывают ее в новой вкладке; обычный клик остается обработчику
+     строки, поэтому переход по ссылке здесь гасим, иначе карточка открылась бы
+     дважды (клик + hashchange). Клик по кнопке внутри строки не трогаем. */
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a.tk-link');
+    if (!a || e.target.closest('button, input, select, textarea, label, a') !== a) return;
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) { e.stopPropagation(); return; }
+    e.preventDefault();
+  }, true);
   window.addEventListener('hashchange', function () {
     if (!state.loaded) return;
     var id = hashLeadId();
