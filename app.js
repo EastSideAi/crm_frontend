@@ -57070,17 +57070,27 @@
     });
   }
 
+  // Ученик правит и удаляет свои сообщения в кабинете, а команда видит все:
+  // удаленное с пометкой, у измененного — прежние версии (Павел 26.11.2026).
+  function pjMsg(c) {
+    var me = c.by !== 'client';
+    var mark = c.deleted_at ? ' · <span class="pj-m-del">удалено учеником ' + esc(fmtWhen(c.deleted_at)) + '</span>'
+      : c.edited_at ? ' · <span class="pj-m-ed">изменено ' + esc(fmtWhen(c.edited_at)) + '</span>' : '';
+    var old = (c.history || []).map(function (h) {
+      return '<div class="pj-m-old">Было · ' + esc(fmtWhen(h.at)) + '<div>' + esc(h.text) + '</div></div>';
+    }).join('');
+    return '<div class="pj-m' + (me ? ' team' : '') + (c.deleted_at ? ' gone' : '') + '"><b>' +
+      esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) + '</b> · ' + esc(fmtWhen(c.at)) + mark +
+      old + '<div>' + esc(c.text) + '</div></div>';
+  }
+
   function pjStep(st, i, cur) {
     var files = (st.subs || []).map(function (f) {
       return f.kind === 'link'
         ? '<a class="pj-f" href="' + esc(f.src) + '" target="_blank" rel="noopener">' + ic('ext', 12) + esc(f.name) + '</a>'
         : '<a class="pj-f" href="#" data-pjdoc="' + f.doc_id + '">' + ic('doc', 12) + esc(f.name) + '</a>';
     }).join('');
-    var msgs = (st.comments || []).map(function (c) {
-      var me = c.by !== 'client';
-      return '<div class="pj-m' + (me ? ' team' : '') + '"><b>' + esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) +
-        '</b> · ' + esc(fmtWhen(c.at)) + '<div>' + esc(c.text) + '</div></div>';
-    }).join('');
+    var msgs = (st.comments || []).map(pjMsg).join('');
     // Кнопки решения — по смыслу шага: сдачу ученика принимают или возвращают,
     // шаг команды берут в работу и закрывают.
     // Тему закрывает поле «Тема проекта» выше, кнопки статуса ей не нужны.
@@ -57189,14 +57199,11 @@
     // Вопросы куратору вне шагов — у всех тарифов: у купившего только курсы нет плана
     // сопровождения, а значит и общих сообщений кабинета (Павел 24.11.2026).
     var qs = p.questions || [];
-    var waiting = qs.length && qs[qs.length - 1].by === 'client';
+    var alive = qs.filter(function (c) { return !c.deleted_at; });
+    var waiting = alive.length && alive[alive.length - 1].by === 'client';
     var ask = '<div class="m-sec"><div class="m-sec-h">Вопросы куратору</div>' +
       (waiting ? '<div class="m-csub" style="margin:0 0 10px;color:var(--amber-ink)">Ученик ждет ответа.</div>' : '') +
-      (qs.length ? '<div class="pj-ms">' + qs.map(function (c) {
-        var me = c.by !== 'client';
-        return '<div class="pj-m' + (me ? ' team' : '') + '"><b>' + esc(me ? (c.author || 'Команда') : (c.author || 'Ученик')) +
-          '</b> · ' + esc(fmtWhen(c.at)) + '<div>' + esc(c.text) + '</div></div>';
-      }).join('') + '</div>' : '<div class="m-csub" style="margin:0 0 10px">Ученик пока ничего не спрашивал. Его вопрос из раздела придет сюда и уведомлением.</div>') +
+      (qs.length ? '<div class="pj-ms">' + qs.map(pjMsg).join('') + '</div>' : '<div class="m-csub" style="margin:0 0 10px">Ученик пока ничего не спрашивал. Его вопрос из раздела придет сюда и уведомлением.</div>') +
       '<div class="pj-reply"><textarea class="al-in" rows="1" id="pj-ask-note" maxlength="4000" ' +
         'placeholder="Написать ученику"></textarea>' +
         '<div class="pj-acts"><button class="bp ghost sm" id="pj-ask-send">' + ic('send', 13) + 'Ответить</button></div></div></div>';
