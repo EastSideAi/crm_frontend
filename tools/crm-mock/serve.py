@@ -263,6 +263,7 @@ def leads():
         klass = [11, 10, 11, 9, 8, None, None, None, 10, 11, 9, 8][i % 12]
         out.append({
             "id": "demo-%02d" % i,
+            "no": 1001 + i,              # короткий номер карточки К-1001
             "name": name,
             "school_class": klass,
             "stage": stage_of(i),
@@ -278,9 +279,77 @@ def leads():
     _LEADS = out
     return out
 
+def _ri(i, who, amount, status="план", cid=None, person=None, item="Мотивация", role="",
+        bill=False, service=False, accrual=False):
+    return {"id": "o%d" % i, "date": "2026-11-20", "status": status, "receiver": who,
+            "item": item, "amount": amount, "dest": "ВТБ, р/с", "comment": "", "has_doc": False,
+            "cid": cid, "person": person or who, "role": role, "by_bill": bill,
+            "service": service, "accrual": accrual}
+
+
+FIN_PERIODS = {"periods": [{"id": "p1", "name": "12.11–24.11", "status": "открыт", "open": True,
+                            "starts_on": "2026-11-12", "ends_on": "2026-11-24"}], "open_id": "p1"}
+FIN_PERIOD = {
+    "period": dict(FIN_PERIODS["periods"][0], open=True), "closed_at": None,
+    "cascade": {"income": 608430, "income_gross": 610000, "shortterm": 0, "base": 608430,
+                "allocations": 300000, "direct": 150000, "profit": 158430, "flex": 74102.77,
+                "dividends": 84327.23},
+    "plan_cascade": None, "rules": [], "offerings": [], "funds": [], "accounts": [],
+    "direct": [], "cash": None, "metrics": None, "distribution": None, "warnings": [],
+    "plan_left": {"count": 0, "amount": 0},
+}
+FIN_REGISTER = {
+    "period": FIN_PERIODS["periods"][0], "rs": 300000, "to_pay": 150000, "paid": 29000,
+    "after": 150000, "over": False, "dividends": 84327.23,
+    "rs_groups": [
+        {"id": "управление", "label": "Управление", "to_pay": 50000, "paid": 0, "items": [
+            _ri(1, "Тестов Владимир", 25000),
+            _ri(2, "Проджектова Анна", 25000, cid="c1", person="Проджектова Анна Ивановна")]},
+        {"id": "продажи", "label": "Отдел продаж", "to_pay": 0, "paid": 2080, "items": [
+            _ri(3, "Анна Эванс", 2080, status="факт", cid="c1", person="Проджектова Анна Ивановна",
+                item="Клиент Икс", accrual=True)]},
+        {"id": "администрирование", "label": "Администрирование", "to_pay": 20000, "paid": 0, "items": [
+            _ri(4, "Учителева Ольга", 3000), _ri(5, "Лариса бухгалтер", 5000),
+            _ri(6, "Админова Мария", 15000, cid="c2", person="Админова Мария Петровна")]},
+        {"id": "сервисы", "label": "Сервисы и подписки", "to_pay": 0, "paid": 23982.1, "items": [
+            _ri(7, "Railway", 23482.10, status="факт", service=True),
+            _ri(8, "Селектел", 500, status="факт", service=True)]},
+        {"id": "funds_alloc", "label": "Отчисления в фонды", "to_pay": 300000, "paid": 0, "items": [
+            {"id": "alloc:contractors", "receiver": "Фонд подрядчиков", "amount": 121686, "status": "план",
+             "item": "отчисление в фонд", "dest": "на карту собственника"},
+            {"id": "alloc:marketing", "receiver": "Фонд маркетинга", "amount": 150644.11, "status": "план",
+             "item": "отчисление в фонд", "dest": "на карту собственника"}]},
+    ],
+    "funds": [{"id": "marketing", "name": "Фонд маркетинга", "added": 150644.11, "spent": 92500, "items": [
+        _ri(9, "СММ Екатерина", 22500, cid="c3", person="Смм Екатерина"),
+        _ri(10, "Ипшница Ольга", 40000, bill=True),
+        _ri(11, "Монтажер Анна", 12500)]}],
+}
+
+RC_ARCHIVE = {"items": [
+    {"id": "a1", "contractor_id": "c1", "contractor": "Тестова Вера Ивановна", "person": "Вера Тестова",
+     "inn": "111111111111", "dept": "Отдел продукта", "title": "Тестова октябрь", "period": "",
+     "date": "2026-11-12", "amount": 45000, "receipt_no": "201abc1", "receipt_inn": "111111111111",
+     "service": "Технические услуги для сайта",
+     "fns_url": "https://lknpd.nalog.ru/api/v1/receipt/111111111111/201abc1/print",
+     "file_name": "Тестова октябрь.png", "file_mime": "image/png", "contractor_archived": False},
+    {"id": "a2", "contractor_id": "c1", "contractor": "Тестова Вера Ивановна", "person": "Вера Тестова",
+     "inn": "111111111111", "dept": "Отдел продукта", "title": "аванс сентябрь", "period": "",
+     "date": "2026-09-25", "amount": 22500, "receipt_no": "2009xyz", "receipt_inn": "111111111111",
+     "service": "Технические услуги для сайта",
+     "fns_url": "https://lknpd.nalog.ru/api/v1/receipt/111111111111/2009xyz/print",
+     "file_name": "аванс сентябрь.jpg", "file_mime": "image/jpeg", "contractor_archived": False},
+    {"id": "a3", "contractor_id": None, "contractor": "Анна", "person": "Анна",
+     "inn": None, "dept": "Отдел маркетинга", "title": "Анна за октябрь 26", "period": "",
+     "date": "2026-11-16", "amount": None, "receipt_no": None, "receipt_inn": None,
+     "service": "", "fns_url": None,
+     "file_name": "Анна за октябрь 26.jpg", "file_mime": "image/jpeg", "contractor_archived": False},
+], "count": 3}
+
 ME = {"ok": True, "id": 1, "name": "Демо Пользователь", "role": "super_admin",
       "caps": ["dash", "clients", "team", "tasks", "tasks_all", "finance", "marketing",
-               "planfact", "finmodel", "zaezd_review", "academy", "academy_review", "care"]}
+               "planfact", "finmodel", "zaezd_review", "academy", "academy_review", "care",
+               "inbox", "contractors", "finmodel_edit"]}
 
 # «Забота» (раздел care): причины и случаи, обезличенные из разбора 23.11.2026, id
 # диалогов выдуманные. Собирается заново, если поменялся сид причин в бэкенде.
@@ -347,6 +416,17 @@ REFUNDS = {"refunded_rub": 117990, "states": [
      "step": None, "ledger": "21.05–10.06", "paid_from": "фонд безопасности", "note": ""}]}
 
 
+BOT_CONV = {"user_id": 501, "channel": "vk_page", "name": "Мама Тестова", "username": None,
+            "full_name": "Мама Тестова", "ai_enabled": False, "handoff_requested": False,
+            "handoff_reason": None, "taken_by": None, "last_text": "Спасибо, подумаем",
+            "last_role": "user", "last_at": "2026-11-25T12:10:00+00:00", "unread": 0, "msgs": 2}
+BOT_MSGS = [
+    {"id": 1, "role": "assistant", "sender": "manager", "text": "Добрый день, это EastSide, вы оставляли заявку",
+     "at": "2026-11-25T12:00:00+00:00"},
+    {"id": 2, "role": "user", "sender": None, "text": "Спасибо, подумаем", "at": "2026-11-25T12:10:00+00:00"},
+]
+BOT_BOUND: list = []
+
 class H(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
@@ -409,6 +489,16 @@ class H(SimpleHTTPRequestHandler):
             return self._json(REFUNDS)
         if p == "/admin/api/sales/debts":
             return self._json(DEBTS)
+        # Реестр к выводу и сообщение бухгалтеру: выдуманные люди и суммы.
+        if p == "/admin/api/fin/periods":
+            return self._json(FIN_PERIODS)
+        if p == "/admin/api/fin/period":
+            return self._json(FIN_PERIOD)
+        if p == "/admin/api/fin/register":
+            return self._json(FIN_REGISTER)
+        # Архив старых чеков (12003): выдуманные люди, у одного нет карточки исполнителя.
+        if p == "/admin/api/contractor-receipts/archive":
+            return self._json(RC_ARCHIVE)
         # Доска «Университеты» в карточке: вузы ученика и лента одного вуза.
         if p.startswith("/admin/api/leads/") and p.endswith("/applications"):
             lead_id = p.split("/")[4]
@@ -417,6 +507,17 @@ class H(SimpleHTTPRequestHandler):
         if p.startswith("/admin/api/applications/") and p.endswith("/events"):
             aid = p.split("/")[4]
             return self._json({"ok": True, "events": _AP_EV.get(int(aid), [])})
+        # «Диалоги»: выдуманная переписка с рабочей страницы ВК без карточки — на ней
+        # видно «Привязать к карточке» (Павел 25.11.2026, касание по переписке).
+        if p == "/admin/api/bot/conversations":
+            return self._json({"conversations": [BOT_CONV]})
+        if p == "/admin/api/bot/conversations/501/messages":
+            return self._json({**BOT_CONV, "contractor": None, "messages": BOT_MSGS})
+        if p == "/admin/api/bot/conversations/501/lead":
+            if BOT_BOUND:
+                return self._json({"found": True, "session_id": BOT_BOUND[0], "match": "id",
+                                   "lead_name": "Тестовый Ученик", "status": "new"})
+            return self._json({"found": False, "can_create": True, "name": BOT_CONV["name"]})
         if p == "/admin/api/docs/kinds":
             return self._json({"ok": True, "kinds": [], "tracks": TRACKS})
         if p.startswith("/admin/api/") or p.startswith("/api/"):
@@ -439,6 +540,9 @@ class H(SimpleHTTPRequestHandler):
         except Exception:
             body = {}
         parts = p.split("/")
+        if p == "/admin/api/bot/conversations/501/bind":
+            BOT_BOUND[:] = [body.get("session_id")]
+            return self._json({"ok": True, "id": body.get("session_id")})
         if p.startswith("/admin/api/leads/") and p.endswith("/applications"):
             lead_id = parts[4]
             lst = apps_for(lead_id)

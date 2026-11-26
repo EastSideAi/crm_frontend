@@ -717,6 +717,25 @@
   /* Имени нет — подписываем тем, что человек успел сделать: заявку без имени менеджер
      откроет и разберет, а пустой заход трогать незачем. Голое «Без имени» на обоих
      не отличало заявку от случайного посетителя. */
+  /* Короткий номер карточки К-1001 (Павел 25.11.2026: «всем присвоить ID, чтобы
+     верифицировать и исключить задвоения»). Выдает сервер (sessions.card_no) по порядку
+     прихода, навсегда; тут только подпись и поиск по id из загруженных лидов. */
+  var LNO = { src: null, idx: {} };
+  function leadNo(x) {
+    if (x && typeof x === 'object') return x.no ? 'К-' + x.no : '';
+    if (!x || !state.leads) return '';
+    if (LNO.src !== state.leads) {
+      LNO.idx = {}; LNO.src = state.leads;
+      state.leads.forEach(function (l) { if (l.no) LNO.idx[l.id] = l.no; });
+    }
+    return LNO.idx[x] ? 'К-' + LNO.idx[x] : '';
+  }
+  function lnoTag(x) {
+    var n = leadNo(x);
+    return n ? '<span class="lno num">' + n + '</span>' : '';
+  }
+  // «к-1234», «k1234», «1234» в поиске — все про номер карточки
+  function lnoHay(l) { return l && l.no ? ' к-' + l.no + ' к' + l.no + ' k-' + l.no + ' k' + l.no + ' #' + l.no : ''; }
   function leadName(l) {
     if (l.name) return l.name;
     // Ник — тоже имя: «Заход без анкеты» при живом @nick читалось как «мы про него
@@ -1183,7 +1202,7 @@
       arr = arr.filter(function (l) {
         var dirs = Array.isArray(l.directions) ? l.directions.join(' ') : (l.directions || '');
         var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' + ((l.booking || {}).contact || '') + ' ' +
-          (l.crm.note || '') + ' ' + dirs + ' ' + (l.grade || '')).toLowerCase();
+          (l.crm.note || '') + ' ' + dirs + ' ' + (l.grade || '') + lnoHay(l)).toLowerCase();
         return hay.indexOf(state.q) !== -1;
       });
     }
@@ -4072,18 +4091,29 @@
       /* Вердикт отвечает на вопрос, ради которого сюда заходят: что висит без подписи.
          Неподписанный акт — это незакрытый расход и невозможная выплата. */
       var dcs = DC.items;
+      // Архив чеков: свой вердикт, документов он не ждет.
+      if (DC.kind === 'rarch') {
+        var ran = RA.items ? RA.items.length : 0;
+        html = '<div><h2>Документы</h2><div class="verdict"><span class="vspark">' +
+          ic('doc', 13) + '</span><span>' + (!RA.items ? 'Загружаю архив чеков…'
+            : !ran ? 'В архиве пусто.'
+            : 'Старые чеки с Google Диска за выплаты мимо CRM: <b>' + ran + '</b>. ' +
+              'Новые чеки живут у платежа, во вкладке «Чеки».') + '</span></div></div>';
+        dcs = null;
+      }
       var wait = dcs ? dcs.filter(function (d) {
         return d.kind === 'act' && (d.status === 'wait_both' || d.status === 'wait_co' ||
                                     d.status === 'wait_ct');
       }).length : 0;
       var phrase7;
-      if (!dcs) phrase7 = 'Загружаю документы…';
+      if (DC.kind === 'rarch') phrase7 = null;
+      else if (!dcs) phrase7 = 'Загружаю документы…';
       else if (!dcs.length) phrase7 = 'Документов пока нет. Акт появится здесь сам, как только вы сформируете его по принятому заданию.';
       else if (wait) phrase7 = 'Без подписи: <b>' + wait + ' ' +
         plural(wait, 'акт', 'акта', 'актов') +
         '</b>. Пока обе подписи не стоят, выплату провести нельзя.';
       else phrase7 = 'Все акты подписаны с обеих сторон.';
-      html = '<div><h2>Документы</h2>' +
+      if (phrase7 !== null) html = '<div><h2>Документы</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' + phrase7 + '</span></div></div>';
     }
     if (state.page === 'czservices') {
@@ -9097,12 +9127,12 @@
     // недели задача и где нашлось слово). Последними: кусок текста занимает
     // свою строку, и все, что после него, уехало бы на третью.
     if (opts.extra) meta = meta.concat(opts.extra);
-    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" data-tid="' + t.id + '">' +
+    return '<a class="trow dy-row tk-link' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" href="#task/' + t.id + '" data-tid="' + t.id + '">' +
       '<div class="dy-t">' + quick + '<div class="dy-main"><span class="dy-ttl">' + impMark(t) +
         (opts.mark ? fndMark(t.title, opts.mark) : esc(t.title)) + '</span>' +
         (meta.length ? '<div class="dy-meta">' + meta.join('') + '</div>' : '') + '</div></div>' +
       '<div class="dy-r">' + right + '</div>' +
-    '</div>';
+    '</a>';
   }
   function dyBand(title, items, cls, opts) {
     if (!items.length) return '';
@@ -12308,14 +12338,14 @@
     // важность — тем же значком, что в строке дня и недели.
     var chip = t.status === 'return' ? '<span class="sev mini st-return">вернули</span>'
       : t.status === 'block' ? '<span class="sev mini st-block">заблокирована</span>' : '';
-    return '<div class="kb-card tb-card' + (t.overdue ? ' over' : '') + '" draggable="true" data-id="' + t.id + '">' +
+    return '<a class="kb-card tb-card tk-link' + (t.overdue ? ' over' : '') + '" href="#task/' + t.id + '" draggable="true" data-id="' + t.id + '">' +
       '<div class="tb-title">' + impMark(t) + esc(t.title) + '</div>' +
       (t.client_name ? '<div class="tb-cl">' + esc(t.client_name) + '</div>' : '') +
       (gave && t.assignee_name ? '<div class="tb-asg">' + dyAv(t.assignee_name) + '<span>' + esc(t.assignee_name) + '</span></div>' : '') +
       (gave === 'dept' && !state.boardGoal && t.parent_title ? '<div class="tb-goal">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></div>' : '') +
       '<div class="kb-meta">' + chip +
         (t.status === 'done' ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
-      '</div></div>';
+      '</div></a>';
   }
   function renderMyBoard(view) {
     if (state.myboard === null) { view.innerHTML = dashSkeleton(); loadMyBoard(); return; }
@@ -12505,10 +12535,10 @@
       var own = isOwnTask(t);
       var right = (t.due_at ? '<span class="tsk-due wk-aim">' + ic('cal', 11) + esc(dayLabel(t.due_at)) + '</span>' : '') +
         (own ? '<button class="qchip wk-pull" data-pull="' + t.id + '">' + ic('go', 12) + 'В неделю</button>' : '');
-      return '<div class="trow dy-row later" data-tid="' + t.id + '">' +
+      return '<a class="trow dy-row later tk-link" href="#task/' + t.id + '" data-tid="' + t.id + '">' +
         '<div class="dy-t"><span class="tsk-chk" style="cursor:default;opacity:.35"></span><span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
           (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : (t.parent_title ? '<span class="dy-cl">' + esc(t.parent_title) + '</span>' : '')) + '</div>' +
-        '<div class="dy-r">' + right + '</div></div>';
+        '<div class="dy-r">' + right + '</div></a>';
     }).join('');
     return '<div class="card dy-card dy-later' + (state.laterOpen ? ' open' : '') + '">' +
       '<button class="dy-h dy-later-h" id="dy-later"><span class="t">Потом</span>' +
@@ -16328,11 +16358,11 @@
                 ? '<div class="tsk-steps">' + steps.map(function (s) {
                     var sst = TASK_ST[s.status] || TASK_ST.wait;
                     var sdue = dueLabel(s);
-                    return '<button class="tsk-step" data-step="' + s.id + '">' +
+                    return '<a class="tsk-step tk-link" href="#task/' + s.id + '" data-step="' + s.id + '">' +
                       '<span class="tsk-step-t">' + esc(s.title) + '</span>' +
                       '<span class="tsk-step-m">' + esc(s.assignee_name || 'не назначена') +
                         ' · <i class="' + sdue.cls + '">' + esc(sdue.text) + '</i></span>' +
-                      '<span class="sev ' + sst.cls + '">' + sst.label + '</span></button>';
+                      '<span class="sev ' + sst.cls + '">' + sst.label + '</span></a>';
                   }).join('') + '</div>'
                 : '<div class="tsk-nosteps">Шагов нет. Большую задачу лучше разложить на шаги — тогда видно движение, а не только срок.</div>') +
               (t.status === 'cancel' ? '' :
@@ -21120,7 +21150,7 @@
      нет вовсе, и счет для него единственная бумага, доказывающая расход. Без вкладки
      раздел по такому человеку выглядел бы пустым, хотя деньги ему уходили. */
   var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['invoice', 'Счета'],
-                  ['receipt', 'Чеки'], ['contract', 'Договоры'],
+                  ['receipt', 'Чеки'], ['rarch', 'Архив чеков'], ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
   // Чеки (этап 7) — отдельный источник: они привязаны к выплате, а не к человеку, и
   // живут своей ручкой. RCP держит их и сводку долгов для полосы вверху «Документов».
@@ -21131,6 +21161,66 @@
                 none: 'ct-draft', sent: 'ct-wait', live: 'ct-wait' };
   var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc',
                   invoice: 'coins' };
+
+  /* Архив чеков (Роман 25.11.2026, задача 12003): старые чеки с Google Диска за выплаты,
+     которые шли мимо CRM. Платежа у них нет, поэтому ни долга, ни сверки, ни кнопок —
+     только найти и посмотреть файл. Новые чеки сюда не попадают: они живут у платежа.
+     Человек без карточки исполнителя получает свою папку по подписи с Диска (p:<имя>). */
+  var RA = { items: null };
+
+  function raLoad() {
+    api('/admin/api/contractor-receipts/archive').then(function (r) {
+      RA.items = (r.items || []).map(function (i) {
+        i.contractor_id = i.contractor_id || ('p:' + (i.person || ''));
+        return i;
+      });
+      if (state.page === 'czdocs') renderAll();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      RA.items = RA.items || [];
+      if (state.page === 'czdocs') renderAll();
+    });
+  }
+
+  function raFiltered() {
+    var q = (DC.q || '').trim().toLowerCase();
+    var list = RA.items || [];
+    if (!q) return list;
+    return list.filter(function (i) {
+      return [i.contractor, i.person, i.inn, i.receipt_inn, i.receipt_no, i.title,
+              i.period, i.service, i.dept].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  function raFileUrl(id) {
+    return API + '/admin/api/contractor-receipts/archive/' + encodeURIComponent(id) +
+      '/file?k=' + encodeURIComponent(getKey());
+  }
+
+  function raRow(i) {
+    var head = i.receipt_no ? 'Чек № ' + i.receipt_no : (i.title || i.file_name || 'Чек');
+    // Под номером — что оказали; нет чека «Мой налог» на картинке — подпись с Диска.
+    var sub = i.service || (i.receipt_no ? i.title : (i.period || '')) || '';
+    var acts = '<button class="rcp-a p" data-ra-open="' + esc(i.id) + '">Открыть</button>' +
+      (i.fns_url ? '<a class="rcp-a" href="' + esc(i.fns_url) +
+        '" target="_blank" rel="noopener" title="Чек в базе ФНС">ФНС</a>' : '');
+    return '<div class="rcp-item">' +
+      '<div class="trow dc-grid ra-grid" data-ra-open="' + esc(i.id) + '">' +
+        '<span class="dc-main ra-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
+          '<span class="ra-txt"><b>' + esc(head) + '</b>' +
+          (sub ? '<span class="rcp-sub">' + esc(sub) + '</span>' : '') + '</span></span>' +
+        // В архиве колонке досталось меньше места: фамилия с инициалами, полное ФИО по наведению.
+        '<span class="dc-who" title="' + esc(i.contractor || '') + '">' +
+          esc(dcShort(i.contractor) || '—') +
+          (i.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
+          (i.inn || i.receipt_inn ? '<span class="dc-inn">' + esc(i.inn || i.receipt_inn) + '</span>' : '') +
+        '</span>' +
+        '<span class="dc-when">' + esc(i.date ? i.date.slice(8, 10) + '.' + i.date.slice(5, 7) +
+          '.' + i.date.slice(0, 4) : '—') + '</span>' +
+        '<span class="dc-sum">' + (i.amount ? '<b>' + ctMoney(i.amount) + ' ₽</b>' : '—') + '</span>' +
+        '<span class="dc-state"><span class="rcp-act">' + acts + '</span></span>' +
+      '</div></div>';
+  }
 
   function rcpLoad(cb) {
     api('/admin/api/contractor-receipts').then(function (r) {
@@ -21436,15 +21526,18 @@
 
   function renderCzDocs(view) {
     var isRcp = DC.kind === 'receipt';
+    var isArch = DC.kind === 'rarch';
     // Чеки грузим всегда: даже на других вкладках вверху нужна полоса «по кому долг».
     if (RCP.items === null) rcpLoad();
     if (isRcp) {
       if (RCP.items === null) { view.innerHTML = dashSkeleton(); return; }
+    } else if (isArch) {
+      if (RA.items === null) { view.innerHTML = dashSkeleton(); raLoad(); return; }
     } else if (DC.items === null) {
       view.innerHTML = dashSkeleton(); dcLoad(); return;
     }
 
-    var src = isRcp ? rcpFiltered() : DC.items;
+    var src = isRcp ? rcpFiltered() : isArch ? raFiltered() : DC.items;
     var people = dcPeople(src);
     var list = DC.who
       ? src.filter(function (i) { return i.contractor_id === DC.who; })
@@ -21459,7 +21552,7 @@
       // Здесь фильтр работает иначе, чем в «Заданиях»: по умолчанию видно ВСЕ, включая
       // документы убранных, — раздел хранит первичку для налоговой, и прятать из него
       // нечего. Кнопка сужает список до убранных, когда ищут конкретного человека.
-      (isRcp ? '' : '<button class="qchip q-arch' + (DC.archived ? ' on' : '') +
+      (isRcp || isArch ? '' : '<button class="qchip q-arch' + (DC.archived ? ' on' : '') +
         '" data-dcarch="1">' + ic('box', 12) + 'Убранные</button>');
 
     // Полоса долга по чекам — главный ответ раздела на «по кому не хватает чека».
@@ -21473,7 +21566,7 @@
           '<button class="dc-alert-go" id="dc-to-rcp">Показать</button></div>'
       : '';
 
-    var body = (!isRcp && DC.err)
+    var body = (!isRcp && !isArch && DC.err)
       ? '<div class="empty">' + esc(DC.err) + '</div>'
       : (!list.length
         ? '<div class="empty">' + (DC.who
@@ -21482,12 +21575,14 @@
             ? 'По запросу «' + esc(DC.q) + '» ничего не нашли.'
             : isRcp
             ? 'Чеков пока нет. Чек появляется здесь, как только по выплате проведут деньги, а исполнитель приложит его из «Мой налог».'
+            : isArch
+            ? 'В архиве пусто. Сюда перенесены старые чеки с Google Диска за выплаты, которые шли мимо CRM.'
             : DC.archived
             ? 'Здесь пусто. Тут лежат документы тех, кого убрали из работы — подписанное не удаляется.'
             : 'Документов пока нет. Акт появляется здесь сам, как только вы сформируете его по принятому заданию.') + '</div>'
-        : (isRcp ? list.map(rcpRow) : list.map(dcRow)).join(''));
+        : (isRcp ? list.map(rcpRow) : isArch ? list.map(raRow) : list.map(dcRow)).join(''));
 
-    var noun = isRcp
+    var noun = isRcp || isArch
       ? plural(list.length, 'чек', 'чека', 'чеков')
       : plural(list.length, 'документ', 'документа', 'документов');
 
@@ -21496,7 +21591,9 @@
     // правило, что в задачах на своих вкладках).
     var head = DC.who
       ? '<div class="dcf-head"><span class="dcf-h-nm">' + esc(DC.whoName) + '</span>' +
-          '<button class="dcf-h-a" id="dc-who-card">Карточка исполнителя</button>' +
+          // У человека из архива без карточки исполнителя вести некуда.
+          (DC.who.indexOf('p:') === 0 ? ''
+            : '<button class="dcf-h-a" id="dc-who-card">Карточка исполнителя</button>') +
           '<button class="dcf-h-a" id="dc-who-all">Ко всем документам</button></div>'
       : '';
 
@@ -21512,11 +21609,11 @@
             '<span class="list-count"><b>' + list.length + '</b> ' + noun + '</span>' +
           '</div>' +
           '<div class="list-quick">' + chips + '</div>' +
-          '<div class="trow dc-grid thead">' +
-            '<span class="th">' + (isRcp ? 'Выплата' : 'Документ') + '</span>' +
+          '<div class="trow dc-grid thead' + (isArch ? ' ra-grid' : '') + '">' +
+            '<span class="th">' + (isRcp ? 'Выплата' : isArch ? 'Чек' : 'Документ') + '</span>' +
             '<span class="th">Исполнитель</span>' +
             '<span class="th">Дата</span><span class="th">Сумма</span>' +
-            '<span class="th">' + (isRcp ? 'Чек' : 'Состояние') + '</span>' +
+            '<span class="th">' + (isRcp ? 'Чек' : isArch ? 'Файл' : 'Состояние') + '</span>' +
           '</div>' + body +
         '</div>' +
       '</div>';
@@ -21602,6 +21699,14 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-task]'), function (r) {
       r.addEventListener('click', function () { openCt(r.getAttribute('data-rcp-task')); });
+    });
+    // Архив: строка и кнопка открывают сам файл чека в новой вкладке. «В ФНС» — ссылка.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ra-open]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('a')) return;
+        e.stopPropagation();
+        window.open(raFileUrl(r.getAttribute('data-ra-open')), '_blank', 'noopener');
+      });
     });
     pageAnim(view);
   }
@@ -24327,6 +24432,9 @@
            нуля, а не копией прошлого файла — с копией уезжали и ее ошибки. Смотреть
            может каждый, у кого есть ведомость; в общую папку кладет тот, кто правит. */
         '<button class="qchip" id="fp-sheet">' + ic('doc', 12) + 'В таблицу</button>' +
+        // Письмо Ларисе на выплаты периода собирается из реестра к выводу (Роман 25.11.2026).
+        (editable ? '<button class="qchip" id="fp-lm">' + ic('mail', 12) +
+          'Сообщение бухгалтеру</button>' : '') +
         (editable
           ? '<button class="qchip" id="fp-ext">' + ic('cal', 12) + 'Продлить</button>' +
             '<button class="qchip go" id="fp-close">' + ic('lock', 12) + 'Закрыть ведомость</button>'
@@ -24434,6 +24542,16 @@
         });
       });
       el('fp-ext').addEventListener('click', function () { finExtendForm(s.period); });
+      var lmBtn = el('fp-lm');
+      if (lmBtn) lmBtn.addEventListener('click', function () {
+        if (lmBtn.disabled) return;
+        lmBtn.disabled = true;
+        api('/admin/api/fin/register?id=' + encodeURIComponent(s.period.id)).then(function (r) {
+          lmOpen(r);
+        }).catch(function () {
+          showToast('Не удалось собрать сообщение', 'проверьте связь и попробуйте еще раз');
+        }).then(function () { lmBtn.disabled = false; });
+      });
       el('fp-close').addEventListener('click', function () { finCloseForm(s); });
     }
     var shBtn = el('fp-sheet');
@@ -26216,7 +26334,7 @@
     if (!words.length) return all;
     return all.filter(function (l) {
       var hay = pkWords((leadName(l) || '') + ' ' + (l.name || '') + ' ' +
-                        (l.contact || '') + ' ' + (l.email || ''));
+                        (l.contact || '') + ' ' + (l.email || '') + lnoHay(l));
       return words.every(function (w) {
         var stem = pkStem(w);
         return hay.some(function (h) { return h.indexOf(stem) === 0 || h.indexOf(w) >= 0; });
@@ -26281,17 +26399,31 @@
      контакту; выбор пишет meta.case_id, после чего имя дохода станет ссылкой в карточку.
      Прямой и ручной платёж приходит без клиента, и здесь его привязывают руками. */
   function finPickClient(oid, presetName) {
+    pickLead({
+      eyebrow: 'Доход', title: 'Привязать к клиенту',
+      sub: 'Выберите карточку того, кто оплатил.' +
+        (presetName ? ' В строке указан: ' + presetName : ''),
+      preset: presetName,
+      onPick: function (cid) {
+        finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
+          'Привязал к клиенту');
+      },
+    });
+  }
+  /* Окно выбора карточки: поиск по имени, контакту и номеру К-…, живые карточки
+     выше пустых, пометка «контакт как у другой карточки». Одно на все места, где
+     что-то привязывают к человеку (доход, диалог), чтобы выбирали одинаково. */
+  function pickLead(o) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML = '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
-      '<div class="al-head"><div><div class="al-eyebrow">Доход</div>' +
-        '<div class="al-title">Привязать к клиенту</div></div>' +
+      '<div class="al-head"><div><div class="al-eyebrow">' + esc(o.eyebrow) + '</div>' +
+        '<div class="al-title">' + esc(o.title) + '</div></div>' +
         '<button class="al-x" id="pk-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-      '<div class="al-sub">Выберите карточку того, кто оплатил.' +
-        (presetName ? ' В строке указан: ' + esc(presetName) : '') + '</div>' +
+      '<div class="al-sub">' + esc(o.sub) + '</div>' +
       '<div class="al-body">' +
-        '<input class="al-in" id="pk-q" placeholder="Поиск по имени или контакту" autocomplete="off">' +
+        '<input class="al-in" id="pk-q" placeholder="Имя, контакт или номер К-…" autocomplete="off">' +
         '<div class="pk-list" id="pk-list"><div class="empty">Загружаю клиентов…</div></div>' +
       '</div>' +
       '<div class="al-foot">' +
@@ -26312,11 +26444,7 @@
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
     var box = el('pk-list'), all = null, dup = {};
-    var pick = function (cid) {
-      finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
-        'Привязал к клиенту');
-      close();
-    };
+    var pick = function (cid) { o.onPick(cid); close(); };
     var draw = function (q) {
       if (!all) return;
       var list = pkFilter(all, q);
@@ -26325,7 +26453,7 @@
       box.innerHTML = list.slice(0, 60).map(function (l) {
         var c = (l.contact || l.email || '').trim();
         return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
-          '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
+          '<b>' + esc(leadName(l) || 'Без имени') + lnoTag(l) + '</b>' +
           (c ? '<i>' + esc(c) + '</i>' : '') +
           '<span class="pk-marks">' + pkMarks(l, dup) + '</span></button>';
       }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
@@ -26336,9 +26464,9 @@
     var have = function (leads) {
       all = leads || [];
       dup = pkDupes(all);
-      draw(presetName || '');
+      draw(o.preset || '');
       var q = el('pk-q');
-      if (q) { q.value = presetName || ''; q.focus(); q.select(); }
+      if (q) { q.value = o.preset || ''; q.focus(); q.select(); }
     };
     if (state.leads && state.leads.length) have(state.leads);
     else api('/admin/api/leads').then(function (r) { have((r && r.leads) || []); })
@@ -26947,6 +27075,228 @@
     });
     pageAnim(view);
   }
+  /* ── Сообщение бухгалтеру (Роман 25.11.2026) ──────────────────────────────────
+     Письмо Ларисе на выплаты периода по шаблону «Справка: сообщение бухгалтеру» из
+     базы знаний финансов. Раньше его собирали руками из ведомости и переписывали по
+     нескольку раз. Строки берем из реестра к выводу, но КАК платить каждому, из
+     данных не следует: карточка исполнителя есть не у всех, кто идет платежкой, и
+     не все с карточкой идут в это письмо. Поэтому у человека выбор пути, и выбор
+     запоминается по имени в браузере: со второго периода письмо собирается само.
+     Какой сервис оплачен лично (вернуть Виталию), в ведомости не отмечено — галочка.
+     Подрядчики (фонд подрядчиков) в письмо не идут. Итог — черновик в поле, его
+     можно поправить перед копированием. */
+  var LM_KEY = 'es_fin_lm_v1';
+  var LM_ROUTES = [['bank', 'платежка'], ['card', 'карта Виталия'],
+                   ['acct', 'бухгалтеру'], ['ip', 'доход ИП Виталия'], ['skip', 'не писать']];
+  var LM_FUND_ROUTES = [['bank', 'платежка из фонда'], ['bill', 'по счету с ВТБ'],
+                        ['skip', 'не писать']];
+  function lmLoad() {
+    try { return JSON.parse(localStorage.getItem(LM_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function lmSave(v) {
+    try { localStorage.setItem(LM_KEY, JSON.stringify(v)); } catch (e) {}
+  }
+  function lmRub(v) {
+    var x = Math.round((Number(v) || 0) * 100) / 100;
+    var int = Math.floor(x), dec = Math.round((x - int) * 100);
+    return String(int).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') +
+      (dec ? ',' + (dec < 10 ? '0' : '') + dec : '') + ' руб';
+  }
+  // Люди периода: одна строка на человека, суммой всех его строк. Начисление с продаж
+  // попадает сюда, даже если стоит фактом: деньги человеку еще не ушли.
+  function lmPeople(list) {
+    var by = {}, out = [];
+    list.forEach(function (it) {
+      if (it.status !== 'план' && !it.accrual) return;
+      var key = it.cid || ('n:' + (it.person || it.receiver || ''));
+      if (!by[key]) {
+        by[key] = { key: key, name: it.person || it.receiver || '—', cid: it.cid,
+                    amount: 0, role: '', bill: false, ids: [] };
+        out.push(by[key]);
+      }
+      var p = by[key];
+      p.amount += Number(it.amount) || 0;
+      if (!p.role && it.role) p.role = it.role;
+      // «Мотивация» — вид выплаты, а не роль; роль в письме пишем, только если она есть.
+      if (!p.role && it.item && it.item !== 'Мотивация' && !it.accrual &&
+          it.item !== it.receiver) p.role = it.item;
+      if (it.by_bill) p.bill = true;
+      p.ids.push(it.id);
+    });
+    return out;
+  }
+  function lmDefault(p) {
+    if (/ванеев/i.test(p.name)) return 'ip';
+    if (/лариса/i.test(p.name)) return 'acct';
+    return p.cid ? 'bank' : 'card';
+  }
+  function lmOpen(R) {
+    if (document.querySelector('.al-ov')) return;
+    var mem = lmLoad();
+    mem.route = mem.route || {}; mem.fund = mem.fund || {}; mem.back = mem.back || {};
+    var rsg = R.rs_groups || [], funds = R.funds || [];
+    var teamItems = [], services = [];
+    rsg.forEach(function (g) {
+      if (g.id === 'funds_alloc') return;
+      g.items.forEach(function (it) {
+        if (it.service) { if (it.status === 'факт') services.push(it); }
+        else teamItems.push(it);
+      });
+    });
+    var team = lmPeople(teamItems);
+    var mkt = funds.filter(function (f) { return f.id === 'marketing'; })[0];
+    var mktPeople = lmPeople(mkt ? mkt.items : []);
+    var alloc = (rsg.filter(function (g) { return g.id === 'funds_alloc'; })[0] || {}).items || [];
+    var st = { bank: mem.bank || 'Сбербанк', route: {}, fund: {}, back: {} };
+    team.forEach(function (p) { st.route[p.key] = mem.route[p.name] || lmDefault(p); });
+    mktPeople.forEach(function (p) {
+      st.fund[p.key] = mem.fund[p.name] || (p.bill ? 'bill' : 'bank');
+    });
+    services.forEach(function (it) { st.back[it.id] = !!mem.back[it.receiver]; });
+
+    function sel(name, opts, val) {
+      return '<select class="al-in lm-sel" data-lm="' + esc(name) + '">' +
+        opts.map(function (o) {
+          return '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' +
+            esc(o[1]) + '</option>';
+        }).join('') + '</select>';
+    }
+    function row(p, kind, opts, val) {
+      return '<div class="lm-row"><span class="lm-nm">' + esc(p.name) +
+          (p.role ? '<i>' + esc(p.role) + '</i>' : '') + '</span>' +
+        '<span class="num lm-sum">' + finRub(p.amount) + '</span>' +
+        sel(kind + ':' + p.key, opts, val) + '</div>';
+    }
+
+    function text() {
+      var L = [], B = st.bank;
+      L.push('Здравствуйте, Лариса.', '');
+      L.push('Сделайте, пожалуйста, сегодня следующие выводы средств и платежки для выплаты мотивации команде.', '');
+      var bank = team.filter(function (p) { return st.route[p.key] === 'bank'; });
+      if (bank.length) {
+        var bs = bank.reduce(function (a, p) { return a + p.amount; }, 0);
+        L.push('Вывести с р/с ВТБ на ' + B + ' ' + lmRub(bs) + ' и сделать следующие платежки:');
+        bank.forEach(function (p, i) {
+          L.push((i + 1) + ') ' + p.name + (p.role ? ' (' + p.role + ')' : '') + ' = ' + lmRub(p.amount));
+        });
+        L.push('');
+      }
+      var sum = function (r) {
+        return team.filter(function (p) { return st.route[p.key] === r; })
+          .reduce(function (a, p) { return a + p.amount; }, 0);
+      };
+      var tch = sum('card'), acc = sum('acct');
+      if (tch || acc) {
+        var parts = [];
+        if (tch) parts.push(lmRub(tch) + ' (преподавателям)');
+        if (acc) parts.push(lmRub(acc) + ' (бухгалтеру Ларисе)');
+        L.push('С р/с ВТБ на личную карту Виталия: ' + parts.join(' + ') +
+          (parts.length > 1 ? ' = ' + lmRub(tch + acc) : '') + ', вывод на собственные нужды.', '');
+      }
+      var ip = sum('ip'), dv = Number(R.dividends) || 0;
+      if (ip || dv) {
+        L.push('Доход от предпринимательской деятельности = ' +
+          [ip ? lmRub(ip) + ' (Виталий)' : '', dv ? lmRub(dv) + ' (дивиденды)' : '']
+            .filter(Boolean).join(' + '), '');
+      }
+      var mb = mktPeople.filter(function (p) { return st.fund[p.key] === 'bank'; });
+      if (mb.length) {
+        var ms = mb.reduce(function (a, p) { return a + p.amount; }, 0);
+        L.push('Виталий, выведите, пожалуйста, с фонда маркетинга ' + lmRub(ms) + ' на р/с ' + B + '.');
+        L.push('Лариса, сделайте следующие платежки в ' + B + ':');
+        mb.forEach(function (p, i) {
+          L.push((i + 1) + ') ' + p.name + (p.role ? ' (' + p.role + ')' : '') + ' = ' + lmRub(p.amount));
+        });
+        L.push('');
+      }
+      // Платеж из фонда по счету уходит прямо с ВТБ, поэтому в копилку фонда
+      // переводим меньше на его сумму (так было в письме 24.11: 150 644,11 − 40 000).
+      var billOut = mktPeople.filter(function (p) { return st.fund[p.key] === 'bill'; })
+        .reduce(function (a, p) { return a + p.amount; }, 0);
+      var fl = alloc.map(function (a) {
+        var v = Number(a.amount) || 0;
+        if (/маркетинг/i.test(a.receiver)) v -= billOut;
+        return { name: a.receiver, v: v };
+      }).filter(function (f) { return f.v > 0.004; });
+      if (fl.length) {
+        L.push('Лариса, сделайте, пожалуйста, вывод средств на карту, чтобы Виталий сделал распределение:');
+        fl.forEach(function (f) { L.push(f.name + ' = ' + lmRub(f.v)); });
+        L.push('');
+      }
+      services.forEach(function (it) {
+        if (st.back[it.id]) L.push('Оплата ' + it.receiver + ' ' + lmRub(it.amount) + ', вернуть Виталию');
+      });
+      return L.join('\n').replace(/\n+$/, '');
+    }
+
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';
+    ov.innerHTML =
+      '<div class="al-card lm-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head"><div><div class="al-eyebrow">Выплаты периода</div>' +
+          '<div class="al-title">Сообщение бухгалтеру</div></div>' +
+          '<button class="al-x" id="lm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">По шаблону из базы знаний. Выберите, как платить каждому, — ' +
+          'выбор запомнится на следующие периоды. Текст внизу можно поправить перед копированием.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Банк для платежек</span>' +
+            sel('bank', [['Сбербанк', 'Сбербанк'], ['Альфа-Банк', 'Альфа-Банк']], st.bank) + '</label>' +
+          (team.length ? '<div class="lm-h">С расчетного счета</div>' +
+            team.map(function (p) { return row(p, 'r', LM_ROUTES, st.route[p.key]); }).join('') : '') +
+          (mktPeople.length ? '<div class="lm-h">Из фонда маркетинга</div>' +
+            mktPeople.map(function (p) { return row(p, 'f', LM_FUND_ROUTES, st.fund[p.key]); }).join('') : '') +
+          (services.length ? '<div class="lm-h">Сервисы, оплаченные в периоде</div>' +
+            services.map(function (it) {
+              return '<label class="lm-row lm-chk"><input type="checkbox" data-lmb="' + esc(it.id) + '"' +
+                (st.back[it.id] ? ' checked' : '') + '><span class="lm-nm">' + esc(it.receiver) +
+                '<i>вернуть Виталию, если платил лично</i></span>' +
+                '<span class="num lm-sum">' + finRub(it.amount) + '</span></label>';
+            }).join('') : '') +
+          '<div class="lm-h">Текст сообщения</div>' +
+          '<textarea class="al-in al-ta lm-ta" id="lm-ta" rows="14"></textarea>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="lm-cancel">Закрыть</button>' +
+          '<button class="bp al-save" id="lm-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var ta = el('lm-ta'), edited = false;
+    function redraw() { if (!edited) ta.value = text(); }
+    function remember() {
+      mem.bank = st.bank;
+      team.forEach(function (p) { mem.route[p.name] = st.route[p.key]; });
+      mktPeople.forEach(function (p) { mem.fund[p.name] = st.fund[p.key]; });
+      services.forEach(function (it) { mem.back[it.receiver] = st.back[it.id]; });
+      lmSave(mem);
+    }
+    redraw();
+    ta.addEventListener('input', function () { edited = true; });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-lm]'), function (s) {
+      s.addEventListener('change', function () {
+        var k = s.getAttribute('data-lm');
+        if (k === 'bank') st.bank = s.value;
+        else if (k.indexOf('r:') === 0) st.route[k.slice(2)] = s.value;
+        else if (k.indexOf('f:') === 0) st.fund[k.slice(2)] = s.value;
+        // Правка выбора пересобирает текст заново: ручные правки в поле при этом
+        // теряются, поэтому сначала выбор, потом правка текста.
+        edited = false; remember(); redraw();
+      });
+    });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-lmb]'), function (c) {
+      c.addEventListener('change', function () {
+        st.back[c.getAttribute('data-lmb')] = c.checked;
+        edited = false; remember(); redraw();
+      });
+    });
+    function close() { ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180); }
+    el('lm-x').addEventListener('click', close);
+    el('lm-cancel').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    el('lm-copy').addEventListener('click', function () {
+      remember(); copyText(ta.value, el('lm-copy'));
+    });
+  }
+
   /* Галочки сверки живут в сессии браузера (на период), а не на сервере: это рабочая
      пометка одного человека на время сверки. Любой сбой доступа к хранилищу глушим —
      экран должен работать и в приватном окне, где sessionStorage кидает исключение. */
@@ -29865,18 +30215,21 @@
         : '<span class="pl-sum num muted">—</span>';
       var factCell = '<span class="pl-fact num' + (s.fact ? '' : ' muted') + '">' +
         (s.fact ? 'факт ' + finRub(s.fact) : 'факт —') + '</span>';
-      return '<div class="pl-row pl-go' + (ok ? '' : ' wait') +
+      var isOpen = state.motivPlanOpen === s.key;
+      return '<div class="pl-row pl-go' + (ok ? '' : ' wait') + (isOpen ? ' open' : '') +
           '" data-plsec="' + esc(s.key) + '">' +
         '<span class="pl-nm">' + esc(s.label) + '</span>' + badge +
         '<span class="pl-val">' + planCell + factCell + '</span>' +
-      '</div>';
+        '<span class="pl-caret">' + ic('chev', 14) + '</span>' +
+      '</div>' +
+      (isOpen ? '<div class="motiv-plan-wrap">' + finPlanBlock(s.key) + '</div>' : '');
     }).join('');
     view.innerHTML = motivSeg() + statBar(tiles) +
       '<div class="card listcard">' +
         '<div class="list-tools plm-head"><div>' +
           '<div class="t fe-t">Мотивация команды: план и факт</div>' +
           '<div class="s fe-s">сколько заложено на команду за месяц и сколько уже начислено. ' +
-            'нажми на группу, чтобы заполнить или поправить ее план.</div>' +
+            'нажми на группу — план раскроется прямо здесь, заполняй не уходя в Финансы.</div>' +
         '</div>' + finMonthNav() + '</div>' +
         '<div class="pl-list">' + rows + '</div>' +
         '<div class="fin-note">' + ic('alert', 13) +
@@ -29887,8 +30240,13 @@
         '</div>' +
       '</div>';
     Array.prototype.forEach.call(view.querySelectorAll('.pl-row[data-plsec]'), function (r) {
-      r.addEventListener('click', function () { finPlanGoSheet(r.getAttribute('data-plsec')); });
+      r.addEventListener('click', function () {
+        var k = r.getAttribute('data-plsec');
+        state.motivPlanOpen = (state.motivPlanOpen === k) ? null : k;
+        saveUi(); renderView();
+      });
     });
+    if (state.motivPlanOpen) finWirePlanBlock(view, state.motivPlanOpen);
     Array.prototype.forEach.call(view.querySelectorAll('[data-plm]'), function (b) {
       b.addEventListener('click', function () {
         var a = b.getAttribute('data-plm');
@@ -29931,6 +30289,77 @@
       if (state.page === 'motiv') renderView();
     });
   }
+  /* Тьюторы в экране Павла. Они не на зарплатной ведомости (reward_sheet) — платят
+     за каждую закрытую точку по ученику, поэтому в список штатных не попадают. Тянем
+     ту же ближайшую выплату, что видит Роман в «Выплаты» (/admin/api/tutor-payouts),
+     и показываем здесь на чтение: кто, за что и когда. Денег этот экран не трогает —
+     отметка «выплачено» остаётся у админа в разделе выплат. */
+  function motivTutLoad() {
+    if (state._motivTut != null || state._motivTutBusy) return;
+    state._motivTutBusy = true;
+    api('/admin/api/tutor-payouts').then(function (r) {
+      state._motivTut = r; state._motivTutBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function (e) {
+      state._motivTut = e.message === '403' ? 'noaccess' : 'none';
+      state._motivTutBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  /* Весь состав команды одним списком по группам. Три разных движка оплаты (штатные
+     reward_sheet, тьюторы case_points, подрядчики contractors) + люди без заведённой
+     оплаты. Ростер берём из /admin/api/team (все внутренние) + /admin/api/contractors
+     (нотариус, врач и прочие внешние), а суммы подкладываем из того источника, где они
+     реально есть. Где оплата в системе ещё не заведена — честный прочерк, это и есть
+     сигнал Павлу, что группа не настроена. */
+  var MOTIV_GROUPS = [
+    { key: 'tutors',    label: 'Тьюторы',           roles: ['tutor', 'senior_tutor', 'tutor_sales'] },
+    { key: 'admins',    label: 'Администраторы',    roles: ['admin', 'grant_admin'] },
+    { key: 'teachers',  label: 'Преподаватели',     roles: ['teacher'] },
+    { key: 'marketing', label: 'Маркетинг',         roles: ['marketer', 'marketing_lead', 'producer'] },
+    { key: 'product',   label: 'Продукт',           roles: ['product_lead'] },
+    { key: 'manage',    label: 'Управление и финансы', roles: ['head', 'super_admin', 'owner', 'manager', 'assistant', 'accountant'] },
+  ];
+  function motivTeamLoad() {
+    if ((Array.isArray(state._team) && state._team.length) || state._motivTeamBusy) return;
+    state._motivTeamBusy = true;
+    api('/admin/api/team').then(function (r) {
+      state._team = (r && r.users) || [];
+      state._motivTeamBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function () {
+      state._team = []; state._motivTeamBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  function motivContrLoad() {
+    if (state._motivContr != null || state._motivContrBusy) return;
+    state._motivContrBusy = true;
+    api('/admin/api/contractors').then(function (r) {
+      state._motivContr = (r && r.contractors) || [];
+      state._motivContrBusy = false;
+      if (state.page === 'motiv') renderView();
+    }).catch(function () {
+      state._motivContr = []; state._motivContrBusy = false;
+      if (state.page === 'motiv') renderView();
+    });
+  }
+  function motivDeptHead(label, n) {
+    return '<div class="rw-dept"><div class="rw-dept-t">' + esc(label) + '</div>' +
+      '<div class="rw-dept-s">' + n + ' ' + plural(n, 'человек', 'человека', 'человек') + '</div></div>';
+  }
+  function motivRosterRow(o) {
+    return '<div class="pl-row' + (o.clickId ? ' pl-go' : '') + '"' +
+        (o.clickId ? ' data-motivperson="' + o.clickId + '"' : '') + '>' +
+      '<span class="pl-nm">' + esc(o.name) +
+        (o.sub ? ' <span class="rw-role">' + esc(o.sub) + '</span>' : '') + '</span>' +
+      '<span class="pl-val">' +
+        '<span class="pl-sum num' + (o.planMuted ? ' muted' : '') + '">' + o.planText + '</span>' +
+        '<span class="pl-fact' + (o.factMuted ? ' muted' : '') + '">' + o.factText + '</span>' +
+      '</span>' + (o.clickId ? ic('go', 15) : '') +
+    '</div>';
+  }
+
   /* Ближайшая выплата-остаток: расчёт месяца закрывается в начале следующего,
      остаток и KPI платят 10-го. Отдаём ближайшее 10-е от сегодня. */
   function motivNextPay() {
@@ -29955,23 +30384,68 @@
         'загрузить людей — проверь сеть.</div></div>';
       motivSegBind(view); return;
     }
-    var d = state._motivRw, all = d.sheets || [];
-    var groups = (d.depts || []).map(function (g) {
-      var mine = all.filter(function (s) { return (s.dept || '') === g.key; });
-      if (!mine.length) return '';
-      return '<div class="rw-dept"><div class="rw-dept-t">' + esc(g.label) + '</div>' +
-          '<div class="rw-dept-s">' + mine.length + ' ' +
-            plural(mine.length, 'человек', 'человека', 'человек') + '</div></div>' +
-        mine.map(motivPersonRow).join('');
+    // Фоновые источники ростера: команда и подрядчики. Пока команда не пришла — скелет.
+    motivTutLoad(); motivContrLoad();
+    if (!Array.isArray(state._team)) {
+      view.innerHTML = motivSeg() + dashSkeleton(); motivTeamLoad(); motivSegBind(view); return;
+    }
+    var d = state._motivRw, sheets = d.sheets || [];
+    var rwById = {};
+    sheets.forEach(function (s) { rwById[s.person_id] = s; });
+    var tutFact = {};
+    if (state._motivTut && state._motivTut.tutors) {
+      state._motivTut.tutors.forEach(function (t) { tutFact[t.id] = t.total; });
+    }
+    var team = state._team.filter(function (u) { return u.active !== false; });
+
+    var sections = MOTIV_GROUPS.map(function (g) {
+      var people = team.filter(function (u) { return g.roles.indexOf(u.role) >= 0; });
+      if (!people.length) return '';
+      people.sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'ru'); });
+      var rows = people.map(function (u) {
+        var sh = rwById[u.id];
+        var roleLabel = (ROLES[u.role] && ROLES[u.role].label) || u.role;
+        if (sh) {
+          return motivRosterRow({ name: u.name, sub: sh.title || roleLabel, clickId: u.id,
+            planText: 'фикс ' + fmtMoney(sh.fund_rub),
+            factText: 'начислено ' + fmtMoney(sh.total_rub), factMuted: !sh.total_rub });
+        }
+        if (g.key === 'tutors') {
+          var f = tutFact[u.id] || 0;
+          return motivRosterRow({ name: u.name, sub: roleLabel,
+            planText: 'сдельно, за точки', planMuted: true,
+            factText: 'к выплате ' + fmtMoney(f), factMuted: !f });
+        }
+        if (u.role === 'owner') {
+          return motivRosterRow({ name: u.name, sub: roleLabel,
+            planText: '—', planMuted: true, factText: 'дивиденды отдельно', factMuted: true });
+        }
+        return motivRosterRow({ name: u.name, sub: roleLabel,
+          planText: '—', planMuted: true, factText: 'оплата не заведена', factMuted: true });
+      }).join('');
+      return motivDeptHead(g.label, people.length) + rows;
     }).join('');
+
+    var contrHtml = '';
+    if (Array.isArray(state._motivContr) && state._motivContr.length) {
+      var contr = state._motivContr.filter(function (c) { return c.active !== false; });
+      var crows = contr.map(function (c) {
+        return motivRosterRow({ name: c.full_name || c.name || 'Подрядчик',
+          sub: c.job || 'подрядчик',
+          planText: 'по актам', planMuted: true, factText: '—', factMuted: true });
+      }).join('');
+      contrHtml = motivDeptHead('Подрядчики', contr.length) + crows;
+    }
+
+    var body = sections + contrHtml;
     view.innerHTML = motivSeg() +
       '<div class="card listcard">' +
         '<div class="list-tools plm-head"><div>' +
           '<div class="t fe-t">Сотрудники</div>' +
-          '<div class="s fe-s">нажми на человека — фикс, что в него входит, KPI на период ' +
-            'и когда выплата. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
+          '<div class="s fe-s">весь состав по группам: заложено (фикс) и начислено за месяц. ' +
+            'штатного можно раскрыть. ' + esc(pfMonthTitle(d.period)) + '.</div>' +
         '</div>' + finMonthNav() + '</div>' +
-        (groups || '<div class="empty">Ни одного расчётного листа пока нет.</div>') +
+        (body || '<div class="empty">Команда пока не загрузилась — проверь сеть.</div>') +
       '</div>';
     Array.prototype.forEach.call(view.querySelectorAll('[data-motivperson]'), function (r) {
       r.addEventListener('click', function () {
@@ -29987,18 +30461,6 @@
     });
     motivSegBind(view); pageAnim(view);
   }
-  function motivPersonRow(s) {
-    return '<div class="pl-row pl-go" data-motivperson="' + s.person_id + '">' +
-      '<span class="pl-nm">' + esc(s.name) +
-        (s.title ? ' <span class="rw-role">' + esc(s.title) + '</span>' : '') + '</span>' +
-      '<span class="pl-val">' +
-        '<span class="pl-sum num">фикс ' + fmtMoney(s.fund_rub) + '</span>' +
-        '<span class="pl-fact num' + (s.total_rub ? '' : ' muted') + '">к выплате ' +
-          fmtMoney(s.total_rub) + '</span>' +
-      '</span>' + ic('go', 15) +
-    '</div>';
-  }
-
   function renderMotivPerson(view) {
     var id = state.motivPerson;
     if (!state._motivRw) { view.innerHTML = dashSkeleton(); motivRwLoad(); return; }
@@ -30099,8 +30561,9 @@
       '</div></div>';
     }
 
-    /* Напоминание, что сверху фикса можно добрать: свои продажи и партнёрка. Партнёрский
-       процент не закреплён (ждёт Виталия) — жёсткую цифру не ставим, см. partner-program. */
+    /* Напоминание, что сверху фикса можно добрать: свои продажи и партнёрка. Процент 5%
+       закреплён (оферта 27.10), см. partner-program. Раскрыт поток кабинета по просьбе
+       Павла 25.11: рилсы → своя ссылка → приводишь и сам же продаёшь. */
     var earn = '<div class="card sp12">' +
       '<div class="sec-head"><div><div class="t">Можно зарабатывать больше</div>' +
         '<div class="s">фикс и KPI — не потолок, сверху можно добрать</div></div></div>' +
@@ -30108,9 +30571,18 @@
         '<div class="mp-earn-row"><span class="mp-earn-k">Продал сам</span>' +
           '<span class="mp-earn-v">до 3,2% с каждой оплаты клиента</span></div>' +
         '<div class="mp-earn-row"><span class="mp-earn-k">Привёл семью</span>' +
-          '<span class="mp-earn-v">партнёрский процент с её оплат</span></div>' +
+          '<span class="mp-earn-v">5% с её покупок от 150 000 ₽ (грант и поездки)</span></div>' +
+        '<div class="mp-earn-how"><div class="mp-earn-how-h">Как это работает</div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">1</span>' +
+            '<span>Заводишь свой партнёрский кабинет — получаешь личную ссылку и готовые материалы для рилсов внутри</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">2</span>' +
+            '<span>Снимаешь рилсы, выкладываешь в свои соцсети и ставишь под ними свою ссылку</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">3</span>' +
+            '<span>Кто перешёл по ссылке — закрепляется за тобой, можешь сам ему продавать</span></div>' +
+          '<div class="mp-earn-step"><span class="mp-earn-num">4</span>' +
+            '<span>Купил — процент твой. Приведённых и доход система считает сама</span></div>' +
+        '</div>' +
         '<button class="bp ghost mp-earn-cta" data-motivearn="1">Подключить и получить ссылку</button>' +
-        '<div class="s mp-earn-note">Партнёрский процент закрепим точнее — пока без фиксированной цифры.</div>' +
       '</div></div>';
 
     view.innerHTML = back +
@@ -30126,7 +30598,8 @@
       '</div>';
     var eb = view.querySelector('[data-motivearn]');
     if (eb) eb.addEventListener('click', function () {
-      showToast('Партнёрскую ссылку подключим — закрепим процент, и кнопка станет рабочей.');
+      window.open('https://t.me/eastsideai_bot?start=partner', '_blank', 'noopener');
+      showToast('Открываю регистрацию партнёра в Telegram — там заведёшь кабинет и получишь ссылку.');
     });
     motivPersonBack(view); pageAnim(view);
   }
@@ -30237,7 +30710,9 @@
       api('/admin/api/fin/plan-lines?section=' + encodeURIComponent(section) + '&month=' + m)
         .then(function (r) {
           (FIN.planlines = FIN.planlines || {})[section] = r; FIN.err = '';
-          if (curSpace() === 'fin') renderAll();
+          // Тот же блок плана встроен в экран Павла (Мотивация), не только в Финансах —
+          // перерисовываем и его, иначе «загружаем план…» висит после загрузки.
+          if (curSpace() === 'fin' || state.page === 'motiv') renderAll();
         }).catch(function (e) { finFail(e, 'planlines'); }).then(done);
     });
   }
@@ -40829,7 +41304,7 @@
       return tf === 'no' ? !t.first : !!t.first;
     });
     var body = shown.slice(0, 300).map(function (p) {
-      var sub = [p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
+      var sub = [leadNo(p.i), p.how || '', p.s ? 'метка ' + p.s : '', p.d ? fmtDay(p.d) : ''].filter(Boolean).join(' · ');
       var mark = p.v ? fmtMoney(Math.round(p.v)) + ' ₽' : '';
       if (p.n > 1 && MG_WHO_N[q.k]) mark = (mark ? mark + ' · ' : '') + p.n + ' ' + (q.k === 'invN' ? 'счета' : 'платежа');
       var on = p.i && state._mgOpen === p.i;
@@ -41566,16 +42041,19 @@
   function sbRegCalc(cc, a, b) {
     var out = {total: 0, contact: 0, by: {}, list: {}};
     SB_REG_KINDS.forEach(function (x) { out.by[x.k] = {n: 0, c: 0}; out.list[x.k] = []; });
-    out.list.all = [];
+    out.list.all = []; out.nl = 0;
     (cc.leads || []).forEach(function (l) {
       // склеенный дубль не лид: человек один, и это главная карточка (поле mg сервера)
-      if (l.nl === 'family' || l.mg) return;
+      if (l.mg) return;
       // ra — все записи на эфиры [дата, слаг, смотрел]; без него (старый ответ сервера) только интенсивы
       var all = l.ra ? l.ra.map(function (r) { return [r[0], r[2], r[1]]; })
         : (l.rg || (l.reg ? [[l.reg, l.w ? 1 : 0]] : [])).map(function (r) { return [r[0], r[1], 'intensive']; });
       var regs = all.filter(function (r) { return r[0] >= a && r[0] <= b; });
       var fresh = l.d >= a && l.d <= b;
       if (!fresh && !regs.length) return;
+      /* Отмеченный «кто это» (уже клиент, семья, спам...) в «Пришло» не идет (Павел 25.11.2026:
+         «не убирается лид, когда ставлю, что уже клиент»). Число таких — строкой под плитками. */
+      if (l.nl) { if (l.nl !== 'family') out.nl++; return; }
       var k = regs.length ? 'efir' : (SB_REG_DOOR[l.k] || 'other');
       var has = !!(l.c || l.ac);
       var what = regs.some(function (r) { return String(r[2] || '').indexOf('intensive') === 0; }) ? 'интенсив' : 'эфир';
@@ -41675,7 +42153,9 @@
           'big' + (free.length ? ' warn' : '')) +
       '</div>' +
       (rest > 0 ? '<div class="sb-rnote">Еще ' + rest + ' ' + plural(rest, 'человек', 'человека', 'человек') +
-        ' не в работе: без контакта, отказ, уже клиент или отмечены «не лид».</div>' : '') +
+        ' не в работе: без контакта, отказ или уже клиент.</div>' : '') +
+      (g.nl ? '<div class="sb-rnote">Не считаем: ' + g.nl + ' ' + plural(g.nl, 'человек', 'человека', 'человек') +
+        ' с отметкой «кто это» (уже клиент, вакансия, спам).</div>' : '') +
       (kinds ? '<div class="sb-rkinds">' + kinds + '</div>' : '') + list + '</div>';
   }
 
@@ -41984,6 +42464,7 @@
       var reason = v.why === 'lead' ? null : v.why;
       var done = function () {
         close();
+        delete MG_HIST[id];   // раскрытая история перечитается с новой отметкой
         state._sb = null; state._mkCross = null; state._pot = null;
         if (after) after(); else renderView();
         showToast(reason ? 'Убрали из лидов: ' + (SB_MK.filter(function (x) { return x[0] === reason; })[0] || [])[1]
@@ -43150,7 +43631,7 @@
         : '<small>оплат нет нигде</small>';
     return '<button class="dbt-r ' + r.state + '" data-dbtlead="' + esc(r.id) + '">' +
       '<span class="sb-pn"><b>' + esc(r.name) + '</b><small>' +
-        esc([r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет',
+        esc([leadNo(r.id), r.tariff && ('тариф ' + r.tariff), r.contract ? 'договор есть' : 'договора нет',
              r.support === false && 'не в Сопровождении'].filter(Boolean).join(' · ')) +
       '</small></span>' +
       '<span class="sb-po' + (r.owner ? ' calm' : ' none') + '" data-l="Ведет">' + esc(r.owner || 'никто') + '</span>' +
@@ -44006,6 +44487,7 @@
   function msFreshRow(p, cc, canMark) {
     var st = MS_FRESH[p.state] || MS_FRESH.out;
     var meta = [esc(p.how), esc(p.day), p.owner ? 'ведет ' + esc(p.owner.split(' ')[0]) : 'никто не ведет'];
+    if (leadNo(p.id)) meta.unshift(leadNo(p.id));
     if (p.state === 'no_contact') meta.push(p.chat ? 'отвечать в диалоге' : 'контакта нет нигде');
     var kind = p.state === 'free' ? 'pool' : (p.mine && p.state === 'respond' ? 'respond' : 'fresh');
     // теплота входа ставится только тем, с кем еще не связались: по ней и идет порядок
@@ -48308,7 +48790,7 @@
     var real = realStages(sts);
     var mine = real.filter(function (st) { return stageIn(st, t.id); }).length;
     var rows = '';
-    rows += '<div class="po-tdr"><span>Этапов ведем мы</span>' +
+    rows += '<div class="po-tdr"><span>' + esc(((p.stages_head || {}).count) || 'Этапов ведем мы') + '</span>' +
       '<b class="num">' + mine + ' из ' + real.length + '</b></div>';
     if (t.ends) {
       rows += '<div class="po-tdr"><span>Работа заканчивается</span><b>' + esc(t.ends) + '</b></div>';
@@ -48655,9 +49137,14 @@
       : cnt < real.length
         ? cnt + ' из ' + real.length + ' этапов: ' + (real.length - cnt) + ' только в тарифе «' + who + '»'
         : 'все ' + cnt + ' ' + plural(cnt, 'этап', 'этапа', 'этапов') + ', последние ' + tail.length + ' есть только здесь';
+    /* Подписи выше написаны под поступление (там младшие тарифы отрезают хвост).
+       У других направлений этапы режутся иначе, и направление пишет свои слова
+       в stages_head портала, а счет остается за кодом. */
+    var sh = p.stages_head || {};
+    if (sh.sub && sh.sub[mode]) sub = sh.sub[mode];
     var head = '<div class="card po-card po-stghead">' +
       '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
-        '<div><div class="t">Этапы поступления</div>' +
+        '<div><div class="t">' + esc(sh.title || 'Этапы поступления') + '</div>' +
         '<div class="s">' + esc(sub) + '</div></div></div>' +
       '<div class="po-payseg"><div class="dperiod">' + segs + '</div></div>' + portalStagesLede(p, mode, sts) + '</div>';
 
@@ -48665,6 +49152,8 @@
   }
   /* якорь экрана: одно предложение, которое диагност произносит вслух */
   function portalStagesLede(p, mode, sts) {
+    var own = (p.stages_head || {}).lede;
+    if (own && own[mode]) return '<div class="po-lede">' + esc(own[mode]) + '</div>';
     if (mode === 'all') {
       return '<div class="po-lede">Слева направо тариф не добавляет этапов — он забирает у семьи работу и добавляет вузы в подачу.</div>';
     }
@@ -50872,7 +51361,7 @@
     if (state.q) {
       arr = arr.filter(function (l) {
         var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' + (l.contact || '') + ' ' +
-          (l.crm.note || '')).toLowerCase();
+          (l.crm.note || '') + lnoHay(l)).toLowerCase();
         return hay.indexOf(state.q) !== -1;
       });
     }
@@ -50946,7 +51435,7 @@
                   : ic('globe', 13) + '<span class="pr-cl">Платформа</span>') + '</span>' +
             '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' + esc(leadName(l)) + '</div>' +
               // Ник уже стоит в заголовке, если имени нет, — второй раз его не пишем.
-              '<div class="t-sub">' + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
+              '<div class="t-sub">' + lnoTag(l) + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
                 : l.contact ? 'имени не назвал' : 'контакта нет') + '</div></div>' +
             '<div class="pr-why hidem">' + esc(prWhy(l)) + '</div>' +
             '<div class="pr-age num' + (age >= PR_QUIET_DAYS ? ' cold' : '') + '">' +
@@ -51195,7 +51684,7 @@
              один — куда он идет, а заметка целиком все равно не влезала и обрывалась
              на полуслове. Не проставлено — так и пишем: это повод зайти и поставить,
              пока оно пустое, семья видит общий пакет документов. */
-          '<div class="t-sub">' + (tutorCol()
+          '<div class="t-sub">' + lnoTag(l) + (tutorCol()
             ? (leadTrack(l) ? esc(trackName(leadTrack(l))) : '<i class="t-sub-none">направление не проставлено</i>')
             : (profileBits.join(' · ') || FUNNEL[l.status]) + (l.crm.note ? ' · ' + esc(l.crm.note) : '')) +
           '</div></div>' +
@@ -53359,8 +53848,17 @@
        преподаватели и тьюторы туда не ходят. Поэтому рядом с «Завести карточку» стоит
        вторая дверь — отметить руками. Показываем ее только тому, у кого есть модуль:
        выбирать придется из списка исполнителей. */
+    /* Карточка у человека бывает, а сшить переписку с ней нечем: заявка пришла с
+       сайта, а пишем мы ему с рабочей страницы ВК или из Макса школы. «Завести» дало
+       бы дубль, поэтому рядом — «Привязать» к той, что есть. После привязки ответы
+       наших в этом диалоге ставят карточке «Связались» сами (Павел 25.11.2026). */
+    var bindBtn = (!d.found && d.can_create)
+      ? '<button class="tg-cact" data-bindcard="' + esc(uid) + '" ' +
+        'title="Карточка уже есть — привязать к ней этот диалог">' + ic('clip', 14) +
+        '<span class="tg-cl">Привязать к карточке</span><span class="tg-cls">Привязать</span></button>'
+      : '';
     if (!d.found && can('contractors')) {
-      return (d.can_create
+      return bindBtn + (d.can_create
         ? '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
           'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
           '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>'
@@ -53376,7 +53874,7 @@
         '</button>';
     }
     if (d.can_create) {
-      return '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
+      return bindBtn + '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
         'title="Карточки в «Контактах» нет — завести ее из этого диалога">' + ic('plus', 14) +
         '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>';
     }
@@ -53469,6 +53967,29 @@
     var open = host.querySelector('[data-card]');
     if (open) open.addEventListener('click', function () {
       openLeadTab(open.getAttribute('data-card'));
+    });
+    var bind = host.querySelector('[data-bindcard]');
+    if (bind) bind.addEventListener('click', function () {
+      var d = state.convLead[uid] || {};
+      pickLead({
+        eyebrow: 'Диалог', title: 'Привязать к карточке',
+        sub: 'Выберите карточку этого человека. Переписка будет видна в ней, а ответы ' +
+          'наших отметят, что с ним связались.',
+        preset: d.name || '',
+        onPick: function (cid) {
+          apiSend('/admin/api/bot/conversations/' + uid + '/bind', 'POST', { session_id: cid },
+            function (r) {
+              state.convLead[uid] = null; convLeadLoad(uid);
+              if (r && r.id) { delete state.details[r.id]; }
+              showToast('Привязал к ' + (leadNo(r && r.id) || 'карточке'));
+            }, function (code, e) {
+              var other = e && e.body && e.body.detail && e.body.detail.id;
+              showToast(code === 409 && other
+                ? 'Этот диалог уже привязан к ' + (leadNo(other) || 'другой карточке')
+                : 'Не получилось привязать');
+            });
+        },
+      });
     });
     var add = host.querySelector('[data-newcard]');
     if (add) add.addEventListener('click', function () {
@@ -55301,7 +55822,10 @@
       (lnch && lnch.call_at
         ? '<span title="Консультация с тьютором состоялась">консультация ' + fmtWhen(lnch.call_at) + '</span>' : ''),
       (pos !== -1 ? '<span>' + (pos + 1) + ' из ' + list.length + '</span>' : ''),
-      '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
+      (leadNo((d && d.no) ? d : lead) || leadNo(id)
+        ? '<button class="m-no num" id="m-no" title="Номер карточки. Нажми, чтобы скопировать">' +
+          esc(leadNo((d && d.no) ? d : lead) || leadNo(id)) + '</button>'
+        : '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>'),
     ].filter(Boolean).join('<span class="dot-sep"></span>') +
       '<button class="m-copylink" id="m-link" title="Скопировать ссылку на эту карточку — команда откроет её одним кликом">' +
       ic('copy', 12) + 'Ссылка на клиента</button>';
@@ -55385,6 +55909,8 @@
     }
     var lnk = el('m-link');
     if (lnk) lnk.addEventListener('click', function () { copyText(leadUrl(id), lnk); });
+    var mno = el('m-no');
+    if (mno) mno.addEventListener('click', function () { copyText(mno.textContent, mno); });
     var mp = el('m-prev'), mn = el('m-next');
     if (mp) mp.addEventListener('click', function () { drawerStep(-1); });
     if (mn) mn.addEventListener('click', function () { drawerStep(1); });
@@ -56703,6 +57229,19 @@
       '</div></div>';
   }
 
+  /* Предоплата с лендинга (Павел 25.11.2026): ученик внес часть, открыты курсы,
+     тариф целиком откроет доплата из его кабинета. Срок прошел — строка красная:
+     это повод позвонить, доступ сам не закрывается. */
+  function pjDebt(b) {
+    var due = b.due_at ? new Date(b.due_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
+    var sum = (b.amount || 0).toLocaleString('ru-RU') + ' ₽';
+    return '<div class="pj-debt' + (b.late ? ' late' : '') + '">' +
+      '<b>' + (b.late ? 'Доплата просрочена' : 'Внесена предоплата') + '</b>' +
+      '<span>Осталось доплатить <b class="num">' + esc(sum) + '</b>' + (due ? (b.late ? ', срок был ' : ' до ') + esc(due) : '') +
+      ', тогда откроется «' + esc(b.tier_title || '') + '». Доплата идет из кабинета ученика по цене эфира.' +
+      (b.late ? ' Позвоните и узнайте, что мешает.' : '') + '</span></div>';
+  }
+
   function buildProjectSection(id) {
     var r = PJ[id];
     if (!r) { loadProject(id); return skeletonSection('projects'); }
@@ -56742,6 +57281,7 @@
           (on ? '<button type="button" class="pd-sw on" id="pj-sw">' +
             '<span class="pd-sw-l">Открыт</span>' +
             '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button>' : '') + '</div>' +
+          (on && p && p.balance ? pjDebt(p.balance) : '') +
           picker +
           (on && p && p.granted_by ? '<div class="det-sw-by">открыл ' + esc(p.granted_by) + ' · ' + esc(fmtWhen(p.granted_at)) + '</div>' : '')) +
       '</div>';
@@ -57422,6 +57962,16 @@
         '<span class="ql-l">Первый ответ</span>' +
         '<span class="own-sp ' + ownSev(m) + '">за ' + fmtMins(m) + '</span>' +
         '<span class="own-when">' + fmtWhen(crm.first_touch_at) + '</span>' +
+      '</div>';
+    } else if (crm.touch || crm.status === 'client') {
+      /* Кнопку «Связался» не нажали, но следы есть: звонок, переписка, консультация или
+         оплата (считает сервер, поле touch). Павел 25.11.2026: «уже оплатили, а якобы не
+         связались, нужно чтобы автоматически менялось». Скорости ответа тут нет: время
+         следа это не время первого ответа. */
+      right = '<div class="own-t">' +
+        '<span class="ql-l">Связались</span>' +
+        (crm.touch ? '<span class="own-when">' + esc(crm.touch.how) + ' · ' + fmtWhen(crm.touch.at) + '</span>'
+          : '<span class="own-when">уже клиент</span>') +
       '</div>';
     } else {
       var waited = base && base.created_at
@@ -62992,6 +63542,64 @@
       '</div></div>';
   }
 
+  /* «За что ближайшая выплата» — разбивка суммы из героя по точкам: Павел 25.11,
+     «у тьюторов нет понимания, когда за какую точку выплата». Берём закрытые точки и
+     консультации, попавшие в окно ближайшей выплаты (те же поля, что считает сервер
+     в payout.amount), и показываем построчно: ученик, точка, сумма. Итог — число с
+     сервера, вторую копию правила 10/20 не заводим. */
+  function pbDueBreakdown(box) {
+    var pay = box.payout || {};
+    if (!pay.date) return '';
+    var from = (pay.from || '').slice(0, 10), to = (pay.to || '').slice(0, 10);
+    var inWin = function (iso) {
+      var d = (iso || '').slice(0, 10);
+      return !!d && !!from && !!to && d >= from && d <= to;
+    };
+    var items = [];
+    (box.students || []).forEach(function (st) {
+      (st.points || []).forEach(function (p, i) {
+        if (p.closedAt && inWin(p.closedAt)) {
+          items.push({ who: st.name, what: 'Точка ' + (i + 1) + '. ' + p.title,
+                       amount: p.amount, when: p.closedAt });
+        }
+      });
+      var c = st.consultation;
+      if (c && !c.paid && inWin(c.heldOn)) {
+        items.push({ who: st.name, what: 'Консультация по подбору вузов',
+                     amount: c.amount, when: c.heldOn });
+      }
+    });
+    items.sort(function (a, b) { return (a.when || '') < (b.when || '') ? -1 : 1; });
+    var date = pay.date ? fmtDay(pay.date) : '';
+    var rule = 'Выплаты два раза в месяц, 10 и 20 числа. Закрыл точку — она сразу встаёт ' +
+      'в ближайшую из них.';
+    if (!items.length) {
+      return '<div class="card pb-due-card"><div class="pb-due-h">' +
+        '<div class="t">В ближайшую выплату ' + esc(date) + '</div>' +
+        '<div class="s">' + rule + '</div></div>' +
+        '<div class="pb-due-empty">Пока сюда ничего не попало. Закрой точку по любому ученику — ' +
+          'и она появится здесь с суммой и датой.</div></div>';
+    }
+    var list = items.map(function (it) {
+      return '<div class="pb-due-row">' +
+        '<span class="pb-due-who">' + esc(it.who) + '</span>' +
+        '<span class="pb-due-what">' + esc(it.what) + '</span>' +
+        '<span class="pb-due-when">' + fmtDay(it.when) + '</span>' +
+        '<span class="pb-due-amt num">' + fmtMoney(it.amount) + ' ₽</span>' +
+      '</div>';
+    }).join('');
+    return '<div class="card pb-due-card">' +
+      '<div class="pb-due-h"><div>' +
+        '<div class="t">В ближайшую выплату ' + esc(date) +
+          '<span class="pb-due-n">' + items.length + ' ' +
+            plural(items.length, 'точка', 'точки', 'точек') + '</span></div>' +
+        '<div class="s">' + rule + '</div></div>' +
+        '<div class="pb-due-total"><b class="num">' + fmtMoney(pay.amount) + ' ₽</b>' +
+          '<small>к выплате</small></div>' +
+      '</div>' +
+      '<div class="pb-due-rows">' + list + '</div></div>';
+  }
+
   function renderPointsBoard(view) {
     if (isSalesManager()) return renderManagerMot(view);
     var seg = pbSeg();
@@ -63023,7 +63631,7 @@
           ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
           : 'Учеников с заведенными точками пока нет.') + '</div></div>';
 
-    var top = seg === 'my' ? pbHero(box) : head;
+    var top = seg === 'my' ? (pbHero(box) + pbDueBreakdown(box)) : head;
     view.innerHTML = pbTabs() + top + pbTracks(box.students) + list;
     pbWire(view);
   }
@@ -64615,6 +65223,17 @@
     var want = screenHash();
     try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) {}
   }
+  /* Строка задачи — настоящая ссылка #task/<id> (Виталий 26.11.2026: «правой
+     кнопкой открыть задачу в новом окне»). Браузерное меню, Ctrl/Cmd-клик и
+     колесико открывают ее в новой вкладке; обычный клик остается обработчику
+     строки, поэтому переход по ссылке здесь гасим, иначе карточка открылась бы
+     дважды (клик + hashchange). Клик по кнопке внутри строки не трогаем. */
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a.tk-link');
+    if (!a || e.target.closest('button, input, select, textarea, label, a') !== a) return;
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) { e.stopPropagation(); return; }
+    e.preventDefault();
+  }, true);
   window.addEventListener('hashchange', function () {
     if (!state.loaded) return;
     var id = hashLeadId();
