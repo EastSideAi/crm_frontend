@@ -60053,7 +60053,15 @@
         '<span class="ap-bar"><i style="width:' + (total ? Math.round(done / total * 100) : 0) + '%"></i></span></div>' +
       '<div class="ap-reqs">' + reqs + '</div>' +
       '<div class="ap-grid">' +
-        '<label>Дедлайн<input type="date" data-apfield="deadline" data-apid="' + a.id + '" value="' + esc(a.deadline || '') + '"></label>' +
+        /* Окно подачи двумя полями подряд (Мария 26.11.2026: «начало подачи и
+           дедлайн, до какого числа подача»): вуз открывает прием с одного числа и
+           закрывает другим, и «рано» — такая же ошибка, как «поздно». Названы парой
+           («с» и «до»), а не «Начало» и «Дедлайн»: рядом они читаются как одно окно.
+           В колонку «Дедлайн» «Сопровождения» идет только вторая дата. */
+        '<label>Подача с<input type="date" data-apfield="opens_at" data-apid="' + a.id + '" value="' + esc(a.opensAt || '') + '"></label>' +
+        '<label>Подача до<input type="date" data-apfield="deadline" data-apid="' + a.id + '"' +
+          ' title="Крайний срок. Эта дата идет в колонку «Дедлайн» в «Сопровождении»"' +
+          ' value="' + esc(a.deadline || '') + '"></label>' +
         '<label>Номер заявки<input data-apfield="app_number" data-apid="' + a.id + '" value="' + esc(a.appNumber || '') + '" placeholder="как на портале"></label>' +
         '<label>Портал<input data-apfield="portal_url" data-apid="' + a.id + '" value="' + esc(a.portalUrl || '') + '" placeholder="ссылка на кабинет вуза"></label>' +
         '<label>Логин<input data-apfield="portal_login" data-apid="' + a.id + '" value="' + esc(a.portalLogin || '') + '" placeholder="логин семьи"></label>' +
@@ -60118,12 +60126,13 @@
           (open ? apOpenCard(open, vault, AP_EV[open.id]) : '')
         : '<div class="ap-empty">Вузов нет. Заведите первый, когда семья выбрала, куда целимся.</div>') +
       '<details class="m-fold ap-new"><summary><span class="pm-t">Добавить вуз</span>' +
-        '<span class="pm-h">вуз, программа, дедлайн</span>' + ic('go', 13) + '</summary>' +
+        '<span class="pm-h">вуз, программа, сроки подачи</span>' + ic('go', 13) + '</summary>' +
         '<div class="m-fold__body"><div class="ap-grid">' +
           '<label>Вуз<input id="ap-n-uni" placeholder="Shanghai University"></label>' +
           '<label>Программа<input id="ap-n-prog" placeholder="Civil Engineering"></label>' +
           '<label>Набор<input id="ap-n-intake" placeholder="2027 осень"></label>' +
-          '<label>Дедлайн<input id="ap-n-dl" type="date"></label>' +
+          '<label>Подача с<input id="ap-n-opens" type="date"></label>' +
+          '<label>Подача до<input id="ap-n-dl" type="date"></label>' +
           '<label>Портал<input id="ap-n-url" placeholder="ссылка на кабинет вуза"></label>' +
           '<label>Логин<input id="ap-n-login" placeholder="логин семьи"></label>' +
         '</div>' +
@@ -60317,6 +60326,7 @@
             uni_name: uni,
             program_name: (el('ap-n-prog').value || '').trim() || null,
             intake: (el('ap-n-intake').value || '').trim() || null,
+            opens_at: el('ap-n-opens').value || null,
             deadline: el('ap-n-dl').value || null,
             portal_url: (el('ap-n-url').value || '').trim() || null,
             portal_login: (el('ap-n-login').value || '').trim() || null,

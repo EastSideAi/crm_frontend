@@ -154,11 +154,11 @@ AP_REQS = [("passport", "Загранпаспорт", True), ("transcript", "Т�
            ("letter", "Мотивационное письмо", False)]
 AP_SEED = [
     ("Harbin Institute of Technology", "Computer Science", "2027 осень", 24, "collecting", "a", True),
-    ("Shanghai Jiao Tong University", "Civil Engineering", "2027 осень", 38, "draft", "a", False),
+    ("Shanghai Jiao Tong University", "Civil Engineering", "2027 осень", 38, "collecting", "a", False),
     ("Zhejiang University", "Software Engineering", "2027 осень", 12, "check", "b", False),
     ("Jilin University", "International Economics", "2027 осень", 61, "ready", "b", False),
     ("Dalian University of Technology", "Mechanical Engineering", "2027 осень", 90, "submitted", "c", False),
-    ("Shandong University", None, None, None, "draft", None, False),
+    ("Shandong University", None, None, None, "collecting", None, False),
     # Заявка «как до 23.11.2026»: уровня нет, но утверждена миграцией — семья ее
     # видит. Нужна в моке, чтобы метку «видит семья» было видно глазами.
     ("Sichuan University", "Chinese Language", "2027 весна", 45, "collecting", "legacy", False),
@@ -181,8 +181,13 @@ def apps_for(lead_id):
         legacy = tier == "legacy"
         if legacy:
             tier = None
+        # Окно подачи: у части вузов прием уже идет (начало в прошлом), у части
+        # откроется позже, у одного не заполнено вовсе — все три случая должны быть
+        # видны глазами на одном экране.
+        opens = None if dl is None or n == 3 else dl - (70 if n % 2 == 0 else 110)
         out.append({
             "id": aid, "uniName": uni, "programName": prog, "intake": intake,
+            "opensAt": (date.today() + timedelta(days=opens)).isoformat() if opens is not None else None,
             "deadline": (date.today() + timedelta(days=dl)).isoformat() if dl is not None else None,
             "status": st, "appNumber": "", "portalUrl": "", "portalLogin": "",
             "hasSecret": n == 0, "requirements": reqs,
@@ -558,6 +563,7 @@ class H(SimpleHTTPRequestHandler):
                     for k, ti, rq in AP_REQS]
             a = {"id": aid, "uniName": body.get("uni_name") or "Без названия",
                  "programName": body.get("program_name"), "intake": body.get("intake"),
+                 "opensAt": body.get("opens_at"),
                  "deadline": body.get("deadline"), "status": "draft", "appNumber": "",
                  "portalUrl": body.get("portal_url") or "", "portalLogin": body.get("portal_login") or "",
                  "hasSecret": False, "requirements": reqs,
@@ -623,6 +629,22 @@ class H(SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(size) or b"{}")
         except Exception:
             body = {}
+        # Правка полей карточки вуза (сроки, портал, номер заявки). До 26.11.2026 мок
+        # на нее отвечал «ok» и ничего не менял: поле в браузере возвращалось старым
+        # следующим же ответом сервера, и это читалось как поломка экрана.
+        if "/admin/api/applications/" in path:
+            _, a = app_by_id(lead_id)
+            if a is not None:
+                for k, api_k in (("opens_at", "opensAt"), ("deadline", "deadline"),
+                                 ("uni_name", "uniName"), ("program_name", "programName"),
+                                 ("intake", "intake"), ("app_number", "appNumber"),
+                                 ("portal_url", "portalUrl"), ("portal_login", "portalLogin"),
+                                 ("notes", "notes")):
+                    if k in body:
+                        a[api_k] = body[k]
+                        ap_log(a["id"], "field", "Изменили " + k + ": " + str(body[k] or "пусто"), True)
+                return self._json({"ok": True, **a})
+            return self._json({"ok": True})
         for l in leads():
             if l["id"] == lead_id:
                 for k in ("status", "note", "tasks", "comms"):
