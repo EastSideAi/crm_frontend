@@ -44409,13 +44409,17 @@
      людей. Очереди считает сервер (routers/sales_shift.py) в порядке приоритета
      нулевого этапа. Звонок — наша звонилка в отдельном окне: одно окно на всю смену,
      каждый следующий номер подставляется в него же, линия не переподключается. */
-  var MS = { d: null, busy: false, at: 0, closing: false };
+  var MS = { d: null, busy: false, at: 0, closing: false, since: '' };
 
   function msLoad(force) {
     if (MS.busy || (MS.d && !force && Date.now() - MS.at < 60000)) return;
     MS.busy = true;
-    api('/admin/api/sales/my-day').then(function (r) {
-      MS.d = r; MS.busy = false; MS.at = Date.now();
+    // Свой период и «Все» сервер собирает по запросу: каждую минуту тянуть всю базу незачем
+    var since = msFreshSince();
+    api('/admin/api/sales/my-day' + (since ? '?since=' + encodeURIComponent(since) : '')).then(function (r) {
+      MS.d = r; MS.busy = false; MS.at = Date.now(); MS.since = since;
+      // пока шел запрос, человек выбрал другой отрезок — спросим под него
+      if (since !== msFreshSince()) return msLoad(true);
       if (state.page === 'myshift') renderView();
       // Сверка лидов первый раз после выкатки считается на сервере фоном: спросим еще раз.
       if (r && r.fresh === null) setTimeout(function () { if (state.page === 'myshift') msLoad(true); }, 20000);
@@ -44604,12 +44608,26 @@
   }
   /* Отрезок блока лидов (встреча продаж 20.11.2026: «прозвонить всех лидов ноября»).
      Сервер отдает месяц, но не меньше недели; режем здесь, по дате прихода в Москве. */
-  var MS_SPANS = [['2d', 'Сегодня и вчера'], ['7d', '7 дней'], ['month', 'Месяц']];
-  var MS_FRESH_MAX = 40;
+  /* «Все» и свой период (Павел 26.11.2026: «МОП должен выбирать период и всех лидов»,
+     регистрации интенсивов 23.09 и 28.10 в месяц не попадали). Их сервер отдает по
+     запросу since, остальные отрезки режем здесь из окна месяца. */
+  var MS_SPANS = [['2d', 'Сегодня и вчера'], ['7d', '7 дней'], ['month', 'Месяц'], ['all', 'Все'], ['custom', 'Период']];
+  var MS_FRESH_STEP = 100;
+  function msToday() { return new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10); }
   function msFreshFrom(span) {
     var t = new Date(Date.now() + 3 * 3600e3), day = 864e5;
+    if (span === 'all') return '';
+    if (span === 'custom') return state.msFreshA || t.toISOString().slice(0, 8) + '01';
     if (span === 'month') return t.toISOString().slice(0, 8) + '01';
     return new Date(t.getTime() - (span === '7d' ? 6 : 1) * day).toISOString().slice(0, 10);
+  }
+  function msFreshTo(span) { return span === 'custom' && state.msFreshB ? state.msFreshB : ''; }
+  // Что просить у сервера: пусто — окно месяца по умолчанию
+  function msFreshSince() {
+    var span = state.msFreshSpan || '2d';
+    if (span === 'all') return 'all';
+    var a = msFreshFrom(span), m = msToday().slice(0, 8) + '01';
+    return span === 'custom' && a < m ? a : '';
   }
   function msFresh(d, cc) {
     var all = d.fresh;
@@ -44617,8 +44635,12 @@
     var span = state.msFreshSpan || '2d';
     var title = 'Лиды: с кем связаться';
     if (all === null) return msSection('fresh', title, 'считаю, список появится через минуту', '', 'Считаю сверку лидов…');
-    var from = msFreshFrom(span);
-    var inSpan = all.filter(function (p) { return !p.date || p.date >= from; });
+    var from = msFreshFrom(span), to = msFreshTo(span);
+    var loading = msFreshSince() !== MS.since;
+    var inSpan = all.filter(function (p) { return !p.date || (p.date >= from && (!to || p.date <= to)); });
+    // «Интенсив»: все, кто регистрировался на интенсив или пришел по его ссылке
+    var nInt = inSpan.filter(function (p) { return p.intensive; }).length;
+    if (state.msFreshInt && nInt) inSpan = inSpan.filter(function (p) { return p.intensive; });
     // «Оставили заявку» (Павел 11262): только те, кто сам попросил консультацию
     var nApplied = inSpan.filter(function (p) { return p.applied; }).length;
     var onlyApplied = !!state.msFreshApplied && nApplied > 0;
@@ -44638,16 +44660,24 @@
       : '') +
       '<span class="ms-wk' + (done >= norm ? ' ok' : '') + '">' + (inShift != null ? 'за день' : 'сегодня обработал') +
       ' <b class="num">' + done + '</b> из ' + norm + ' семей</span>';
+    var range = span === 'custom'
+      ? '<span class="ms-range"><input type="date" class="al-in" id="ms-fa" value="' + esc(from) + '" max="' + msToday() + '" aria-label="С какого дня">' +
+        '<span>–</span><input type="date" class="al-in" id="ms-fb" value="' + esc(to || msToday()) + '" max="' + msToday() + '" aria-label="По какой день"></span>'
+      : '';
     var chips = '<div class="list-quick ms-spans">' + MS_SPANS.map(function (x) {
       return '<button class="qchip' + (x[0] === span ? ' on' : '') + '" data-msspan="' + x[0] + '">' + x[1] + '</button>';
-    }).join('') + (nApplied ? '<span class="ms-chipsep"></span><button class="qchip' + (onlyApplied ? ' on' : '') +
+    }).join('') + range + (nInt || state.msFreshInt ? '<span class="ms-chipsep"></span><button class="qchip' + (state.msFreshInt ? ' on' : '') +
+      '" data-msint="1" aria-pressed="' + !!state.msFreshInt + '">Интенсив<span class="qn num">' + nInt + '</span></button>' : '') + (nApplied ? '<span class="ms-chipsep"></span><button class="qchip' + (onlyApplied ? ' on' : '') +
       '" data-msapplied="1" aria-pressed="' + onlyApplied + '">' + ic('cal', 13) + 'Оставили заявку<span class="qn num">' + nApplied + '</span></button>' : '') + '</div>';
     var sub = worked + ' · ' + (f.length ? 'пришло ' + f.length + (parts.length ? ': ' + parts.join(', ') : ', все в работе') +
       '; сверху горячие, с кем еще не связались' : 'за этот отрезок новых не было');
-    var more = state.msFreshMore ? f : f.slice(0, MS_FRESH_MAX);
-    var rows = !f.length ? '<div class="empty">За этот отрезок новых лидов не было.</div>' :
+    var more = f.slice(0, state.msFreshShow || MS_FRESH_STEP);
+    var left = f.length - more.length;
+    var rows = loading ? '<div class="empty">Собираю лидов за весь период…</div>' :
+      !f.length ? '<div class="empty">За этот отрезок новых лидов не было.</div>' :
       more.map(function (p) { return msFreshRow(p, cc, d.can_mark); }).join('') +
-      (f.length > more.length ? '<button class="ms-more" data-msmore="1">Показать еще ' + (f.length - more.length) + '</button>' : '');
+      (left > 0 ? '<button class="ms-more" data-msmore="1">Показать еще ' + Math.min(left, MS_FRESH_STEP) +
+        (left > MS_FRESH_STEP ? ' из ' + left : '') + '</button>' : '');
     return msSection('fresh', title, sub, chips + rows, 'За этот отрезок новых лидов не было.');
   }
 
@@ -44896,16 +44926,39 @@
     dialBind(view, function () { MS.d = null; msLoad(true); shLoad(true); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-msapplied]'), function (b) {
       b.addEventListener('click', function () {
-        state.msFreshApplied = !state.msFreshApplied; state.msFreshMore = false; renderView();
+        state.msFreshApplied = !state.msFreshApplied; state.msFreshShow = 0; renderView();
       });
     });
+    var msIntB = view.querySelector('[data-msint]');
+    if (msIntB) msIntB.addEventListener('click', function () {
+      state.msFreshInt = !state.msFreshInt; state.msFreshShow = 0; renderView();
+    });
+    // Отрезок поменялся так, что нужен другой запрос (Все, период старше месяца) — спросим сервер
+    var msRefetch = function () {
+      state.msFreshShow = 0;
+      if (msFreshSince() !== MS.since) msLoad(true);
+      renderView();
+    };
     Array.prototype.forEach.call(view.querySelectorAll('[data-msspan]'), function (b) {
       b.addEventListener('click', function () {
-        state.msFreshSpan = b.getAttribute('data-msspan'); state.msFreshMore = false; renderView();
+        state.msFreshSpan = b.getAttribute('data-msspan'); msRefetch();
+      });
+    });
+    ['ms-fa', 'ms-fb'].forEach(function (id) {
+      var inp = el(id);
+      if (inp) inp.addEventListener('change', function () {
+        if (!this.value) return;
+        if (id === 'ms-fa') state.msFreshA = this.value; else state.msFreshB = this.value;
+        if (state.msFreshB && state.msFreshA && state.msFreshB < state.msFreshA) {
+          var t = state.msFreshA; state.msFreshA = state.msFreshB; state.msFreshB = t;
+        }
+        msRefetch();
       });
     });
     var msMoreB = view.querySelector('[data-msmore]');
-    if (msMoreB) msMoreB.addEventListener('click', function () { state.msFreshMore = true; renderView(); });
+    if (msMoreB) msMoreB.addEventListener('click', function () {
+      state.msFreshShow = (state.msFreshShow || MS_FRESH_STEP) + MS_FRESH_STEP; renderView();
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sbmk]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();
