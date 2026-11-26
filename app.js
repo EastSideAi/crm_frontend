@@ -36968,13 +36968,16 @@
      Рассылка мини-курсов не должна предлагать CSCA тому, кто уже учится в Китае,
      а магистранту CSCA не нужен вовсе. В карточке этого не видно: этапы плана у всех
      стоят на подготовке. Поэтому разметка руками: «Поступил / Не поступил» и для
-     непоступивших программа. Пишем в overrides карточки (admitted, track), трек —
-     тот же, что карточка уже несет, поэтому подробный трек («бакалавриат после
-     языкового года») не затираем, если категория совпала. */
-  function admProgram(track) {
-    track = track || '';
-    if (track.indexOf('bachelor') === 0) return 'bachelor';
-    if (track.indexOf('master') === 0) return 'master';
+     непоступивших — куда поступает сейчас. Пишем в overrides карточки admitted и
+     applying. Трек карточки (overrides.track) НЕ трогаем: от него зависит пакет
+     документов семьи, а первая версия экрана писала в него и затерла языковой год
+     пятерым ученикам (26.11.2026). Трек только подсказывает, что выбрать. */
+  function admApplying(c) {
+    if (c.applying) return c.applying;
+    var t = c.program || '';
+    if (t.indexOf('lang') === 0) return 'lang';
+    if (t === 'bachelor' || t === 'bachelor_after_lang') return 'bachelor';
+    if (t.indexOf('master') === 0) return 'master';
     return '';
   }
 
@@ -37002,18 +37005,18 @@
       return (a.name || '').localeCompare(b.name || '', 'ru');
     });
     var done = list.filter(function (c) {
-      return c.admitted === 'yes' || (c.admitted === 'no' && admProgram(c.program));
+      return c.admitted === 'yes' || (c.admitted === 'no' && admApplying(c));
     }).length;
     var TAR = { std: 'Стандарт', plus: 'Плюс', prem: 'Премиум' };
     var rows = list.map(function (c) {
-      var id = esc(c.session_id), prog = admProgram(c.program);
+      var id = esc(c.session_id), prog = admApplying(c);
       return '<div class="trow adm-row">' +
         '<div class="t-cell"><a class="t-ttl adm-name" href="#lead/' + id + '">' + esc(c.name) + '</a>' +
           '<div class="t-sub">' + esc(TAR[c.tariff] || c.tariff) + '</div></div>' +
         '<div class="adm-acts">' +
           admSeg(id, 'admitted', [['yes', 'Поступил'], ['no', 'Не поступил']], c.admitted) +
           (c.admitted === 'no'
-            ? admSeg(id, 'program', [['bachelor', 'Бакалавриат'], ['master', 'Магистратура']], prog)
+            ? admSeg(id, 'applying', [['lang', 'Языковой год'], ['bachelor', 'Бакалавриат'], ['master', 'Магистратура']], prog)
             : '') +
         '</div></div>';
     }).join('');
@@ -37030,20 +37033,20 @@
         var id = b.getAttribute('data-adm'), k = b.getAttribute('data-k'), v = b.getAttribute('data-v');
         var c = state._adm.filter(function (x) { return x.session_id === id; })[0];
         if (!c) return;
-        var ov = {}, prev = { admitted: c.admitted, program: c.program };
+        var ov = {}, prev = { admitted: c.admitted, applying: c.applying };
         if (k === 'admitted') {
           if (c.admitted === v) return;
           ov.admitted = v; c.admitted = v;
         } else {
-          if (admProgram(c.program) === v) return;
-          ov.track = v; c.program = v;
+          if (c.applying === v) return;
+          ov.applying = v; c.applying = v;
         }
         renderView();
         api('/admin/api/leads/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ overrides: ov }) }).then(function () {
           delete state.details[id];
         }).catch(function () {
-          c.admitted = prev.admitted; c.program = prev.program; renderView();
+          c.admitted = prev.admitted; c.applying = prev.applying; renderView();
           showToast('Не сохранилось — проверь сеть и нажми еще раз');
         });
       });
