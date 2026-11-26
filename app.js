@@ -59922,6 +59922,10 @@
       if (state.drawerId === id && state.modalSection === 'apply') renderModalContent();
     }).catch(function (e) {
       APPS_BUSY[id] = false;
+      // Запрос не доехал — это НЕ «вузов нет». Раньше сюда ложился пустой список, и
+      // доска до перезагрузки страницы показывала «Вузов нет» у ученика, которому
+      // тьютор завел семь (Мария 26.11.2026, Кудакаева: в логах бэкенда за час ни
+      // одного запроса за списком — браузер показывал свою же старую пустоту).
       if (e.message !== '403') { APPS[id] = { applications: [], failed: true }; if (state.drawerId === id) renderModalContent(); }
     });
   }
@@ -60100,7 +60104,10 @@
     return '<div class="m-ctitle">Университеты</div>' +
       '<div class="m-csub">Три уровня: мечта (А), реальный (Б), запасной (С). Карточка таскается мышью между колонками, ' +
         'флаг отмечает главный вуз. В кабинете семья видит только те, что разложены по уровням.</div>' +
-      (list.length
+      (box.failed
+        ? '<div class="ap-empty">Список вузов не загрузился — похоже, отвалилась сеть. ' +
+            '<button class="lnk" id="ap-again">Попробовать еще раз</button></div>'
+        : list.length
         ? (hold.length
             ? '<div class="uv-hold" data-uvdrop="">' +
                 '<div class="uv-hold__h"><b>Не разложены</b><span>' + hold.length + '</span>' +
@@ -60290,6 +60297,9 @@
         });
       });
     });
+
+    var again = el('ap-again');
+    if (again) again.addEventListener('click', function () { loadApps(id, true); });
 
     var add = el('ap-n-add');
     if (add) {
