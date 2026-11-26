@@ -59905,12 +59905,13 @@
     { k: 'offer',      t: 'приглашение' },
     { k: 'rejected',   t: 'отказ' },
   ];
-  // Состояние документа по кругу: клик по строке ведет его от «ждем» до «собрано».
-  // Отдельных кнопок нет намеренно — в пакете десяток строк, и три кнопки на каждой
-  // превращают экран в панель управления вместо чек-листа.
-  var AP_NEXT = { todo: 'doing', doing: 'done', done: 'rejected', rejected: 'todo' };
-  var AP_REQ = { todo: ['ждем', ''], doing: ['в работе', 'go'],
-                 done: ['собрано', 'ok'], rejected: ['поправить', 'no'] };
+  /* Чек-листа документов в карточке вуза НЕТ (Мария 26.11.2026: «все документы
+     отсюда убери, им это вообще не надо, только захламляет»). Пакет семьи живет в
+     разделе «Документы»: он один на ученика и собирается по направлению, а здесь
+     тот же список висел отдельно у КАЖДОГО вуза — пять вузов, пять загранпаспортов.
+     Две правды про одни и те же бумаги расходятся на первой же отметке. Сам чек-лист
+     в базе и в ручках бэкенда остался, экран его не показывает — ни тут, ни в
+     кабинете семьи (platform_frontend, экран «Подача»). */
 
   function loadApps(id, force) {
     if (APPS_BUSY[id]) return;
@@ -59981,11 +59982,10 @@
     }).catch(function () { AP_EV_BUSY[appId] = false; AP_EV[appId] = []; });
   }
 
-  /* Карточка на доске: только то, что решает, куда ее двигать. Пакет и портал
+  /* Карточка на доске: только то, что решает, куда ее двигать. Сроки и портал
      живут в раскрытой карточке под доской — в колонке шириной 240px они
      превращаются в нечитаемую стопку. */
   function apBoardCard(a, open) {
-    var done = (a.progress && a.progress.done) || 0, total = (a.progress && a.progress.total) || 0;
     var sub = [a.programName, a.intake].filter(Boolean).join(' · ');
     return '<article class="uv-card' + (open ? ' on' : '') + (a.isMain ? ' main' : '') + '"' +
         ' draggable="true" data-uvcard="' + a.id + '" data-tier="' + esc(a.tier || '') + '"' +
@@ -60003,7 +60003,6 @@
            вранье полосы, поэтому у такой карточки стоит метка. */
         (!a.tier && a.approved ? '<span class="uv-seen">видит семья</span>' : '') +
         '<span class="uv-st st-' + esc(a.status) + '">' + esc(apStatusTitle(a.status)) + '</span>' +
-        (total ? '<span class="uv-pack">' + done + '/' + total + '</span>' : '') +
         apDeadline(a) +
       '</div></article>';
   }
@@ -60015,13 +60014,6 @@
     var steps = AP_STATUS.map(function (s) {
       return '<button class="ap-step' + (s.k === a.status ? ' on' : '') + '" data-apst="' + a.id + '" data-st="' + s.k + '">' + s.t + '</button>';
     }).join('');
-    var reqs = (a.requirements || []).map(function (r) {
-      var st = AP_REQ[r.state] || AP_REQ.todo;
-      return '<button class="ap-req" data-apreq="' + a.id + '" data-key="' + esc(r.key) + '" data-state="' + esc(r.state || 'todo') + '">' +
-        '<span class="ap-req__t">' + esc(r.title || r.key) + (r.required ? '' : ' <i>по запросу вуза</i>') + '</span>' +
-        '<span class="ap-req__s ' + st[1] + '">' + st[0] + '</span></button>';
-    }).join('');
-    var done = (a.progress && a.progress.done) || 0, total = (a.progress && a.progress.total) || 0;
     // Уровень кнопками, а не только перетаскиванием: с телефона карточку мышью не
     // возьмешь, а список вузов разбирают и в дороге.
     var seg = AP_TIERS.map(function (t) {
@@ -60049,9 +60041,6 @@
           ' aria-pressed="' + (a.isMain ? 'true' : 'false') + '">' + ic('flag', 13) +
           (a.isMain ? 'Главный вуз' : 'Сделать главным') + '</button>' : '') + '</div>' +
       '<div class="ap-steps">' + steps + '</div>' +
-      '<div class="ap-pack"><span>Пакет</span><b>' + done + ' из ' + total + '</b>' +
-        '<span class="ap-bar"><i style="width:' + (total ? Math.round(done / total * 100) : 0) + '%"></i></span></div>' +
-      '<div class="ap-reqs">' + reqs + '</div>' +
       '<div class="ap-grid">' +
         /* Окно подачи двумя полями подряд (Мария 26.11.2026: «начало подачи и
            дедлайн, до какого числа подача»): вуз открывает прием с одного числа и
@@ -60075,7 +60064,7 @@
       '</div>' +
       '<div class="ap-shown" data-apshown="' + a.id + '"></div>' +
       '<details class="m-fold uv-logf"><summary><span class="pm-t">Что происходило</span>' +
-        '<span class="pm-h">переносы, статусы, пакет</span>' + ic('go', 13) + '</summary>' +
+        '<span class="pm-h">переносы, статусы, сроки</span>' + ic('go', 13) + '</summary>' +
         '<div class="m-fold__body uv-log">' + log + '</div></details>' +
     '</div>';
   }
@@ -60246,18 +60235,6 @@
           body: JSON.stringify({ status: st }),
         }).then(function () { loadApps(id, true); })
           .catch(function () { showToast('Статус не сменился'); });
-      });
-    });
-
-    Array.prototype.forEach.call(host.querySelectorAll('[data-apreq]'), function (b) {
-      b.addEventListener('click', function () {
-        var next = AP_NEXT[b.getAttribute('data-state')] || 'doing';
-        delete AP_EV[b.getAttribute('data-apreq')];
-        api('/admin/api/applications/' + b.getAttribute('data-apreq') + '/requirements', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ op: 'set', key: b.getAttribute('data-key'), state: next }),
-        }).then(function () { loadApps(id, true); })
-          .catch(function () { showToast('Не отметилось'); });
       });
     });
 
