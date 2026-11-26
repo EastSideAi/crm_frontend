@@ -16801,3 +16801,20 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 /* Строка задачи — ссылка #task/<id>, чтобы открывать ее в новой вкладке.
    :where — без веса: вид задает класс строки (.trow, .tsk-step, .kb-card). */
 :where(a.tk-link) { display: block; color: inherit; text-decoration: none; }
+
+/* «Кто поступил» — разметка клиентов на тарифе (app.js renderAdmitted) */
+.adm-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; height: auto;
+  min-height: 58px; padding-top: 8px; padding-bottom: 8px; cursor: default; }
+.adm-row .t-cell { flex: 1 1 220px; min-width: 0; }
+.adm-name { color: var(--ink); text-decoration: none; }
+.adm-name:hover { color: var(--blue); }
+.adm-acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.adm-count { font: 500 13px 'Manrope', sans-serif; color: var(--ink-2); white-space: nowrap; }
+.adm-count b { color: var(--ink); font-weight: 700; }
+@media (max-width: 720px) {
+  .adm-row { padding: 12px 14px; gap: 10px; }
+  .adm-row .t-cell { flex-basis: 100%; }
+  .adm-acts { width: 100%; }
+  .adm-seg { flex: 1 1 100%; }
+  .adm-seg button { flex: 1; padding-left: 8px; padding-right: 8px; }
+}
