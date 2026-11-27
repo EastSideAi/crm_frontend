@@ -3347,7 +3347,7 @@
   /* Порядок вкладок задала Ольга 13.11.2026; первая открывается по умолчанию */
   var MK_TABS = [['cross', 'Сквозная'], ['plan', 'Декомпозиция'],
                  ['launch', 'Запуски'], ['ads', 'Реклама'], ['efir', 'Эфиры'],
-                 ['dash', 'Каналы и лиды'], ['links', 'Ссылки и сценарии']];
+                 ['dash', 'Каналы и лиды'], ['mini', 'Мини-курсы'], ['links', 'Ссылки и сценарии']];
   /* Какие вкладки «Маркетинга» человеку положены. У подрядчика по рекламе (cap `ads`
      без `marketing`) остается одна «Реклама»: остальные вкладки — сквозная воронка,
      оплаты клиентов, план запуска и ссылки бота, и внешнему человеку их не отдаем.
@@ -3374,7 +3374,7 @@
      Видит их тот, кому открыт весь «Маркетинг», а не подрядчик с одной «Рекламой». */
   var MK_PAGES = [['social', 'Соцстатистика'], ['broadcasts', 'Рассылки'], ['gifts', 'Подарки']];
   /* Общий порядок ряда: вкладки и страницы вперемешку (Ольга 13.11.2026) */
-  var MK_ORDER = ['cross', 'plan', 'launch', 'ads', 'efir', 'dash', 'social', 'links', 'broadcasts', 'gifts'];
+  var MK_ORDER = ['cross', 'plan', 'launch', 'ads', 'efir', 'dash', 'mini', 'social', 'links', 'broadcasts', 'gifts'];
   function mkPagesFor() {
     if (!can('marketing')) return [];
     return MK_PAGES.filter(function (o) { return can(pageCap(o[0])); });
@@ -37070,6 +37070,15 @@
       '<div class="mf-sub">По неделям входа</div>' + wk + '</div>';
   }
 
+  /* Своя вкладка «Мини-курсы» (Вера 27.11.2026): раньше карточка стояла первой в
+     «Ссылках и сценариях», среди воронок бота, и терялась там. Период — общий
+     переключатель «Маркетинга» в шапке. */
+  function renderMkMini(view) {
+    if (state._mfLoad !== (state.mfProd || 'det') + ':' + mfDays()) { state._mf = null; fetchMiniFunnel(); }
+    view.innerHTML = miniFunnelCard();
+    mfWire(view);
+  }
+
   function mfWire(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-mfp]'), function (b) {
       b.addEventListener('click', function () {
@@ -40756,20 +40765,18 @@
     if (state.mkTab === 'efir') { renderMkEfir(view); return; }
     if (state.mkTab === 'ads') { renderMkAds(view); return; }
     if (state.mkTab === 'plan') { renderMkPlan(view); return; }
+    if (state.mkTab === 'mini') { renderMkMini(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
-    if (state._mfLoad !== (state.mfProd || 'det') + ':' + mfDays()) { state._mf = null; fetchMiniFunnel(); }
     /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
        права стирать другой: раньше пустой ответ маркетинга гасил весь экран. */
     if (!state._mk) {
-      view.innerHTML = miniFunnelCard() + courseFunnelCard() + dashSkeleton();
-      mfWire(view);
+      view.innerHTML = courseFunnelCard() + dashSkeleton();
       fetchMk();
       return;
     }
     if (state._mk === 'none') {
-      view.innerHTML = miniFunnelCard() + courseFunnelCard() +
+      view.innerHTML = courseFunnelCard() +
         '<div class="card"><div class="empty">Не удалось загрузить воронки бота — проверь сеть или доступ.</div></div>';
-      mfWire(view);
       return;
     }
     var d = state._mk;
@@ -40792,13 +40799,12 @@
         '<div class="mk-st num" title="вошло · дошли до менеджера">' + entered + ' · ' + ho + '</div></div>';
     }).join('');
 
-    view.innerHTML = miniFunnelCard() + courseFunnelCard() +
+    view.innerHTML = courseFunnelCard() +
       '<div class="card" style="padding:22px 24px"><div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Воронки</div><div class="s">создавай воронку и ссылки здесь; шаги диалога меняет только агент песочницы</div></div>' +
         '<span style="flex:1"></span><button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
         '<div class="mk-list">' + (frows || '<div class="empty">Воронок пока нет — жми «+ Воронка».</div>') + '</div></div>';
 
-    mfWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-stats]'), function (row) {
       row.addEventListener('click', function () {
         state._mkStats = row.getAttribute('data-stats');
