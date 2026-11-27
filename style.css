@@ -16840,8 +16840,8 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 
 /* «Все мини-курсы» — сводная таблица на вкладке «Мини-курсы» (app.js miniSummaryCard) */
 .ms-scroll { overflow-x: auto; border-top: 1px solid var(--line); }
-.ms-table { min-width: 760px; }
-.ms-row { display: grid; grid-template-columns: minmax(180px,1.4fr) repeat(5, minmax(110px,1fr));
+.ms-table { min-width: 640px; }
+.ms-row { display: grid; grid-template-columns: minmax(180px,1.6fr) repeat(4, minmax(110px,1fr));
   align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--line); }
 .ms-row:last-child { border-bottom: none; }
 .ms-head { padding-top: 10px; padding-bottom: 10px; background: #FBFBFC; align-items: end;
@@ -16871,7 +16871,7 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 @media (max-width: 720px) {
   .ms-person { padding-left: 14px; padding-right: 14px; }
   .ms-ch { white-space: normal; text-align: right; max-width: 110px; }
-  .ms-row { padding: 0 14px 0 0; grid-template-columns: 146px repeat(5, 96px); min-height: 62px; }
+  .ms-row { padding: 0 14px 0 0; grid-template-columns: 146px repeat(4, 96px); min-height: 62px; }
   .ms-name { padding-left: 14px; }
   .ms-table { min-width: 0; width: max-content; }
   /* имя продукта стоит на месте, пока цифры листаются пальцем */

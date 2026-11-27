@@ -37085,9 +37085,10 @@
   }
 
   /* Сводка всех мини-курсов одной таблицей (Вера 27.11.2026: «на одном экране, чтобы
-     не переключаться»). Строка — продукт, столбец — шаг; прочерк — у продукта такого
-     шага нет, это не ноль. Под числом — доля от вошедших: сравнивать продукты разного
-     размера по голым числам нельзя. */
+     не переключаться» и «видеть, кто купил и с кем еще работать»; клиентов команды тут
+     нет — им продавать нечего). Строка — продукт, столбцы — кто эти люди для нас, шаги
+     воронки ниже, в карточке продукта. Под числом доля: от вошедших, у «занимались» —
+     от тех, с кем работаем. Прочерк — у продукта так не посчитать, это не ноль. */
   function fetchMiniSummary() {
     var days = mfDays();
     state._msLoad = days;
@@ -37105,12 +37106,12 @@
     var head = '<div class="sec-head" style="padding:20px 24px 16px">' +
       '<span class="ic">' + ic('chart', 14) + '</span>' +
       '<div><div class="t">Все мини-курсы</div>' +
-      '<div class="s">кто зашел за период и кто он для нас · нажми на число, чтобы увидеть людей</div></div></div>';
+      '<div class="s">кто зашел за период, без клиентов команды · нажми на число, чтобы увидеть людей</div></div></div>';
     if (!d) return '<div class="card" style="margin-bottom:18px">' + head + '<div class="empty">Считаю…</div></div>';
     if (d === 'none') return '<div class="card" style="margin-bottom:18px">' + head +
       '<div class="empty">Не удалось загрузить сводку — проверь сеть или доступ.</div></div>';
     var cols = d.cols || [], pick = state._msPick || {};
-    var LIST = { client: 1, bought: 1, potential: 1 };
+    var LIST = { bought: 1, potential: 1 };
     var th = '<div class="ms-row ms-head"><span class="ms-name">Продукт</span>' + cols.map(function (c) {
       return '<span class="ms-c' + (c.key === 'potential' ? ' ms-key' : '') + '">' + esc(c.title) + '</span>';
     }).join('') + '</div>';
@@ -37139,7 +37140,7 @@
 
   /* Люди одной ячейки: «с кем работать» — главный вопрос Веры (27.11.2026), поэтому
      список открывается прямо под таблицей, а имя ведет в карточку CRM. */
-  var MS_GROUP = { client: 'уже клиенты', bought: 'купили после входа', potential: 'не купили — с ними работаем' };
+  var MS_GROUP = { bought: 'купили после входа', potential: 'не купили — с ними работаем' };
   function miniPeopleList() {
     var pick = state._msPick;
     if (!pick) return '';
