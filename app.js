@@ -45329,6 +45329,8 @@
       return 'план ' + fmtMoney(r.plan) + ', вес ' + fmtMoney(r.weight_pct) + '%';
     }
     if (r.payout === 'fixed') {
+      // Дни до закрытия ведомости: чем меньше, тем лучше, норма — потолок.
+      if (r.metric === 'fin_close_days') return 'не позже ' + fmtMoney(r.plan) + ' дн';
       return r.plan_source === 'row' ? 'норма ' + fmtMoney(r.plan) : fmtMoney(r.rub_max) + ' ₽ за план';
     }
     // Мотивация с 23.11.2026: ступени от процента плана, пропорция, процент с оплат
