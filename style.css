@@ -16840,8 +16840,8 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 
 /* «Все мини-курсы» — сводная таблица на вкладке «Мини-курсы» (app.js miniSummaryCard) */
 .ms-scroll { overflow-x: auto; border-top: 1px solid var(--line); }
-.ms-table { min-width: 980px; }
-.ms-row { display: grid; grid-template-columns: minmax(170px,1.3fr) repeat(9, minmax(76px,1fr));
+.ms-table { min-width: 760px; }
+.ms-row { display: grid; grid-template-columns: minmax(180px,1.4fr) repeat(5, minmax(110px,1fr));
   align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--line); }
 .ms-row:last-child { border-bottom: none; }
 .ms-head { padding-top: 10px; padding-bottom: 10px; background: #FBFBFC; align-items: end;
@@ -16852,11 +16852,26 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 .ms-c b { display: block; font: 600 15px 'Manrope', sans-serif; color: var(--ink); }
 .ms-c small { display: block; font-size: 11px; color: var(--ink-3); }
 .ms-c.ms-zero b { color: var(--ink-3); }
-.ms-money b { color: var(--blue); }
-.ms-money.ms-zero b { color: var(--red); }
+.ms-bought b { color: var(--green-ink); }
+.ms-potential b { color: var(--blue); }
+.ms-head .ms-key { color: var(--blue); }
+.ms-pick { background: none; border: 0; font: inherit; cursor: pointer; padding: 6px 8px; margin: -6px -8px;
+  border-radius: 10px; transition: background .14s; }
+.ms-pick:hover { background: var(--fill); }
+.ms-pick.on { background: var(--blue-tint); }
+.ms-lhead { display: flex; align-items: center; justify-content: space-between; }
+.ms-close { background: none; border: 0; color: var(--ink-3); cursor: pointer; padding: 4px; border-radius: 8px; }
+.ms-close:hover { color: var(--ink); background: var(--fill); }
+.ms-person { display: flex; align-items: center; gap: 16px; height: auto; min-height: 58px; padding-top: 8px;
+  padding-bottom: 8px; color: inherit; text-decoration: none; }
+.ms-person .t-cell { flex: 1; min-width: 0; }
+.ms-ch { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.ms-ch.none { color: var(--red-ink); }
 .ms-na { color: var(--line-2); font-size: 15px; }
 @media (max-width: 720px) {
-  .ms-row { padding: 0 14px 0 0; grid-template-columns: 146px repeat(9, 76px); min-height: 62px; }
+  .ms-person { padding-left: 14px; padding-right: 14px; }
+  .ms-ch { white-space: normal; text-align: right; max-width: 110px; }
+  .ms-row { padding: 0 14px 0 0; grid-template-columns: 146px repeat(5, 96px); min-height: 62px; }
   .ms-name { padding-left: 14px; }
   .ms-table { min-width: 0; width: max-content; }
   /* имя продукта стоит на месте, пока цифры листаются пальцем */
