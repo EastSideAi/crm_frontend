@@ -37075,8 +37075,55 @@
      переключатель «Маркетинга» в шапке. */
   function renderMkMini(view) {
     if (state._mfLoad !== (state.mfProd || 'det') + ':' + mfDays()) { state._mf = null; fetchMiniFunnel(); }
-    view.innerHTML = miniFunnelCard();
+    if (state._msLoad !== mfDays()) { state._ms = null; fetchMiniSummary(); }
+    view.innerHTML = miniSummaryCard() + miniFunnelCard();
     mfWire(view);
+  }
+
+  /* Сводка всех мини-курсов одной таблицей (Вера 27.11.2026: «на одном экране, чтобы
+     не переключаться»). Строка — продукт, столбец — шаг; прочерк — у продукта такого
+     шага нет, это не ноль. Под числом — доля от вошедших: сравнивать продукты разного
+     размера по голым числам нельзя. */
+  function fetchMiniSummary() {
+    var days = mfDays();
+    state._msLoad = days;
+    api('/admin/api/minicourse/summary?days=' + days).then(function (r) {
+      if (state._msLoad !== days) return;
+      state._ms = r;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') { state._ms = 'none'; if (state.page === 'marketing') renderView(); }
+    });
+  }
+
+  function miniSummaryCard() {
+    var d = state._ms;
+    var head = '<div class="sec-head" style="padding:20px 24px 16px">' +
+      '<span class="ic">' + ic('chart', 14) + '</span>' +
+      '<div><div class="t">Все мини-курсы</div>' +
+      '<div class="s">люди по дате входа · под числом доля от вошедших · прочерк — у продукта нет такого шага</div></div></div>';
+    if (!d) return '<div class="card" style="margin-bottom:18px">' + head + '<div class="empty">Считаю…</div></div>';
+    if (d === 'none') return '<div class="card" style="margin-bottom:18px">' + head +
+      '<div class="empty">Не удалось загрузить сводку — проверь сеть или доступ.</div></div>';
+    var cols = d.cols || [];
+    var th = '<div class="ms-row ms-head"><span class="ms-name">Продукт</span>' + cols.map(function (c) {
+      return '<span class="ms-c">' + esc(c.title) + '</span>';
+    }).join('') + '</div>';
+    var rows = (d.rows || []).map(function (r) {
+      var enter = r.cells.enter || 0;
+      return '<div class="ms-row"><div class="ms-name"><b>' + esc(r.title) + '</b>' +
+          (r.note ? '<small>' + esc(r.note) + '</small>' : '') + '</div>' +
+        cols.map(function (c, i) {
+          var n = r.cells[c.key];
+          if (n === null || n === undefined) return '<span class="ms-c ms-na">—</span>';
+          var pct = i && enter ? Math.round(n / enter * 100) + '%' : '';
+          return '<span class="ms-c' + (c.key === 'paid' || c.key === 'more' ? ' ms-money' : '') +
+            (n ? '' : ' ms-zero') + '"><b class="num">' + n + '</b>' +
+            (pct ? '<small class="num">' + pct + '</small>' : '') + '</span>';
+        }).join('') + '</div>';
+    }).join('');
+    return '<div class="card sp5" style="overflow:hidden;margin-bottom:18px">' + head +
+      '<div class="ms-scroll"><div class="ms-table">' + th + rows + '</div></div></div>';
   }
 
   function mfWire(view) {

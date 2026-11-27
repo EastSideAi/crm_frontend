@@ -16837,3 +16837,30 @@ button.ql-verd.ql-mk:focus-visible { outline: 2px solid var(--blue); outline-off
 /* Строка задачи — ссылка #task/<id>, чтобы открывать ее в новой вкладке.
    :where — без веса: вид задает класс строки (.trow, .tsk-step, .kb-card). */
 :where(a.tk-link) { display: block; color: inherit; text-decoration: none; }
+
+/* «Все мини-курсы» — сводная таблица на вкладке «Мини-курсы» (app.js miniSummaryCard) */
+.ms-scroll { overflow-x: auto; border-top: 1px solid var(--line); }
+.ms-table { min-width: 980px; }
+.ms-row { display: grid; grid-template-columns: minmax(170px,1.3fr) repeat(9, minmax(76px,1fr));
+  align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.ms-row:last-child { border-bottom: none; }
+.ms-head { padding-top: 10px; padding-bottom: 10px; background: #FBFBFC; align-items: end;
+  font: 600 11px/1.3 'Manrope', sans-serif; color: var(--ink-3); }
+.ms-name b { display: block; font: 600 14px 'Manrope', sans-serif; color: var(--ink); }
+.ms-name small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+.ms-c { text-align: right; }
+.ms-c b { display: block; font: 600 15px 'Manrope', sans-serif; color: var(--ink); }
+.ms-c small { display: block; font-size: 11px; color: var(--ink-3); }
+.ms-c.ms-zero b { color: var(--ink-3); }
+.ms-money b { color: var(--blue); }
+.ms-money.ms-zero b { color: var(--red); }
+.ms-na { color: var(--line-2); font-size: 15px; }
+@media (max-width: 720px) {
+  .ms-row { padding: 0 14px 0 0; grid-template-columns: 146px repeat(9, 76px); min-height: 62px; }
+  .ms-name { padding-left: 14px; }
+  .ms-table { min-width: 0; width: max-content; }
+  /* имя продукта стоит на месте, пока цифры листаются пальцем */
+  .ms-name { position: sticky; left: 0; z-index: 1; align-self: stretch; display: flex; flex-direction: column;
+    justify-content: center; background: var(--card); border-right: 1px solid var(--line); }
+  .ms-head .ms-name { background: #FBFBFC; }
+}
