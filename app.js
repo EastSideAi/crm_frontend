@@ -1134,12 +1134,14 @@
     attention:     { label: 'Внимание',         icon: 'flame', pred: function (l) { return leadRisks(l).length; } },
     // Павел 18.11.2026: интерес к краткосрочным программам, отметка в карточке.
     short:         { label: 'Краткосрочка',     icon: 'flight', pred: function (l) { return hasShort(l); } },
+    // Павел 27.11.2026: кто оплатил тариф проектной деятельности со страницы тарифов.
+    efirpaid:      { label: 'Купили после эфира', icon: 'check', pred: function (l) { return hasEfirPaid(l); } },
   };
   /* Порядок срезов в ряду. На «Сопровождении» ряд короче (Мария 19.11.2026: «эти
      три пункта там не нужны»): квалификация лида и «без контакта» — вопросы к
      холодному человеку, а на этой вкладке лежат те, с кем мы уже работаем и у кого
      контакт есть по определению. Остаются «Все», «С задачами» и «Внимание». */
-  var QUICK_ORDER = ['', 'hot', 'applied', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short'];
+  var QUICK_ORDER = ['', 'hot', 'applied', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short', 'efirpaid'];
   var QUICK_SUPPORT = ['', 'tasks', 'attention'];
   function quickKeys(seg) { return trackTab(seg) ? QUICK_SUPPORT : QUICK_ORDER; }
   function quickPred(seg) {
@@ -58762,9 +58764,14 @@
      программами, чтобы их не потерять, и фильтр»). Плашка-интерес из lead_marks:
      лидом быть не мешает, фильтр — в «Контактах». */
   function hasShort(l) { return ((l && l.crm && l.crm.marks) || []).indexOf('short') >= 0; }
+  /* «Купил после эфира» ставит сама оплата со страницы тарифов, руками ее не жмут. */
+  function hasEfirPaid(l) { return ((l && l.crm && l.crm.marks) || []).indexOf('efir_paid') >= 0; }
   function buildShortMark(ctx) {
     var on = hasShort(ctx);
-    return '<div class="potc shm"><span class="ql-l">Краткосрочка</span>' + (on
+    return (hasEfirPaid(ctx)
+      ? '<div class="potc shm"><span class="ql-l">Эфир</span><span class="potc-on">' + ic('check', 11) + 'Купил после эфира</span></div>'
+      : '') +
+      '<div class="potc shm"><span class="ql-l">Краткосрочка</span>' + (on
       ? '<span class="potc-on">' + ic('check', 11) + 'Интересуется краткосрочными программами</span>' +
         '<button class="bp ghost sm" data-shm="0">Снять</button>'
       : '<button class="bp ghost sm" data-shm="1">Интересуется краткосрочными программами</button>') + '</div>';
