@@ -45419,6 +45419,9 @@
 
     return '<div class="rw-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
       '<div class="rw-nm">' + esc(r.label) +
+        (r.fact_kind === 'auto' && r.metric
+          ? ' <button class="rw-det" data-rwdet="' + esc(r.metric) + '" data-rwlbl="' +
+            esc(r.label) + '">из чего</button>' : '') +
         (r.hint ? '<small>' + esc(r.hint) + '</small>' : '') +
         (r.overridden
           ? '<small class="rw-fixnote">система насчитала ' +
@@ -45429,6 +45432,7 @@
         ? '<span class="rw-why">' + esc(r.blocked) + '</span>'
         : esc(rwCond(r)) + rwPlan(r, closed) +
           (r.need ? '<span class="rw-why">' + esc(r.need) + '</span>' : '') +
+          (r.stale ? '<span class="rw-why">' + esc(r.stale) + '</span>' : '') +
           (r.payout === 'percent' && r.count != null
             ? '<small class="rw-sub">' + fmtMoney(r.count) + ' ' +
               plural(r.count, 'клиент', 'клиента', 'клиентов') + ' в этом месяце</small>' : '')) +
@@ -45627,7 +45631,62 @@
     setTimeout(function () { el('rf-v').focus(); }, 50);
   }
 
+  /* «Из чего сложилось»: список людей, регистраций или постов за цифрой показателя
+     (Роман 27.11.2026: «как проверять систему будем?»). Не засчитанное тоже в списке
+     с причиной — проверяют именно границу. Человек открывается в своей карточке. */
+  function rwDetail(metric, label) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card ct-card rwd-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Из чего сложилось · ' +
+        esc(pfMonthTitle(rwMonth())) + '</div><div class="al-title">' + esc(label) + '</div></div>' +
+      '<button class="al-x" id="rwd-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-body" id="rwd-body"><div class="empty">Собираю список…</div></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('rwd-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    api('/admin/api/reward/detail?metric=' + encodeURIComponent(metric) + '&period=' + rwMonth())
+      .then(function (d) {
+        var items = (d && d.items) || [];
+        var off = items.length - (d.counted || 0);
+        var head = '<div class="rwd-sum">Засчитано ' + fmtMoney(d.counted || 0) +
+          (off ? ', не засчитано ' + fmtMoney(off) + ' — причина в строке' : '') + '</div>' +
+          (d.note ? '<div class="rwd-note">' + esc(d.note) + '</div>' : '');
+        if (!items.length) {
+          el('rwd-body').innerHTML = head + '<div class="empty">В этом месяце здесь пусто.</div>';
+          return;
+        }
+        el('rwd-body').innerHTML = head + '<div class="rwd-list">' + items.map(function (it) {
+          var name = esc(it.title) + (it.no ? ' <span class="lno">' + esc(it.no) + '</span>' : '');
+          var link = it.lead ? '<a href="#lead/' + esc(it.lead) + '" data-rwdl="1">' + name + '</a>'
+            : it.url ? '<a href="' + esc(it.url) + '" target="_blank" rel="noopener">' + name + '</a>' : name;
+          return '<div class="rwd-row' + (it.counted ? '' : ' off') + '">' +
+            '<div class="rwd-t">' + link + '<small>' + esc(it.sub || '') + '</small></div>' +
+            '<div class="rwd-s">' + (it.counted ? 'засчитан' : esc(it.why || 'не засчитан')) + '</div></div>';
+        }).join('') + '</div>';
+        Array.prototype.forEach.call(ov.querySelectorAll('[data-rwdl]'), function (a) {
+          a.addEventListener('click', close);
+        });
+      }).catch(function () {
+        el('rwd-body').innerHTML = '<div class="empty">Список не загрузился — проверь сеть.</div>';
+      });
+  }
+
   function rwBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwdet]'), function (b) {
+      b.addEventListener('click', function () {
+        rwDetail(b.getAttribute('data-rwdet'), b.getAttribute('data-rwlbl'));
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rwfix]'), function (b) {
       b.addEventListener('click', function () {
         var id = parseInt(b.getAttribute('data-rwfix'), 10);
