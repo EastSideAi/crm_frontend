@@ -3347,7 +3347,7 @@
   /* Порядок вкладок задала Ольга 13.11.2026; первая открывается по умолчанию */
   var MK_TABS = [['cross', 'Сквозная'], ['plan', 'Декомпозиция'],
                  ['launch', 'Запуски'], ['ads', 'Реклама'], ['efir', 'Эфиры'],
-                 ['dash', 'Каналы и лиды'], ['links', 'Ссылки и сценарии']];
+                 ['dash', 'Каналы и лиды'], ['mini', 'Мини-курсы'], ['links', 'Ссылки и сценарии']];
   /* Какие вкладки «Маркетинга» человеку положены. У подрядчика по рекламе (cap `ads`
      без `marketing`) остается одна «Реклама»: остальные вкладки — сквозная воронка,
      оплаты клиентов, план запуска и ссылки бота, и внешнему человеку их не отдаем.
@@ -3374,7 +3374,7 @@
      Видит их тот, кому открыт весь «Маркетинг», а не подрядчик с одной «Рекламой». */
   var MK_PAGES = [['social', 'Соцстатистика'], ['broadcasts', 'Рассылки'], ['gifts', 'Подарки']];
   /* Общий порядок ряда: вкладки и страницы вперемешку (Ольга 13.11.2026) */
-  var MK_ORDER = ['cross', 'plan', 'launch', 'ads', 'efir', 'dash', 'social', 'links', 'broadcasts', 'gifts'];
+  var MK_ORDER = ['cross', 'plan', 'launch', 'ads', 'efir', 'dash', 'mini', 'social', 'links', 'broadcasts', 'gifts'];
   function mkPagesFor() {
     if (!can('marketing')) return [];
     return MK_PAGES.filter(function (o) { return can(pageCap(o[0])); });
@@ -37070,6 +37070,129 @@
       '<div class="mf-sub">По неделям входа</div>' + wk + '</div>';
   }
 
+  /* Своя вкладка «Мини-курсы» (Вера 27.11.2026): раньше карточка стояла первой в
+     «Ссылках и сценариях», среди воронок бота, и терялась там. Период — общий
+     переключатель «Маркетинга» в шапке. */
+  function renderMkMini(view) {
+    if (state._mfLoad !== (state.mfProd || 'det') + ':' + mfDays()) { state._mf = null; fetchMiniFunnel(); }
+    if (state._msLoad !== mfDays()) {
+      state._ms = null; fetchMiniSummary();
+      if (state._msPick) { state._msPeople = null; fetchMiniPeople(); }   // период сменился — люди другие
+    }
+    view.innerHTML = miniSummaryCard() + miniFunnelCard();
+    mfWire(view);
+    msWire(view);
+  }
+
+  /* Сводка всех мини-курсов одной таблицей (Вера 27.11.2026: «на одном экране, чтобы
+     не переключаться» и «видеть, кто купил и с кем еще работать»). Сопровождаемые (тариф,
+     все включено) — отдельным столбцом, остальные — наши покупатели. Строка — продукт, столбцы — кто эти люди для нас, шаги
+     воронки ниже, в карточке продукта. Под числом доля: от вошедших, у «занимались» —
+     от тех, с кем работаем. Прочерк — у продукта так не посчитать, это не ноль. */
+  function fetchMiniSummary() {
+    var days = mfDays();
+    state._msLoad = days;
+    api('/admin/api/minicourse/summary?days=' + days).then(function (r) {
+      if (state._msLoad !== days) return;
+      state._ms = r;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') { state._ms = 'none'; if (state.page === 'marketing') renderView(); }
+    });
+  }
+
+  function miniSummaryCard() {
+    var d = state._ms;
+    var head = '<div class="sec-head" style="padding:20px 24px 16px">' +
+      '<span class="ic">' + ic('chart', 14) + '</span>' +
+      '<div><div class="t">Все мини-курсы</div>' +
+      '<div class="s">все, кто зашел за период · нажми на число, чтобы увидеть людей</div></div></div>';
+    if (!d) return '<div class="card" style="margin-bottom:18px">' + head + '<div class="empty">Считаю…</div></div>';
+    if (d === 'none') return '<div class="card" style="margin-bottom:18px">' + head +
+      '<div class="empty">Не удалось загрузить сводку — проверь сеть или доступ.</div></div>';
+    var cols = d.cols || [], pick = state._msPick || {};
+    var LIST = { tariff: 1, bought: 1, potential: 1 };
+    var th = '<div class="ms-row ms-head"><span class="ms-name">Продукт</span>' + cols.map(function (c) {
+      return '<span class="ms-c' + (c.key === 'potential' ? ' ms-key' : '') + '">' + esc(c.title) + '</span>';
+    }).join('') + '</div>';
+    var rows = (d.rows || []).map(function (r) {
+      var enter = r.cells.enter || 0;
+      return '<div class="ms-row"><div class="ms-name"><b>' + esc(r.title) + '</b>' +
+          (r.note ? '<small>' + esc(r.note) + '</small>' : '') + '</div>' +
+        cols.map(function (c, i) {
+          var n = r.cells[c.key];
+          if (n === null || n === undefined) return '<span class="ms-c ms-na">—</span>';
+          var base = c.key === 'engaged' ? (r.cells.potential || 0) : enter;   // доля «занимались» — от тех, с кем работаем
+          var pct = i && base ? Math.round(n / base * 100) + '%' : '';
+          var cls = 'ms-c ms-' + c.key + (n ? '' : ' ms-zero');
+          var inner = '<b class="num">' + n + '</b>' + (pct ? '<small class="num">' + pct + '</small>' : '');
+          if (r.listable && LIST[c.key] && n) {
+            var on = pick.product === r.key && pick.group === c.key;
+            return '<button class="' + cls + ' ms-pick' + (on ? ' on' : '') + '" data-msp="' + esc(r.key) +
+              '" data-msg="' + c.key + '" title="Показать людей">' + inner + '</button>';
+          }
+          return '<span class="' + cls + '">' + inner + '</span>';
+        }).join('') + '</div>';
+    }).join('');
+    return '<div class="card sp5" style="overflow:hidden;margin-bottom:18px">' + head +
+      '<div class="ms-scroll"><div class="ms-table">' + th + rows + '</div></div>' + miniPeopleList() + '</div>';
+  }
+
+  /* Люди одной ячейки: «с кем работать» — главный вопрос Веры (27.11.2026), поэтому
+     список открывается прямо под таблицей, а имя ведет в карточку CRM. */
+  var MS_GROUP = { tariff: 'на сопровождении', bought: 'купили после входа', potential: 'не купили — с ними работаем' };
+  function miniPeopleList() {
+    var pick = state._msPick;
+    if (!pick) return '';
+    var L = state._msPeople;
+    var row = ((state._ms && state._ms.rows) || []).filter(function (r) { return r.key === pick.product; })[0] || {};
+    var head = '<div class="mf-sub ms-lhead"><span>' + esc(row.title || '') + ' · ' + MS_GROUP[pick.group] + '</span>' +
+      '<button class="ms-close" data-msclose title="Свернуть">' + ic('x', 12) + '</button></div>';
+    if (!L) return head + '<div class="empty">Загружаю…</div>';
+    if (L === 'none') return head + '<div class="empty">Не удалось загрузить людей — проверь сеть или доступ.</div>';
+    if (!L.length) return head + '<div class="empty">Никого.</div>';
+    return head + L.map(function (p) {
+      var ch = [p.tg ? 'телеграм' : '', p.email ? 'почта' : '', p.phone ? 'телефон' : ''].filter(Boolean);
+      var last = p.steps.length ? p.steps[p.steps.length - 1] : '';
+      return '<a class="trow ms-person" href="#lead/' + esc(p.id) + '">' +
+        '<div class="t-cell"><div class="t-ttl">' + esc(p.name) + '</div>' +
+          '<div class="t-sub">зашел ' + esc(fmtDayShort(p.entered)) + (last ? ' · дошел до шага «' + esc(last) + '»' : '') + '</div></div>' +
+        '<div class="ms-ch' + (ch.length ? '' : ' none') + '">' + (ch.length ? ch.join(', ') : 'контактов нет') + '</div></a>';
+    }).join('');
+  }
+  function fmtDayShort(iso) {
+    var d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
+  }
+  function fetchMiniPeople() {
+    var pick = state._msPick, days = mfDays();
+    var key = pick.product + ':' + pick.group + ':' + days;
+    state._msPeopleKey = key;
+    api('/admin/api/minicourse/people?product=' + pick.product + '&group=' + pick.group + '&days=' + days)
+      .then(function (r) {
+        if (state._msPeopleKey !== key) return;
+        state._msPeople = (r && r.people) || [];
+        if (state.page === 'marketing') renderView();
+      }).catch(function (e) {
+        if (state._msPeopleKey !== key) return;
+        state._msPeople = 'none';
+        if (state.page === 'marketing') renderView();
+      });
+  }
+  function msWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-msp]'), function (b) {
+      b.addEventListener('click', function () {
+        var pr = b.getAttribute('data-msp'), g = b.getAttribute('data-msg'), cur = state._msPick;
+        if (cur && cur.product === pr && cur.group === g) { state._msPick = null; renderView(); return; }
+        state._msPick = { product: pr, group: g }; state._msPeople = null;
+        fetchMiniPeople(); renderView();
+      });
+    });
+    var c = view.querySelector('[data-msclose]');
+    if (c) c.addEventListener('click', function () { state._msPick = null; renderView(); });
+  }
+
+
   function mfWire(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-mfp]'), function (b) {
       b.addEventListener('click', function () {
@@ -40756,20 +40879,18 @@
     if (state.mkTab === 'efir') { renderMkEfir(view); return; }
     if (state.mkTab === 'ads') { renderMkAds(view); return; }
     if (state.mkTab === 'plan') { renderMkPlan(view); return; }
+    if (state.mkTab === 'mini') { renderMkMini(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
-    if (state._mfLoad !== (state.mfProd || 'det') + ':' + mfDays()) { state._mf = null; fetchMiniFunnel(); }
     /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
        права стирать другой: раньше пустой ответ маркетинга гасил весь экран. */
     if (!state._mk) {
-      view.innerHTML = miniFunnelCard() + courseFunnelCard() + dashSkeleton();
-      mfWire(view);
+      view.innerHTML = courseFunnelCard() + dashSkeleton();
       fetchMk();
       return;
     }
     if (state._mk === 'none') {
-      view.innerHTML = miniFunnelCard() + courseFunnelCard() +
+      view.innerHTML = courseFunnelCard() +
         '<div class="card"><div class="empty">Не удалось загрузить воронки бота — проверь сеть или доступ.</div></div>';
-      mfWire(view);
       return;
     }
     var d = state._mk;
@@ -40792,13 +40913,12 @@
         '<div class="mk-st num" title="вошло · дошли до менеджера">' + entered + ' · ' + ho + '</div></div>';
     }).join('');
 
-    view.innerHTML = miniFunnelCard() + courseFunnelCard() +
+    view.innerHTML = courseFunnelCard() +
       '<div class="card" style="padding:22px 24px"><div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Воронки</div><div class="s">создавай воронку и ссылки здесь; шаги диалога меняет только агент песочницы</div></div>' +
         '<span style="flex:1"></span><button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
         '<div class="mk-list">' + (frows || '<div class="empty">Воронок пока нет — жми «+ Воронка».</div>') + '</div></div>';
 
-    mfWire(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-stats]'), function (row) {
       row.addEventListener('click', function () {
         state._mkStats = row.getAttribute('data-stats');
