@@ -45294,14 +45294,56 @@
     if (r.payout === 'share') {
       return 'план ' + fmtMoney(r.plan) + ', вес ' + fmtMoney(r.weight_pct) + '%';
     }
-    if (r.payout === 'fixed') return 'норма ' + fmtMoney(r.plan);
+    if (r.payout === 'fixed') {
+      return r.plan_source === 'row' ? 'норма ' + fmtMoney(r.plan) : fmtMoney(r.rub_max) + ' ₽ за план';
+    }
+    // Мотивация с 23.11.2026: ступени от процента плана, пропорция, процент с оплат
+    // и условие листа. Слова — как в мотивации человека.
+    if (r.payout === 'gate') return 'без этого бонусы листа не платятся';
+    if (r.payout === 'prop') return 'до ' + fmtMoney(r.rub_max) + ' ₽ пропорционально плану';
     var steps = r.steps || [];
     if (!steps.length) return '';
+    if (r.payout === 'percent') {
+      return steps.map(function (s, i) {
+        var nx = steps[i + 1];
+        var who = nx ? fmtMoney(s.from) + '—' + fmtMoney(nx.from - 1) : 'от ' + fmtMoney(s.from);
+        return who + ' ' + plural(nx ? 2 : s.from, 'клиент', 'клиента', 'клиентов') + ' → ' +
+          fmtMoney(s.pct).replace('.', ',') + '%';
+      }).join(', ');
+    }
+    if (r.payout === 'pct_steps') {
+      return steps.map(function (s) {
+        return fmtMoney(s.from) + '% плана → ' + fmtMoney(s.rub) + ' ₽';
+      }).join(', ');
+    }
     return steps.map(function (s) {
       var range = s.to != null ? fmtMoney(s.from) + '—' + fmtMoney(s.to)
                                : 'от ' + fmtMoney(s.from);
       return range + ' → ' + fmtMoney(s.rub) + ' ₽';
     }).join(', ');
+  }
+
+  /* План строки и откуда он: поставила Ольга, посчитан от прошлого месяца или
+     записан в самой строке. У строк, где план живет помесячно, его можно поставить
+     прямо тут — отдельная форма ради одного числа означала бы, что его не поставят. */
+  var RW_PLAN_SRC = { month: 'план месяца', prev: 'от прошлого месяца', none: '', row: '' };
+  function rwPlanable(r) {
+    return r.payout === 'pct_steps' || r.payout === 'prop' || r.plan_k != null ||
+      r.plan_source === 'month';
+  }
+  function rwPlan(r, closed) {
+    if (!rwPlanable(r) || r.state === 'blocked') return '';
+    var has = r.plan != null;
+    var txt = has ? 'план ' + fmtMoney(r.plan).replace('.', ',') : 'поставить план';
+    var src = RW_PLAN_SRC[r.plan_source] || '';
+    if (r.plan_source === 'prev' && r.plan_k != null) {
+      src = r.plan_k === 1 ? 'не ниже прошлого месяца'
+        : '+' + fmtMoney(Math.round((r.plan_k - 1) * 100)) + '% к прошлому месяцу';
+    }
+    var btn = closed ? '<span class="num">' + esc(txt) + '</span>'
+      : '<button class="pf-set' + (has ? '' : ' none') + '" data-rwplan="' + r.id + '"' +
+        (r.plan_source === 'month' ? ' data-rwv="' + r.plan + '"' : '') + '>' + esc(txt) + '</button>';
+    return '<div class="rw-plan">' + btn + (has && src ? '<small>' + esc(src) + '</small>' : '') + '</div>';
   }
 
   function rwRow(r, closed) {
@@ -45347,9 +45389,16 @@
           : '') + '</div>' +
       '<div class="rw-cond">' + (r.state === 'blocked'
         ? '<span class="rw-why">' + esc(r.blocked) + '</span>'
-        : esc(rwCond(r))) + '</div>' +
+        : esc(rwCond(r)) + rwPlan(r, closed) +
+          (r.need ? '<span class="rw-why">' + esc(r.need) + '</span>' : '') +
+          (r.payout === 'percent' && r.count != null
+            ? '<small class="rw-sub">' + fmtMoney(r.count) + ' ' +
+              plural(r.count, 'клиент', 'клиента', 'клиентов') + ' в этом месяце</small>' : '')) +
+      '</div>' +
       '<div class="rw-fact">' + fact + '</div>' +
-      '<div class="rw-sum num">' + (r.rub ? fmtMoney(r.rub) + ' ₽' : '—') + '</div>' +
+      '<div class="rw-sum num">' + (r.rub ? fmtMoney(r.rub) + ' ₽' : '—') +
+        (r.held_rub ? '<small class="rw-why">' + fmtMoney(r.held_rub) + ' ₽ ждут условия</small>' : '') +
+      '</div>' +
       '<div class="rw-st"><span class="sev ' + st[0] + '">' + st[1] + '</span></div>' +
     '</div>';
   }
@@ -45609,6 +45658,44 @@
         inp.addEventListener('keydown', function (e) {
           if (e.key === 'Enter') { e.preventDefault(); save(); }
           if (e.key === 'Escape') { done = true; state._rw = null; renderView(); }
+        });
+        inp.addEventListener('blur', save);
+      });
+    });
+
+    /* План месяца ставится на месте, как цифра. Пустое поле возвращает план по
+       правилу строки (от прошлого месяца или из самой строки). */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwplan]'), function (b) {
+      b.addEventListener('click', function () {
+        var rowId = parseInt(b.getAttribute('data-rwplan'), 10);
+        var was = b.getAttribute('data-rwv') || '';
+        var inp = document.createElement('input');
+        inp.className = 'ed-input pf-in num';
+        inp.value = was.replace('.', ',');
+        inp.setAttribute('inputmode', 'decimal');
+        inp.setAttribute('placeholder', 'план');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus();
+        var done = false;
+        var back = function () { state._rw = null; renderView(); };
+        var save = function () {
+          if (done) return;
+          done = true;
+          var raw = String(inp.value).replace(/\s/g, '').replace(',', '.');
+          if (raw === '' && was === '') { back(); return; }
+          var n = raw === '' ? null : parseFloat(raw);
+          if (n !== null && (isNaN(n) || n < 0)) { showToast('Нужно число, например 25'); back(); return; }
+          api('/admin/api/reward/plan', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row_id: rowId, period: rwMonth(), plan: n }),
+          }).then(back).catch(function (e) {
+            showToast(e.message === '422' ? 'Такой план система не приняла' : 'Не сохранилось — проверь сеть');
+            back();
+          });
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { done = true; back(); }
         });
         inp.addEventListener('blur', save);
       });

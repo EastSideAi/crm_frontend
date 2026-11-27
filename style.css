@@ -13713,6 +13713,11 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .pf-set.rw-fixed { color: var(--amber-ink); background: var(--amber-soft); }
 .rw-nm small.rw-fixnote { color: var(--amber-ink); }
 .rw-why { font-size: 12px; font-weight: 500; color: var(--amber-ink); line-height: 1.45; }
+.rw-cond .rw-why, .rw-sum .rw-why { display: block; margin-top: 4px; }
+.rw-plan { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.rw-plan small, .rw-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); opacity: .8; }
+.rw-sub { display: block; margin-top: 4px; }
+.rw-sum small { font-family: inherit; }
 .rw-dash { color: var(--ink-3); font-weight: 500; }
 .rw-rate { display: inline-flex; gap: 6px; justify-content: flex-end; }
 .sev.kpi-ok      { color: var(--green-ink); background: var(--green-soft); }
