@@ -45300,6 +45300,10 @@
     // Мотивация с 23.11.2026: ступени от процента плана, пропорция, процент с оплат
     // и условие листа. Слова — как в мотивации человека.
     if (r.payout === 'gate') return 'без этого бонусы листа не платятся';
+    if (r.payout === 'per_unit') {
+      return fmtMoney(r.rub_max) + ' ₽ за каждое сверх ' + fmtMoney(r.plan) +
+        (r.count ? ', сверх нормы ' + fmtMoney(r.count) : '');
+    }
     if (r.payout === 'prop') return 'до ' + fmtMoney(r.rub_max) + ' ₽ пропорционально плану';
     var steps = r.steps || [];
     if (!steps.length) return '';
