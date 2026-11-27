@@ -3523,7 +3523,7 @@
         t.addEventListener('click', function () {
           state.mkTab = t.getAttribute('data-mktab');
           if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
-          if (state.mkTab === 'efir') { state._mkEfir = null; state._mkEfirLinks = null; }   /* всегда свежие цифры */
+          if (state.mkTab === 'efir') { state._mkEfir = null; state._mkEfirLinks = null; state._laLaunchAll = null; }   /* всегда свежие цифры */
           if (state.mkTab === 'ads') state._mkAds = null;    /* всегда свежие цифры */
           if (!onMk) { setPage('marketing'); return; }
           saveUi(); renderTopbar(); renderView();
@@ -39468,7 +39468,7 @@
           state._laLaunchAll = (r && r.launches) || 'none';
         }).catch(function () { state._laLaunchAll = 'none'; }).then(function () {
           state._laLaunchLoading = false;
-          if (state.page === 'marketing' && state.mkTab === 'plan') renderView();
+          if (state.page === 'marketing' && (state.mkTab === 'plan' || state.mkTab === 'efir')) renderView();
         });
       }
       return null;
@@ -39943,6 +39943,28 @@
       '<div class="lad-static links" style="border-top:1px solid var(--line)">' + body + '</div></div>';
   }
 
+  /* Запуск с тем же слагом, что у мероприятия на «Эфирах». undefined — еще
+     грузится, null — это не интенсив или запуска нет. Тот же ответ
+     /marketing/launch, что у «Декомпозиции», кэш общий. */
+  function efirLaunchOf(slug) {
+    if (!/^intensive-/.test(slug || '')) return null;
+    var a = state._laLaunchAll;
+    if (!a) {
+      if (!state._laLaunchLoading) {
+        state._laLaunchLoading = true;
+        api('/admin/api/marketing/launch').then(function (r) {
+          state._laLaunchAll = (r && r.launches) || 'none';
+        }).catch(function () { state._laLaunchAll = 'none'; }).then(function () {
+          state._laLaunchLoading = false;
+          if (state.page === 'marketing' && (state.mkTab === 'efir' || state.mkTab === 'plan')) renderView();
+        });
+      }
+      return undefined;
+    }
+    if (a === 'none') return null;
+    return a.filter(function (x) { return x.slug === slug; })[0] || null;
+  }
+
   function renderMkEfir(view) {
     if (!state._mkEfir) { view.innerHTML = dashSkeleton(); fetchMkEfir(); return; }
     if (state._mkEfir === 'none') {
@@ -39962,6 +39984,16 @@
       return;
     }
     var c = cur.counts, m = cur.money;
+    /* Интенсив считается как на «Запусках» (Ольга 27.11.2026: «сделай так как в
+       маркетинге»): регистрации — люди запуска без дублей и команды, «откуда
+       пришли» — те же три двери. Пока «Запуски» не приехали, старых цифр не
+       показываем: 626 на секунду и потом 501 читались бы как сбой. */
+    var lch = efirLaunchOf(cur.slug);
+    if (lch === undefined) { view.innerHTML = dashSkeleton(); return; }
+    var lSp = lch && lch.reach_split;
+    var lReach = lch ? ((lch.path || []).filter(function (x) { return x.key === 'reach'; })[0] || {}).people : null;
+    if (lReach == null) lch = null;
+    var regN = lch ? lReach : c.reg;
     var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
     var conv = function (txt) { return '<span class="lad-conv num">' + txt + '</span>'; };
     var convMut = function (txt) { return '<span class="lad-conv">' + esc(txt) + '</span>'; };
@@ -40060,7 +40092,12 @@
     /* Первый ряд — откуда пришли зарегистрировавшиеся (Ольга 13.11.2026): рассылки
        писем и бота отдельно, у каждой в подписи — сколько отправили. Проценты — от
        регистраций. Эфир без разбивки показывает одну плашку рассылки, как раньше. */
-    var srcTiles = rs ? [['mail', 'Пришли из рассылок писем'], ['bot', 'Пришли из рассылок бота'],
+    var srcTiles = lch && lSp ? LAUNCH_SPLIT.map(function (d) {
+      var n = lSp[d[0]] || 0;
+      return { label: 'Пришли ' + d[1], value: n, step: n ? 'reach_' + d[0] : '',
+               stepTitle: d[2], stepPlate: n,
+               sub: pct(n, regN) + '% от регистраций' };
+    }) : rs ? [['mail', 'Пришли из рассылок писем'], ['bot', 'Пришли из рассылок бота'],
                          ['social', 'Пришли из соцсетей'], ['partner', 'Пришли от партнеров'],
                          ['ads', 'Пришли с рекламы']].map(function (x) {
       var n = rs[x[0]] || 0;
@@ -40079,13 +40116,16 @@
       efirGroup('Эфир', [
         /* Регистрация — форма на сайте и вход в бота по ссылке эфира (Ольга
            13.11.2026: «они же в бота регались»). Стоит и рядом с рассылками. */
-        { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
+        lch ? { label: 'Зарегистрировались', value: regN, step: 'reach',
+                stepTitle: 'Регистрации', stepPlate: regN,
+                sub: lch.pages && lch.pages.since ? 'считаем с ' + fmtDay(lch.pages.since) : '' }
+            : { label: 'Зарегистрировались', value: c.reg, ebl: 'reg',
           sub: (c.reg_bot ? 'сайт ' + c.reg_site + ' · бот ' + c.reg_bot + '<br>' : '') +
                efirWindowText(cur.window) },
         /* Участники — главная цифра эфира: сколько людей его вообще увидели, живьем
            или в записи. Человек, посмотревший оба раза, считается один раз. */
         { label: 'Участники эфира', value: uchastniki, ebl: 'people',
-          sub: (c.reg ? pct(uchastniki, c.reg) + '% от регистраций · ' : '') +
+          sub: (regN ? pct(uchastniki, regN) + '% от регистраций · ' : '') +
                'живьем ' + c.came + ', запись ' + c.rec +
                (cur.split ? '<br>' + efirSplitSub(cur.split) : '') },
         { label: 'Были в комнате', value: c.came, sub: zalSub, ebl: 'came' },
@@ -40201,6 +40241,20 @@
       n.addEventListener('click', open);
       n.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); }
+      });
+    });
+
+    /* Плашки интенсива, посчитанные как на «Запусках», открывают те же списки */
+    var lch = efirLaunchOf(cur.slug);
+    if (lch) Array.prototype.forEach.call(view.querySelectorAll('[data-lstep]'), function (n) {
+      var openIt = function () {
+        launchPeopleOpen(lch.slug, { key: n.getAttribute('data-lstep'),
+          title: n.getAttribute('data-ltitle') || '',
+          people: parseInt(n.getAttribute('data-lplate') || '0', 10) }, lch.title, n, '', true);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
       });
     });
 
