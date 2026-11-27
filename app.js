@@ -42960,7 +42960,7 @@
           showToast('Отметил: ' + DIAL_RES[res]);
           state._dial = null; state._sb = null; state._cb = null; state._mt = null;
           delete MG_TOUCH[id]; delete MG_HIST[id];   // строка и история человека перечитаются
-          if (done) done(r); else renderView();
+          if (done) done(r, res, id); else renderView();
         }, function () {
           showToast('Не сохранилось, проверь интернет');
           Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = false; });
@@ -44603,6 +44603,12 @@
 
   /* Кнопки строки: позвонить, связался, взять, карточка. Звонок без права на
      звонилку уходит обычной ссылкой tel: — с телефона менеджера это тоже звонок. */
+  // Ждут сообщения после недозвона. Старый сервер флажка не знает — тогда по последнему исходу.
+  function msNeedText(p) {
+    var d = p && p.dial;
+    if (!d) return false;
+    return d.need_text != null ? !!d.need_text : (d.last === 'no_answer' && !d.reached && !d.texted_at);
+  }
   function msActs(p, kind, canCall) {
     var out = [];
     // Свободного лида сначала берут, потом звонят: иначе звонок без ответственного.
@@ -44620,20 +44626,26 @@
     }
     // «Связался» — касание не звонком (написал в мессенджер); звонок отмечают кнопками под именем.
     if (kind === 'respond' || (kind === 'hot' && !p.free)) out.push('<button class="bp ghost" data-mstouch="' + esc(p.id) + '" title="Связался не звонком: написал, ответил в диалоге">Написал</button>');
-    if (kind === 'pool') out.push('<button class="bp" data-mstake="' + esc(p.id) + '">Взять себе</button>');
+    // После недозвона главное — сообщение, «взять» тише: сообщение и так закрепит лида.
+    if (kind === 'pool') out.push('<button class="bp' + (msNeedText(p) ? ' ghost' : '') + '" data-mstake="' + esc(p.id) + '">Взять себе</button>');
     // Переписка рядом со звонком (Павел 19.11.2026: «ссылочки на диалог»): диалог бота
     // открывается в «Диалогах» CRM, чат из карточки — у мессенджера.
-    if (p.chat && p.chat.bot) out.push('<a class="bp ghost ms-chat" href="' + esc(dialogUrl(p.chat.bot)) + '">' + ic('chat', 13) + 'Диалог</a>');
+    // После недозвона вместо «Диалога» одна кнопка «написать»: она и откроет переписку.
+    if (msNeedText(p)) { /* кнопка ниже */ }
+    else if (p.chat && p.chat.bot) out.push('<a class="bp ghost ms-chat" href="' + esc(dialogUrl(p.chat.bot)) + '">' + ic('chat', 13) + 'Диалог</a>');
     else if (p.chat && p.chat.url) out.push('<a class="bp ghost ms-chat" href="' + esc(p.chat.url) + '" target="_blank" rel="noopener">' + ic('chat', 13) + 'Чат</a>');
     // Не взял трубку — сообщение в один клик (разбор лучших практик 19.11.2026: недозвон,
     // сразу сообщение в мессенджер, назавтра звонок в другое время).
     // Семья пишет в нашего бота — текст уходит через бота сразу (Павел 20.11.2026: «да,
     // делаем»), иначе копируется для рабочего аккаунта, куда система писать не может.
-    if (p.dial && p.dial.last === 'no_answer' && !p.dial.reached) {
+    // Павел 27.11.2026: «не взял 1 звонок, далее обязательно сообщение». Пока сообщения
+    // нет, кнопка главная в строке; ушло из диалога CRM или отмечено — снова тихая.
+    if (msNeedText(p) || (p.dial && p.dial.last === 'no_answer' && !p.dial.reached)) {
+      var cls = msNeedText(p) ? 'bp' : 'bp ghost';
       out.push(p.chat && p.chat.bot
-        ? '<button class="bp ghost" data-mstpl="' + esc(p.id) + '" data-bot="1" title="Отправить семье сообщение после недозвона через бота">' +
-          ic('chat', 13) + 'Отправить сообщение</button>'
-        : '<button class="bp ghost" data-mstpl="' + esc(p.id) + '" title="Скопировать сообщение после недозвона">' +
+        ? '<button class="' + cls + '" data-mstpl="' + esc(p.id) + '" data-bot="1" title="Отправить семье сообщение после недозвона через бота">' +
+          ic('chat', 13) + 'Написать после недозвона</button>'
+        : '<button class="' + cls + '" data-mstpl="' + esc(p.id) + '" title="Скопировать сообщение после недозвона и отметить, что написал">' +
           ic('copy', 13) + 'Скопировать текст</button>');
     }
     out.push('<button class="icobtn sm" data-mslead="' + esc(p.id) + '" title="Открыть карточку">' + ic('ext', 14) + '</button>');
@@ -44713,7 +44725,7 @@
       var ck = msClock(p.created_at);
       tag = '<span class="sev ' + ck[0].replace(/^sev /, '') + '" data-born="' + esc(p.created_at) + '">' + ck[1] + '</span>';
     } else if (kind === 'retry') {
-      tag = '<span class="sev ms-t warn">позвонить снова</span>';
+      tag = msNeedText(p) ? '<span class="sev ms-late">не взял, напиши</span>' : '<span class="sev ms-t warn">позвонить снова</span>';
     } else if (kind === 'hot') {
       tag = '<span class="sev ms-when">консультация ' + esc(msWhen(p.meet_at)) + '</span>';
     } else if (kind === 'after') {
@@ -44765,8 +44777,14 @@
     var heat = p.todo && p.heat_label ? '<span class="ms-heat h' + (p.heat || 0) + '">' + esc(p.heat_label) + '</span>' : '';
     var mk = canMark ? '<button type="button" class="ms-mk" data-sbmk="' + esc(p.id) + '" data-sbmkn="' + esc(p.name) +
       '" title="Не лид: не наша услуга, вакансия, спам, семья">кто это</button>' : '';
-    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small>' + trace + '</div>' +
-      '<span class="sev ' + st[0] + '">' + st[1] + '</span>' + msActs(p, kind, cc) + '</div>';
+    // Звонок со своего телефона отмечают и здесь: недозвон сразу просит сообщение.
+    var dl = p.phone || (p.dial && p.dial.tries)
+      ? '<span class="ms-dl"><span class="ms-dls' + (p.dial && p.dial.tries ? '' : ' todo') + '">' + esc(dialSum(p.dial)) + '</span>' +
+        dialMarks(p.id) + '</span>' : '';
+    var sev = msNeedText(p) ? '<span class="sev ms-late">не взял, напиши</span>'
+      : '<span class="sev ' + st[0] + '">' + st[1] + '</span>';
+    return '<div class="ms-row"><div class="ms-nm"><b>' + esc(p.name) + heat + '</b><small>' + meta.join(' · ') + mk + '</small>' + trace + dl + '</div>' +
+      sev + msActs(p, kind, cc) + '</div>';
   }
   /* Отрезок блока лидов (встреча продаж 20.11.2026: «прозвонить всех лидов ноября»).
      Сервер отдает месяц, но не меньше недели; режем здесь, по дате прихода в Москве. */
@@ -45085,7 +45103,16 @@
       '</div>';
     msBind(view);
     msTick();
-    dialBind(view, function () { MS.d = null; msLoad(true); shLoad(true); });
+    // Не взял — сразу предлагаем сообщение этому человеку, не дожидаясь, пока найдет кнопку.
+    dialBind(view, function (r, res, id) {
+      if (res === 'no_answer') MS.textAfter = id;
+      MS.d = null; msLoad(true); shLoad(true);
+    });
+    if (MS.textAfter && MS.d) {
+      var ta = view.querySelector('[data-mstpl="' + MS.textAfter + '"]');
+      MS.textAfter = null;
+      if (ta) { ta.scrollIntoView({ block: 'center' }); setTimeout(function () { ta.click(); }, 150); }
+    }
     Array.prototype.forEach.call(view.querySelectorAll('[data-msapplied]'), function (b) {
       b.addEventListener('click', function () {
         state.msFreshApplied = !state.msFreshApplied; state.msFreshShow = 0; renderView();
@@ -45181,7 +45208,7 @@
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-mstpl'), dd = MS.d || {}, p = null, kind = '';
         (dd.confirm || []).forEach(function (x) { if (x.id === id) { p = x; kind = 'confirm'; } });
-        if (!p) ['retry', 'hot', 'respond', 'follow', 'decide', 'pool'].forEach(function (q) {
+        if (!p) ['retry', 'hot', 'respond', 'follow', 'decide', 'pool', 'fresh'].forEach(function (q) {
           (dd[q] || []).forEach(function (x) { if (!p && x.id === id) p = x; });
         });
         if (!p) return;
@@ -45196,13 +45223,20 @@
           }));
           return;
         }
+        // Отправить из рабочего мессенджера система не может, поэтому копия засчитывает
+        // шаг «написал после недозвона»: так и договорились, кнопка одна.
+        var texted = function () {
+          if (msNeedText(p)) apiSend('/admin/api/leads/' + encodeURIComponent(p.id) + '/call-mark', 'POST',
+            { result: 'texted' }, function () { MS.d = null; msLoad(true); }, function () {});
+        };
         var done = function () {
           showToast(p.chat && (p.chat.bot || p.chat.url) ? 'Текст скопирован, вставь в чат' : 'Текст скопирован, отправь в мессенджер семьи');
+          texted();
           if (p.chat && p.chat.bot) location.hash = dialogUrl(p.chat.bot).replace(/^.*#/, '#');
           else if (p.chat && p.chat.url) window.open(p.chat.url, '_blank', 'noopener');
         };
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { prompt('Скопируй текст', text); });
-        else prompt('Скопируй текст', text);
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { prompt('Скопируй текст', text); texted(); });
+        else { prompt('Скопируй текст', text); texted(); }
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mstask]'), function (b) {
