@@ -13695,7 +13695,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 }
 
 .rw-row { display: grid; grid-template-columns: 210px minmax(130px, 1fr) 116px 104px 116px;
-  gap: 16px; align-items: center; padding: 0 24px; min-height: 60px;
+  gap: 16px; align-items: center; padding: 12px 24px; min-height: 60px;
   border-bottom: 1px solid var(--line); }
 .rw-row:last-child { border-bottom: none; }
 .rw-row.dim .rw-nm { color: var(--ink-2); }

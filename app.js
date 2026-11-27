@@ -45347,7 +45347,7 @@
   }
 
   function rwRow(r, closed) {
-    var st = RW_ST[r.state] || RW_ST.wait;
+    var st = r.need ? ['rw-wait', 'нужен план'] : (RW_ST[r.state] || RW_ST.wait);
     var fact;
     if (r.state === 'blocked') {
       // Причина живет в колонке условий: там строка идет слева и читается как
