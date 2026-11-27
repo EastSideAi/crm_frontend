@@ -37085,8 +37085,8 @@
   }
 
   /* Сводка всех мини-курсов одной таблицей (Вера 27.11.2026: «на одном экране, чтобы
-     не переключаться» и «видеть, кто купил и с кем еще работать»; клиентов команды тут
-     нет — им продавать нечего). Строка — продукт, столбцы — кто эти люди для нас, шаги
+     не переключаться» и «видеть, кто купил и с кем еще работать»). Сопровождаемые (тариф,
+     все включено) — отдельным столбцом, остальные — наши покупатели. Строка — продукт, столбцы — кто эти люди для нас, шаги
      воронки ниже, в карточке продукта. Под числом доля: от вошедших, у «занимались» —
      от тех, с кем работаем. Прочерк — у продукта так не посчитать, это не ноль. */
   function fetchMiniSummary() {
@@ -37106,12 +37106,12 @@
     var head = '<div class="sec-head" style="padding:20px 24px 16px">' +
       '<span class="ic">' + ic('chart', 14) + '</span>' +
       '<div><div class="t">Все мини-курсы</div>' +
-      '<div class="s">кто зашел за период, без клиентов команды · нажми на число, чтобы увидеть людей</div></div></div>';
+      '<div class="s">все, кто зашел за период · нажми на число, чтобы увидеть людей</div></div></div>';
     if (!d) return '<div class="card" style="margin-bottom:18px">' + head + '<div class="empty">Считаю…</div></div>';
     if (d === 'none') return '<div class="card" style="margin-bottom:18px">' + head +
       '<div class="empty">Не удалось загрузить сводку — проверь сеть или доступ.</div></div>';
     var cols = d.cols || [], pick = state._msPick || {};
-    var LIST = { bought: 1, potential: 1 };
+    var LIST = { tariff: 1, bought: 1, potential: 1 };
     var th = '<div class="ms-row ms-head"><span class="ms-name">Продукт</span>' + cols.map(function (c) {
       return '<span class="ms-c' + (c.key === 'potential' ? ' ms-key' : '') + '">' + esc(c.title) + '</span>';
     }).join('') + '</div>';
@@ -37122,7 +37122,7 @@
         cols.map(function (c, i) {
           var n = r.cells[c.key];
           if (n === null || n === undefined) return '<span class="ms-c ms-na">—</span>';
-          var base = c.key === 'engaged' ? (r.cells.potential || 0) : enter;
+          var base = c.key === 'engaged' ? (r.cells.potential || 0) : enter;   // доля «занимались» — от тех, с кем работаем
           var pct = i && base ? Math.round(n / base * 100) + '%' : '';
           var cls = 'ms-c ms-' + c.key + (n ? '' : ' ms-zero');
           var inner = '<b class="num">' + n + '</b>' + (pct ? '<small class="num">' + pct + '</small>' : '');
@@ -37140,7 +37140,7 @@
 
   /* Люди одной ячейки: «с кем работать» — главный вопрос Веры (27.11.2026), поэтому
      список открывается прямо под таблицей, а имя ведет в карточку CRM. */
-  var MS_GROUP = { bought: 'купили после входа', potential: 'не купили — с ними работаем' };
+  var MS_GROUP = { tariff: 'на сопровождении', bought: 'купили после входа', potential: 'не купили — с ними работаем' };
   function miniPeopleList() {
     var pick = state._msPick;
     if (!pick) return '';
