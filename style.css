@@ -13695,7 +13695,7 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 }
 
 .rw-row { display: grid; grid-template-columns: 210px minmax(130px, 1fr) 116px 104px 116px;
-  gap: 16px; align-items: center; padding: 0 24px; min-height: 60px;
+  gap: 16px; align-items: center; padding: 12px 24px; min-height: 60px;
   border-bottom: 1px solid var(--line); }
 .rw-row:last-child { border-bottom: none; }
 .rw-row.dim .rw-nm { color: var(--ink-2); }
@@ -13713,6 +13713,28 @@ a.csw-file.is-link:hover { text-decoration: underline; }
 .pf-set.rw-fixed { color: var(--amber-ink); background: var(--amber-soft); }
 .rw-nm small.rw-fixnote { color: var(--amber-ink); }
 .rw-why { font-size: 12px; font-weight: 500; color: var(--amber-ink); line-height: 1.45; }
+.rw-cond .rw-why, .rw-sum .rw-why { display: block; margin-top: 4px; }
+.rw-plan { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.rw-plan small, .rw-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); opacity: .8; }
+.rw-sub { display: block; margin-top: 4px; }
+.rw-sum small { font-family: inherit; }
+.rw-det { margin-left: 6px; padding: 1px 8px; border: 0; border-radius: 999px; font: inherit;
+  font-size: 11.5px; font-weight: 600; color: var(--blue); background: var(--blue-tint); cursor: pointer; }
+.rw-det:hover { filter: brightness(.97); }
+.rw-det:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.rwd-card { width: min(640px, calc(100vw - 32px)); }
+.rwd-sum { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.rwd-note { margin-top: 4px; font-size: 12px; color: var(--ink-3); }
+.rwd-list { margin-top: 12px; max-height: 60vh; overflow: auto; border-top: 1px solid var(--line); }
+.rwd-row { display: flex; gap: 12px; justify-content: space-between; align-items: baseline;
+  padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rwd-row.off .rwd-t a, .rwd-row.off .rwd-t { color: var(--ink-3); }
+.rwd-t { font-size: 13.5px; font-weight: 600; min-width: 0; }
+.rwd-t a { color: var(--ink); text-decoration: none; }
+.rwd-t a:hover { color: var(--blue); }
+.rwd-t small { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.rwd-s { flex: none; max-width: 45%; text-align: right; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.rwd-row.off .rwd-s { color: var(--amber-ink); }
 .rw-dash { color: var(--ink-3); font-weight: 500; }
 .rw-rate { display: inline-flex; gap: 6px; justify-content: flex-end; }
 .sev.kpi-ok      { color: var(--green-ink); background: var(--green-soft); }

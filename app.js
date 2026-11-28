@@ -45336,9 +45336,34 @@
     if (r.payout === 'share') {
       return 'план ' + fmtMoney(r.plan) + ', вес ' + fmtMoney(r.weight_pct) + '%';
     }
-    if (r.payout === 'fixed') return 'норма ' + fmtMoney(r.plan);
+    if (r.payout === 'fixed') {
+      // Дни до закрытия ведомости: чем меньше, тем лучше, норма — потолок.
+      if (r.metric === 'fin_close_days') return 'не позже ' + fmtMoney(r.plan) + ' дн';
+      return r.plan_source === 'row' ? 'норма ' + fmtMoney(r.plan) : fmtMoney(r.rub_max) + ' ₽ за план';
+    }
+    // Мотивация с 23.11.2026: ступени от процента плана, пропорция, процент с оплат
+    // и условие листа. Слова — как в мотивации человека.
+    if (r.payout === 'gate') return 'без этого бонусы листа не платятся';
+    if (r.payout === 'per_unit') {
+      return fmtMoney(r.rub_max) + ' ₽ за каждое сверх ' + fmtMoney(r.plan) +
+        (r.count ? ', сверх нормы ' + fmtMoney(r.count) : '');
+    }
+    if (r.payout === 'prop') return 'до ' + fmtMoney(r.rub_max) + ' ₽ пропорционально плану';
     var steps = r.steps || [];
     if (!steps.length) return '';
+    if (r.payout === 'percent') {
+      return steps.map(function (s, i) {
+        var nx = steps[i + 1];
+        var who = nx ? fmtMoney(s.from) + '—' + fmtMoney(nx.from - 1) : 'от ' + fmtMoney(s.from);
+        return who + ' ' + plural(nx ? 2 : s.from, 'клиент', 'клиента', 'клиентов') + ' → ' +
+          fmtMoney(s.pct).replace('.', ',') + '%';
+      }).join(', ');
+    }
+    if (r.payout === 'pct_steps') {
+      return steps.map(function (s) {
+        return fmtMoney(s.from) + '% плана → ' + fmtMoney(s.rub) + ' ₽';
+      }).join(', ');
+    }
     return steps.map(function (s) {
       var range = s.to != null ? fmtMoney(s.from) + '—' + fmtMoney(s.to)
                                : 'от ' + fmtMoney(s.from);
@@ -45346,8 +45371,31 @@
     }).join(', ');
   }
 
+  /* План строки и откуда он: поставила Ольга, посчитан от прошлого месяца или
+     записан в самой строке. У строк, где план живет помесячно, его можно поставить
+     прямо тут — отдельная форма ради одного числа означала бы, что его не поставят. */
+  var RW_PLAN_SRC = { month: 'план месяца', prev: 'от прошлого месяца', none: '', row: '' };
+  function rwPlanable(r) {
+    return r.payout === 'pct_steps' || r.payout === 'prop' || r.plan_k != null ||
+      r.plan_source === 'month';
+  }
+  function rwPlan(r, closed) {
+    if (!rwPlanable(r) || r.state === 'blocked') return '';
+    var has = r.plan != null;
+    var txt = has ? 'план ' + fmtMoney(r.plan).replace('.', ',') : 'поставить план';
+    var src = RW_PLAN_SRC[r.plan_source] || '';
+    if (r.plan_source === 'prev' && r.plan_k != null) {
+      src = r.plan_k === 1 ? 'не ниже прошлого месяца'
+        : '+' + fmtMoney(Math.round((r.plan_k - 1) * 100)) + '% к прошлому месяцу';
+    }
+    var btn = closed ? '<span class="num">' + esc(txt) + '</span>'
+      : '<button class="pf-set' + (has ? '' : ' none') + '" data-rwplan="' + r.id + '"' +
+        (r.plan_source === 'month' ? ' data-rwv="' + r.plan + '"' : '') + '>' + esc(txt) + '</button>';
+    return '<div class="rw-plan">' + btn + (has && src ? '<small>' + esc(src) + '</small>' : '') + '</div>';
+  }
+
   function rwRow(r, closed) {
-    var st = RW_ST[r.state] || RW_ST.wait;
+    var st = r.need ? ['rw-wait', 'нужен план'] : (RW_ST[r.state] || RW_ST.wait);
     var fact;
     if (r.state === 'blocked') {
       // Причина живет в колонке условий: там строка идет слева и читается как
@@ -45381,6 +45429,9 @@
 
     return '<div class="rw-row' + (r.state === 'blocked' ? ' dim' : '') + '">' +
       '<div class="rw-nm">' + esc(r.label) +
+        (r.fact_kind === 'auto' && r.metric
+          ? ' <button class="rw-det" data-rwdet="' + esc(r.metric) + '" data-rwlbl="' +
+            esc(r.label) + '">из чего</button>' : '') +
         (r.hint ? '<small>' + esc(r.hint) + '</small>' : '') +
         (r.overridden
           ? '<small class="rw-fixnote">система насчитала ' +
@@ -45389,9 +45440,17 @@
           : '') + '</div>' +
       '<div class="rw-cond">' + (r.state === 'blocked'
         ? '<span class="rw-why">' + esc(r.blocked) + '</span>'
-        : esc(rwCond(r))) + '</div>' +
+        : esc(rwCond(r)) + rwPlan(r, closed) +
+          (r.need ? '<span class="rw-why">' + esc(r.need) + '</span>' : '') +
+          (r.stale ? '<span class="rw-why">' + esc(r.stale) + '</span>' : '') +
+          (r.payout === 'percent' && r.count != null
+            ? '<small class="rw-sub">' + fmtMoney(r.count) + ' ' +
+              plural(r.count, 'клиент', 'клиента', 'клиентов') + ' в этом месяце</small>' : '')) +
+      '</div>' +
       '<div class="rw-fact">' + fact + '</div>' +
-      '<div class="rw-sum num">' + (r.rub ? fmtMoney(r.rub) + ' ₽' : '—') + '</div>' +
+      '<div class="rw-sum num">' + (r.rub ? fmtMoney(r.rub) + ' ₽' : '—') +
+        (r.held_rub ? '<small class="rw-why">' + fmtMoney(r.held_rub) + ' ₽ ждут условия</small>' : '') +
+      '</div>' +
       '<div class="rw-st"><span class="sev ' + st[0] + '">' + st[1] + '</span></div>' +
     '</div>';
   }
@@ -45582,7 +45641,62 @@
     setTimeout(function () { el('rf-v').focus(); }, 50);
   }
 
+  /* «Из чего сложилось»: список людей, регистраций или постов за цифрой показателя
+     (Роман 27.11.2026: «как проверять систему будем?»). Не засчитанное тоже в списке
+     с причиной — проверяют именно границу. Человек открывается в своей карточке. */
+  function rwDetail(metric, label) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card ct-card rwd-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Из чего сложилось · ' +
+        esc(pfMonthTitle(rwMonth())) + '</div><div class="al-title">' + esc(label) + '</div></div>' +
+      '<button class="al-x" id="rwd-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-body" id="rwd-body"><div class="empty">Собираю список…</div></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('rwd-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    api('/admin/api/reward/detail?metric=' + encodeURIComponent(metric) + '&period=' + rwMonth())
+      .then(function (d) {
+        var items = (d && d.items) || [];
+        var off = items.length - (d.counted || 0);
+        var head = '<div class="rwd-sum">Засчитано ' + fmtMoney(d.counted || 0) +
+          (off ? ', не засчитано ' + fmtMoney(off) + ' — причина в строке' : '') + '</div>' +
+          (d.note ? '<div class="rwd-note">' + esc(d.note) + '</div>' : '');
+        if (!items.length) {
+          el('rwd-body').innerHTML = head + '<div class="empty">В этом месяце здесь пусто.</div>';
+          return;
+        }
+        el('rwd-body').innerHTML = head + '<div class="rwd-list">' + items.map(function (it) {
+          var name = esc(it.title) + (it.no ? ' <span class="lno">' + esc(it.no) + '</span>' : '');
+          var link = it.lead ? '<a href="#lead/' + esc(it.lead) + '" data-rwdl="1">' + name + '</a>'
+            : it.url ? '<a href="' + esc(it.url) + '" target="_blank" rel="noopener">' + name + '</a>' : name;
+          return '<div class="rwd-row' + (it.counted ? '' : ' off') + '">' +
+            '<div class="rwd-t">' + link + '<small>' + esc(it.sub || '') + '</small></div>' +
+            '<div class="rwd-s">' + (it.counted ? 'засчитан' : esc(it.why || 'не засчитан')) + '</div></div>';
+        }).join('') + '</div>';
+        Array.prototype.forEach.call(ov.querySelectorAll('[data-rwdl]'), function (a) {
+          a.addEventListener('click', close);
+        });
+      }).catch(function () {
+        el('rwd-body').innerHTML = '<div class="empty">Список не загрузился — проверь сеть.</div>';
+      });
+  }
+
   function rwBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwdet]'), function (b) {
+      b.addEventListener('click', function () {
+        rwDetail(b.getAttribute('data-rwdet'), b.getAttribute('data-rwlbl'));
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rwfix]'), function (b) {
       b.addEventListener('click', function () {
         var id = parseInt(b.getAttribute('data-rwfix'), 10);
@@ -45651,6 +45765,44 @@
         inp.addEventListener('keydown', function (e) {
           if (e.key === 'Enter') { e.preventDefault(); save(); }
           if (e.key === 'Escape') { done = true; state._rw = null; renderView(); }
+        });
+        inp.addEventListener('blur', save);
+      });
+    });
+
+    /* План месяца ставится на месте, как цифра. Пустое поле возвращает план по
+       правилу строки (от прошлого месяца или из самой строки). */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rwplan]'), function (b) {
+      b.addEventListener('click', function () {
+        var rowId = parseInt(b.getAttribute('data-rwplan'), 10);
+        var was = b.getAttribute('data-rwv') || '';
+        var inp = document.createElement('input');
+        inp.className = 'ed-input pf-in num';
+        inp.value = was.replace('.', ',');
+        inp.setAttribute('inputmode', 'decimal');
+        inp.setAttribute('placeholder', 'план');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus();
+        var done = false;
+        var back = function () { state._rw = null; renderView(); };
+        var save = function () {
+          if (done) return;
+          done = true;
+          var raw = String(inp.value).replace(/\s/g, '').replace(',', '.');
+          if (raw === '' && was === '') { back(); return; }
+          var n = raw === '' ? null : parseFloat(raw);
+          if (n !== null && (isNaN(n) || n < 0)) { showToast('Нужно число, например 25'); back(); return; }
+          api('/admin/api/reward/plan', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row_id: rowId, period: rwMonth(), plan: n }),
+          }).then(back).catch(function (e) {
+            showToast(e.message === '422' ? 'Такой план система не приняла' : 'Не сохранилось — проверь сеть');
+            back();
+          });
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { done = true; back(); }
         });
         inp.addEventListener('blur', save);
       });
