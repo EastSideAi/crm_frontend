@@ -1134,12 +1134,14 @@
     attention:     { label: 'Внимание',         icon: 'flame', pred: function (l) { return leadRisks(l).length; } },
     // Павел 18.11.2026: интерес к краткосрочным программам, отметка в карточке.
     short:         { label: 'Краткосрочка',     icon: 'flight', pred: function (l) { return hasShort(l); } },
+    // Павел 27.11.2026: кто оплатил тариф проектной деятельности со страницы тарифов.
+    efirpaid:      { label: 'Купили после эфира', icon: 'check', pred: function (l) { return hasEfirPaid(l); } },
   };
   /* Порядок срезов в ряду. На «Сопровождении» ряд короче (Мария 19.11.2026: «эти
      три пункта там не нужны»): квалификация лида и «без контакта» — вопросы к
      холодному человеку, а на этой вкладке лежат те, с кем мы уже работаем и у кого
      контакт есть по определению. Остаются «Все», «С задачами» и «Внимание». */
-  var QUICK_ORDER = ['', 'hot', 'applied', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short'];
+  var QUICK_ORDER = ['', 'hot', 'applied', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention', 'short', 'efirpaid'];
   var QUICK_SUPPORT = ['', 'tasks', 'attention'];
   function quickKeys(seg) { return trackTab(seg) ? QUICK_SUPPORT : QUICK_ORDER; }
   function quickPred(seg) {
@@ -42497,6 +42499,7 @@
   function sbConv(d) {
     var st = (d.path || {}).steps || {};
     var c = st.contact || 0, b = st.c_booked || 0, h = st.c_held || 0;
+    var fl = d.flows || {}, mh = fl.held || 0, mb = fl.held_bought || 0;
     var pc = function (a, z) { return z ? Math.round(a / z * 100) : null; };
     var tile = function (t, a, af, al, z, zf, zl, hint) {
       var v = pc(a, z);
@@ -42508,8 +42511,12 @@
     return '<div class="card sp12 cv"><div class="sec-head pf-sec"><span class="ic">' + ic('funnel', 14) +
       '</span><div><div class="t">Главные конверсии</div>' +
       '<div class="s">' + (sbSpan() !== 'month' ? 'лиды отрезка' : 'лиды месяца') +
-      ': связались ' + c + ' из ' + (st.lead || 0) + '; запись решает первая линия, явку — напоминание до встречи</div></div></div>' +
+      ': связались ' + c + ' из ' + (st.lead || 0) + '; покупка — по консультациям отрезка; запись решает первая линия, явку — напоминание до встречи</div></div></div>' +
       '<div class="cv-ts">' +
+        // Павел 27.11.2026: две главные — до консультации довели и после нее купили.
+        // Покупка — договор или оплата в день встречи и позже: кто платил раньше, не в счет.
+        tile('Из контакта в консультацию', h, 'c_held', 'провели консультацию', c, 'contact', 'связались', 'консультация проведена после звонка или диалога') +
+        tile('Из консультации в покупку', mb, 'held_bought', 'купили', mh, 'held', 'консультаций', 'консультации отрезка, договор или оплата после встречи') +
         tile('Из контакта в запись', b, 'c_booked', 'записались', c, 'contact', 'связались', 'записались после звонка или диалога') +
         tile('Из записи в пришедших', h, 'c_held', 'пришли', b, 'c_booked', 'записались', 'дошли до консультации') +
       '</div></div>';
@@ -42631,6 +42638,7 @@
   var SB_FLAG_TITLE = { lead: 'Пришли', contact: 'Связались', c_booked: 'Записались',
     c_held: 'Пришли на встречу', c_contract: 'Договор',
     booked: 'Записи месяца', held: 'Консультации месяца', contract: 'Договоры месяца',
+    held_bought: 'Купили после консультации',
     paid: 'Заплатили', unowned: 'Никто не взял', no_contact: 'Взяли, но связи нет',
     x_contact: 'Пришли, связи нет', x_booked: 'Связались, не записались',
     x_held: 'Записались, не пришли', x_contract: 'Были на встрече, договора нет',
@@ -58914,9 +58922,14 @@
      программами, чтобы их не потерять, и фильтр»). Плашка-интерес из lead_marks:
      лидом быть не мешает, фильтр — в «Контактах». */
   function hasShort(l) { return ((l && l.crm && l.crm.marks) || []).indexOf('short') >= 0; }
+  /* «Купил после эфира» ставит сама оплата со страницы тарифов, руками ее не жмут. */
+  function hasEfirPaid(l) { return ((l && l.crm && l.crm.marks) || []).indexOf('efir_paid') >= 0; }
   function buildShortMark(ctx) {
     var on = hasShort(ctx);
-    return '<div class="potc shm"><span class="ql-l">Краткосрочка</span>' + (on
+    return (hasEfirPaid(ctx)
+      ? '<div class="potc shm"><span class="ql-l">Эфир</span><span class="potc-on">' + ic('check', 11) + 'Купил после эфира</span></div>'
+      : '') +
+      '<div class="potc shm"><span class="ql-l">Краткосрочка</span>' + (on
       ? '<span class="potc-on">' + ic('check', 11) + 'Интересуется краткосрочными программами</span>' +
         '<button class="bp ghost sm" data-shm="0">Снять</button>'
       : '<button class="bp ghost sm" data-shm="1">Интересуется краткосрочными программами</button>') + '</div>';
